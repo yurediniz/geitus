@@ -1,0 +1,69 @@
+# ===== Java / Maven (backend) =====
+target/
+build/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+hs_err_pid*
+replay_pid*
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# ===== Node / React / Vite (frontend) =====
+node_modules/
+dist/
+dist-ssr/
+.vite/
+coverage/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+.eslintcache
+
+# ===== Variáveis de ambiente / segredos =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ===== IntelliJ IDEA =====
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# ===== VS Code =====
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+# ===== Eclipse / STS =====
+.settings/
+.project
+.classpath
+.apt_generated/
+.factorypath
+
+# ===== Sistema operacional =====
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ===== Temporários e cache =====
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+.cache/

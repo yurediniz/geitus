@@ -1,0 +1,33 @@
+# EditorConfig — padroniza estilo de código entre editores e IDEs
+# https://editorconfig.org
+
+root = true
+
+# Padrão para todos os arquivos
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Java (backend)
+[*.java]
+indent_size = 4
+
+# Arquivos de configuração e build do backend
+[*.{xml,properties}]
+indent_size = 4
+
+# Frontend (React / TypeScript)
+[*.{js,jsx,ts,tsx,json,css,scss,html,yml,yaml}]
+indent_size = 2
+
+# Markdown — não remover espaços ao final (quebras de linha significativas)
+[*.md]
+trim_trailing_whitespace = false
+
+# Makefile exige tabulação real
+[Makefile]
+indent_style = tab
