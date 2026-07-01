@@ -1,0 +1,48 @@
+# Integracao continua do frontend do ERPell.
+# Instala as dependencias e roda lint, typecheck e build a cada push na develop
+# e a cada pull request direcionado a main. Nao faz deploy.
+name: CI Frontend
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci.yml'
+
+jobs:
+  build:
+    name: Lint, typecheck e build do frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # Todos os passos rodam dentro da pasta do frontend.
+        working-directory: frontend
+
+    steps:
+      - name: Obter o codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Verificacao de tipos
+        run: npm run typecheck
+
+      - name: Build de producao
+        run: npm run build
