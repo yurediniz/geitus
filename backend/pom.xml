@@ -19,8 +19,12 @@
     <description>Backend do ERPell - plataforma SaaS de gestao para pequenos negocios (UpeFlow)</description>
 
     <properties>
-        <!-- Versao obrigatoria do projeto: Java 21 LTS -->
+        <!-- Versao obrigatoria do projeto: Java 21 LTS.
+             O spring-boot-starter-parent mapeia maven.compiler.release a partir
+             desta propriedade, portanto o compilador usa "release 21". -->
         <java.version>21</java.version>
+        <!-- Versao do maven-enforcer-plugin (garante o build apenas em Java 21) -->
+        <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Versao da biblioteca JWT (preparada para a etapa futura de autenticacao) -->
         <jjwt.version>0.12.6</jjwt.version>
@@ -49,6 +53,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Actuator: expoe apenas o health check nesta etapa -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
         <!-- Migrations do banco de dados -->
@@ -106,6 +116,30 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- Garante que o build so rode em Java 21 (21.x), evitando conflito
+                 com outras versoes de JDK instaladas na maquina. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>${maven-enforcer-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>exigir-java-21</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>[21,22)</version>
+                                    <message>Este projeto exige Java 21 (versoes 21.x). Ajuste o JAVA_HOME para um JDK 21 antes de compilar. Versao detectada incompativel.</message>
+                                </requireJavaVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

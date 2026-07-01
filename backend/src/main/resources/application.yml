@@ -27,6 +27,18 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
 
+# Spring Boot Actuator: nesta etapa expomos apenas o health check.
+# Nenhum endpoint sensivel (env, beans, mappings, etc.) fica exposto.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      # Nao expor detalhes internos (status de componentes) sem autenticacao.
+      show-details: never
+
 # Configuracoes especificas do ERPell
 erpell:
   cors:

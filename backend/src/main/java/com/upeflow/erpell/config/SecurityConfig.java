@@ -47,6 +47,8 @@ public class SecurityConfig {
                         // Health check liberado (inclui a requisicao de preflight do CORS)
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/health").permitAll()
+                        // Health check padrao do Actuator tambem liberado
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         // Por enquanto, todo o restante exige autenticacao (ainda nao implementada)
                         .anyRequest().authenticated())
                 // Sem login por formulario; API responde 401 para acesso nao autenticado

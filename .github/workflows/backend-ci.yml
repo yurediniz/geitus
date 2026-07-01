@@ -1,0 +1,42 @@
+# Integracao continua do backend do ERPell.
+# Compila, testa e empacota o backend a cada push na develop e a cada
+# pull request direcionado a main.
+name: CI Backend
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
+
+jobs:
+  build:
+    name: Compilar e testar o backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # Todos os passos rodam dentro da pasta do backend.
+        working-directory: backend
+
+    steps:
+      - name: Obter o codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Conceder permissao de execucao ao Maven Wrapper
+        run: chmod +x ./mvnw
+
+      - name: Rodar verificacao (compilar, testar e empacotar)
+        run: ./mvnw --batch-mode verify
