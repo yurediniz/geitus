@@ -3,13 +3,16 @@ import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router-dom'
 
 import { AppProviders } from '@/app/AppProviders'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { router } from '@/routes/router'
 import '@/styles/index.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AppProviders>
-      <RouterProvider router={router} />
-    </AppProviders>
+    <ErrorBoundary>
+      <AppProviders>
+        <RouterProvider router={router} />
+      </AppProviders>
+    </ErrorBoundary>
   </StrictMode>,
 )

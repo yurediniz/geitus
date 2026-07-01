@@ -1,10 +1,11 @@
 /**
  * Cliente HTTP base para as chamadas ao backend do ERPell.
  *
- * A URL base vem da variavel de ambiente VITE_API_BASE_URL (ver .env.example).
- * Em desenvolvimento, o padrao aponta para o backend local em /api.
+ * Por padrao usa o caminho relativo "/api", que em desenvolvimento e
+ * encaminhado ao backend pelo proxy do Vite (ver vite.config.ts). Pode ser
+ * sobrescrita pela variavel de ambiente VITE_API_BASE_URL (ver .env.example).
  */
-const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api'
+const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 /**
  * Erro padronizado de requisicao HTTP, com o status retornado pelo servidor.
