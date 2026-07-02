@@ -86,7 +86,7 @@ Estas variáveis criam, de forma **idempotente**, um usuário administrador loca
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
-| `ERPELL_BOOTSTRAP_DEV_ADMIN` | *(desligado)* | Habilita o bootstrap quando o valor é `true` |
+| `ERPELL_BOOTSTRAP_DEV_ADMIN` | *(desligado)* | Habilita o bootstrap quando o valor é `true` (mapeada para a property `erpell.bootstrap.dev-admin`) |
 | `ERPELL_DEV_ADMIN_EMAIL` | *(vazio)* | E-mail do admin de desenvolvimento |
 | `ERPELL_DEV_ADMIN_PASSWORD` | *(vazio)* | Senha do admin (usada apenas para gerar o hash BCrypt) |
 | `ERPELL_DEV_ADMIN_NAME` | `Administrador` | Nome do admin |

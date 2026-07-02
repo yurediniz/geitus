@@ -48,6 +48,7 @@ A área principal do ERPell exige login. O fluxo mínimo desta etapa:
 - Um usuário já autenticado que abrir `/login` é redirecionado para `/`.
 - O botão **Sair** (sidebar / cabeçalho no mobile) limpa a sessão e volta para `/login`.
 - Chamadas autenticadas que recebem **401** limpam o token e redirecionam para `/login` (sessão expirada).
+- **Carregando sessão (boot):** quando há um token salvo, o usuário é revalidado via `GET /api/auth/me` antes de os guards decidirem o redirect. Enquanto essa revalidação ocorre, um indicador discreto de carregamento é exibido — isso evita o "flicker" (área privada sem nome/e-mail) e o "piscar" do login antes de detectar um token inválido.
 
 ### Como acessar o login
 

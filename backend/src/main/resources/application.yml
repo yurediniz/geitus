@@ -41,6 +41,10 @@ management:
 
 # Configuracoes especificas do ERPell
 erpell:
+  bootstrap:
+    # Habilita o bootstrap idempotente do admin de DESENVOLVIMENTO (ver DevAdminBootstrap).
+    # Mapeia a env var ERPELL_BOOTSTRAP_DEV_ADMIN para a property idiomatica do Spring.
+    dev-admin: ${ERPELL_BOOTSTRAP_DEV_ADMIN:false}
   cors:
     # Origens liberadas para o frontend local (Vite). Separe por virgula se houver mais de uma.
     allowed-origins: ${ERPELL_CORS_ALLOWED_ORIGINS:http://localhost:5173}

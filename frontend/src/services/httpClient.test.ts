@@ -1,0 +1,180 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+import {
+  apiGet,
+  apiPost,
+  HttpError,
+  setUnauthorizedHandler,
+} from '@/services/httpClient'
+import { getStoredToken } from '@/services/tokenStorage'
+
+// Mocka o tokenStorage para controlar o token sem depender do localStorage.
+vi.mock('@/services/tokenStorage', () => ({
+  getStoredToken: vi.fn(),
+}))
+
+const getStoredTokenMock = vi.mocked(getStoredToken)
+
+/** Cria um Response fake com status e (opcionalmente) um corpo JSON. */
+function respostaFake(status: number, corpo?: unknown): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => {
+      if (corpo === undefined) {
+        throw new Error('sem corpo')
+      }
+      return corpo
+    },
+  } as unknown as Response
+}
+
+/** Extrai os headers passados ao fetch como um objeto simples. */
+function headersDaChamada(): Record<string, string> {
+  const chamada = vi.mocked(globalThis.fetch).mock.calls[0]
+  const init = chamada?.[1] as RequestInit | undefined
+  return (init?.headers ?? {}) as Record<string, string>
+}
+
+describe('httpClient', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn())
+    getStoredTokenMock.mockReturnValue(null)
+    setUnauthorizedHandler(null)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+    setUnauthorizedHandler(null)
+  })
+
+  describe('injecao do token (Authorization)', () => {
+    it('injeta Authorization: Bearer <token> em chamada autenticada com token salvo', async () => {
+      getStoredTokenMock.mockReturnValue('token-abc')
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(200, { ok: true }))
+
+      await apiGet('/auth/me', { autenticada: true })
+
+      expect(headersDaChamada().Authorization).toBe('Bearer token-abc')
+    })
+
+    it('NAO injeta Authorization quando a chamada nao e autenticada', async () => {
+      getStoredTokenMock.mockReturnValue('token-abc')
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(200, { ok: true }))
+
+      await apiGet('/health')
+
+      expect(headersDaChamada().Authorization).toBeUndefined()
+    })
+
+    it('NAO injeta Authorization em chamada autenticada sem token salvo', async () => {
+      getStoredTokenMock.mockReturnValue(null)
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(200, { ok: true }))
+
+      await apiGet('/auth/me', { autenticada: true })
+
+      expect(headersDaChamada().Authorization).toBeUndefined()
+    })
+  })
+
+  describe('tratamento de 401 (sessao expirada)', () => {
+    it('dispara o handler de 401 registrado quando a chamada e autenticada', async () => {
+      const handler = vi.fn()
+      setUnauthorizedHandler(handler)
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(401))
+
+      await expect(apiGet('/auth/me', { autenticada: true })).rejects.toMatchObject({
+        status: 401,
+      })
+      expect(handler).toHaveBeenCalledTimes(1)
+    })
+
+    it('dispara o handler de 401 tambem em POST autenticado (simetria com GET)', async () => {
+      const handler = vi.fn()
+      setUnauthorizedHandler(handler)
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(401))
+
+      await expect(
+        apiPost('/algum-recurso', { valor: 1 }, { autenticada: true }),
+      ).rejects.toMatchObject({ status: 401 })
+      expect(handler).toHaveBeenCalledTimes(1)
+    })
+
+    it('NAO dispara o handler quando a chamada NAO e autenticada', async () => {
+      const handler = vi.fn()
+      setUnauthorizedHandler(handler)
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(401))
+
+      await expect(apiPost('/auth/login', { email: 'a', senha: 'b' })).rejects.toMatchObject({
+        status: 401,
+      })
+      expect(handler).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('mapeamento de erros', () => {
+    it('mapeia 400 para HttpError com campos quando o backend os fornece', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(
+        respostaFake(400, { campos: { email: 'Informe o e-mail.' } }),
+      )
+
+      await expect(apiPost('/auth/login', {})).rejects.toMatchObject({
+        status: 400,
+        campos: { email: 'Informe o e-mail.' },
+      })
+    })
+
+    it('mapeia 400 sem corpo para HttpError sem campos', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(400))
+
+      const erro = await apiPost('/auth/login', {}).catch((e: unknown) => e)
+      expect(erro).toBeInstanceOf(HttpError)
+      expect((erro as HttpError).status).toBe(400)
+      expect((erro as HttpError).campos).toBeUndefined()
+    })
+
+    it('mapeia demais status de erro para HttpError com o status correspondente', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(500))
+
+      await expect(apiGet('/health')).rejects.toMatchObject({ status: 500 })
+    })
+
+    it('mapeia falha de rede para HttpError com status 0', async () => {
+      vi.mocked(globalThis.fetch).mockRejectedValue(new TypeError('network error'))
+
+      const erro = await apiGet('/health').catch((e: unknown) => e)
+      expect(erro).toBeInstanceOf(HttpError)
+      expect((erro as HttpError).status).toBe(0)
+    })
+
+    it('falha de rede em POST tambem resulta em status 0', async () => {
+      vi.mocked(globalThis.fetch).mockRejectedValue(new TypeError('network error'))
+
+      const erro = await apiPost('/auth/login', {}).catch((e: unknown) => e)
+      expect(erro).toBeInstanceOf(HttpError)
+      expect((erro as HttpError).status).toBe(0)
+    })
+  })
+
+  describe('respostas de sucesso', () => {
+    it('retorna o corpo JSON em GET bem-sucedido', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(200, { valor: 42 }))
+
+      const dados = await apiGet<{ valor: number }>('/health')
+      expect(dados).toEqual({ valor: 42 })
+    })
+
+    it('envia o corpo serializado e Content-Type JSON em POST', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(200, { ok: true }))
+
+      await apiPost('/auth/login', { email: 'ana@empresa.com', senha: 'x' })
+
+      const chamada = vi.mocked(globalThis.fetch).mock.calls[0]
+      const init = chamada?.[1] as RequestInit
+      expect(init.method).toBe('POST')
+      expect(init.body).toBe(JSON.stringify({ email: 'ana@empresa.com', senha: 'x' }))
+      expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json')
+    })
+  })
+})

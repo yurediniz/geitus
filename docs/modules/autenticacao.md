@@ -106,6 +106,7 @@ Migration `V2__auth_inicial.sql` (a `V1` permanece intacta).
 - Validação clara por campo (React Hook Form + Zod), com acessibilidade básica (labels, `aria-invalid`, `aria-describedby`, `role="alert"`).
 - Rotas privadas redirecionam usuário não autenticado para `/login`; usuário autenticado que acessa `/login` é levado à área principal.
 - **Logout** simples (limpa sessão e volta para `/login`); 401 em chamada autenticada limpa o token e redireciona.
+- **Carregando sessão (reidratação no boot):** com token salvo, o usuário é revalidado via `GET /api/auth/me` antes de os guards (`ProtectedRoute`/`PublicOnlyRoute`) decidirem o redirect. Enquanto isso, um indicador discreto de carregamento é exibido, evitando o flicker da área privada sem dados do usuário e o "piscar" do login antes de detectar token inválido.
 
 ## Variáveis de ambiente
 
@@ -115,7 +116,7 @@ Todas com valores **fictícios** no `.env.example` (nunca segredos reais).
 |---|---|
 | `JWT_SECRET` | Segredo do JWT (HS256). **Obrigatório**: mínimo 32 bytes / 256 bits, senão a aplicação não sobe. |
 | `JWT_EXPIRATION` | Expiração do token em milissegundos (padrão 86400000 = 24h). |
-| `ERPELL_BOOTSTRAP_DEV_ADMIN` | Habilita o bootstrap do admin de desenvolvimento quando `true`. |
+| `ERPELL_BOOTSTRAP_DEV_ADMIN` | Habilita o bootstrap do admin de desenvolvimento quando `true` (mapeada para a property `erpell.bootstrap.dev-admin`). |
 | `ERPELL_DEV_ADMIN_EMAIL` | E-mail do admin de desenvolvimento. |
 | `ERPELL_DEV_ADMIN_PASSWORD` | Senha do admin (usada apenas para gerar o hash BCrypt). |
 | `ERPELL_DEV_ADMIN_NAME` | Nome do admin. |
@@ -154,7 +155,7 @@ Rodar novamente não duplica dados. Detalhes em [backend/README.md](../../backen
 ## Próximos passos futuros
 
 - Fechar o Swagger por perfil antes do primeiro deploy produtivo (prioritário).
-- Refresh token + estratégia de revogação; revalidação de sessão no boot com estado de "carregando sessão".
+- Refresh token + estratégia de revogação. (A revalidação de sessão no boot com estado de "carregando sessão" **já foi implementada** — ver "Regras de UX".)
 - Migrar token para cookie `httpOnly`.
 - Enum/allow-list de `perfil` e autorização por perfil (RBAC básico).
 - Recuperação de senha, rate limiting/lockout de login.

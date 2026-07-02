@@ -1,10 +1,27 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
 import { AuthProvider } from '@/hooks/useAuth'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
+import { getMe } from '@/services/authService'
 import { setStoredToken } from '@/services/tokenStorage'
+import type { Usuario } from '@/types/auth'
+
+// Mocka a reidratacao (GET /api/auth/me) para controlar o boot com token.
+vi.mock('@/services/authService', () => ({
+  getMe: vi.fn(),
+}))
+
+const getMeMock = vi.mocked(getMe)
+
+const usuarioFake: Usuario = {
+  id: 1,
+  nome: 'Ana Souza',
+  email: 'ana@empresa.com',
+  perfil: 'ADMIN',
+  empresaId: 1,
+}
 
 /**
  * Monta uma arvore minima de rotas: uma area privada sob ProtectedRoute e uma
@@ -27,6 +44,7 @@ function renderComRota(entrada: string) {
 
 describe('ProtectedRoute', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     localStorage.clear()
   })
 
@@ -37,11 +55,27 @@ describe('ProtectedRoute', () => {
     expect(screen.queryByText(/area privada/i)).not.toBeInTheDocument()
   })
 
-  it('renderiza a area privada quando ha token', () => {
+  it('mostra o loading enquanto revalida a sessao e depois renderiza a area privada', async () => {
     setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
 
     renderComRota('/')
 
-    expect(screen.getByText(/area privada/i)).toBeInTheDocument()
+    // Enquanto a reidratacao nao termina, mostra o indicador de carregamento.
+    expect(screen.getByText(/carregando/i)).toBeInTheDocument()
+    expect(screen.queryByText(/area privada/i)).not.toBeInTheDocument()
+
+    // Concluida a reidratacao, a area privada e renderizada.
+    expect(await screen.findByText(/area privada/i)).toBeInTheDocument()
+  })
+
+  it('redireciona para /login quando a revalidacao da sessao falha (token invalido)', async () => {
+    setStoredToken('token-invalido')
+    getMeMock.mockRejectedValue(new Error('falha'))
+
+    renderComRota('/')
+
+    expect(await screen.findByText(/tela de login/i)).toBeInTheDocument()
+    expect(screen.queryByText(/area privada/i)).not.toBeInTheDocument()
   })
 })

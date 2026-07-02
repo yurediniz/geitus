@@ -29,7 +29,7 @@ import com.upeflow.erpell.user.UsuarioRepository;
  * sem inserir credenciais manualmente no banco.
  */
 @Component
-@ConditionalOnProperty(name = "ERPELL_BOOTSTRAP_DEV_ADMIN", havingValue = "true")
+@ConditionalOnProperty(prefix = "erpell.bootstrap", name = "dev-admin", havingValue = "true")
 public class DevAdminBootstrap implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DevAdminBootstrap.class);
