@@ -10,32 +10,48 @@ Público-alvo inicial:
 - Pet shops
 - Lojas de roupas
 
-> **Status:** MVP em desenvolvimento.
+> **Status:** MVP em desenvolvimento — fase atual: **fundação técnica e documental**, antes da autenticação inicial.
+
+Estado atual do repositório:
+
+- Monorepo estruturado.
+- Backend base criado (Spring Boot com health check, tratamento global de erros e migration inicial).
+- Frontend base criado (React + Vite com roteamento, providers e componentes base).
+- Documentação inicial criada (`CLAUDE.md`, diretrizes de engenharia e registro de decisões).
+- CI inicial criado (workflows de backend e frontend em `.github/workflows/`).
 
 ---
 
-## Stack planejada
+## Stack
 
 ### Backend
 
-- Java
-- Spring Boot (Spring Web, Spring Data JPA, Spring Security)
-- Autenticação com JWT
+- Java 21 LTS
+- Spring Boot 3.5.x
+- Maven via Maven Wrapper
+- Spring Web
+- Spring Data JPA
+- Spring Security
 - Bean Validation
 - PostgreSQL
-- Flyway (migrations)
-- Maven
+- Flyway
+- JWT e BCrypt (quando a autenticação for implementada)
+- OpenAPI/Swagger via springdoc-openapi (quando endpoints reais forem implementados)
 
 ### Frontend
 
+- Node.js 24 LTS (versão recomendada)
 - React
 - TypeScript
 - Vite
 - Tailwind CSS
 - shadcn/ui
 - React Router
-- React Hook Form + Zod
+- React Hook Form
+- Zod
 - TanStack Query
+- Vitest
+- Testing Library
 - Zustand (apenas quando houver necessidade real de estado global)
 
 ### Banco de dados
@@ -78,12 +94,16 @@ O projeto é organizado como monorepo:
 
 ```text
 erpell/
-├── backend/            # Aplicação Java + Spring Boot (a ser implementada)
-├── frontend/           # Aplicação React + TypeScript + Vite (a ser implementada)
+├── backend/            # Aplicação Java + Spring Boot (base criada)
+├── frontend/           # Aplicação React + TypeScript + Vite (base criada)
 ├── docs/               # Documentação do projeto
-│   └── modules/        # Documentação específica de cada módulo
+│   ├── engineering-guidelines.md  # Padrões de engenharia
+│   ├── decision-log.md            # Registro de decisões
+│   └── modules/                   # Documentação específica de cada módulo
+├── .claude/
+│   └── agents/         # Agentes especializados (execução e revisão)
 ├── .github/
-│   └── workflows/      # Automações de CI/CD (a serem configuradas)
+│   └── workflows/      # Automações de CI (backend e frontend)
 ├── CLAUDE.md           # Diretrizes do projeto e regras de negócio
 ├── README.md
 ├── .gitignore
@@ -94,13 +114,13 @@ erpell/
 
 ## Como começar
 
-Atualmente o repositório contém apenas a estrutura base do monorepo. Backend, frontend e banco ainda serão implementados de forma incremental.
+O repositório já contém as bases do backend e do frontend. As funcionalidades dos módulos serão implementadas de forma incremental.
 
-Pré-requisitos previstos para o desenvolvimento:
+Pré-requisitos para o desenvolvimento:
 
-- Java (JDK)
-- Maven
-- Node.js
+- Java 21 (JDK)
+- Maven (via Maven Wrapper incluído no `backend/`)
+- Node.js 24 LTS
 - PostgreSQL
 - Git
 
@@ -112,7 +132,7 @@ git clone <url-do-repositorio>
 cd erpell
 ```
 
-As instruções detalhadas de execução do backend e do frontend serão adicionadas conforme cada parte for implementada.
+Instruções específicas de execução do backend e do frontend estão em `backend/README.md` e `frontend/README.md`, e serão detalhadas conforme cada parte evoluir.
 
 ---
 
@@ -142,8 +162,19 @@ Cada etapa deve ser implementada, testada e versionada antes de avançar.
 
 ## Convenções
 
-- **Branches:** `main` (versão estável), `develop` (funcionalidades em teste), `feature/*`, `fix/*`, `docs/*`.
-- **Commits:** padrão próximo ao Conventional Commits (ex.: `feat(products): cria entidade de produto`).
+- **Branches:** nesta fase, o trabalho é feito diretamente na `develop`; a `main` representa a versão estável. As branches `feature/*`, `fix/*` e `docs/*` ficam reservadas para uso futuro ou decisão explícita.
+- **Commits:** padrão próximo ao Conventional Commits, com descrição em português (ex.: `feat(products): cria entidade de produto`).
 - **Documentação e mensagens:** em português do Brasil.
 
 Consulte o arquivo [CLAUDE.md](CLAUDE.md) para as diretrizes completas de arquitetura, regras de negócio e fluxo de trabalho.
+
+---
+
+## Links úteis
+
+- [CLAUDE.md](CLAUDE.md) — diretrizes gerais, arquitetura, stack e regras de negócio.
+- [docs/engineering-guidelines.md](docs/engineering-guidelines.md) — padrões de engenharia, código, testes, segurança e revisão.
+- [docs/decision-log.md](docs/decision-log.md) — registro de decisões importantes, motivos e impactos.
+- [docs/README.md](docs/README.md) — visão geral da documentação do projeto.
+- [docs/modules/README.md](docs/modules/README.md) — organização das especificações por módulo.
+- [.claude/agents/AGENTS.md](.claude/agents/AGENTS.md) — agentes especializados de execução e revisão.

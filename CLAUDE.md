@@ -638,7 +638,7 @@ O projeto deve ser versionado desde o início.
 
 ### Branches
 
-Usar preferencialmente:
+Convenção de nomes:
 
 ```text
 main
@@ -648,11 +648,14 @@ fix/nome-do-ajuste
 docs/nome-do-documento
 ```
 
+As branches `feature/*`, `fix/*` e `docs/*` ficam **reservadas para uso futuro** ou para quando houver **decisão explícita**. Nesta fase, **não criar branch nova** para tarefas comuns.
+
 ### Fluxo atual
 
 Durante o desenvolvimento inicial, o fluxo é simplificado:
 
 * Trabalhar **diretamente na branch `develop`**.
+* **Não** criar branch nova para tarefas comuns nesta fase.
 * **Não** criar PR para tarefas comuns na `develop`.
 * **Não** fazer push para `main`.
 * **Não** fazer merge para `main`.
@@ -692,9 +695,9 @@ Ao iniciar uma tarefa:
 
 1. Ler este `CLAUDE.md`.
 2. Ler o documento específico do módulo em `docs/`, se existir.
-3. Verificar o estado atual do projeto.
-4. Verificar a branch atual.
-5. Criar ou usar a branch correta.
+3. Consultar, em tarefas de implementação e revisão, o `docs/engineering-guidelines.md` e o `docs/decision-log.md` quando houver decisão relacionada.
+4. Verificar o estado atual do projeto.
+5. Confirmar que está na branch `develop`, salvo decisão explícita em contrário.
 6. Implementar a menor parte funcional possível.
 7. Rodar lint, testes e build quando aplicável.
 8. Explicar o que foi alterado.

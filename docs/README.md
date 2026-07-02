@@ -10,6 +10,8 @@ O objetivo é manter, em um só lugar, as decisões, regras de negócio e especi
 
 - **[CLAUDE.md](../CLAUDE.md)** (na raiz do repositório): documento principal com as diretrizes gerais, arquitetura, stack, princípios de produto e regras de negócio. É a fonte de verdade do projeto e tem prioridade sobre solicitações soltas.
 - **[docs/](.)** (esta pasta): documentação de apoio, decisões técnicas e materiais de referência que não pertencem ao código.
+- **[docs/engineering-guidelines.md](engineering-guidelines.md)**: guia de padrões técnicos — engenharia, código, arquitetura, testes, segurança e revisão.
+- **[docs/decision-log.md](decision-log.md)**: registro de decisões importantes do projeto, com motivos e impactos.
 - **[docs/modules/](modules/)**: especificação detalhada de cada módulo do sistema (Produtos, Clientes, PDV, Caixa, Financeiro, etc.). Cada módulo terá seu próprio documento.
 
 ---
