@@ -15,9 +15,19 @@
 
 ## Papel do Claude Code neste projeto
 
-Você está atuando como engenheiro de software responsável por implementar o ERPell seguindo rigorosamente as diretrizes deste repositório.
+Você atua como **engenheiro e orquestrador principal** do ERPell: coordena a execução, a revisão e a validação das tarefas, seguindo rigorosamente as diretrizes deste repositório e apoiando-se em agentes especializados quando necessário.
 
-Você deve:
+Como orquestrador, você deve:
+
+* Ler este `CLAUDE.md` antes de executar qualquer tarefa relevante.
+* Ler `.claude/agents/AGENTS.md` quando a tarefa envolver uso de agentes.
+* Usar os agentes especializados quando a tarefa exigir (ver seção "Agentes especializados").
+* Respeitar a separação de papéis: o **executor implementa** e o **reviewer revisa**.
+* Garantir que o mesmo agente que implementa **não aprove a própria entrega**.
+* Coordenar execução, revisão e validação antes de considerar uma tarefa concluída.
+* Manter o projeto incremental, evitando implementar funcionalidades futuras sem especificação.
+
+Ao implementar (diretamente ou via agente executor), você deve:
 
 * Implementar código limpo, organizado e sustentável.
 * Seguir a arquitetura definida.
@@ -39,6 +49,40 @@ Você não deve:
 * Ignorar regras de negócio para facilitar a implementação.
 * Implementar funcionalidades futuras sem solicitação explícita.
 * Fazer grandes refatorações sem necessidade clara.
+
+---
+
+## Agentes especializados
+
+O ERPell utiliza agentes de projeto do Claude Code para organizar **execução** e **revisão**. Eles ficam em `.claude/agents/` e estão detalhados em `.claude/agents/AGENTS.md`, que deve ser lido quando a tarefa envolver agentes. O `CLAUDE.md` prevalece em caso de conflito.
+
+### Agentes executores (implementam código no seu domínio)
+
+* `back-end-executor`
+* `front-end-executor`
+
+### Agentes revisores (apenas revisam — read-only neste momento)
+
+* `back-end-reviewer`
+* `front-end-reviewer`
+* `product-ux-reviewer`
+* `qa-reviewer`
+* `security-reviewer`
+* `data-reviewer`
+* `ci-cd-reviewer`
+
+### Regras de uso
+
+* Agentes executores podem implementar código dentro do seu domínio (backend ou frontend).
+* Agentes revisores apenas revisam: apontam riscos, problemas, inconsistências e melhorias. **Não alteram arquivos.**
+* `qa-reviewer` e `ci-cd-reviewer` **não usam Bash** neste momento (não executam comandos).
+* O mesmo agente que implementa **não deve aprovar** a própria entrega.
+* `back-end-reviewer` deve revisar entregas relevantes de backend.
+* `front-end-reviewer` deve revisar entregas relevantes de frontend.
+* `security-reviewer` é **obrigatório** em tarefas de autenticação, autorização, JWT, senhas, permissões, CORS, dados sensíveis e proteção de rotas.
+* `data-reviewer` é **obrigatório** em tarefas com banco de dados, migrations, modelagem, constraints, índices ou integridade.
+* `product-ux-reviewer` deve revisar telas, fluxos importantes e decisões que afetem a experiência.
+* `ci-cd-reviewer` deve revisar workflows, pipelines e automações.
 
 ---
 
@@ -178,25 +222,37 @@ Não implementar no MVP:
 
 Essas funcionalidades podem ser previstas para o futuro, mas não devem ser implementadas sem uma especificação própria.
 
+### Plataforma e decisões recentes de escopo
+
+* O MVP continua sendo **PDV com ERP básico**.
+* O público inicial são pequenos negócios, principalmente **mercados, pet shops e lojas de roupas**.
+* A plataforma principal continua sendo **web/SaaS** neste momento.
+* **Serviços** continuam **fora do escopo inicial**.
+* **PDV Desktop/offline** é uma possibilidade futura, mas **não deve ser implementado agora**. O PDV deve ser pensado futuramente com atenção ao isolamento das regras de venda e a uma possível execução local/offline, **sem alterar o escopo atual**.
+* O objetivo não é criar o ERP com mais funcionalidades, e sim **fazer o essencial muito bem**.
+
 ---
 
 ## Stack definida para o MVP
 
 ### Backend
 
-* Java
-* Spring Boot
+* Java 21 LTS
+* Spring Boot 3.5.x
+* Maven via Maven Wrapper (`mvnw`)
 * Spring Web
 * Spring Data JPA
 * Spring Security
-* JWT para autenticação
 * Bean Validation
 * PostgreSQL
 * Flyway para migrations
-* Maven como gerenciador de dependências
+* BCrypt para hash de senha (quando a autenticação for implementada)
+* JWT para autenticação (quando a autenticação for implementada)
+* OpenAPI/Swagger via springdoc-openapi para documentação da API (quando endpoints reais forem implementados)
 
 ### Frontend
 
+* Node.js 24 LTS (versão recomendada)
 * React
 * TypeScript
 * Vite
@@ -206,6 +262,8 @@ Essas funcionalidades podem ser previstas para o futuro, mas não devem ser impl
 * React Hook Form
 * Zod
 * TanStack Query
+* Vitest
+* Testing Library
 * Zustand apenas quando houver necessidade real de estado global
 
 ### Banco de Dados
@@ -589,28 +647,40 @@ fix/nome-do-ajuste
 docs/nome-do-documento
 ```
 
+### Fluxo atual
+
+Durante o desenvolvimento inicial, o fluxo é simplificado:
+
+* Trabalhar **diretamente na branch `develop`**.
+* **Não** criar PR para tarefas comuns na `develop`.
+* **Não** fazer push para `main`.
+* **Não** fazer merge para `main`.
+* A branch `main` deve representar **versão estável**.
+* PRs serão usados futuramente, principalmente para **promover `develop` → `main`**.
+
 ### Regras
 
 * `main` deve representar versão estável.
-* `develop` deve concentrar funcionalidades em teste.
-* Cada funcionalidade deve ser feita em branch própria.
-* Commits devem ser pequenos e descritivos.
+* `develop` deve concentrar as funcionalidades em desenvolvimento e teste.
+* Commits devem ser pequenos, claros e descritivos.
 * Evitar commits gigantes com muitas mudanças misturadas.
-* Antes de iniciar uma nova feature, verificar a branch atual.
-* Antes de commitar, revisar arquivos alterados.
+* Mensagens de commit devem estar em **português do Brasil**.
+* Antes de iniciar tarefas, verificar a branch atual e o estado do working tree.
+* Antes de finalizar, rodar `git status`.
+* Fazer commit somente quando a entrega estiver coerente e validada.
 
 ### Padrão de commits
 
-Usar padrão próximo ao Conventional Commits:
+Usar padrão próximo ao Conventional Commits, mantendo a **descrição em português do Brasil**:
 
 ```text
-feat(products): create product entity
-feat(products): add product listing page
-fix(products): validate sale price
-refactor(pdv): simplify sale item calculation
-docs(project): update product rules
-test(products): add product service tests
-chore(project): configure repository structure
+feat(products): cria entidade de produto
+feat(products): adiciona página de listagem de produtos
+fix(products): valida preço de venda
+refactor(pdv): simplifica cálculo do item de venda
+docs(projeto): atualiza regras de produto
+test(products): adiciona testes do service de produto
+chore(projeto): configura estrutura do repositório
 ```
 
 ---
@@ -640,6 +710,68 @@ Quando houver conflito entre este documento e uma solicitação solta:
 * Priorizar este documento.
 * Apontar o conflito.
 * Solicitar decisão do usuário.
+
+---
+
+## Protocolo de execução de tarefas
+
+Antes de executar qualquer tarefa relevante, o Claude Code deve revisar o pedido recebido e validar se ele está alinhado ao `CLAUDE.md`, ao `.claude/agents/AGENTS.md` e ao escopo atual do ERPell.
+
+### Avaliação antes de executar
+
+* O objetivo está claro?
+* Existe conflito com o escopo do MVP?
+* A tarefa exige agente especializado?
+* A tarefa envolve backend, frontend, segurança, banco, UX, QA ou CI/CD?
+* Há risco de alterar arquitetura, regras de negócio, dependências ou banco de dados?
+* Há necessidade de pedir confirmação antes de seguir?
+
+### Pode executar diretamente
+
+Quando a tarefa for clara, segura e limitada, como:
+
+* ajustes simples de documentação;
+* correções de lint;
+* ajustes pequenos de estilo;
+* organização de arquivos;
+* melhorias pequenas de README;
+* testes simples;
+* correções que não alterem arquitetura, segurança, banco ou regras de negócio.
+
+### Deve parar e pedir confirmação
+
+Quando a tarefa envolver:
+
+* nova dependência relevante;
+* mudança de stack;
+* mudança de arquitetura;
+* alteração de banco de dados ou migrations;
+* autenticação, autorização, JWT, senhas ou permissões;
+* regras de negócio;
+* módulos como Produtos, Clientes, PDV, Caixa, Estoque ou Financeiro;
+* alteração de escopo do MVP;
+* mudança no fluxo de Git;
+* alteração relevante em CI/CD;
+* decisão técnica com mais de uma alternativa válida.
+
+### Após executar
+
+Apresentar:
+
+* resumo do que foi feito;
+* arquivos alterados;
+* comandos executados;
+* validações realizadas;
+* limitações conhecidas;
+* sugestões de melhoria.
+
+As sugestões devem ser classificadas em:
+
+* **Aplicar agora:** melhorias pequenas, seguras e alinhadas à tarefa atual.
+* **Deixar para depois:** melhorias úteis, mas não necessárias neste momento.
+* **Fora do escopo:** ideias que não devem ser implementadas no MVP atual.
+
+O Claude Code **não deve aplicar automaticamente** sugestões que envolvam escopo, arquitetura, segurança, banco, dependências ou regras de negócio.
 
 ---
 
@@ -684,39 +816,99 @@ Não é necessário testar tudo no início, mas regras críticas não devem fica
 
 ---
 
-## Segurança básica
+## Segurança e dados
 
 Desde o início:
 
 * Nunca salvar senhas em texto puro.
-* Usar hash de senha.
+* Usar hash de senha (BCrypt quando a autenticação for implementada).
 * Proteger rotas autenticadas.
-* Validar dados de entrada.
-* Não confiar apenas no frontend.
+* Validar dados de entrada **no backend** — não confiar apenas no frontend.
 * Não expor informações sensíveis desnecessariamente.
+* Usar variáveis de ambiente para segredos e configurações sensíveis.
+* Nunca commitar senhas, tokens, chaves privadas ou arquivos `.env` com dados reais.
 * Separar permissões futuramente por perfil.
-* Não commitar senhas, tokens, chaves privadas ou arquivos `.env` com dados reais.
+
+Revisores obrigatórios em tarefas sensíveis:
+
+* `security-reviewer` é **obrigatório** em tarefas de autenticação, autorização, JWT, senhas, permissões, CORS, dados sensíveis e proteção de rotas.
+* `data-reviewer` é **obrigatório** em tarefas que envolvam banco de dados, migrations e modelagem.
+
+---
+
+## Documentação do projeto
+
+A documentação operacional do desenvolvimento deve ser feita em **Markdown** dentro do repositório.
+
+* **PDFs não** devem ser usados como documentação operacional diária para o Claude Code.
+* `docs/` deve concentrar especificações, decisões e módulos.
+* `docs/modules/` deve conter especificações por módulo.
+* Decisões importantes devem ser registradas futuramente em `docs/decision-log.md`, quando esse arquivo for criado.
+* Cada módulo relevante deve ter especificação própria antes de uma implementação significativa.
+* A documentação deve ser objetiva, modular e adequada para consumo por IA.
+
+### Dois tipos de documentação
+
+**1. Documentação de produto e arquitetura:**
+
+* `CLAUDE.md`
+* `.claude/agents/AGENTS.md`
+* `docs/`
+* `docs/modules/`
+* futuro `docs/decision-log.md`
+
+**2. Documentação técnica da API:**
+
+* OpenAPI
+* Swagger UI
+* `/v3/api-docs`
+* `/swagger-ui.html` ou rota equivalente definida pelo springdoc-openapi
+
+### Relação entre os dois tipos
+
+* OpenAPI/Swagger documenta a **API do backend**.
+* OpenAPI/Swagger **não substitui** a documentação de regras de negócio, UX, produto ou decisões arquiteturais.
+* Swagger UI deve ser habilitado inicialmente para **desenvolvimento**.
+* Swagger UI **não** deve ser exposto em **produção** sem decisão explícita futura.
+* Endpoints públicos e autenticados devem ser documentados quando forem criados.
+
+---
+
+## Linguagem
+
+* Toda documentação, resumos, commits e descrições devem estar em **português do Brasil**.
+* Nomes técnicos inevitáveis podem permanecer em inglês.
+* Nomes de bibliotecas, frameworks, comandos e padrões técnicos devem permanecer conforme o ecossistema.
 
 ---
 
 ## Padrão de resposta esperado do Claude Code
 
-Ao finalizar uma tarefa, responder com:
+Ao finalizar uma tarefa, responder em **português do Brasil** com:
 
 ```text
 Resumo:
-- O que foi implementado.
+- O que foi feito.
 
 Arquivos alterados:
 - Lista dos principais arquivos.
 
+Comandos executados:
+- Comandos rodados (lint, testes, build, git etc.).
+
+Validações realizadas:
+- O que foi verificado e revisado (incluindo revisores acionados).
+
 Como testar:
 - Passos para validar manualmente.
-- Comandos executados.
 
 Observações:
 - Limitações conhecidas.
-- Próximos passos sugeridos.
+
+Sugestões de melhoria:
+- Aplicar agora: melhorias pequenas, seguras e alinhadas.
+- Deixar para depois: úteis, mas não necessárias agora.
+- Fora do escopo: não implementar no MVP atual.
 ```
 
 ---
