@@ -10,6 +10,10 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.upeflow.erpell.auth.JwtAuthenticationFilter;
+import com.upeflow.erpell.auth.JwtService;
+import com.upeflow.erpell.config.RestAccessDeniedHandler;
+import com.upeflow.erpell.config.RestAuthenticationEntryPoint;
 import com.upeflow.erpell.config.SecurityConfig;
 
 /**
@@ -19,7 +23,13 @@ import com.upeflow.erpell.config.SecurityConfig;
  * permitindo que a base rode em qualquer ambiente sem um PostgreSQL ativo.
  */
 @WebMvcTest(HealthController.class)
-@Import(SecurityConfig.class)
+@Import({
+        SecurityConfig.class,
+        JwtAuthenticationFilter.class,
+        JwtService.class,
+        RestAuthenticationEntryPoint.class,
+        RestAccessDeniedHandler.class
+})
 class HealthControllerTest {
 
     @Autowired

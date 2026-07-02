@@ -25,14 +25,41 @@ Frontend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Esta é a *
 - Projeto React + TypeScript + Vite configurado.
 - Tailwind CSS v4 com tokens de tema (claro/escuro) e atalho de importação `@` para `src`.
 - Layout base: sidebar com a identidade do ERPell, cabeçalho e área principal com espaço para as rotas futuras.
-- Roteamento com React Router (página inicial + página de "não encontrada").
+- Roteamento com React Router, separado em **rotas públicas** (`/login`) e **rotas privadas** (área principal), com um guard de autenticação.
+- **Autenticação inicial**: tela de login, estado de sessão e proteção de rotas (ver seção "Autenticação" abaixo).
 - Cartão de **status do backend** consumindo `GET /api/health`, com tratamento de **carregando**, **sucesso** e **erro**.
-- Cliente HTTP base (`services/httpClient.ts`) e serviço de health (`services/healthService.ts`).
+- Cliente HTTP base (`services/httpClient.ts`, com `apiGet`/`apiPost` e injeção de token) e serviços de `health` e `auth`.
 
 ### O que ainda NÃO existe (próximas etapas)
 
-- Autenticação e telas de login.
+- Refresh token e revalidação automática de sessão.
+- Cadastro de usuários/empresa e recuperação de senha.
 - Módulos: produtos, clientes, PDV, caixa, financeiro, dashboard real.
+
+---
+
+## Autenticação
+
+A área principal do ERPell exige login. O fluxo mínimo desta etapa:
+
+- `/login` — tela pública (sem sidebar). Valida e-mail e senha com React Hook Form + Zod e chama `POST /api/auth/login`.
+- Ao autenticar com sucesso, o token e o usuário ficam disponíveis via `hooks/useAuth`, e o usuário é levado para a área principal (`/`).
+- As rotas privadas ficam sob um `ProtectedRoute`: **sem token, o acesso é redirecionado para `/login`**.
+- Um usuário já autenticado que abrir `/login` é redirecionado para `/`.
+- O botão **Sair** (sidebar / cabeçalho no mobile) limpa a sessão e volta para `/login`.
+- Chamadas autenticadas que recebem **401** limpam o token e redirecionam para `/login` (sessão expirada).
+
+### Como acessar o login
+
+1. Suba o backend (com o endpoint `POST /api/auth/login` disponível) e o frontend (`npm run dev`).
+2. Abra `http://localhost:5173`. Sem sessão ativa, você é redirecionado para `http://localhost:5173/login`.
+3. Informe e-mail e senha de um usuário válido e clique em **Entrar**.
+
+### Armazenamento do token — limitação conhecida
+
+O token JWT é guardado no **`localStorage`** (`services/tokenStorage.ts`), uma decisão **pragmática do MVP**.
+
+> **Limitação de segurança (XSS):** o `localStorage` é acessível por qualquer script na página, portanto o token fica exposto a ataques de Cross-Site Scripting. Além disso, **não há refresh token** neste MVP. Uma abordagem mais robusta (cookie `httpOnly` + refresh token) fica para uma etapa futura. Toda leitura/escrita do token passa por `tokenStorage.ts` para facilitar essa troca de estratégia.
 
 ---
 

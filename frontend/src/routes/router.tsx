@@ -1,48 +1,59 @@
 import { createBrowserRouter, type RouteObject } from 'react-router-dom'
 
 import { RootLayout } from '@/components/layout/RootLayout'
+import { LoginPage } from '@/features/auth/LoginPage'
 import { HomePage } from '@/routes/HomePage'
 import { NotFoundPage } from '@/routes/NotFoundPage'
+import { ProtectedRoute } from '@/routes/ProtectedRoute'
+import { PublicOnlyRoute } from '@/routes/PublicOnlyRoute'
 
 /**
- * Rotas publicas (acessiveis sem autenticacao).
+ * Rotas publicas (acessiveis sem autenticacao), FORA do RootLayout — sem
+ * sidebar/layout autenticado.
  *
- * TODO (Etapa 5 - Autenticacao): adicionar aqui rotas como `/login`,
- * definidas FORA do RootLayout (sem menu/layout autenticado). Nenhuma
- * rota publica existe ainda; a separacao esta preparada para receber
- * essas telas sem reestruturar o router.
+ * `/login` fica sob o PublicOnlyRoute: um usuario ja autenticado que tente
+ * acessa-la e redirecionado para a area principal (`/`).
  */
-const publicRoutes: RouteObject[] = []
+const publicRoutes: RouteObject[] = [
+  {
+    element: <PublicOnlyRoute />,
+    children: [{ path: '/login', element: <LoginPage /> }],
+  },
+]
 
 /**
- * Rotas privadas (futuramente exigirao autenticacao).
+ * Rotas privadas: protegidas pelo ProtectedRoute (sem token -> /login) e
+ * renderizadas dentro do RootLayout (layout autenticado com sidebar).
  *
- * Ficam dentro do RootLayout, que fornece o layout autenticado. Novas
- * telas dos modulos (produtos, clientes, PDV, etc.) serao adicionadas
+ * Novas telas dos modulos (produtos, clientes, PDV, etc.) serao adicionadas
  * como filhas do RootLayout nas proximas etapas.
- *
- * TODO (Etapa 5 - Autenticacao): envolver o RootLayout com um
- * ProtectedRoute/guard de autenticacao. Nenhuma protecao por auth e
- * aplicada agora.
- *
- * A rota curinga (`*` -> NotFoundPage) permanece dentro do RootLayout,
- * mantendo o comportamento atual: qualquer caminho desconhecido exibe a
- * pagina "nao encontrada" com o layout padrao.
  */
 const privateRoutes: RouteObject[] = [
   {
-    path: '/',
-    element: <RootLayout />,
+    element: <ProtectedRoute />,
     children: [
-      { index: true, element: <HomePage /> },
-      { path: '*', element: <NotFoundPage /> },
+      {
+        path: '/',
+        element: <RootLayout />,
+        children: [{ index: true, element: <HomePage /> }],
+      },
     ],
   },
 ]
 
 /**
- * Configuracao de rotas da aplicacao. As definicoes ficam separadas em
- * rotas publicas e privadas para deixar clara a topologia que sera usada
- * na Etapa 5 (autenticacao). O comportamento atual e identico ao anterior.
+ * Rota curinga top-level: qualquer caminho desconhecido cai no NotFound,
+ * independentemente de autenticacao. Fica fora dos guards para que uma URL
+ * inexistente nao seja confundida com "acesso negado" e redirecionada ao login.
  */
-export const router = createBrowserRouter([...publicRoutes, ...privateRoutes])
+const fallbackRoute: RouteObject = { path: '*', element: <NotFoundPage /> }
+
+/**
+ * Configuracao de rotas da aplicacao, separada em rotas publicas, privadas e
+ * o fallback de "nao encontrada".
+ */
+export const router = createBrowserRouter([
+  ...publicRoutes,
+  ...privateRoutes,
+  fallbackRoute,
+])

@@ -1,7 +1,10 @@
 /**
- * Modulo de autenticacao e autorizacao do ERPell.
+ * Modulo de autenticacao do ERPell.
  *
- * <p>Reservado para a etapa futura (login, JWT e controle de acesso).
- * Ainda sem implementacao nesta base inicial. Ver CLAUDE.md.
+ * <p>Contem o login por e-mail/senha (BCrypt), a emissao e validacao de JWT
+ * (HS256), o filtro de autenticacao por Bearer token e o endpoint de dados do
+ * usuario autenticado. Nao implementa refresh token, recuperacao de senha, MFA,
+ * OAuth/SSO, RBAC avancado, rate limiting nem lockout (fora do escopo do MVP).
+ * Ver CLAUDE.md e docs/decision-log.md (DEC-016).
  */
 package com.upeflow.erpell.auth;

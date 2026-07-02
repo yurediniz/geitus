@@ -1,7 +1,9 @@
 /**
- * Modulo de empresa (dados da organizacao) do ERPell.
+ * Modulo de empresa (tenant) do ERPell.
  *
- * <p>Reservado para a etapa futura. Ainda sem implementacao nesta base
- * inicial. Ver CLAUDE.md.
+ * <p>Na Etapa 5 contem apenas a estrutura minima ({@code Empresa} e seu
+ * repositorio) necessaria para vincular usuarios a uma empresa na autenticacao
+ * (ver DEC-016). NAO e o modulo Empresa completo, que sera especificado em etapa
+ * propria. Ver CLAUDE.md.
  */
 package com.upeflow.erpell.company;

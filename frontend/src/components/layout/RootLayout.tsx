@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Package,
@@ -6,9 +6,12 @@ import {
   ShoppingCart,
   Wallet,
   LineChart,
+  LogOut,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
+import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
 
 /** Item de navegacao da sidebar. Itens "emBreve" ainda nao possuem rota. */
@@ -33,6 +36,14 @@ const itensNavegacao: NavItem[] = [
  * a area de conteudo, onde as rotas sao renderizadas via <Outlet />.
  */
 export function RootLayout() {
+  const navigate = useNavigate()
+  const { usuario, logout } = useAuth()
+
+  const aoSair = () => {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       <aside className="hidden w-64 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
@@ -52,8 +63,24 @@ export function RootLayout() {
           ))}
         </nav>
 
-        <div className="border-t p-4 text-xs text-muted-foreground">
-          Versão inicial — MVP em desenvolvimento
+        <div className="space-y-3 border-t p-4">
+          {usuario && (
+            <div className="leading-tight">
+              <p className="truncate text-sm font-medium" title={usuario.nome}>
+                {usuario.nome}
+              </p>
+              <p className="truncate text-xs text-muted-foreground" title={usuario.email}>
+                {usuario.email}
+              </p>
+            </div>
+          )}
+          <Button variant="outline" size="sm" className="w-full" onClick={aoSair}>
+            <LogOut className="h-4 w-4" />
+            Sair
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Versão inicial — MVP em desenvolvimento
+          </p>
         </div>
       </aside>
 
@@ -63,6 +90,15 @@ export function RootLayout() {
           <span className="hidden text-sm text-muted-foreground md:inline">
             Plataforma de gestão para pequenos negócios
           </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto md:hidden"
+            onClick={aoSair}
+          >
+            <LogOut className="h-4 w-4" />
+            Sair
+          </Button>
         </header>
 
         <main className="flex-1 p-6">

@@ -10,7 +10,7 @@ import '@/styles/index.css'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <AppProviders>
+      <AppProviders onUnauthorized={() => router.navigate('/login')}>
         <RouterProvider router={router} />
       </AppProviders>
     </ErrorBoundary>

@@ -11,7 +11,8 @@ Backend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Esta é a **
 - Flyway (migrations)
 - PostgreSQL (driver)
 - Maven 3.9.16 via Maven Wrapper
-- JWT (dependências preparadas para a etapa futura de autenticação — ainda não utilizadas)
+- JWT (jjwt 0.12.x) para autenticação
+- springdoc-openapi (Swagger UI) para documentação da API em desenvolvimento
 
 ---
 
@@ -24,11 +25,14 @@ Backend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Esta é a **
 - Flyway habilitado, com uma migration inicial (`V1__baseline.sql`) apenas para validação.
 - Health check da aplicação em `GET /api/health` e health check padrão do Actuator em `GET /actuator/health`.
 - CORS básico liberado para o frontend local (Vite).
-- Segurança liberando **apenas** os health checks (`/api/health` e `/actuator/health`); qualquer outra rota exige autenticação (ainda não implementada, portanto responde `401`).
+- **Autenticação inicial (Etapa 5):** login por e-mail/senha (BCrypt) com emissão de JWT (HS256), filtro de autenticação por Bearer token e endpoint de dados do usuário autenticado.
+- Segurança liberando os health checks (`/api/health`, `/actuator/health`), o `POST /api/auth/login` e a documentação Swagger; qualquer outra rota exige um JWT válido (responde `401` sem token/token inválido e `403` sem permissão).
+- Documentação da API via Swagger UI (apenas para desenvolvimento).
 
 ### O que ainda NÃO existe (próximas etapas)
 
-- Autenticação completa (login, JWT, usuários).
+- Módulo Empresa completo e CRUD de usuários (a Etapa 5 cria apenas o mínimo para autenticar).
+- Refresh token, recuperação de senha, MFA, OAuth/SSO, RBAC avançado (fora do escopo do MVP).
 - Entidades e regras de negócio (produtos, clientes, PDV, caixa, estoque, financeiro).
 
 ---
@@ -73,8 +77,20 @@ Nenhum dado sensível fica no código. A aplicação lê as variáveis abaixo (t
 | `POSTGRES_PASSWORD` | `erpell` | Senha do banco |
 | `SERVER_PORT` | `8080` | Porta da API |
 | `ERPELL_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origens liberadas no CORS (separadas por vírgula) |
-| `JWT_SECRET` | *(vazio)* | Segredo do JWT (uso na etapa futura) |
-| `JWT_EXPIRATION` | `86400000` | Expiração do token JWT em milissegundos (uso futuro) |
+| `JWT_SECRET` | *(vazio)* | Segredo do JWT (HS256). **Obrigatório**: mínimo 32 bytes / 256 bits, senão a aplicação não sobe |
+| `JWT_EXPIRATION` | `86400000` | Expiração do token JWT em milissegundos |
+
+### Bootstrap de usuário admin de desenvolvimento (opcional)
+
+Estas variáveis criam, de forma **idempotente**, um usuário administrador local ao subir a aplicação. Servem apenas para desenvolvimento; nenhuma senha fica no código.
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `ERPELL_BOOTSTRAP_DEV_ADMIN` | *(desligado)* | Habilita o bootstrap quando o valor é `true` |
+| `ERPELL_DEV_ADMIN_EMAIL` | *(vazio)* | E-mail do admin de desenvolvimento |
+| `ERPELL_DEV_ADMIN_PASSWORD` | *(vazio)* | Senha do admin (usada apenas para gerar o hash BCrypt) |
+| `ERPELL_DEV_ADMIN_NAME` | `Administrador` | Nome do admin |
+| `ERPELL_DEV_COMPANY_NAME` | `Empresa de Desenvolvimento` | Nome da empresa (tenant) criada para o admin |
 
 Consulte o arquivo `.env.example` na raiz do repositório para um modelo de configuração.
 
@@ -120,6 +136,58 @@ Resposta esperada do `GET /api/health`:
 ```
 
 O `GET /actuator/health` retorna o health check padrão do Spring Boot Actuator (`{ "status": "UP" }`), sem detalhes internos.
+
+---
+
+## Autenticação (Etapa 5)
+
+A autenticação usa JWT (HS256) com senha em hash BCrypt. Requer PostgreSQL rodando e um `JWT_SECRET` com no mínimo 32 bytes.
+
+### 1. Criar um usuário para testar
+
+Em desenvolvimento, use o bootstrap do admin. Exemplo (Git Bash):
+
+```bash
+export JWT_SECRET="um-segredo-forte-com-no-minimo-32-bytes-aqui"
+export ERPELL_BOOTSTRAP_DEV_ADMIN=true
+export ERPELL_DEV_ADMIN_EMAIL="admin@erpell.dev"
+export ERPELL_DEV_ADMIN_PASSWORD="troque-esta-senha"
+./mvnw spring-boot:run
+```
+
+Ao subir, a aplicação cria a empresa e o usuário admin (se ainda não existirem). Rodar de novo não duplica nada.
+
+### 2. Obter um token via login
+
+```bash
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@erpell.dev","senha":"troque-esta-senha"}'
+```
+
+Resposta (200):
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiJ9...",
+  "usuario": { "id": 1, "nome": "Administrador Dev", "email": "admin@erpell.dev", "perfil": "ADMIN", "empresaId": 1 }
+}
+```
+
+Credencial inválida (senha errada, usuário inexistente ou inativo) → `401` com mensagem genérica `"Credenciais inválidas."` (não revela se o e-mail existe). Campos vazios/inválidos → `400` com a lista de `campos`.
+
+### 3. Consumir uma rota protegida
+
+```bash
+curl http://localhost:8080/api/auth/me \
+  -H "Authorization: Bearer <TOKEN>"
+```
+
+Sem token, ou com token expirado/adulterado, a rota responde `401`.
+
+### Swagger UI (apenas desenvolvimento)
+
+Com a aplicação no ar: `http://localhost:8080/swagger-ui.html` (OpenAPI em `http://localhost:8080/v3/api-docs`). Use o botão **Authorize** para informar o token JWT. O Swagger é liberado apenas nesta fase de desenvolvimento e **não deve ser exposto em produção** sem decisão futura (ver DEC-012).
 
 ---
 

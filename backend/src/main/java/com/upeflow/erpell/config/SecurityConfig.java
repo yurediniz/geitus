@@ -7,25 +7,27 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.upeflow.erpell.auth.JwtAuthenticationFilter;
+
 /**
- * Configuracao basica de seguranca do ERPell.
+ * Configuracao de seguranca do ERPell.
  *
- * <p>Nesta etapa inicial a regra e simples: liberar apenas o health check e
- * exigir autenticacao para qualquer outra rota. A autenticacao completa (JWT,
- * login e usuarios) sera implementada em uma etapa futura.
- *
- * <p>Tambem define o CORS basico para permitir que o frontend local (Vite)
- * consuma a API durante o desenvolvimento.
+ * <p>API stateless com autenticacao via JWT (Bearer). Rotas publicas: health
+ * checks, {@code POST /api/auth/login} e a documentacao (Swagger UI / api-docs,
+ * liberada apenas para desenvolvimento nesta fase). Todo o restante exige token
+ * valido. Respostas de erro seguem o formato {@link com.upeflow.erpell.shared.error.ApiError}
+ * (401 sem token/token invalido, 403 sem permissao), sem vazar detalhes internos.
  */
 @Configuration
 public class SecurityConfig {
@@ -40,6 +42,27 @@ public class SecurityConfig {
     @Value("${erpell.cors.allowed-origins}")
     private String allowedOrigins;
 
+    /** Caminhos do Swagger/OpenAPI liberados apenas em desenvolvimento. */
+    private static final String[] CAMINHOS_SWAGGER = {
+            "/swagger-ui.html",
+            "/swagger-ui/**",
+            "/v3/api-docs",
+            "/v3/api-docs/**",
+            "/v3/api-docs.yaml"
+    };
+
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final RestAuthenticationEntryPoint authenticationEntryPoint;
+    private final RestAccessDeniedHandler accessDeniedHandler;
+
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+            RestAuthenticationEntryPoint authenticationEntryPoint,
+            RestAccessDeniedHandler accessDeniedHandler) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.authenticationEntryPoint = authenticationEntryPoint;
+        this.accessDeniedHandler = accessDeniedHandler;
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -48,20 +71,35 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // Health check liberado (inclui a requisicao de preflight do CORS)
+                        // Preflight do CORS liberado
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // Health checks liberados
                         .requestMatchers("/api/health").permitAll()
-                        // Health check padrao do Actuator tambem liberado
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-                        // Por enquanto, todo o restante exige autenticacao (ainda nao implementada)
+                        // Login liberado (apenas POST)
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        // Documentacao (Swagger UI / api-docs) liberada apenas nesta fase de desenvolvimento
+                        .requestMatchers(CAMINHOS_SWAGGER).permitAll()
+                        // Todo o restante exige autenticacao (JWT valido)
                         .anyRequest().authenticated())
-                // Sem login por formulario; API responde 401 (e nao 403) para acesso nao autenticado
+                // Respostas de erro padronizadas (sem vazar detalhes internos)
                 .exceptionHandling(handling -> handling
-                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler))
                 .httpBasic(AbstractHttpConfigurer::disable)
-                .formLogin(AbstractHttpConfigurer::disable);
+                .formLogin(AbstractHttpConfigurer::disable)
+                // Autenticacao por JWT antes do filtro padrao de usuario/senha
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * Codificador de senha: BCrypt. Usado para gerar e verificar os hashes.
+     */
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 
     @Bean

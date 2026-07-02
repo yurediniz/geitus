@@ -45,7 +45,16 @@ erpell:
     # Origens liberadas para o frontend local (Vite). Separe por virgula se houver mais de uma.
     allowed-origins: ${ERPELL_CORS_ALLOWED_ORIGINS:http://localhost:5173}
   security:
-    # JWT preparado para a etapa futura de autenticacao (ainda nao utilizado).
+    # JWT usado na autenticacao. O segredo (HS256) precisa ter no minimo 32 bytes
+    # (256 bits); caso contrario a aplicacao NAO sobe (fail-fast, ver JwtSecretValidator).
     jwt:
       secret: ${JWT_SECRET:}
       expiration: ${JWT_EXPIRATION:86400000}
+
+# Documentacao da API (springdoc / Swagger UI). Voltada ao desenvolvimento.
+# NAO expor em producao sem decisao futura (ver DEC-012 no decision-log).
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
