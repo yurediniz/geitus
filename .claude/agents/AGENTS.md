@@ -75,5 +75,6 @@ O mesmo agente que **implementa** uma tarefa **não deve aprovar** o próprio tr
 ## Observações
 
 - Todos os agentes usam `model: inherit` (herdam o modelo da sessão principal) por enquanto.
+- **`qa-reviewer` e `ci-cd-reviewer` são read-only neste momento e não usam `Bash`**: eles apenas inspecionam testes, workflows e automações — **não executam comandos** (não rodam `npm test`, `npm run build`, `./mvnw verify` nem os pipelines). Poderão receber `Bash` no futuro, se houver necessidade.
 - Não há plugins, MCP ou hooks configurados nesta etapa.
 - Estes agentes organizam o processo; as regras de produto e arquitetura continuam definidas no `CLAUDE.md`, que prevalece em caso de conflito.
