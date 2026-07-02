@@ -34,6 +34,7 @@ function renderComRota(entrada: string) {
         <Routes>
           <Route element={<ProtectedRoute />}>
             <Route path="/" element={<div>Area privada</div>} />
+            <Route path="/produtos" element={<div>Produtos protegidos</div>} />
           </Route>
           <Route path="/login" element={<div>Tela de login</div>} />
         </Routes>
@@ -77,5 +78,22 @@ describe('ProtectedRoute', () => {
 
     expect(await screen.findByText(/tela de login/i)).toBeInTheDocument()
     expect(screen.queryByText(/area privada/i)).not.toBeInTheDocument()
+  })
+
+  it('protege a rota /produtos quando nao ha token', () => {
+    renderComRota('/produtos')
+
+    expect(screen.getByText(/tela de login/i)).toBeInTheDocument()
+    expect(screen.queryByText(/produtos protegidos/i)).not.toBeInTheDocument()
+  })
+
+  it('renderiza /produtos quando ha token valido', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    renderComRota('/produtos')
+
+    expect(await screen.findByText(/produtos protegidos/i)).toBeInTheDocument()
+    expect(screen.queryByText(/tela de login/i)).not.toBeInTheDocument()
   })
 })

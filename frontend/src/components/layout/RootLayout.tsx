@@ -25,7 +25,7 @@ interface NavItem {
 
 const itensNavegacao: NavItem[] = [
   { rotulo: 'Início', to: '/', icone: LayoutDashboard },
-  { rotulo: 'Produtos', icone: Package, emBreve: true },
+  { rotulo: 'Produtos', to: '/produtos', icone: Package },
   { rotulo: 'Clientes', icone: Users, emBreve: true },
   { rotulo: 'PDV', icone: ShoppingCart, emBreve: true },
   { rotulo: 'Caixa', icone: Wallet, emBreve: true },

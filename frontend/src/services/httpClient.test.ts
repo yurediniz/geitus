@@ -116,12 +116,24 @@ describe('httpClient', () => {
   describe('mapeamento de erros', () => {
     it('mapeia 400 para HttpError com campos quando o backend os fornece', async () => {
       vi.mocked(globalThis.fetch).mockResolvedValue(
-        respostaFake(400, { campos: { email: 'Informe o e-mail.' } }),
+        respostaFake(400, { mensagem: 'Um ou mais campos sao invalidos.', campos: { email: 'Informe o e-mail.' } }),
       )
 
       await expect(apiPost('/auth/login', {})).rejects.toMatchObject({
         status: 400,
+        message: 'Um ou mais campos sao invalidos.',
         campos: { email: 'Informe o e-mail.' },
+      })
+    })
+
+    it('preserva a mensagem de regra de negocio em 400 sem campos', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(
+        respostaFake(400, { mensagem: 'Já existe um produto com este SKU nesta empresa.' }),
+      )
+
+      await expect(apiPost('/produtos', {})).rejects.toMatchObject({
+        status: 400,
+        message: 'Já existe um produto com este SKU nesta empresa.',
       })
     })
 

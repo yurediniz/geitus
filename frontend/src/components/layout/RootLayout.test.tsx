@@ -24,13 +24,14 @@ const usuarioFake: Usuario = {
 }
 
 /** Monta o RootLayout dentro de rotas, com uma tela de login de destino. */
-function renderLayout() {
+function renderLayout(entrada = '/') {
   return render(
     <AuthProvider>
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={[entrada]}>
         <Routes>
           <Route path="/" element={<RootLayout />}>
             <Route index element={<div>Conteudo</div>} />
+            <Route path="produtos" element={<div>Produtos</div>} />
           </Route>
           <Route path="/login" element={<div>Tela de login</div>} />
         </Routes>
@@ -54,6 +55,20 @@ describe('RootLayout - logout', () => {
     expect(await screen.findByText('Ana Souza')).toBeInTheDocument()
     expect(screen.getByText('ana@empresa.com')).toBeInTheDocument()
     expect(screen.getByText('Empresa Teste')).toBeInTheDocument()
+  })
+
+  it('exibe Produtos como item de navegacao ativo, nao como item em breve', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    renderLayout('/produtos')
+
+    await screen.findByText('Ana Souza')
+    const produtos = screen.getByRole('link', { name: /produtos/i })
+
+    expect(produtos).toHaveAttribute('href', '/produtos')
+    expect(produtos).toHaveAttribute('aria-current', 'page')
+    expect(screen.getAllByText(/^em breve$/i).length).toBeGreaterThan(0)
   })
 
   it('o botao Sair limpa a sessao e leva para /login', async () => {

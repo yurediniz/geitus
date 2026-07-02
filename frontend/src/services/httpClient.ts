@@ -49,15 +49,15 @@ interface ApiErrorBody {
   campos?: Record<string, string>
 }
 
-/** Extrai `campos` do corpo de erro, quando presente e no formato esperado. */
-async function lerCamposDoErro(resposta: Response): Promise<Record<string, string> | undefined> {
+/** Extrai o corpo padronizado de erro, quando presente e no formato esperado. */
+async function lerCorpoDoErro(resposta: Response): Promise<ApiErrorBody | undefined> {
   try {
     const corpo = (await resposta.json()) as ApiErrorBody
-    if (corpo && typeof corpo.campos === 'object' && corpo.campos !== null) {
-      return corpo.campos
+    if (corpo && typeof corpo === 'object') {
+      return corpo
     }
   } catch {
-    // Corpo ausente ou nao-JSON: sem detalhes de campos.
+    // Corpo ausente ou nao-JSON: sem detalhes adicionais.
   }
   return undefined
 }
@@ -91,8 +91,9 @@ async function tratarErro(resposta: Response, autenticada: boolean): Promise<nev
   }
 
   if (resposta.status === 400) {
-    const campos = await lerCamposDoErro(resposta)
-    throw new HttpError(400, 'Dados invalidos.', campos)
+    const corpo = await lerCorpoDoErro(resposta)
+    const campos = corpo?.campos && typeof corpo.campos === 'object' ? corpo.campos : undefined
+    throw new HttpError(400, corpo?.mensagem ?? 'Dados invalidos.', campos)
   }
 
   throw new HttpError(resposta.status, `Requisicao falhou (HTTP ${resposta.status}).`)
