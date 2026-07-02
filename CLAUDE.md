@@ -717,6 +717,39 @@ Quando houver conflito entre este documento e uma solicitação solta:
 
 ---
 
+## Modo econômico de contexto
+
+Para reduzir consumo de tokens sem perder qualidade, leia apenas o necessário para cada tarefa:
+
+* Não ler todos os documentos do projeto em toda tarefa.
+* Ler sempre este `CLAUDE.md` como fonte principal de orientação.
+* Ler `.claude/agents/AGENTS.md` somente quando a tarefa envolver agentes ou revisão por agentes.
+* Ler `docs/engineering-guidelines.md` quando houver implementação, revisão técnica, refatoração, testes ou padrões de código.
+* Ler `docs/decision-log.md` somente quando a tarefa envolver decisão arquitetural, banco, stack, escopo, segurança, conflito ou mudança relevante.
+* Ler `docs/modules/<módulo>.md` somente quando a tarefa envolver aquele módulo.
+* Ler `README.md`, `backend/README.md` ou `frontend/README.md` somente quando a tarefa envolver documentação, execução, setup ou uso dessas áreas.
+* Não repetir no relatório final regras já documentadas, salvo quando forem diretamente relevantes.
+* Preferir respostas finais objetivas (ver "Padrão de resposta esperado do Claude Code").
+* Detalhar mais apenas quando houver erro, risco, decisão importante, mudança de banco, segurança/autenticação ou solicitação explícita do usuário.
+
+Economia de contexto **não** dispensa validações obrigatórias (testes, lint, build) nem os revisores obrigatórios em tarefas sensíveis.
+
+---
+
+## Uso proporcional de agentes
+
+* Não acionar todos os reviewers por padrão; usar apenas os agentes necessários para a tarefa.
+* `back-end-reviewer` para mudanças relevantes no backend.
+* `front-end-reviewer` para mudanças relevantes no frontend.
+* `security-reviewer` quando houver autenticação, autorização, CORS, JWT, senha, permissões, dados sensíveis ou proteção de rotas — permanece **obrigatório** nesses casos.
+* `data-reviewer` quando houver banco, migrations, modelagem, constraints, índices ou integridade — permanece **obrigatório** nesses casos.
+* `product-ux-reviewer` quando houver tela, fluxo importante ou decisão de experiência.
+* `qa-reviewer` quando houver testes, critérios de aceite, bug crítico ou fluxo sensível.
+* `ci-cd-reviewer` apenas quando houver workflow, pipeline ou automação.
+* Auditoria completa com múltiplos reviewers deve ser reservada para marcos importantes ou tarefas críticas, não para ajustes pequenos.
+
+---
+
 ## Protocolo de execução de tarefas
 
 Antes de executar qualquer tarefa relevante, o Claude Code deve revisar o pedido recebido e validar se ele está alinhado ao `CLAUDE.md`, ao `.claude/agents/AGENTS.md` e ao escopo atual do ERPell.
@@ -890,7 +923,45 @@ A documentação operacional do desenvolvimento deve ser feita em **Markdown** d
 
 ## Padrão de resposta esperado do Claude Code
 
-Ao finalizar uma tarefa, responder em **português do Brasil** com:
+Responder em **português do Brasil**, usando um dos dois níveis abaixo conforme a natureza da tarefa.
+
+### Resposta curta (padrão)
+
+Usar na maioria das tarefas — ajustes pequenos, documentação, correções simples, tarefas sem risco relevante:
+
+```text
+Resumo:
+- O que foi feito.
+
+Arquivos alterados:
+- Lista dos principais arquivos.
+
+Validações executadas:
+- O que foi rodado/revisado.
+
+Reviewers usados:
+- Se houver.
+
+Pendências ou riscos:
+- Se houver.
+
+Próximo passo:
+- Sugestão objetiva.
+```
+
+### Resposta detalhada
+
+Usar apenas quando houver:
+
+* tarefa crítica;
+* erro em validação;
+* alteração de banco;
+* autenticação/segurança;
+* decisão arquitetural;
+* mudança de escopo;
+* solicitação explícita do usuário.
+
+Nesses casos, responder com:
 
 ```text
 Resumo:

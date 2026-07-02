@@ -184,5 +184,6 @@ As revisões devem verificar:
 * O **`security-reviewer`** deve cruzar este documento com tarefas sensíveis (seção 8).
 * O **`data-reviewer`** deve cruzar este documento com alterações de banco (seção 5).
 * O **`product-ux-reviewer`** deve observar principalmente a seção de UX aplicada ao código (seção 9).
+* Em tarefas pequenas e claras, consultar apenas a(s) seção(ões) relevante(s) em vez de reler o documento inteiro (modo econômico de contexto, ver `CLAUDE.md`).
 
 Os papéis e as obrigatoriedades de cada agente estão detalhados em [`.claude/agents/AGENTS.md`](../.claude/agents/AGENTS.md).
