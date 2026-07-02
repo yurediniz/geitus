@@ -22,6 +22,7 @@ Como orquestrador, você deve:
 * Ler este `CLAUDE.md` antes de executar qualquer tarefa relevante.
 * Ler `.claude/agents/AGENTS.md` quando a tarefa envolver uso de agentes.
 * Usar os agentes especializados quando a tarefa exigir (ver seção "Agentes especializados").
+* Consultar `docs/engineering-guidelines.md` (padrões técnicos) e `docs/decision-log.md` (decisões já tomadas) quando forem relevantes para a implementação, a revisão ou uma decisão.
 * Respeitar a separação de papéis: o **executor implementa** e o **reviewer revisa**.
 * Garantir que o mesmo agente que implementa **não aprove a própria entrega**.
 * Coordenar execução, revisão e validação antes de considerar uma tarefa concluída.
@@ -842,8 +843,9 @@ A documentação operacional do desenvolvimento deve ser feita em **Markdown** d
 
 * **PDFs não** devem ser usados como documentação operacional diária para o Claude Code.
 * `docs/` deve concentrar especificações, decisões e módulos.
+* `docs/engineering-guidelines.md` reúne os padrões de engenharia, código, arquitetura, testes, segurança e revisão.
 * `docs/modules/` deve conter especificações por módulo.
-* Decisões importantes devem ser registradas futuramente em `docs/decision-log.md`, quando esse arquivo for criado.
+* Decisões importantes devem ser registradas em `docs/decision-log.md`.
 * Cada módulo relevante deve ter especificação própria antes de uma implementação significativa.
 * A documentação deve ser objetiva, modular e adequada para consumo por IA.
 
@@ -853,9 +855,10 @@ A documentação operacional do desenvolvimento deve ser feita em **Markdown** d
 
 * `CLAUDE.md`
 * `.claude/agents/AGENTS.md`
+* `docs/engineering-guidelines.md`
+* `docs/decision-log.md`
 * `docs/`
 * `docs/modules/`
-* futuro `docs/decision-log.md`
 
 **2. Documentação técnica da API:**
 

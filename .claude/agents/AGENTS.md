@@ -59,7 +59,7 @@ O mesmo agente que **implementa** uma tarefa **não deve aprovar** o próprio tr
 
 ## Fluxo recomendado
 
-1. Definir a tarefa e consultar o `CLAUDE.md` (e a spec do módulo em `docs/`, se existir).
+1. Definir a tarefa e consultar o `CLAUDE.md`, o `docs/engineering-guidelines.md` (checklist comum de implementação/revisão), o `docs/decision-log.md` (decisões já tomadas) e a spec do módulo em `docs/`, se existir.
 2. Um **executor** implementa a menor parte funcional possível.
 3. O **revisor** correspondente revisa a entrega.
 4. Aplicar revisores obrigatórios conforme a natureza da tarefa:
@@ -78,3 +78,4 @@ O mesmo agente que **implementa** uma tarefa **não deve aprovar** o próprio tr
 - **`qa-reviewer` e `ci-cd-reviewer` são read-only neste momento e não usam `Bash`**: eles apenas inspecionam testes, workflows e automações — **não executam comandos** (não rodam `npm test`, `npm run build`, `./mvnw verify` nem os pipelines). Poderão receber `Bash` no futuro, se houver necessidade.
 - Não há plugins, MCP ou hooks configurados nesta etapa.
 - Estes agentes organizam o processo; as regras de produto e arquitetura continuam definidas no `CLAUDE.md`, que prevalece em caso de conflito.
+- **Documentos de referência:** executores e revisores devem usar o [`docs/engineering-guidelines.md`](../../docs/engineering-guidelines.md) como checklist comum de implementação e revisão, e consultar o [`docs/decision-log.md`](../../docs/decision-log.md) para entender decisões já tomadas antes de propor mudanças.
