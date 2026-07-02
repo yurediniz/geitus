@@ -14,6 +14,7 @@ Frontend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Esta é a *
 - React Router
 - TanStack Query
 - React Hook Form + Zod (preparados para os formulários das próximas etapas)
+- Vitest + Testing Library (testes)
 - Oxlint (lint)
 - npm (gerenciador de pacotes)
 
@@ -91,6 +92,7 @@ Scripts disponíveis:
 | `npm run dev` | Servidor de desenvolvimento com HMR |
 | `npm run lint` | Análise estática com Oxlint |
 | `npm run typecheck` | Verificação de tipos (TypeScript) |
+| `npm test` | Testes com Vitest (Testing Library) |
 | `npm run build` | Build de produção (typecheck + Vite) |
 | `npm run preview` | Serve localmente o build de produção |
 

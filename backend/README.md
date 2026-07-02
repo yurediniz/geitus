@@ -22,9 +22,9 @@ Backend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Esta é a **
 - Estrutura de pacotes por domínio (ver abaixo).
 - `application.yml` lendo configurações de variáveis de ambiente.
 - Flyway habilitado, com uma migration inicial (`V1__baseline.sql`) apenas para validação.
-- Endpoint de health check em `GET /api/health`.
+- Health check da aplicação em `GET /api/health` e health check padrão do Actuator em `GET /actuator/health`.
 - CORS básico liberado para o frontend local (Vite).
-- Segurança liberando **apenas** o health check; qualquer outra rota exige autenticação (ainda não implementada, portanto responde `401`).
+- Segurança liberando **apenas** os health checks (`/api/health` e `/actuator/health`); qualquer outra rota exige autenticação (ainda não implementada, portanto responde `401`).
 
 ### O que ainda NÃO existe (próximas etapas)
 
@@ -106,17 +106,20 @@ Requer um PostgreSQL acessível conforme as variáveis de ambiente:
 ./mvnw spring-boot:run
 ```
 
-Com a aplicação no ar, valide o health check:
+Com a aplicação no ar, valide os health checks:
 
 ```bash
 curl http://localhost:8080/api/health
+curl http://localhost:8080/actuator/health
 ```
 
-Resposta esperada:
+Resposta esperada do `GET /api/health`:
 
 ```json
 { "status": "UP", "aplicacao": "ERPell", "timestamp": "..." }
 ```
+
+O `GET /actuator/health` retorna o health check padrão do Spring Boot Actuator (`{ "status": "UP" }`), sem detalhes internos.
 
 ---
 
