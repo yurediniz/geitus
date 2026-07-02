@@ -7,30 +7,41 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.upeflow.erpell.auth.CredenciaisInvalidasException;
 import com.upeflow.erpell.company.Empresa;
 import com.upeflow.erpell.company.EmpresaRepository;
+import com.upeflow.erpell.user.Usuario;
+import com.upeflow.erpell.user.UsuarioRepository;
 
 /**
  * Regras de negocio do modulo Produtos.
  *
- * <p>Base minima da Etapa 7B1: ainda sem controller/endpoint. Toda a regra de
- * negocio fica concentrada aqui (arquitetura por camadas do CLAUDE.md), pronta
- * para ser consumida por um controller fino quando ele for criado.
+ * <p>Toda a regra de negocio fica concentrada aqui (arquitetura por camadas do
+ * CLAUDE.md), consumida por um controller fino ({@code ProdutoController}).
  *
- * <p>O {@code empresaId} recebido por todo metodo publico representa SEMPRE a
+ * <p>O {@code empresaId} recebido pelos metodos internos representa SEMPRE a
  * empresa do usuario autenticado (nunca uma escolha livre do chamador) e e
  * usado para isolar consultas e alteracoes por tenant (DEC-016): um produto de
  * outra empresa nunca deve ser encontrado, atualizado ou vazado.
+ *
+ * <p>Os metodos publicos usados pelo controller recebem {@code idUsuario} (o
+ * id extraido do JWT) e resolvem a empresa internamente, no mesmo padrao usado
+ * em {@code EmpresaService.buscarUsuarioAtivo}: assim o controller nunca
+ * manipula {@code empresaId} diretamente, evitando que um cliente da API
+ * consiga informar/adivinhar uma empresa por parametro.
  */
 @Service
 public class ProdutoService {
 
     private final ProdutoRepository produtoRepository;
     private final EmpresaRepository empresaRepository;
+    private final UsuarioRepository usuarioRepository;
 
-    public ProdutoService(ProdutoRepository produtoRepository, EmpresaRepository empresaRepository) {
+    public ProdutoService(ProdutoRepository produtoRepository, EmpresaRepository empresaRepository,
+            UsuarioRepository usuarioRepository) {
         this.produtoRepository = produtoRepository;
         this.empresaRepository = empresaRepository;
+        this.usuarioRepository = usuarioRepository;
     }
 
     @Transactional
@@ -92,6 +103,60 @@ public class ProdutoService {
     @Transactional(readOnly = true)
     public List<Produto> listarPorEmpresa(Long empresaId) {
         return produtoRepository.findByEmpresaId(empresaId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Produto> listarPorEmpresaComFiltros(Long empresaId, String busca, Boolean ativo) {
+        String buscaNormalizada = StringUtils.hasText(busca) ? busca.trim() : null;
+        return produtoRepository.buscarPorEmpresaComFiltros(empresaId, buscaNormalizada, ativo);
+    }
+
+    /**
+     * Resolve a empresa do usuario autenticado e delega ao cadastro. O
+     * {@code idUsuario} vem sempre do JWT (nunca de parametro externo).
+     */
+    @Transactional
+    public Produto cadastrarParaUsuario(Long idUsuario, String nome, String categoria, String unidade,
+            BigDecimal precoVenda, BigDecimal custo, BigDecimal estoqueMinimo, String codigoBarras, String sku) {
+        Long empresaId = resolverEmpresaId(idUsuario);
+        return cadastrar(empresaId, nome, categoria, unidade, precoVenda, custo, estoqueMinimo, codigoBarras, sku);
+    }
+
+    @Transactional
+    public Produto atualizarDadosBasicosParaUsuario(Long idUsuario, Long produtoId, String nome, String categoria,
+            String unidade, BigDecimal precoVenda, BigDecimal custo, BigDecimal estoqueMinimo,
+            String codigoBarras, String sku) {
+        Long empresaId = resolverEmpresaId(idUsuario);
+        return atualizarDadosBasicos(empresaId, produtoId, nome, categoria, unidade, precoVenda, custo,
+                estoqueMinimo, codigoBarras, sku);
+    }
+
+    @Transactional
+    public Produto inativarParaUsuario(Long idUsuario, Long produtoId) {
+        return inativar(resolverEmpresaId(idUsuario), produtoId);
+    }
+
+    @Transactional
+    public Produto reativarParaUsuario(Long idUsuario, Long produtoId) {
+        return reativar(resolverEmpresaId(idUsuario), produtoId);
+    }
+
+    @Transactional(readOnly = true)
+    public Produto buscarPorIdParaUsuario(Long idUsuario, Long produtoId) {
+        return buscarPorId(resolverEmpresaId(idUsuario), produtoId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Produto> listarParaUsuario(Long idUsuario, String busca, Boolean ativo) {
+        Long empresaId = resolverEmpresaId(idUsuario);
+        return listarPorEmpresaComFiltros(empresaId, busca, ativo);
+    }
+
+    private Long resolverEmpresaId(Long idUsuario) {
+        Usuario usuario = usuarioRepository.findById(idUsuario)
+                .filter(Usuario::isAtivo)
+                .orElseThrow(CredenciaisInvalidasException::new);
+        return usuario.getEmpresaId();
     }
 
     /**

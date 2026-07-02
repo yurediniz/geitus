@@ -21,6 +21,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.upeflow.erpell.company.Empresa;
 import com.upeflow.erpell.company.EmpresaRepository;
+import com.upeflow.erpell.user.UsuarioRepository;
 
 /**
  * Testa as regras do {@link ProdutoService}: validacoes de cadastro/atualizacao
@@ -35,11 +36,14 @@ class ProdutoServiceTest {
     @Mock
     private EmpresaRepository empresaRepository;
 
+    @Mock
+    private UsuarioRepository usuarioRepository;
+
     private ProdutoService produtoService;
 
     @BeforeEach
     void setUp() {
-        produtoService = new ProdutoService(produtoRepository, empresaRepository);
+        produtoService = new ProdutoService(produtoRepository, empresaRepository, usuarioRepository);
     }
 
     private Empresa empresaComId(Long id) {

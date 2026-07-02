@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.upeflow.erpell.auth.CredenciaisInvalidasException;
+import com.upeflow.erpell.product.ProdutoNaoEncontradoException;
+import com.upeflow.erpell.product.RegraDeNegocioException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -97,6 +99,38 @@ public class GlobalExceptionHandler {
                 request.getRequestURI());
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(corpo);
+    }
+
+    /**
+     * Produto nao encontrado para a empresa do usuario autenticado (inclui
+     * produto de outra empresa: nos dois casos o comportamento e identico, para
+     * nunca vazar dados entre empresas — DEC-016).
+     */
+    @ExceptionHandler(ProdutoNaoEncontradoException.class)
+    public ResponseEntity<ApiError> tratarProdutoNaoEncontrado(ProdutoNaoEncontradoException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.NOT_FOUND.value(),
+                HttpStatus.NOT_FOUND.getReasonPhrase(),
+                "Produto não encontrado.",
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(corpo);
+    }
+
+    /**
+     * Violacao de regra de negocio do modulo Produtos (por exemplo, SKU ou
+     * codigo de barras duplicado na mesma empresa).
+     */
+    @ExceptionHandler(RegraDeNegocioException.class)
+    public ResponseEntity<ApiError> tratarRegraDeNegocio(RegraDeNegocioException ex, HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+
+        return ResponseEntity.badRequest().body(corpo);
     }
 
     /**
