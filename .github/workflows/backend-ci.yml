@@ -15,6 +15,10 @@ on:
       - 'backend/**'
       - '.github/workflows/backend-ci.yml'
 
+# Princípio de menor privilégio: o workflow só precisa ler o repositório.
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Compilar e testar o backend

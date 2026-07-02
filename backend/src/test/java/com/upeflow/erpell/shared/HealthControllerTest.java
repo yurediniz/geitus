@@ -32,4 +32,15 @@ class HealthControllerTest {
                 .andExpect(jsonPath("$.status").value("UP"))
                 .andExpect(jsonPath("$.aplicacao").value("ERPell"));
     }
+
+    /**
+     * Ancora para a futura autenticacao: qualquer rota que nao esteja
+     * explicitamente liberada deve ser barrada pela cadeia de seguranca
+     * ({@code anyRequest().authenticated()}) e responder 401.
+     */
+    @Test
+    void rotaProtegidaDeveResponder401() throws Exception {
+        mockMvc.perform(get("/api/protegido"))
+                .andExpect(status().isUnauthorized());
+    }
 }

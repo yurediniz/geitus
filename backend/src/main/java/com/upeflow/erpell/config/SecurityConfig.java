@@ -7,10 +7,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -29,11 +31,13 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
 
     /**
-     * Origens permitidas pelo CORS. Configuravel por variavel de ambiente
-     * ({@code ERPELL_CORS_ALLOWED_ORIGINS}); por padrao aceita o frontend local
-     * do Vite. Aceita multiplas origens separadas por virgula.
+     * Origens permitidas pelo CORS. O valor vem exclusivamente da propriedade
+     * {@code erpell.cors.allowed-origins}, definida no {@code application.yml}
+     * (fonte unica), que por sua vez usa a variavel de ambiente
+     * {@code ERPELL_CORS_ALLOWED_ORIGINS} e, na ausencia dela, o frontend local
+     * do Vite como padrao. Aceita multiplas origens separadas por virgula.
      */
-    @Value("${erpell.cors.allowed-origins:http://localhost:5173}")
+    @Value("${erpell.cors.allowed-origins}")
     private String allowedOrigins;
 
     @Bean
@@ -51,7 +55,9 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         // Por enquanto, todo o restante exige autenticacao (ainda nao implementada)
                         .anyRequest().authenticated())
-                // Sem login por formulario; API responde 401 para acesso nao autenticado
+                // Sem login por formulario; API responde 401 (e nao 403) para acesso nao autenticado
+                .exceptionHandling(handling -> handling
+                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable);
 
@@ -63,8 +69,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(parseOrigins(allowedOrigins));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true);
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept"));
+        configuration.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

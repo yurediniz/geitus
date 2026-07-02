@@ -15,6 +15,10 @@ on:
       - 'frontend/**'
       - '.github/workflows/frontend-ci.yml'
 
+# Princípio de menor privilégio: o workflow só precisa ler o repositório.
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Lint, typecheck e build do frontend
