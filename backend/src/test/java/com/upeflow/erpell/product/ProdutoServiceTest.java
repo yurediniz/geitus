@@ -113,7 +113,7 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComSkuDuplicadoNaMesmaEmpresaDeveFalhar() {
-        when(produtoRepository.existsBySkuAndEmpresaId("SKU-1", 1L)).thenReturn(true);
+        when(produtoRepository.existsBySkuAndEmpresa_Id("SKU-1", 1L)).thenReturn(true);
 
         assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
                 new BigDecimal("10"), null, null, null, "SKU-1"))
@@ -127,7 +127,7 @@ class ProdutoServiceTest {
         // O SKU "SKU-1" existe em outra empresa (1), mas o cadastro e feito na
         // empresa 2: a checagem de unicidade deve considerar apenas a empresa
         // informada, entao a consulta para a empresa 2 retorna "nao existe".
-        when(produtoRepository.existsBySkuAndEmpresaId("SKU-1", 2L)).thenReturn(false);
+        when(produtoRepository.existsBySkuAndEmpresa_Id("SKU-1", 2L)).thenReturn(false);
 
         Empresa empresa2 = empresaComId(2L);
         when(empresaRepository.findById(2L)).thenReturn(Optional.of(empresa2));
@@ -138,13 +138,13 @@ class ProdutoServiceTest {
 
         assertThat(produto.getSku()).isEqualTo("SKU-1");
         assertThat(produto.getEmpresaId()).isEqualTo(2L);
-        verify(produtoRepository).existsBySkuAndEmpresaId("SKU-1", 2L);
-        verify(produtoRepository, never()).existsBySkuAndEmpresaId(eq("SKU-1"), eq(1L));
+        verify(produtoRepository).existsBySkuAndEmpresa_Id("SKU-1", 2L);
+        verify(produtoRepository, never()).existsBySkuAndEmpresa_Id(eq("SKU-1"), eq(1L));
     }
 
     @Test
     void cadastrarComCodigoBarrasDuplicadoNaMesmaEmpresaDeveFalhar() {
-        when(produtoRepository.existsByCodigoBarrasAndEmpresaId("789123", 1L)).thenReturn(true);
+        when(produtoRepository.existsByCodigoBarrasAndEmpresa_Id("789123", 1L)).thenReturn(true);
 
         assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
                 new BigDecimal("10"), null, null, "789123", null))
@@ -164,13 +164,13 @@ class ProdutoServiceTest {
 
         assertThat(produto.getSku()).isNull();
         assertThat(produto.getCodigoBarras()).isNull();
-        verify(produtoRepository, never()).existsBySkuAndEmpresaId(any(), anyLong());
-        verify(produtoRepository, never()).existsByCodigoBarrasAndEmpresaId(any(), anyLong());
+        verify(produtoRepository, never()).existsBySkuAndEmpresa_Id(any(), anyLong());
+        verify(produtoRepository, never()).existsByCodigoBarrasAndEmpresa_Id(any(), anyLong());
     }
 
     @Test
     void atualizarProdutoDeOutraEmpresaDeveFalhar() {
-        when(produtoRepository.findByIdAndEmpresaId(5L, 1L)).thenReturn(Optional.empty());
+        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> produtoService.atualizarDadosBasicos(1L, 5L, "Novo Nome", null, null,
                 new BigDecimal("10"), null, null, null, null))
@@ -183,7 +183,7 @@ class ProdutoServiceTest {
     void atualizarProdutoDentroDaEmpresaCorretaDeveAlterarDados() {
         Empresa empresa = empresaComId(1L);
         Produto produtoExistente = produtoComId(5L, empresa, null, null);
-        when(produtoRepository.findByIdAndEmpresaId(5L, 1L)).thenReturn(Optional.of(produtoExistente));
+        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
         when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
 
         Produto atualizado = produtoService.atualizarDadosBasicos(1L, 5L, "Nome Atualizado", "Categoria",
@@ -197,8 +197,8 @@ class ProdutoServiceTest {
     void atualizarComSkuJaUsadoPorOutroProdutoDaMesmaEmpresaDeveFalhar() {
         Empresa empresa = empresaComId(1L);
         Produto produtoExistente = produtoComId(5L, empresa, "SKU-PROPRIO", null);
-        when(produtoRepository.findByIdAndEmpresaId(5L, 1L)).thenReturn(Optional.of(produtoExistente));
-        when(produtoRepository.existsBySkuAndEmpresaIdAndIdNot("SKU-DE-OUTRO", 1L, 5L)).thenReturn(true);
+        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
+        when(produtoRepository.existsBySkuAndEmpresa_IdAndIdNot("SKU-DE-OUTRO", 1L, 5L)).thenReturn(true);
 
         assertThatThrownBy(() -> produtoService.atualizarDadosBasicos(1L, 5L, "Produto", null, null,
                 new BigDecimal("10"), null, null, null, "SKU-DE-OUTRO"))
@@ -211,15 +211,15 @@ class ProdutoServiceTest {
     void atualizarMantendoOProprioSkuNaoDeveFalhar() {
         Empresa empresa = empresaComId(1L);
         Produto produtoExistente = produtoComId(5L, empresa, "SKU-PROPRIO", null);
-        when(produtoRepository.findByIdAndEmpresaId(5L, 1L)).thenReturn(Optional.of(produtoExistente));
-        when(produtoRepository.existsBySkuAndEmpresaIdAndIdNot("SKU-PROPRIO", 1L, 5L)).thenReturn(false);
+        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
+        when(produtoRepository.existsBySkuAndEmpresa_IdAndIdNot("SKU-PROPRIO", 1L, 5L)).thenReturn(false);
         when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
 
         Produto atualizado = produtoService.atualizarDadosBasicos(1L, 5L, "Produto Atualizado", null, null,
                 new BigDecimal("15"), null, null, null, "SKU-PROPRIO");
 
         assertThat(atualizado.getSku()).isEqualTo("SKU-PROPRIO");
-        verify(produtoRepository).existsBySkuAndEmpresaIdAndIdNot("SKU-PROPRIO", 1L, 5L);
+        verify(produtoRepository).existsBySkuAndEmpresa_IdAndIdNot("SKU-PROPRIO", 1L, 5L);
         verify(produtoRepository).save(any(Produto.class));
     }
 
@@ -227,7 +227,7 @@ class ProdutoServiceTest {
     void inativarEReativarProdutoDevemAlterarStatus() {
         Empresa empresa = empresaComId(1L);
         Produto produtoExistente = produtoComId(5L, empresa, null, null);
-        when(produtoRepository.findByIdAndEmpresaId(5L, 1L)).thenReturn(Optional.of(produtoExistente));
+        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
         when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
 
         Produto inativado = produtoService.inativar(1L, 5L);
@@ -239,7 +239,7 @@ class ProdutoServiceTest {
 
     @Test
     void buscarPorIdDeOutraEmpresaDeveLancarProdutoNaoEncontrado() {
-        when(produtoRepository.findByIdAndEmpresaId(5L, 2L)).thenReturn(Optional.empty());
+        when(produtoRepository.findByIdAndEmpresa_Id(5L, 2L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> produtoService.buscarPorId(2L, 5L))
                 .isInstanceOf(ProdutoNaoEncontradoException.class);

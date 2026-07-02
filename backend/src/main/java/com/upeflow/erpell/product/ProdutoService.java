@@ -96,13 +96,13 @@ public class ProdutoService {
 
     @Transactional(readOnly = true)
     public Produto buscarPorId(Long empresaId, Long produtoId) {
-        return produtoRepository.findByIdAndEmpresaId(produtoId, empresaId)
+        return produtoRepository.findByIdAndEmpresa_Id(produtoId, empresaId)
                 .orElseThrow(ProdutoNaoEncontradoException::new);
     }
 
     @Transactional(readOnly = true)
     public List<Produto> listarPorEmpresa(Long empresaId) {
-        return produtoRepository.findByEmpresaId(empresaId);
+        return produtoRepository.findByEmpresa_Id(empresaId);
     }
 
     @Transactional(readOnly = true)
@@ -191,22 +191,22 @@ public class ProdutoService {
     }
 
     private void validarUnicidadeParaNovoProduto(Long empresaId, String sku, String codigoBarras) {
-        if (StringUtils.hasText(sku) && produtoRepository.existsBySkuAndEmpresaId(sku, empresaId)) {
+        if (StringUtils.hasText(sku) && produtoRepository.existsBySkuAndEmpresa_Id(sku, empresaId)) {
             throw new RegraDeNegocioException("Já existe um produto com este SKU nesta empresa.");
         }
         if (StringUtils.hasText(codigoBarras)
-                && produtoRepository.existsByCodigoBarrasAndEmpresaId(codigoBarras, empresaId)) {
+                && produtoRepository.existsByCodigoBarrasAndEmpresa_Id(codigoBarras, empresaId)) {
             throw new RegraDeNegocioException("Já existe um produto com este código de barras nesta empresa.");
         }
     }
 
     private void validarUnicidadeParaAtualizacao(Long empresaId, Long produtoId, String sku, String codigoBarras) {
         if (StringUtils.hasText(sku)
-                && produtoRepository.existsBySkuAndEmpresaIdAndIdNot(sku, empresaId, produtoId)) {
+                && produtoRepository.existsBySkuAndEmpresa_IdAndIdNot(sku, empresaId, produtoId)) {
             throw new RegraDeNegocioException("Já existe um produto com este SKU nesta empresa.");
         }
         if (StringUtils.hasText(codigoBarras)
-                && produtoRepository.existsByCodigoBarrasAndEmpresaIdAndIdNot(codigoBarras, empresaId, produtoId)) {
+                && produtoRepository.existsByCodigoBarrasAndEmpresa_IdAndIdNot(codigoBarras, empresaId, produtoId)) {
             throw new RegraDeNegocioException("Já existe um produto com este código de barras nesta empresa.");
         }
     }

@@ -15,17 +15,25 @@ import org.springframework.data.repository.query.Param;
  */
 public interface ProdutoRepository extends JpaRepository<Produto, Long> {
 
-    List<Produto> findByEmpresaId(Long empresaId);
+    // Nota: Produto nao possui um atributo direto "empresaId" (apenas o
+    // relacionamento "empresa" com Empresa e o getter derivado
+    // Produto.getEmpresaId()). Por isso os metodos abaixo usam a notacao
+    // "Empresa_Id" para navegar explicitamente ate a propriedade "id" de
+    // Empresa; sem o underscore, o Spring Data tenta resolver "empresaId"
+    // como um unico atributo da entidade e falha na inicializacao do
+    // contexto ("Could not resolve attribute 'empresaId' of ... Produto").
 
-    Optional<Produto> findByIdAndEmpresaId(Long id, Long empresaId);
+    List<Produto> findByEmpresa_Id(Long empresaId);
 
-    boolean existsBySkuAndEmpresaId(String sku, Long empresaId);
+    Optional<Produto> findByIdAndEmpresa_Id(Long id, Long empresaId);
 
-    boolean existsBySkuAndEmpresaIdAndIdNot(String sku, Long empresaId, Long id);
+    boolean existsBySkuAndEmpresa_Id(String sku, Long empresaId);
 
-    boolean existsByCodigoBarrasAndEmpresaId(String codigoBarras, Long empresaId);
+    boolean existsBySkuAndEmpresa_IdAndIdNot(String sku, Long empresaId, Long id);
 
-    boolean existsByCodigoBarrasAndEmpresaIdAndIdNot(String codigoBarras, Long empresaId, Long id);
+    boolean existsByCodigoBarrasAndEmpresa_Id(String codigoBarras, Long empresaId);
+
+    boolean existsByCodigoBarrasAndEmpresa_IdAndIdNot(String codigoBarras, Long empresaId, Long id);
 
     /**
      * Lista produtos da empresa com filtros opcionais de busca (nome, SKU ou
