@@ -43,14 +43,14 @@ Request:
 
 Respostas:
 
-- **200** — `{ "token": "<jwt>", "usuario": { "id", "nome", "email", "perfil", "empresaId" } }`
+- **200** — `{ "token": "<jwt>", "usuario": { "id", "nome", "email", "perfil", "empresa" } }`, onde `empresa` contém dados básicos da empresa vinculada.
 - **401** — credencial inválida (senha errada, usuário inexistente **ou** inativo) → mensagem genérica `"Credenciais inválidas."` (não revela se o e-mail existe).
 - **400** — validação (campos vazios / e-mail inválido), com a lista de `campos`.
 
 ### `GET /api/auth/me` (autenticado)
 
 - Header `Authorization: Bearer <jwt>`.
-- **200** — `{ "id", "nome", "email", "perfil", "empresaId" }` (nunca retorna `senha_hash`).
+- **200** — `{ "id", "nome", "email", "perfil", "empresa" }` (nunca retorna `senha_hash`).
 - **401** — sem token, token expirado, adulterado, com assinatura inválida, ou usuário inativado.
 
 ### Rotas públicas mantidas

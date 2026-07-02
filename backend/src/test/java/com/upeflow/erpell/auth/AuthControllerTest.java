@@ -18,6 +18,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.upeflow.erpell.auth.dto.LoginResponse;
 import com.upeflow.erpell.auth.dto.UsuarioResponse;
+import com.upeflow.erpell.company.Empresa;
+import com.upeflow.erpell.company.dto.EmpresaResponse;
 import com.upeflow.erpell.config.RestAccessDeniedHandler;
 import com.upeflow.erpell.config.RestAuthenticationEntryPoint;
 import com.upeflow.erpell.config.SecurityConfig;
@@ -57,7 +59,7 @@ class AuthControllerTest {
 
     @Test
     void loginValidoDeveRetornar200ComToken() throws Exception {
-        UsuarioResponse usuario = new UsuarioResponse(1L, "Admin", "admin@erpell.dev", "ADMIN", 7L);
+        UsuarioResponse usuario = new UsuarioResponse(1L, "Admin", "admin@erpell.dev", "ADMIN", empresaFake());
         when(authService.login(any())).thenReturn(new LoginResponse("token-fake", usuario));
 
         mockMvc.perform(post("/api/auth/login")
@@ -68,7 +70,8 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.usuario.id").value(1))
                 .andExpect(jsonPath("$.usuario.email").value("admin@erpell.dev"))
                 .andExpect(jsonPath("$.usuario.perfil").value("ADMIN"))
-                .andExpect(jsonPath("$.usuario.empresaId").value(7))
+                .andExpect(jsonPath("$.usuario.empresa.id").value(7))
+                .andExpect(jsonPath("$.usuario.empresa.nome").value("Empresa Teste"))
                 // Nunca deve vazar hash de senha
                 .andExpect(content().string(org.hamcrest.Matchers.not(
                         org.hamcrest.Matchers.containsString("senha_hash"))))
@@ -130,7 +133,7 @@ class AuthControllerTest {
 
     @Test
     void meComTokenValidoDeveRetornar200() throws Exception {
-        UsuarioResponse usuario = new UsuarioResponse(1L, "Admin", "admin@erpell.dev", "ADMIN", 7L);
+        UsuarioResponse usuario = new UsuarioResponse(1L, "Admin", "admin@erpell.dev", "ADMIN", empresaFake());
         when(authService.buscarUsuarioAutenticado(1L)).thenReturn(usuario);
 
         String token = jwtService.gerarToken(criarUsuario(1L, "ADMIN"));
@@ -138,7 +141,14 @@ class AuthControllerTest {
         mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.email").value("admin@erpell.dev"));
+                .andExpect(jsonPath("$.email").value("admin@erpell.dev"))
+                .andExpect(jsonPath("$.empresa.id").value(7))
+                .andExpect(jsonPath("$.empresa.nome").value("Empresa Teste"))
+                // Nunca deve vazar hash de senha
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("senha_hash"))))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("senhaHash"))));
     }
 
     @Test
@@ -166,5 +176,15 @@ class AuthControllerTest {
         when(usuario.getPerfil()).thenReturn(perfil);
         when(usuario.getEmpresaId()).thenReturn(7L);
         return usuario;
+    }
+
+    private EmpresaResponse empresaFake() {
+        Empresa empresa = new Empresa("Empresa Teste");
+        return EmpresaResponse.de(setId(empresa, 7L));
+    }
+
+    private Empresa setId(Empresa empresa, Long id) {
+        org.springframework.test.util.ReflectionTestUtils.setField(empresa, "id", id);
+        return empresa;
     }
 }

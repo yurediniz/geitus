@@ -63,6 +63,8 @@ class AuthServiceTest {
         assertThat(resposta.token()).isNotBlank();
         assertThat(resposta.usuario().email()).isEqualTo(EMAIL);
         assertThat(resposta.usuario().perfil()).isEqualTo("ADMIN");
+        assertThat(resposta.usuario().empresa()).isNotNull();
+        assertThat(resposta.usuario().empresa().nome()).isEqualTo("Empresa Teste");
     }
 
     @Test
@@ -123,5 +125,7 @@ class AuthServiceTest {
         UsuarioResponse resposta = authService.buscarUsuarioAutenticado(1L);
 
         assertThat(resposta.email()).isEqualTo(EMAIL);
+        assertThat(resposta.empresa()).isNotNull();
+        assertThat(resposta.empresa().nome()).isEqualTo("Empresa Teste");
     }
 }

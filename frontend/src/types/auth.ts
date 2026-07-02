@@ -4,6 +4,7 @@
  * Refletem o contrato fixo da API do backend (POST /api/auth/login e
  * GET /api/auth/me). Ver frontend/README.md para detalhes do fluxo.
  */
+import type { Empresa } from '@/types/empresa'
 
 /** Usuario autenticado, conforme retornado pela API. */
 export interface Usuario {
@@ -11,7 +12,7 @@ export interface Usuario {
   nome: string
   email: string
   perfil: string
-  empresaId: number
+  empresa: Empresa
 }
 
 /** Corpo enviado para POST /api/auth/login. */

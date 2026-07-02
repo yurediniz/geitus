@@ -20,7 +20,7 @@ const usuarioFake: Usuario = {
   nome: 'Ana Souza',
   email: 'ana@empresa.com',
   perfil: 'ADMIN',
-  empresaId: 1,
+  empresa: { id: 1, nome: 'Empresa Teste', ativo: true, criadoEm: '2026-01-01T00:00:00Z', atualizadoEm: null },
 }
 
 /** Monta o RootLayout dentro de rotas, com uma tela de login de destino. */
@@ -45,7 +45,7 @@ describe('RootLayout - logout', () => {
     localStorage.clear()
   })
 
-  it('exibe nome e e-mail do usuario reidratado', async () => {
+  it('exibe nome, e-mail e empresa do usuario reidratado', async () => {
     setStoredToken('token-valido')
     getMeMock.mockResolvedValue(usuarioFake)
 
@@ -53,6 +53,7 @@ describe('RootLayout - logout', () => {
 
     expect(await screen.findByText('Ana Souza')).toBeInTheDocument()
     expect(screen.getByText('ana@empresa.com')).toBeInTheDocument()
+    expect(screen.getByText('Empresa Teste')).toBeInTheDocument()
   })
 
   it('o botao Sair limpa a sessao e leva para /login', async () => {

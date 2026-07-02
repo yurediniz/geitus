@@ -156,3 +156,34 @@ export async function apiPost<T>(
 
   return (await resposta.json()) as T
 }
+
+/**
+ * Executa um PATCH no caminho informado com corpo JSON e retorna o corpo em JSON.
+ *
+ * @param path caminho relativo a URL base (ex.: "/empresas/minha")
+ * @param corpo objeto serializado como JSON no corpo da requisicao
+ * @param opcoes.autenticada injeta o header Authorization: Bearer <token>
+ */
+export async function apiPatch<T>(
+  path: string,
+  corpo: unknown,
+  opcoes: { autenticada?: boolean } = {},
+): Promise<T> {
+  const autenticada = opcoes.autenticada ?? false
+  let resposta: Response
+  try {
+    resposta = await fetch(`${baseUrl}${path}`, {
+      method: 'PATCH',
+      headers: montarHeaders(autenticada, true),
+      body: JSON.stringify(corpo),
+    })
+  } catch {
+    throw new HttpError(0, 'Nao foi possivel conectar ao servidor.')
+  }
+
+  if (!resposta.ok) {
+    await tratarErro(resposta, autenticada)
+  }
+
+  return (await resposta.json()) as T
+}

@@ -2,6 +2,7 @@ import { createBrowserRouter, type RouteObject } from 'react-router-dom'
 
 import { RootLayout } from '@/components/layout/RootLayout'
 import { LoginPage } from '@/features/auth/LoginPage'
+import { EmpresaPage } from '@/features/company/EmpresaPage'
 import { HomePage } from '@/routes/HomePage'
 import { NotFoundPage } from '@/routes/NotFoundPage'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
@@ -35,7 +36,10 @@ const privateRoutes: RouteObject[] = [
       {
         path: '/',
         element: <RootLayout />,
-        children: [{ index: true, element: <HomePage /> }],
+        children: [
+          { index: true, element: <HomePage /> },
+          { path: 'empresa', element: <EmpresaPage /> },
+        ],
       },
     ],
   },

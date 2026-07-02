@@ -6,6 +6,7 @@ import {
   ShoppingCart,
   Wallet,
   LineChart,
+  Building2,
   LogOut,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -29,6 +30,7 @@ const itensNavegacao: NavItem[] = [
   { rotulo: 'PDV', icone: ShoppingCart, emBreve: true },
   { rotulo: 'Caixa', icone: Wallet, emBreve: true },
   { rotulo: 'Financeiro', icone: LineChart, emBreve: true },
+  { rotulo: 'Empresa', to: '/empresa', icone: Building2 },
 ]
 
 /**
@@ -66,6 +68,12 @@ export function RootLayout() {
         <div className="space-y-3 border-t p-4">
           {usuario && (
             <div className="leading-tight">
+              <p
+                className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                title={usuario.empresa.nome}
+              >
+                {usuario.empresa.nome}
+              </p>
               <p className="truncate text-sm font-medium" title={usuario.nome}>
                 {usuario.nome}
               </p>

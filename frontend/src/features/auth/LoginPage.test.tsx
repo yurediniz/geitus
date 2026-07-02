@@ -92,7 +92,7 @@ describe('LoginPage', () => {
         nome: 'Ana',
         email: 'ana@empresa.com',
         perfil: 'ADMIN',
-        empresaId: 1,
+        empresa: { id: 1, nome: 'Empresa Teste', ativo: true, criadoEm: '2026-01-01T00:00:00Z', atualizadoEm: null },
       },
     })
     renderLogin()
