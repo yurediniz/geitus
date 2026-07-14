@@ -12,11 +12,11 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Modulo:** Produtos
 - **Origem:** Etapa 7B1
 - **Prioridade:** media
-- **Status:** aberto
+- **Status:** finalizado
 - **Descricao:** A entidade Produto possui setters publicos. Futuramente, reduzir a visibilidade ou concentrar alteracoes em metodos de dominio pode diminuir o risco de bypass das regras do `ProdutoService`.
 - **Impacto:** Nao bloqueia a Etapa 7B2, mas pode afetar manutencao conforme o modulo crescer.
 - **Quando revisar:** Apos endpoints de Produtos ou antes de PDV/Estoque.
-- **Observacoes:** Manter simples enquanto o modulo ainda esta em construcao inicial.
+- **Observacoes:** Resolvido na refatoracao pos-7C. Setters individuais removidos de `Produto`; alteracoes so via construtor completo e `atualizarDadosBasicos`. Testes ajustados para o novo construtor.
 
 ## DT-002 — Simplificar construcao no metodo cadastrar do ProdutoService
 
@@ -24,11 +24,11 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Modulo:** Produtos
 - **Origem:** Etapa 7B1
 - **Prioridade:** baixa
-- **Status:** aberto
+- **Status:** finalizado
 - **Descricao:** Ha redundancia interna na construcao/cadastro do produto.
 - **Impacto:** Nao afeta comportamento, testes ou seguranca.
 - **Quando revisar:** Proxima refatoracao pequena do modulo Produtos.
-- **Observacoes:** Corrigir apenas quando houver uma oportunidade natural de limpeza no modulo.
+- **Observacoes:** Resolvido na refatoracao pos-7C. `cadastrar` usa o construtor completo em uma linha, sem repassar nome/preco duas vezes.
 
 ## DT-003 — Aplicar validacao de tamanho maximo nos DTOs de Produto
 
@@ -60,11 +60,11 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Modulo:** Produtos
 - **Origem:** Etapa 7B2
 - **Prioridade:** media
-- **Status:** aberto
+- **Status:** finalizado
 - **Descricao:** Os endpoints REST passaram a usar metodos `*ParaUsuario`, que resolvem a empresa a partir do usuario autenticado, mas os metodos antigos por `empresaId` (da Etapa 7B1) foram mantidos e ficaram sem consumidor externo, gerando dois caminhos publicos para a mesma regra de negocio.
 - **Impacto:** Nao afeta seguranca (o isolamento por empresa continua correto), mas aumenta a superficie publica do service e pode confundir futuros consumidores.
 - **Quando revisar:** Antes de outros modulos (Caixa, PDV, Estoque) passarem a depender do `ProdutoService`.
-- **Observacoes:** Reduzir para um unico caminho publico (`*ParaUsuario`), tornando os metodos por `empresaId` privados ou removendo-os apos confirmar que os testes de service nao dependem deles diretamente.
+- **Observacoes:** Resolvido na refatoracao pos-7C. Metodos por `empresaId` passaram a package-private (unica API publica: `*ParaUsuario`); `@Transactional` concentrado no ponto de entrada; dead code `listarPorEmpresa` e `ProdutoRepository.findByEmpresa_Id` removidos.
 
 ## DT-006 — Validar casas decimais de estoqueMinimo no ProdutoRequest
 
@@ -72,11 +72,11 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Modulo:** Produtos
 - **Origem:** Etapa 7B2
 - **Prioridade:** baixa
-- **Status:** aberto
+- **Status:** finalizado
 - **Descricao:** A coluna `estoque_minimo` e `NUMERIC(12,3)`, mas o DTO `ProdutoRequest` nao possui `@Digits(integer = 12, fraction = 3)` para barrar excesso de casas decimais antes de chegar ao banco.
 - **Impacto:** Um valor com mais de 3 casas decimais cairia como erro generico de banco/handler, em vez de um 400 amigavel.
 - **Quando revisar:** Proxima manutencao pequena dos DTOs de Produto.
-- **Observacoes:** Adicionar `@Digits` alinhado a migration `V3__produtos.sql`.
+- **Observacoes:** Resolvido na refatoracao pos-7C. `ProdutoRequest` recebeu `@Digits`: `preco_venda`/`custo` (integer=10, fraction=2) e `estoque_minimo` (integer=9, fraction=3), alinhados a migration V3. Teste cobre estoque minimo com casas decimais em excesso -> 400.
 
 ## DT-007 — Cobrir teste de codigo de barras duplicado no ProdutoControllerTest
 
@@ -84,11 +84,11 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Modulo:** Produtos
 - **Origem:** Etapa 7B2
 - **Prioridade:** baixa
-- **Status:** aberto
+- **Status:** finalizado
 - **Descricao:** O `ProdutoControllerTest` cobre SKU duplicado no cadastro e na atualizacao, mas nao ha teste simetrico para codigo de barras duplicado, embora a regra de negocio trate os dois campos da mesma forma.
 - **Impacto:** Nao afeta comportamento; e uma lacuna pequena de cobertura de teste no controller.
 - **Quando revisar:** Proxima manutencao pequena dos testes de Produtos.
-- **Observacoes:** A regra em si ja e coberta no `ProdutoServiceTest` (Etapa 7B1); a lacuna e apenas no nivel de contrato HTTP.
+- **Observacoes:** Resolvido na refatoracao pos-7C. Adicionado teste de cadastro com codigo de barras duplicado -> 400 com a mensagem da regra, simetrico ao de SKU.
 
 ## DT-008 — Completar testes de 401 para os endpoints de Produtos
 
@@ -96,11 +96,11 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Modulo:** Produtos
 - **Origem:** Etapa 7B2
 - **Prioridade:** baixa
-- **Status:** aberto
+- **Status:** finalizado
 - **Descricao:** O `ProdutoControllerTest` cobre 401 sem token para listar e cadastrar, mas nao ha teste explicito de 401 para buscarPorId, atualizar, inativar e reativar. O comportamento e garantido pela configuracao global de seguranca, mas sem teste dedicado por endpoint.
 - **Impacto:** Baixo risco de regressao silenciosa se a configuracao global de seguranca mudar no futuro.
 - **Quando revisar:** Proxima manutencao pequena dos testes de Produtos.
-- **Observacoes:** Reforca a protecao contra regressao futura, sem exigir mudanca de comportamento agora.
+- **Observacoes:** Resolvido na refatoracao pos-7C. Adicionados 4 testes de 401 sem token (buscarPorId, atualizar, inativar, reativar).
 
 ## DT-009 — Avaliar indice para busca textual de produtos se o volume crescer
 
@@ -161,3 +161,15 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Impacto:** Risco de XSS aceito conscientemente no MVP; documentado em `frontend/README.md` e `docs/modules/autenticacao.md`.
 - **Quando revisar:** Evolucao de seguranca pos-MVP ou antes de producao com dados sensiveis.
 - **Observacoes:** A migracao para cookie httpOnly implica revisitar CSRF/CORS (`allowCredentials`).
+
+## DT-014 — Cobrir resolverEmpresaId (usuario inativo/inexistente) no ProdutoService
+
+- **ID:** DT-014
+- **Modulo:** Produtos
+- **Origem:** Refatoracao pos-7C (revisao QA)
+- **Prioridade:** baixa
+- **Status:** aberto
+- **Descricao:** O ramo `resolverEmpresaId` do `ProdutoService` (usuario do token inexistente ou inativo -> `CredenciaisInvalidasException`) nao e exercitado por teste: o `ProdutoServiceTest` chama os metodos internos por `empresaId` e o `ProdutoControllerTest` mocka o service inteiro.
+- **Impacto:** Fluxo de autorizacao por tenant sem cobertura direta; baixo risco pois a logica e simples e identica ao padrao ja testado em `EmpresaServiceTest`.
+- **Quando revisar:** Proxima manutencao dos testes de Produtos.
+- **Observacoes:** Adicionar teste de service cobrindo `cadastrarParaUsuario`/`buscarPorIdParaUsuario` com usuario inativo/inexistente.

@@ -20,13 +20,14 @@ import jakarta.persistence.Table;
 /**
  * Produto fisico do ERPell.
  *
- * <p>Base minima do modulo Produtos (Etapa 7B1): apenas entidade, repository
- * e service, sem controller/endpoint ainda. Todo produto nasce vinculado a
- * uma empresa (tenant), conforme DEC-016, e nunca deve ser lido ou alterado
- * fora da empresa a que pertence.
+ * <p>Todo produto nasce vinculado a uma empresa (tenant), conforme DEC-016, e
+ * nunca deve ser lido ou alterado fora da empresa a que pertence. A empresa e
+ * imutavel apos a criacao; os demais dados so mudam via
+ * {@link #atualizarDadosBasicos} (nao ha setters individuais), garantindo que
+ * as alteracoes passem pelas regras do {@code ProdutoService}.
  *
- * <p>Nao deve ser exposta diretamente na API: quando o controller for criado,
- * usar DTOs.
+ * <p>Nao deve ser exposta diretamente na API: o {@code ProdutoController} usa
+ * DTOs ({@code ProdutoRequest}/{@code ProdutoResponse}).
  */
 @Entity
 @Table(name = "produtos")
@@ -77,11 +78,17 @@ public class Produto {
         // Construtor exigido pelo JPA.
     }
 
-    public Produto(Empresa empresa, String nome, BigDecimal precoVenda) {
+    /**
+     * Cria um produto ja com os dados basicos. A empresa (tenant) e imutavel
+     * apos a criacao; os demais campos podem ser alterados via
+     * {@link #atualizarDadosBasicos}. O service e responsavel por validar as
+     * regras de negocio antes de instanciar.
+     */
+    public Produto(Empresa empresa, String nome, String categoria, String unidade, BigDecimal precoVenda,
+            BigDecimal custo, BigDecimal estoqueMinimo, String codigoBarras, String sku) {
         this.empresa = empresa;
-        this.nome = nome;
-        this.precoVenda = precoVenda;
         this.ativo = true;
+        atualizarDadosBasicos(nome, categoria, unidade, precoVenda, custo, estoqueMinimo, codigoBarras, sku);
     }
 
     @PrePersist
@@ -135,64 +142,32 @@ public class Produto {
         return nome;
     }
 
-    public void setNome(String nome) {
-        this.nome = nome;
-    }
-
     public String getCategoria() {
         return categoria;
-    }
-
-    public void setCategoria(String categoria) {
-        this.categoria = categoria;
     }
 
     public String getUnidade() {
         return unidade;
     }
 
-    public void setUnidade(String unidade) {
-        this.unidade = unidade;
-    }
-
     public BigDecimal getPrecoVenda() {
         return precoVenda;
-    }
-
-    public void setPrecoVenda(BigDecimal precoVenda) {
-        this.precoVenda = precoVenda;
     }
 
     public BigDecimal getCusto() {
         return custo;
     }
 
-    public void setCusto(BigDecimal custo) {
-        this.custo = custo;
-    }
-
     public BigDecimal getEstoqueMinimo() {
         return estoqueMinimo;
-    }
-
-    public void setEstoqueMinimo(BigDecimal estoqueMinimo) {
-        this.estoqueMinimo = estoqueMinimo;
     }
 
     public String getCodigoBarras() {
         return codigoBarras;
     }
 
-    public void setCodigoBarras(String codigoBarras) {
-        this.codigoBarras = codigoBarras;
-    }
-
     public String getSku() {
         return sku;
-    }
-
-    public void setSku(String sku) {
-        this.sku = sku;
     }
 
     public boolean isAtivo() {

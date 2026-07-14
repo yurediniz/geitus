@@ -23,8 +23,6 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
     // como um unico atributo da entidade e falha na inicializacao do
     // contexto ("Could not resolve attribute 'empresaId' of ... Produto").
 
-    List<Produto> findByEmpresa_Id(Long empresaId);
-
     Optional<Produto> findByIdAndEmpresa_Id(Long id, Long empresaId);
 
     boolean existsBySkuAndEmpresa_Id(String sku, Long empresaId);

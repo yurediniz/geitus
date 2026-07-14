@@ -63,9 +63,9 @@ class ProdutoControllerTest {
     private Produto produtoComId(Long id, Long empresaId, String nome, String sku) {
         Empresa empresa = new Empresa("Empresa " + empresaId);
         ReflectionTestUtils.setField(empresa, "id", empresaId);
-        Produto produto = new Produto(empresa, nome, new BigDecimal("10.00"));
+        Produto produto = new Produto(empresa, nome, null, null, new BigDecimal("10.00"),
+                null, null, null, sku);
         ReflectionTestUtils.setField(produto, "id", id);
-        produto.setSku(sku);
         return produto;
     }
 
@@ -90,6 +90,32 @@ class ProdutoControllerTest {
         mockMvc.perform(post("/api/produtos")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{ \"nome\": \"Produto\", \"precoVenda\": 10.00 }"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void buscarPorIdSemTokenDeveRetornar401() throws Exception {
+        mockMvc.perform(get("/api/produtos/5"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void atualizarSemTokenDeveRetornar401() throws Exception {
+        mockMvc.perform(patch("/api/produtos/5")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"nome\": \"Produto\", \"precoVenda\": 10.00 }"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void inativarSemTokenDeveRetornar401() throws Exception {
+        mockMvc.perform(patch("/api/produtos/5/inativar"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void reativarSemTokenDeveRetornar401() throws Exception {
+        mockMvc.perform(patch("/api/produtos/5/reativar"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -221,6 +247,22 @@ class ProdutoControllerTest {
     }
 
     @Test
+    void cadastrarComCodigoBarrasDuplicadoDeveRetornar400() throws Exception {
+        when(produtoService.cadastrarParaUsuario(eq(1L), eq("Produto"), isNull(), isNull(),
+                eq(new BigDecimal("10.00")), isNull(), isNull(), eq("789123"), isNull()))
+                .thenThrow(new RegraDeNegocioException("Já existe um produto com este código de barras nesta empresa."));
+
+        String token = tokenParaUsuario(1L);
+
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"nome\": \"Produto\", \"precoVenda\": 10.00, \"codigoBarras\": \"789123\" }"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Já existe um produto com este código de barras nesta empresa."));
+    }
+
+    @Test
     void cadastrarComNomeAcimaDoTamanhoMaximoDeveRetornar400() throws Exception {
         String token = tokenParaUsuario(1L);
 
@@ -231,6 +273,18 @@ class ProdutoControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(corpo))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void cadastrarComEstoqueMinimoComCasasDecimaisDemaisDeveRetornar400() throws Exception {
+        String token = tokenParaUsuario(1L);
+
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"nome\": \"Produto\", \"precoVenda\": 10.00, \"estoqueMinimo\": 1.2345 }"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[?(@.campo=='estoqueMinimo')]").exists());
     }
 
     // ---------- Atualizacao ----------

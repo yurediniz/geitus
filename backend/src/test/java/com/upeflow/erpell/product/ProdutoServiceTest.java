@@ -53,10 +53,9 @@ class ProdutoServiceTest {
     }
 
     private Produto produtoComId(Long id, Empresa empresa, String sku, String codigoBarras) {
-        Produto produto = new Produto(empresa, "Produto Existente", new BigDecimal("10.00"));
+        Produto produto = new Produto(empresa, "Produto Existente", null, null, new BigDecimal("10.00"),
+                null, null, codigoBarras, sku);
         ReflectionTestUtils.setField(produto, "id", id);
-        produto.setSku(sku);
-        produto.setCodigoBarras(codigoBarras);
         return produto;
     }
 

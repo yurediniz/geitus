@@ -24,11 +24,13 @@ import com.upeflow.erpell.user.UsuarioRepository;
  * usado para isolar consultas e alteracoes por tenant (DEC-016): um produto de
  * outra empresa nunca deve ser encontrado, atualizado ou vazado.
  *
- * <p>Os metodos publicos usados pelo controller recebem {@code idUsuario} (o
- * id extraido do JWT) e resolvem a empresa internamente, no mesmo padrao usado
- * em {@code EmpresaService.buscarUsuarioAtivo}: assim o controller nunca
- * manipula {@code empresaId} diretamente, evitando que um cliente da API
- * consiga informar/adivinhar uma empresa por parametro.
+ * <p>A API publica do service e composta apenas pelos metodos {@code *ParaUsuario},
+ * que recebem {@code idUsuario} (o id extraido do JWT) e resolvem a empresa
+ * internamente, no mesmo padrao usado em {@code EmpresaService.buscarUsuarioAtivo}:
+ * assim o controller nunca manipula {@code empresaId} diretamente, evitando que
+ * um cliente da API consiga informar/adivinhar uma empresa por parametro. Os
+ * metodos que recebem {@code empresaId} sao de uso interno (package-private) e
+ * concentram a regra de isolamento por tenant.
  */
 @Service
 public class ProdutoService {
@@ -44,8 +46,7 @@ public class ProdutoService {
         this.usuarioRepository = usuarioRepository;
     }
 
-    @Transactional
-    public Produto cadastrar(Long empresaId, String nome, String categoria, String unidade,
+    Produto cadastrar(Long empresaId, String nome, String categoria, String unidade,
             BigDecimal precoVenda, BigDecimal custo, BigDecimal estoqueMinimo,
             String codigoBarras, String sku) {
         validarDadosBasicos(nome, precoVenda, custo, estoqueMinimo);
@@ -56,15 +57,13 @@ public class ProdutoService {
         Empresa empresa = empresaRepository.findById(empresaId)
                 .orElseThrow(() -> new RegraDeNegocioException("Empresa informada não encontrada."));
 
-        Produto produto = new Produto(empresa, nome.trim(), precoVenda);
-        produto.atualizarDadosBasicos(nome.trim(), categoria, unidade, precoVenda, custo, estoqueMinimo,
-                codigoBarrasNormalizado, skuNormalizado);
+        Produto produto = new Produto(empresa, nome.trim(), categoria, unidade, precoVenda, custo,
+                estoqueMinimo, codigoBarrasNormalizado, skuNormalizado);
 
         return produtoRepository.save(produto);
     }
 
-    @Transactional
-    public Produto atualizarDadosBasicos(Long empresaId, Long produtoId, String nome, String categoria,
+    Produto atualizarDadosBasicos(Long empresaId, Long produtoId, String nome, String categoria,
             String unidade, BigDecimal precoVenda, BigDecimal custo, BigDecimal estoqueMinimo,
             String codigoBarras, String sku) {
         Produto produto = buscarPorId(empresaId, produtoId);
@@ -80,33 +79,24 @@ public class ProdutoService {
         return produtoRepository.save(produto);
     }
 
-    @Transactional
-    public Produto inativar(Long empresaId, Long produtoId) {
+    Produto inativar(Long empresaId, Long produtoId) {
         Produto produto = buscarPorId(empresaId, produtoId);
         produto.inativar();
         return produtoRepository.save(produto);
     }
 
-    @Transactional
-    public Produto reativar(Long empresaId, Long produtoId) {
+    Produto reativar(Long empresaId, Long produtoId) {
         Produto produto = buscarPorId(empresaId, produtoId);
         produto.ativar();
         return produtoRepository.save(produto);
     }
 
-    @Transactional(readOnly = true)
-    public Produto buscarPorId(Long empresaId, Long produtoId) {
+    Produto buscarPorId(Long empresaId, Long produtoId) {
         return produtoRepository.findByIdAndEmpresa_Id(produtoId, empresaId)
                 .orElseThrow(ProdutoNaoEncontradoException::new);
     }
 
-    @Transactional(readOnly = true)
-    public List<Produto> listarPorEmpresa(Long empresaId) {
-        return produtoRepository.findByEmpresa_Id(empresaId);
-    }
-
-    @Transactional(readOnly = true)
-    public List<Produto> listarPorEmpresaComFiltros(Long empresaId, String busca, Boolean ativo) {
+    List<Produto> listarPorEmpresaComFiltros(Long empresaId, String busca, Boolean ativo) {
         // Sem termo de busca, usa a query sem o parametro :busca — passar null
         // para dentro de LOWER(CONCAT(...)) falha no PostgreSQL (bytea).
         if (!StringUtils.hasText(busca)) {
