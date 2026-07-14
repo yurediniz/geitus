@@ -1,4 +1,4 @@
-# Integracao continua do backend do ERPell.
+# Integracao continua do backend do Geitus.
 # Compila, testa e empacota o backend a cada push na develop e a cada
 # pull request direcionado a main.
 name: CI Backend

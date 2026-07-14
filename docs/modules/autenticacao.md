@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Permitir que usuários de um pequeno negócio acessem o ERPell de forma segura, com login por e-mail e senha, emissão de token JWT e proteção das rotas da aplicação. É a base sobre a qual os demais módulos (produtos, clientes, PDV, caixa, financeiro) exigirão um usuário autenticado.
+Permitir que usuários de um pequeno negócio acessem o Geitus de forma segura, com login por e-mail e senha, emissão de token JWT e proteção das rotas da aplicação. É a base sobre a qual os demais módulos (produtos, clientes, PDV, caixa, financeiro) exigirão um usuário autenticado.
 
 ## Escopo (Etapa 5 — autenticação inicial)
 
@@ -38,7 +38,7 @@ Permitir que usuários de um pequeno negócio acessem o ERPell de forma segura, 
 Request:
 
 ```json
-{ "email": "admin@erpell.dev", "senha": "sua-senha" }
+{ "email": "admin@geitus.dev", "senha": "sua-senha" }
 ```
 
 Respostas:
@@ -100,7 +100,7 @@ Migration `V2__auth_inicial.sql` (a `V1` permanece intacta).
 
 ## Regras de UX
 
-- Tela `/login` limpa, centralizada, **sem sidebar**, alinhada à identidade do ERPell.
+- Tela `/login` limpa, centralizada, **sem sidebar**, alinhada à identidade do Geitus.
 - Feedback de **loading** no submit (botão desabilitado + indicador).
 - Mensagem de erro **humana** para credenciais inválidas (ex.: "E-mail ou senha inválidos."), sem detalhe técnico; mensagem específica para falha de conexão.
 - Validação clara por campo (React Hook Form + Zod), com acessibilidade básica (labels, `aria-invalid`, `aria-describedby`, `role="alert"`).
@@ -116,11 +116,11 @@ Todas com valores **fictícios** no `.env.example` (nunca segredos reais).
 |---|---|
 | `JWT_SECRET` | Segredo do JWT (HS256). **Obrigatório**: mínimo 32 bytes / 256 bits, senão a aplicação não sobe. |
 | `JWT_EXPIRATION` | Expiração do token em milissegundos (padrão 86400000 = 24h). |
-| `ERPELL_BOOTSTRAP_DEV_ADMIN` | Habilita o bootstrap do admin de desenvolvimento quando `true` (mapeada para a property `erpell.bootstrap.dev-admin`). |
-| `ERPELL_DEV_ADMIN_EMAIL` | E-mail do admin de desenvolvimento. |
-| `ERPELL_DEV_ADMIN_PASSWORD` | Senha do admin (usada apenas para gerar o hash BCrypt). |
-| `ERPELL_DEV_ADMIN_NAME` | Nome do admin. |
-| `ERPELL_DEV_COMPANY_NAME` | Nome da empresa (tenant) criada para o admin. |
+| `GEITUS_BOOTSTRAP_DEV_ADMIN` | Habilita o bootstrap do admin de desenvolvimento quando `true` (mapeada para a property `geitus.bootstrap.dev-admin`). |
+| `GEITUS_DEV_ADMIN_EMAIL` | E-mail do admin de desenvolvimento. |
+| `GEITUS_DEV_ADMIN_PASSWORD` | Senha do admin (usada apenas para gerar o hash BCrypt). |
+| `GEITUS_DEV_ADMIN_NAME` | Nome do admin. |
+| `GEITUS_DEV_COMPANY_NAME` | Nome da empresa (tenant) criada para o admin. |
 | `VITE_API_BASE_URL` | (frontend) URL base da API. |
 
 ## Usuário inicial de desenvolvimento
@@ -129,9 +129,9 @@ Não há usuário padrão com senha fixa no código. Em desenvolvimento, o **boo
 
 ```bash
 export JWT_SECRET="um-segredo-forte-com-no-minimo-32-bytes-aqui"
-export ERPELL_BOOTSTRAP_DEV_ADMIN=true
-export ERPELL_DEV_ADMIN_EMAIL="admin@erpell.dev"
-export ERPELL_DEV_ADMIN_PASSWORD="troque-esta-senha"
+export GEITUS_BOOTSTRAP_DEV_ADMIN=true
+export GEITUS_DEV_ADMIN_EMAIL="admin@geitus.dev"
+export GEITUS_DEV_ADMIN_PASSWORD="troque-esta-senha"
 ./mvnw spring-boot:run
 ```
 

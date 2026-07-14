@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react'
  * Indicador simples e discreto exibido enquanto a sessao e revalidada no boot
  * (reidratacao via GET /api/auth/me). Evita o "flicker" de renderizar a area
  * privada sem os dados do usuario ou piscar antes de um redirect por token
- * invalido. Deve permanecer minimalista, alinhado a identidade do ERPell.
+ * invalido. Deve permanecer minimalista, alinhado a identidade do Geitus.
  */
 export function SessionLoading() {
   return (

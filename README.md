@@ -1,6 +1,6 @@
-# ERPell
+# Geitus
 
-**ERPell** é o primeiro produto da **UpeFlow**: uma plataforma SaaS de gestão para pequenos negócios, com foco em PDV (Ponto de Venda) e ERP básico.
+**Geitus** é uma plataforma SaaS de gestão para pequenos negócios, com foco em PDV (Ponto de Venda) e ERP básico.
 
 O objetivo não é ser o ERP com mais funcionalidades do mercado, e sim fazer o essencial muito bem, com experiência de uso superior, confiabilidade e inteligência prática.
 
@@ -93,7 +93,7 @@ Não fazem parte do MVP (podem ser previstos para o futuro, mas exigem especific
 O projeto é organizado como monorepo:
 
 ```text
-erpell/
+geitus/
 ├── backend/            # Aplicação Java + Spring Boot (base criada)
 ├── frontend/           # Aplicação React + TypeScript + Vite (base criada)
 ├── docs/               # Documentação do projeto
@@ -130,7 +130,7 @@ Passos iniciais:
 ```bash
 # Clonar o repositório
 git clone <url-do-repositorio>
-cd erpell
+cd geitus
 ```
 
 Instruções específicas de execução do backend e do frontend estão em `backend/README.md` e `frontend/README.md`, e serão detalhadas conforme cada parte evoluir.

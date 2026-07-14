@@ -12,11 +12,11 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.upeflow</groupId>
-    <artifactId>erpell-backend</artifactId>
+    <groupId>com.geitus</groupId>
+    <artifactId>geitus-backend</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>erpell-backend</name>
-    <description>Backend do ERPell - plataforma SaaS de gestao para pequenos negocios (UpeFlow)</description>
+    <name>geitus-backend</name>
+    <description>Backend do Geitus - plataforma SaaS de gestao para pequenos negocios</description>
 
     <properties>
         <!-- Versao obrigatoria do projeto: Java 21 LTS.

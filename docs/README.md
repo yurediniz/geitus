@@ -1,6 +1,6 @@
-# Documentação do ERPell
+# Documentação do Geitus
 
-Esta pasta reúne a documentação do projeto **ERPell**, o produto de PDV e ERP básico da **UpeFlow**.
+Esta pasta reúne a documentação do **Geitus**, o sistema SaaS de PDV e ERP básico para pequenos negócios.
 
 O objetivo é manter, em um só lugar, as decisões, regras de negócio e especificações que orientam o desenvolvimento — de forma que qualquer pessoa da equipe consiga entender o produto sem depender apenas do código.
 

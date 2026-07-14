@@ -1,11 +1,11 @@
-# Configuracao de testes do backend do ERPell.
+# Configuracao de testes do backend do Geitus.
 #
 # Fornece um segredo JWT valido (>= 32 bytes) apenas para os testes, evitando
 # depender de variaveis de ambiente externas. Nenhum segredo real aqui.
-erpell:
+geitus:
   cors:
     allowed-origins: http://localhost:5173
   security:
     jwt:
-      secret: segredo-de-teste-apenas-para-os-testes-do-erpell-1234567890
+      secret: segredo-de-teste-apenas-para-os-testes-do-geitus-1234567890
       expiration: 86400000

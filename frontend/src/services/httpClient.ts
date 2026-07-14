@@ -1,5 +1,5 @@
 /**
- * Cliente HTTP base para as chamadas ao backend do ERPell.
+ * Cliente HTTP base para as chamadas ao backend do Geitus.
  *
  * Por padrao usa o caminho relativo "/api", que em desenvolvimento e
  * encaminhado ao backend pelo proxy do Vite (ver vite.config.ts). Pode ser

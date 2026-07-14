@@ -9,7 +9,7 @@ import { HomePage } from '@/routes/HomePage'
 vi.mock('@/services/healthService', () => ({
   getHealth: vi.fn().mockResolvedValue({
     status: 'UP',
-    aplicacao: 'ERPell',
+    aplicacao: 'Geitus',
     timestamp: '2026-01-01T00:00:00Z',
   }),
 }))
@@ -20,11 +20,11 @@ function renderComProviders(ui: ReactElement) {
 }
 
 describe('HomePage', () => {
-  it('renderiza o título principal do ERPell', () => {
+  it('renderiza o título principal do Geitus', () => {
     renderComProviders(<HomePage />)
 
     expect(
-      screen.getByRole('heading', { name: /ERPell — Plataforma de gestão/i }),
+      screen.getByRole('heading', { name: /Geitus — Plataforma de gestão/i }),
     ).toBeInTheDocument()
   })
 })

@@ -1,6 +1,6 @@
 # Documentação dos módulos
 
-Esta pasta contém a especificação detalhada de cada módulo do **ERPell**.
+Esta pasta contém a especificação detalhada de cada módulo do **Geitus**.
 
 Cada módulo do sistema terá o seu próprio documento, descrevendo o que ele faz, suas regras de negócio e como se relaciona com os demais. A especificação de um módulo é criada quando ele entra em desenvolvimento — a documentação cresce de forma incremental, junto com o produto.
 

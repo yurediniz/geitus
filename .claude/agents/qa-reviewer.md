@@ -1,6 +1,6 @@
 ---
 name: qa-reviewer
-description: Use este agente para REVISAR (sem alterar arquivos) a qualidade de uma entrega do ERPell — cenários de teste, critérios de aceite, casos extremos, fluxos quebrados e validações. Acione-o para planejar e conferir a cobertura de testes antes de concluir a tarefa.
+description: Use este agente para REVISAR (sem alterar arquivos) a qualidade de uma entrega do Geitus — cenários de teste, critérios de aceite, casos extremos, fluxos quebrados e validações. Acione-o para planejar e conferir a cobertura de testes antes de concluir a tarefa.
 tools: Read, Grep, Glob
 model: inherit
 ---

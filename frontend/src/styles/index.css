@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
-  Tokens de tema do ERPell (base para o shadcn/ui).
+  Tokens de tema do Geitus (base para o shadcn/ui).
   Usamos variaveis CSS para cores, permitindo tema claro e escuro.
 */
 :root {

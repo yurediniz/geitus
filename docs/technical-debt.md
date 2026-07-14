@@ -1,6 +1,6 @@
 # Technical Debt / Pendencias Tecnicas
 
-Este arquivo registra pendencias tecnicas, dividas tecnicas e melhorias internas nao bloqueantes do ERPell.
+Este arquivo registra pendencias tecnicas, dividas tecnicas e melhorias internas nao bloqueantes do Geitus.
 
 Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam ser revisitados em momentos apropriados. Este documento nao substitui o `docs/decision-log.md`: decisoes arquiteturais continuam sendo registradas no decision log.
 
@@ -145,7 +145,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Origem:** Etapa 5 (auditoria de seguranca)
 - **Prioridade:** media (pre-producao)
 - **Status:** aberto
-- **Descricao:** O `DevAdminBootstrap` e habilitado apenas pela property `erpell.bootstrap.dev-admin` (env `ERPELL_BOOTSTRAP_DEV_ADMIN`). Se a variavel vazar para producao, um admin e criado.
+- **Descricao:** O `DevAdminBootstrap` e habilitado apenas pela property `geitus.bootstrap.dev-admin` (env `GEITUS_BOOTSTRAP_DEV_ADMIN`). Se a variavel vazar para producao, um admin e criado.
 - **Impacto:** Baixo em desenvolvimento; relevante em producao.
 - **Quando revisar:** Antes de producao.
 - **Observacoes:** Adicionar trava adicional por profile (`@Profile("!prod")` ou equivalente), mantendo a property.

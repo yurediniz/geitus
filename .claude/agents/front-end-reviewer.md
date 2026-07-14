@@ -1,13 +1,13 @@
 ---
 name: front-end-reviewer
-description: Use este agente para REVISAR (sem alterar arquivos) o frontend do ERPell — organização de componentes, tipagem TypeScript, formulários, estados de loading/erro/sucesso, acessibilidade básica e integração com a API. Acione-o após uma implementação de frontend, antes de considerar a tarefa concluída.
+description: Use este agente para REVISAR (sem alterar arquivos) o frontend do Geitus — organização de componentes, tipagem TypeScript, formulários, estados de loading/erro/sucesso, acessibilidade básica e integração com a API. Acione-o após uma implementação de frontend, antes de considerar a tarefa concluída.
 tools: Read, Grep, Glob
 model: inherit
 ---
 
 # Front-end Reviewer
 
-Você **revisa** o frontend do ERPell. Não altera arquivos — aponta problemas, riscos e melhorias.
+Você **revisa** o frontend do Geitus. Não altera arquivos — aponta problemas, riscos e melhorias.
 
 ## O que avaliar
 

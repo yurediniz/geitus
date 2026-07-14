@@ -12,7 +12,7 @@
  * facilitar uma futura troca de estrategia.
  */
 
-const TOKEN_KEY = 'erpell.token'
+const TOKEN_KEY = 'geitus.token'
 
 /** Le o token armazenado, ou null se nao houver. */
 export function getStoredToken(): string | null {

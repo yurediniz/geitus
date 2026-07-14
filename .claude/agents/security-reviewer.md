@@ -1,6 +1,6 @@
 ---
 name: security-reviewer
-description: Use este agente para REVISAR segurança (sem alterar arquivos) no ERPell — autenticação, JWT, senhas, CORS, permissões, dados sensíveis, variáveis de ambiente, exposição de erros e proteção de rotas. USE OBRIGATORIAMENTE em qualquer tarefa que envolva autenticação, autorização ou segurança (MUST BE USED).
+description: Use este agente para REVISAR segurança (sem alterar arquivos) no Geitus — autenticação, JWT, senhas, CORS, permissões, dados sensíveis, variáveis de ambiente, exposição de erros e proteção de rotas. USE OBRIGATORIAMENTE em qualquer tarefa que envolva autenticação, autorização ou segurança (MUST BE USED).
 tools: Read, Grep, Glob
 model: inherit
 ---

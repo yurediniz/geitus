@@ -1,6 +1,6 @@
-# ERPell — Backend
+# Geitus — Backend
 
-Backend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Contém a aplicação Spring Boot com **autenticação por JWT**, o contexto de **Empresa** do usuário autenticado e o módulo inicial de **Produtos**, além dos health checks. Os demais módulos de negócio (clientes, PDV, caixa, estoque, financeiro) ainda não foram implementados.
+Backend do **Geitus**, a plataforma SaaS de gestão da **Geitus**. Contém a aplicação Spring Boot com **autenticação por JWT**, o contexto de **Empresa** do usuário autenticado e o módulo inicial de **Produtos**, além dos health checks. Os demais módulos de negócio (clientes, PDV, caixa, estoque, financeiro) ainda não foram implementados.
 
 ---
 
@@ -42,19 +42,15 @@ Backend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Contém a ap
 ## Estrutura de pacotes
 
 ```text
-com.upeflow.erpell
-├── config/          # Configurações (segurança, CORS, OpenAPI)
-├── auth/            # Autenticação (login, JWT, bootstrap dev)
-├── company/         # Empresa (contexto da empresa autenticada)
-├── user/            # Usuários (entidade mínima para autenticação)
-├── product/         # Produtos (CRUD inicial)
-├── customer/        # Clientes (etapa futura)
-├── sale/            # Vendas / PDV (etapa futura)
-├── cashregister/    # Caixa (etapa futura)
-├── stock/           # Estoque (etapa futura)
-├── finance/         # Financeiro (etapa futura)
-└── shared/          # Componentes compartilhados (inclui o health check)
+com.geitus.app
+├── config/     # Configurações (segurança, CORS, OpenAPI)
+├── shared/     # Health check, ApiError e tratamento global de erros
+├── iam/        # Identidade e acesso: login, JWT, usuário, bootstrap dev
+├── company/    # Empresa (contexto da empresa autenticada)
+└── catalog/    # Produtos (CRUD inicial)
 ```
+
+Organização **por domínio de negócio**. Domínios futuros (`pricing`, `customer`, `inventory`, `cashier`, `sales`, `finance`, `fiscal`, `commission`) nascem quando o módulo entrar em desenvolvimento — ver o mapa completo no `CLAUDE.md`.
 
 As migrations do banco ficam em `src/main/resources/db/migration`.
 
@@ -74,11 +70,11 @@ Nenhum dado sensível fica no código. A aplicação lê as variáveis abaixo (t
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
-| `DATABASE_URL` | `jdbc:postgresql://localhost:5432/erpell` | URL de conexão do PostgreSQL |
-| `POSTGRES_USER` | `erpell` | Usuário do banco |
-| `POSTGRES_PASSWORD` | `erpell` | Senha do banco |
+| `DATABASE_URL` | `jdbc:postgresql://localhost:5432/geitus_db` | URL de conexão do PostgreSQL |
+| `POSTGRES_USER` | `geitus` | Usuário do banco |
+| `POSTGRES_PASSWORD` | `geitus` | Senha do banco |
 | `SERVER_PORT` | `8080` | Porta da API |
-| `ERPELL_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origens liberadas no CORS (separadas por vírgula) |
+| `GEITUS_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origens liberadas no CORS (separadas por vírgula) |
 | `JWT_SECRET` | *(vazio)* | Segredo do JWT (HS256). **Obrigatório**: mínimo 32 bytes / 256 bits, senão a aplicação não sobe |
 | `JWT_EXPIRATION` | `86400000` | Expiração do token JWT em milissegundos |
 
@@ -88,11 +84,11 @@ Estas variáveis criam, de forma **idempotente**, um usuário administrador loca
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
-| `ERPELL_BOOTSTRAP_DEV_ADMIN` | *(desligado)* | Habilita o bootstrap quando o valor é `true` (mapeada para a property `erpell.bootstrap.dev-admin`) |
-| `ERPELL_DEV_ADMIN_EMAIL` | *(vazio)* | E-mail do admin de desenvolvimento |
-| `ERPELL_DEV_ADMIN_PASSWORD` | *(vazio)* | Senha do admin (usada apenas para gerar o hash BCrypt) |
-| `ERPELL_DEV_ADMIN_NAME` | `Administrador` | Nome do admin |
-| `ERPELL_DEV_COMPANY_NAME` | `Empresa de Desenvolvimento` | Nome da empresa (tenant) criada para o admin |
+| `GEITUS_BOOTSTRAP_DEV_ADMIN` | *(desligado)* | Habilita o bootstrap quando o valor é `true` (mapeada para a property `geitus.bootstrap.dev-admin`) |
+| `GEITUS_DEV_ADMIN_EMAIL` | *(vazio)* | E-mail do admin de desenvolvimento |
+| `GEITUS_DEV_ADMIN_PASSWORD` | *(vazio)* | Senha do admin (usada apenas para gerar o hash BCrypt) |
+| `GEITUS_DEV_ADMIN_NAME` | `Administrador` | Nome do admin |
+| `GEITUS_DEV_COMPANY_NAME` | `Empresa de Desenvolvimento` | Nome da empresa (tenant) criada para o admin |
 
 Consulte o arquivo `.env.example` na raiz do repositório para um modelo de configuração.
 
@@ -134,7 +130,7 @@ curl http://localhost:8080/actuator/health
 Resposta esperada do `GET /api/health`:
 
 ```json
-{ "status": "UP", "aplicacao": "ERPell", "timestamp": "..." }
+{ "status": "UP", "aplicacao": "Geitus", "timestamp": "..." }
 ```
 
 O `GET /actuator/health` retorna o health check padrão do Spring Boot Actuator (`{ "status": "UP" }`), sem detalhes internos.
@@ -151,9 +147,9 @@ Em desenvolvimento, use o bootstrap do admin. Exemplo (Git Bash):
 
 ```bash
 export JWT_SECRET="um-segredo-forte-com-no-minimo-32-bytes-aqui"
-export ERPELL_BOOTSTRAP_DEV_ADMIN=true
-export ERPELL_DEV_ADMIN_EMAIL="admin@erpell.dev"
-export ERPELL_DEV_ADMIN_PASSWORD="troque-esta-senha"
+export GEITUS_BOOTSTRAP_DEV_ADMIN=true
+export GEITUS_DEV_ADMIN_EMAIL="admin@geitus.dev"
+export GEITUS_DEV_ADMIN_PASSWORD="troque-esta-senha"
 ./mvnw spring-boot:run
 ```
 
@@ -164,7 +160,7 @@ Ao subir, a aplicação cria a empresa e o usuário admin (se ainda não existir
 ```bash
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@erpell.dev","senha":"troque-esta-senha"}'
+  -d '{"email":"admin@geitus.dev","senha":"troque-esta-senha"}'
 ```
 
 Resposta (200):
@@ -175,7 +171,7 @@ Resposta (200):
   "usuario": {
     "id": 1,
     "nome": "Administrador",
-    "email": "admin@erpell.dev",
+    "email": "admin@geitus.dev",
     "perfil": "ADMIN",
     "empresa": { "id": 1, "nome": "Empresa de Desenvolvimento", "ativo": true, "criadoEm": "...", "atualizadoEm": null }
   }
@@ -204,10 +200,10 @@ Com a aplicação no ar: `http://localhost:8080/swagger-ui.html` (OpenAPI em `ht
 Exemplo rápido para subir um PostgreSQL local com Docker (opcional):
 
 ```bash
-docker run --name erpell-postgres \
-  -e POSTGRES_DB=erpell \
-  -e POSTGRES_USER=erpell \
-  -e POSTGRES_PASSWORD=erpell \
+docker run --name geitus-postgres \
+  -e POSTGRES_DB=geitus \
+  -e POSTGRES_USER=geitus \
+  -e POSTGRES_PASSWORD=geitus \
   -p 5432:5432 -d postgres:16
 ```
 

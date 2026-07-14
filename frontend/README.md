@@ -1,6 +1,6 @@
-# ERPell — Frontend
+# Geitus — Frontend
 
-Frontend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Contém a aplicação React com o layout principal, **autenticação** (login + proteção de rotas), a página de **Empresa** (`/empresa`) e a página de **Produtos** (`/produtos`). As telas dos demais módulos (clientes, PDV, caixa, financeiro) ainda não foram implementadas.
+Frontend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Contém a aplicação React com o layout principal, **autenticação** (login + proteção de rotas), a página de **Empresa** (`/empresa`) e a página de **Produtos** (`/produtos`). As telas dos demais módulos (clientes, PDV, caixa, financeiro) ainda não foram implementadas.
 
 ---
 
@@ -24,7 +24,7 @@ Frontend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Contém a a
 
 - Projeto React + TypeScript + Vite configurado.
 - Tailwind CSS v4 com tokens de tema (claro/escuro) e atalho de importação `@` para `src`.
-- Layout base: sidebar com a identidade do ERPell, cabeçalho e área principal com espaço para as rotas futuras.
+- Layout base: sidebar com a identidade do Geitus, cabeçalho e área principal com espaço para as rotas futuras.
 - Roteamento com React Router, separado em **rotas públicas** (`/login`) e **rotas privadas** (área principal), com um guard de autenticação.
 - **Autenticação**: tela de login, estado de sessão e proteção de rotas (ver seção "Autenticação" abaixo).
 - **Empresa** (`/empresa`): exibição e edição do nome da empresa do usuário autenticado; nome da empresa visível na sidebar.
@@ -42,7 +42,7 @@ Frontend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Contém a a
 
 ## Autenticação
 
-A área principal do ERPell exige login. O fluxo mínimo desta etapa:
+A área principal do Geitus exige login. O fluxo mínimo desta etapa:
 
 - `/login` — tela pública (sem sidebar). Valida e-mail e senha com React Hook Form + Zod e chama `POST /api/auth/login`.
 - Ao autenticar com sucesso, o token e o usuário ficam disponíveis via `hooks/useAuth`, e o usuário é levado para a área principal (`/`).

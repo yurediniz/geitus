@@ -1,8 +1,8 @@
-# Diretrizes de Engenharia — ERPell
+# Diretrizes de Engenharia — Geitus
 
 ## 1. Objetivo
 
-Este documento define os padrões técnicos do ERPell para manter o produto **simples, sustentável, consistente, testável e evolutivo**.
+Este documento define os padrões técnicos do Geitus para manter o produto **simples, sustentável, consistente, testável e evolutivo**.
 
 Ele complementa o `CLAUDE.md` (visão de produto, escopo e regras) e o `.claude/agents/AGENTS.md` (papéis de execução e revisão). Em caso de conflito, o `CLAUDE.md` prevalece.
 
@@ -68,7 +68,7 @@ Conceitos que orientam essas escolhas:
 * Formulários devem usar React Hook Form e Zod quando aplicável.
 * Chamadas assíncronas devem usar TanStack Query quando fizer sentido.
 * Estados de loading, erro, vazio e sucesso devem ser tratados.
-* A UI deve seguir os princípios do ERPell: simplicidade, fluidez, clareza e feedback visual.
+* A UI deve seguir os princípios do Geitus: simplicidade, fluidez, clareza e feedback visual.
 * **Não** criar telas poluídas.
 * **Não** expor campos avançados sem necessidade.
 * Evitar prop drilling excessivo.

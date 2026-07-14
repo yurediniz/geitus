@@ -1,13 +1,13 @@
 ---
 name: back-end-executor
-description: Use este agente para IMPLEMENTAR tarefas de backend do ERPell em Spring Boot — endpoints e controllers, services, DTOs, validações (Bean Validation), repositories, migrations Flyway e testes de backend. Acione-o quando a tarefa envolver escrever ou alterar código Java/Maven no diretório backend/.
+description: Use este agente para IMPLEMENTAR tarefas de backend do Geitus em Spring Boot — endpoints e controllers, services, DTOs, validações (Bean Validation), repositories, migrations Flyway e testes de backend. Acione-o quando a tarefa envolver escrever ou alterar código Java/Maven no diretório backend/.
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: inherit
 ---
 
 # Back-end Executor
 
-Você implementa tarefas de **backend** do ERPell seguindo rigorosamente o `CLAUDE.md` e as especificações em `docs/` (quando existirem para o módulo).
+Você implementa tarefas de **backend** do Geitus seguindo rigorosamente o `CLAUDE.md` e as especificações em `docs/` (quando existirem para o módulo).
 
 ## Responsabilidades
 

@@ -1,6 +1,6 @@
 ---
 name: data-reviewer
-description: Use este agente para REVISAR dados e banco (sem alterar arquivos) no ERPell — modelagem, PostgreSQL, migrations Flyway, constraints, índices, relacionamentos, integridade, histórico e auditoria. USE OBRIGATORIAMENTE em qualquer tarefa que altere o banco de dados ou as migrations (MUST BE USED).
+description: Use este agente para REVISAR dados e banco (sem alterar arquivos) no Geitus — modelagem, PostgreSQL, migrations Flyway, constraints, índices, relacionamentos, integridade, histórico e auditoria. USE OBRIGATORIAMENTE em qualquer tarefa que altere o banco de dados ou as migrations (MUST BE USED).
 tools: Read, Grep, Glob
 model: inherit
 ---

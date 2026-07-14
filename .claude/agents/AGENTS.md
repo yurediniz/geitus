@@ -1,6 +1,6 @@
-# Agentes especializados do ERPell
+# Agentes especializados do Geitus
 
-Este documento descreve os agentes de projeto do Claude Code usados para organizar a **execução** e a **revisão** do ERPell. Os agentes ficam em `.claude/agents/` e são versionados junto com o repositório.
+Este documento descreve os agentes de projeto do Claude Code usados para organizar a **execução** e a **revisão** do Geitus. Os agentes ficam em `.claude/agents/` e são versionados junto com o repositório.
 
 O objetivo é ter uma divisão clara de papéis: quem **implementa** e quem **revisa** — garantindo qualidade, rastreabilidade e aderência ao `CLAUDE.md`.
 
@@ -49,7 +49,7 @@ O mesmo agente que **implementa** uma tarefa **não deve aprovar** o próprio tr
 
 ### Produto/UX em telas e fluxos
 
-- `product-ux-reviewer` **deve revisar telas e fluxos importantes**, protegendo a simplicidade e a experiência do ERPell — evitando soluções complexas demais, genéricas demais ou com cara de ERP antigo.
+- `product-ux-reviewer` **deve revisar telas e fluxos importantes**, protegendo a simplicidade e a experiência do Geitus — evitando soluções complexas demais, genéricas demais ou com cara de ERP antigo.
 
 ### CI/CD em automações
 

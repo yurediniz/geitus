@@ -34,7 +34,7 @@ const itensNavegacao: NavItem[] = [
 ]
 
 /**
- * Shell principal da aplicacao: uma sidebar fixa com a identidade do ERPell e
+ * Shell principal da aplicacao: uma sidebar fixa com a identidade do Geitus e
  * a area de conteudo, onde as rotas sao renderizadas via <Outlet />.
  */
 export function RootLayout() {
@@ -51,11 +51,10 @@ export function RootLayout() {
       <aside className="hidden w-64 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
         <div className="flex h-16 items-center gap-2 border-b px-6">
           <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary font-bold text-primary-foreground">
-            E
+            G
           </span>
           <div className="leading-tight">
-            <p className="font-semibold">ERPell</p>
-            <p className="text-xs text-muted-foreground">UpeFlow</p>
+            <p className="font-semibold">Geitus</p>
           </div>
         </div>
 
@@ -94,7 +93,7 @@ export function RootLayout() {
 
       <div className="flex flex-1 flex-col">
         <header className="flex h-16 items-center border-b px-6">
-          <span className="font-semibold md:hidden">ERPell</span>
+          <span className="font-semibold md:hidden">Geitus</span>
           <span className="hidden text-sm text-muted-foreground md:inline">
             Plataforma de gestão para pequenos negócios
           </span>

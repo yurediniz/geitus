@@ -1,4 +1,4 @@
-# Integracao continua do frontend do ERPell.
+# Integracao continua do frontend do Geitus.
 # Instala as dependencias e roda lint, typecheck e build a cada push na develop
 # e a cada pull request direcionado a main. Nao faz deploy.
 name: CI Frontend

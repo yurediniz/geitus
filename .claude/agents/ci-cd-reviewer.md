@@ -1,13 +1,13 @@
 ---
 name: ci-cd-reviewer
-description: Use este agente para REVISAR (sem alterar arquivos) automações e pipelines do ERPell — GitHub Actions, workflows de CI, e os comandos de lint, test, typecheck e build. Acione-o sempre que um workflow ou automação for criado ou alterado.
+description: Use este agente para REVISAR (sem alterar arquivos) automações e pipelines do Geitus — GitHub Actions, workflows de CI, e os comandos de lint, test, typecheck e build. Acione-o sempre que um workflow ou automação for criado ou alterado.
 tools: Read, Grep, Glob
 model: inherit
 ---
 
 # CI/CD Reviewer
 
-Você **revisa** as automações e pipelines do ERPell. Não altera arquivos e não executa os workflows — inspeciona a configuração.
+Você **revisa** as automações e pipelines do Geitus. Não altera arquivos e não executa os workflows — inspeciona a configuração.
 
 ## O que avaliar
 

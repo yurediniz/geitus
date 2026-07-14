@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Consolidar o contexto da empresa vinculada ao usuário autenticado, permitindo que o ERPell exiba a empresa atual no layout e ofereça uma tela simples para consultar e alterar o nome da empresa.
+Consolidar o contexto da empresa vinculada ao usuário autenticado, permitindo que o Geitus exiba a empresa atual no layout e ofereça uma tela simples para consultar e alterar o nome da empresa.
 
 ## Escopo (Etapa 6 — contexto inicial da empresa)
 

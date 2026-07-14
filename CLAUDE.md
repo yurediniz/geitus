@@ -2,9 +2,8 @@
 
 ## Projeto
 
-**Empresa/marca mãe:** UpeFlow
-**Produto:** ERPell
-**Repositório:** erpell
+**Marca/Produto:** Geitus (marca única — não há distinção entre marca e produto)
+**Repositório:** geitus
 **Tipo:** Plataforma SaaS de gestão para pequenos negócios
 **Produto inicial:** PDV com ERP básico
 **Status:** MVP em desenvolvimento
@@ -15,7 +14,7 @@
 
 ## Papel do Claude Code neste projeto
 
-Você atua como **engenheiro e orquestrador principal** do ERPell: coordena a execução, a revisão e a validação das tarefas, seguindo rigorosamente as diretrizes deste repositório e apoiando-se em agentes especializados quando necessário.
+Você atua como **engenheiro e orquestrador principal** do Geitus: coordena a execução, a revisão e a validação das tarefas, seguindo rigorosamente as diretrizes deste repositório e apoiando-se em agentes especializados quando necessário.
 
 Como orquestrador, você deve:
 
@@ -55,7 +54,7 @@ Você não deve:
 
 ## Agentes especializados
 
-O ERPell utiliza agentes de projeto do Claude Code para organizar **execução** e **revisão**. Eles ficam em `.claude/agents/` e estão detalhados em `.claude/agents/AGENTS.md`, que deve ser lido quando a tarefa envolver agentes. O `CLAUDE.md` prevalece em caso de conflito.
+O Geitus utiliza agentes de projeto do Claude Code para organizar **execução** e **revisão**. Eles ficam em `.claude/agents/` e estão detalhados em `.claude/agents/AGENTS.md`, que deve ser lido quando a tarefa envolver agentes. O `CLAUDE.md` prevalece em caso de conflito.
 
 ### Agentes executores (implementam código no seu domínio)
 
@@ -89,18 +88,16 @@ O ERPell utiliza agentes de projeto do Claude Code para organizar **execução**
 
 ## Contexto da marca
 
-A UpeFlow é a empresa/marca mãe.
+Geitus é a marca única do projeto — não há distinção entre empresa/marca-mãe e produto. Geitus é o sistema SaaS de gestão com foco em PDV e ERP básico para pequenos negócios.
 
-O ERPell é o primeiro produto da UpeFlow: um sistema SaaS de gestão com foco em PDV e ERP básico para pequenos negócios.
-
-A proposta do ERPell não é ser o ERP com mais funcionalidades do mercado.
+A proposta do Geitus não é ser o ERP com mais funcionalidades do mercado.
 A proposta é fazer o essencial muito bem, com experiência de uso superior, confiabilidade e inteligência prática.
 
 ---
 
-## Visão do ERPell
+## Visão do Geitus
 
-O ERPell existe para tornar simples a gestão de pequenos negócios por meio da tecnologia.
+O Geitus existe para tornar simples a gestão de pequenos negócios por meio da tecnologia.
 
 O produto deve atender inicialmente:
 
@@ -160,7 +157,7 @@ Exemplos:
 
 ## Princípios de UX
 
-Toda interface do ERPell deve seguir estes princípios:
+Toda interface do Geitus deve seguir estes princípios:
 
 * O usuário nunca deve ficar sem saber o que aconteceu.
 * A informação mais importante deve aparecer primeiro.
@@ -176,7 +173,7 @@ Toda interface do ERPell deve seguir estes princípios:
 
 ## Escopo do MVP
 
-O MVP inicial do ERPell deve conter apenas os módulos essenciais.
+O MVP inicial do Geitus deve conter apenas os módulos essenciais.
 
 ### Módulos do MVP
 
@@ -283,7 +280,7 @@ Essas funcionalidades podem ser previstas para o futuro, mas não devem ser impl
 O projeto deve ser organizado como monorepo:
 
 ```text
-erpell/
+geitus/
 ├── backend/
 ├── frontend/
 ├── docs/
@@ -294,24 +291,30 @@ erpell/
 
 ### Backend
 
+Raiz do pacote: `com.geitus.app`. Organização **por domínio/contexto de negócio** (cada domínio agrupa suas entidades, service, controller, repository e DTOs). Os domínios nascem conforme cada etapa — abaixo, os que já existem e o mapa-alvo:
+
 ```text
 backend/
-├── src/main/java/...
-│   ├── config/
-│   ├── auth/
-│   ├── company/
-│   ├── user/
-│   ├── product/
-│   ├── customer/
-│   ├── sale/
-│   ├── cashregister/
-│   ├── stock/
-│   ├── finance/
-│   └── shared/
+├── src/main/java/com/geitus/app/
+│   ├── config/        # segurança, CORS, OpenAPI
+│   ├── shared/        # health check, ApiError, tratamento global de erros
+│   ├── iam/           # identidade e acesso: login, JWT, usuário, bootstrap dev
+│   ├── company/       # empresa (contexto da empresa autenticada)
+│   ├── catalog/       # produtos (e, futuramente, variações, categorias, marcas)
+│   ├── pricing/       # (futuro) tabelas de preço e promoções
+│   ├── customer/      # (futuro) clientes
+│   ├── inventory/     # (futuro) estoque, locais, lote/série, movimentos
+│   ├── cashier/       # (futuro) caixa e movimentos de caixa
+│   ├── sales/         # (futuro) venda, item, pagamento (PDV)
+│   ├── finance/       # (futuro) recebíveis e movimentos financeiros
+│   ├── fiscal/        # (futuro) regras fiscais, tributação, documento fiscal
+│   └── commission/    # (futuro) comissões
 └── src/main/resources/
     ├── application.yml
     └── db/migration/
 ```
+
+> Os pacotes marcados como "(futuro)" **não devem ser criados antes** de o módulo entrar em desenvolvimento (evitar estrutura vazia). Quando o número de domínios crescer (a partir de Vendas/Estoque), avaliar **Spring Modulith** para fronteiras explícitas e eventos internos entre módulos.
 
 ### Frontend
 
@@ -374,7 +377,7 @@ frontend/
 
 ## Design e UI
 
-O ERPell deve parecer:
+O Geitus deve parecer:
 
 * Simples
 * Moderno
@@ -489,7 +492,7 @@ Exemplos:
 
 > Especificação detalhada (endpoints, modelo de dados, regras completas): `docs/modules/produtos.md`.
 
-Inicialmente, o ERPell trabalhará apenas com produtos físicos.
+Inicialmente, o Geitus trabalhará apenas com produtos físicos.
 
 Serviços serão tratados futuramente em módulo ou aba separada.
 
@@ -532,7 +535,7 @@ Regras iniciais:
 
 ## Módulo PDV — diretriz inicial
 
-O PDV é uma das telas mais importantes do ERPell.
+O PDV é uma das telas mais importantes do Geitus.
 
 Deve priorizar:
 
@@ -755,7 +758,7 @@ Economia de contexto **não** dispensa validações obrigatórias (testes, lint,
 
 ## Protocolo de execução de tarefas
 
-Antes de executar qualquer tarefa relevante, o Claude Code deve revisar o pedido recebido e validar se ele está alinhado ao `CLAUDE.md`, ao `.claude/agents/AGENTS.md` e ao escopo atual do ERPell.
+Antes de executar qualquer tarefa relevante, o Claude Code deve revisar o pedido recebido e validar se ele está alinhado ao `CLAUDE.md`, ao `.claude/agents/AGENTS.md` e ao escopo atual do Geitus.
 
 ### Avaliação antes de executar
 
@@ -995,7 +998,7 @@ Sugestões de melhoria:
 
 ## Regra final
 
-O ERPell deve ser construído de forma incremental.
+O Geitus deve ser construído de forma incremental.
 
 Primeiro funcionar bem.
 

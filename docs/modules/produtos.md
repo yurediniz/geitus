@@ -4,7 +4,7 @@
 
 Produto é o item físico que um pequeno negócio vende. É a entidade central que conecta PDV, estoque, financeiro e relatórios: sem produto cadastrado, não há venda, não há movimentação de estoque e não há receita a registrar.
 
-Inicialmente o ERPell trabalha **apenas com produtos físicos**. Serviços (ex.: banho e tosa, montagem) ficam fora do MVP e serão tratados futuramente em módulo ou aba separada.
+Inicialmente o Geitus trabalha **apenas com produtos físicos**. Serviços (ex.: banho e tosa, montagem) ficam fora do MVP e serão tratados futuramente em módulo ou aba separada.
 
 **Limites do MVP:** cadastro simples, busca eficiente para o PDV, e uma base de dados preparada para o módulo de Estoque — sem funcionalidades avançadas de precificação, variação ou fiscal.
 
@@ -150,7 +150,7 @@ No frontend, a página protegida `/produtos` consome esses endpoints (listagem c
 - Formulário com validação (React Hook Form + Zod, seguindo o padrão já usado em Empresa/Login).
 - Estados de loading, erro, vazio e sucesso.
 - Feedback claro após salvar/inativar.
-- Layout consistente com o restante do ERPell (mesmos componentes shadcn/ui, mesma linguagem visual).
+- Layout consistente com o restante do Geitus (mesmos componentes shadcn/ui, mesma linguagem visual).
 
 ## 9. Relação com módulos futuros
 

@@ -40,14 +40,14 @@ describe('BackendStatus', () => {
   it('exibe "Conectado" e o nome da aplicação quando a query tem sucesso', async () => {
     getHealthMock.mockResolvedValue({
       status: 'UP',
-      aplicacao: 'ERPell',
+      aplicacao: 'Geitus',
       timestamp: '2026-01-01T00:00:00Z',
     })
 
     renderComProviders(<BackendStatus />)
 
     expect(await screen.findByText(/conectado/i)).toBeInTheDocument()
-    expect(screen.getByText(/ERPell/)).toBeInTheDocument()
+    expect(screen.getByText(/Geitus/)).toBeInTheDocument()
   })
 
   it('exibe "Backend indisponível" quando a query falha', async () => {

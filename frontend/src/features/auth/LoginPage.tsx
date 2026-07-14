@@ -36,7 +36,7 @@ function mensagemDeErro(erro: unknown): string {
 }
 
 /**
- * Tela de login do ERPell. Layout limpo e centralizado, fora do RootLayout
+ * Tela de login do Geitus. Layout limpo e centralizado, fora do RootLayout
  * (sem sidebar). Trata loading, erro e validacao de campos.
  */
 export function LoginPage() {
@@ -76,11 +76,10 @@ export function LoginPage() {
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center gap-2 text-center">
           <span className="flex h-11 w-11 items-center justify-center rounded-md bg-primary text-lg font-bold text-primary-foreground">
-            E
+            G
           </span>
           <div>
-            <p className="text-lg font-semibold">ERPell</p>
-            <p className="text-xs text-muted-foreground">UpeFlow</p>
+            <p className="text-lg font-semibold">Geitus</p>
           </div>
         </div>
 

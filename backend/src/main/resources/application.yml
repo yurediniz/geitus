@@ -1,15 +1,15 @@
-# Configuracao da aplicacao ERPell (backend).
+# Configuracao da aplicacao Geitus (backend).
 # Valores sensiveis NAO ficam no codigo: sao lidos de variaveis de ambiente.
 # O formato ${VARIAVEL:padrao} usa o valor padrao apenas em desenvolvimento local.
 
 spring:
   application:
-    name: ERPell
+    name: Geitus
 
   datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/erpell}
-    username: ${POSTGRES_USER:erpell}
-    password: ${POSTGRES_PASSWORD:erpell}
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/geitus_db}
+    username: ${POSTGRES_USER:geitus}
+    password: ${POSTGRES_PASSWORD:geitus}
 
   jpa:
     hibernate:
@@ -39,15 +39,15 @@ management:
       # Nao expor detalhes internos (status de componentes) sem autenticacao.
       show-details: never
 
-# Configuracoes especificas do ERPell
-erpell:
+# Configuracoes especificas do Geitus
+geitus:
   bootstrap:
     # Habilita o bootstrap idempotente do admin de DESENVOLVIMENTO (ver DevAdminBootstrap).
-    # Mapeia a env var ERPELL_BOOTSTRAP_DEV_ADMIN para a property idiomatica do Spring.
-    dev-admin: ${ERPELL_BOOTSTRAP_DEV_ADMIN:false}
+    # Mapeia a env var GEITUS_BOOTSTRAP_DEV_ADMIN para a property idiomatica do Spring.
+    dev-admin: ${GEITUS_BOOTSTRAP_DEV_ADMIN:false}
   cors:
     # Origens liberadas para o frontend local (Vite). Separe por virgula se houver mais de uma.
-    allowed-origins: ${ERPELL_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    allowed-origins: ${GEITUS_CORS_ALLOWED_ORIGINS:http://localhost:5173}
   security:
     # JWT usado na autenticacao. O segredo (HS256) precisa ter no minimo 32 bytes
     # (256 bits); caso contrario a aplicacao NAO sobe (fail-fast, ver JwtSecretValidator).
