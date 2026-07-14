@@ -10,15 +10,15 @@ Público-alvo inicial:
 - Pet shops
 - Lojas de roupas
 
-> **Status:** MVP em desenvolvimento — fase atual: **fundação técnica e documental**, antes da autenticação inicial.
+> **Status:** MVP em desenvolvimento — etapas 1 a 7 concluídas (fundação, autenticação, empresa e produtos); próximo módulo: **Clientes**.
 
 Estado atual do repositório:
 
-- Monorepo estruturado.
-- Backend base criado (Spring Boot com health check, tratamento global de erros e migration inicial).
-- Frontend base criado (React + Vite com roteamento, providers e componentes base).
-- Documentação inicial criada (`CLAUDE.md`, diretrizes de engenharia e registro de decisões).
-- CI inicial criado (workflows de backend e frontend em `.github/workflows/`).
+- Monorepo estruturado, com CI de backend e frontend em `.github/workflows/`.
+- **Autenticação** implementada: login por e-mail/senha (BCrypt), JWT (HS256), proteção de rotas e tela de login.
+- **Empresa**: contexto da empresa do usuário autenticado (`/api/empresas/minha`) e página de edição do nome.
+- **Produtos**: CRUD inicial protegido (`/api/produtos`, com busca e filtro de status) e tela de produtos.
+- Documentação operacional em `docs/` (diretrizes de engenharia, registro de decisões, dívidas técnicas e especificações por módulo).
 
 ---
 
@@ -35,8 +35,8 @@ Estado atual do repositório:
 - Bean Validation
 - PostgreSQL
 - Flyway
-- JWT e BCrypt (quando a autenticação for implementada)
-- OpenAPI/Swagger via springdoc-openapi (quando endpoints reais forem implementados)
+- JWT (jjwt) e BCrypt para autenticação
+- OpenAPI/Swagger via springdoc-openapi (Swagger UI habilitado apenas em desenvolvimento)
 
 ### Frontend
 
@@ -99,6 +99,7 @@ erpell/
 ├── docs/               # Documentação do projeto
 │   ├── engineering-guidelines.md  # Padrões de engenharia
 │   ├── decision-log.md            # Registro de decisões
+│   ├── technical-debt.md          # Pendências e dívidas técnicas
 │   └── modules/                   # Documentação específica de cada módulo
 ├── .claude/
 │   └── agents/         # Agentes especializados (execução e revisão)
@@ -175,6 +176,7 @@ Consulte o arquivo [CLAUDE.md](CLAUDE.md) para as diretrizes completas de arquit
 - [CLAUDE.md](CLAUDE.md) — diretrizes gerais, arquitetura, stack e regras de negócio.
 - [docs/engineering-guidelines.md](docs/engineering-guidelines.md) — padrões de engenharia, código, testes, segurança e revisão.
 - [docs/decision-log.md](docs/decision-log.md) — registro de decisões importantes, motivos e impactos.
+- [docs/technical-debt.md](docs/technical-debt.md) — pendências e dívidas técnicas rastreadas.
 - [docs/README.md](docs/README.md) — visão geral da documentação do projeto.
 - [docs/modules/README.md](docs/modules/README.md) — organização das especificações por módulo.
 - [.claude/agents/AGENTS.md](.claude/agents/AGENTS.md) — agentes especializados de execução e revisão.

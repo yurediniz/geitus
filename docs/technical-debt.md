@@ -113,3 +113,51 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Impacto:** Aceitavel para o volume esperado do MVP (poucos milhares de produtos por empresa); pode degradar performance se o catalogo crescer muito.
 - **Quando revisar:** Quando houver indicio real de lentidao na busca de produtos.
 - **Observacoes:** Considerar indice trigram (`pg_trgm`) ou full-text search do PostgreSQL; nao ha necessidade agora.
+
+## DT-010 — Fechar o Swagger UI por perfil antes de producao
+
+- **ID:** DT-010
+- **Modulo:** Seguranca/Backend
+- **Origem:** Etapa 5 (auditoria de seguranca)
+- **Prioridade:** alta (pre-producao)
+- **Status:** aberto
+- **Descricao:** Os caminhos do Swagger UI/api-docs sao liberados incondicionalmente no `SecurityConfig`; a restricao a desenvolvimento e apenas documental (DEC-012). Se o mesmo build subir em producao, o mapa da API fica publico.
+- **Impacto:** Sem efeito em desenvolvimento; risco de exposicao da superficie da API em producao.
+- **Quando revisar:** Obrigatoriamente antes de qualquer deploy de producao.
+- **Observacoes:** Condicionar a liberacao a um profile (`@Profile("dev")`) ou desabilitar `springdoc.*.enabled` fora de dev. Tambem registrado em `docs/modules/autenticacao.md`.
+
+## DT-011 — Rate limiting e protecao contra forca bruta no login
+
+- **ID:** DT-011
+- **Modulo:** Seguranca/Backend
+- **Origem:** Etapa 5 (auditoria de seguranca)
+- **Prioridade:** media (pre-producao)
+- **Status:** aberto
+- **Descricao:** O `POST /api/auth/login` nao possui rate limiting nem lockout; forca bruta e credential stuffing nao sao mitigados. Ha tambem um canal teorico de timing (BCrypt so executa para usuario existente).
+- **Impacto:** Aceitavel em desenvolvimento; risco real com usuarios de producao.
+- **Quando revisar:** Antes de producao com usuarios reais.
+- **Observacoes:** Fora do escopo do MVP por decisao explicita da Etapa 5; nao implementar sem tarefa propria.
+
+## DT-012 — Amarrar o bootstrap de dev-admin a profile nao-producao
+
+- **ID:** DT-012
+- **Modulo:** Seguranca/Backend
+- **Origem:** Etapa 5 (auditoria de seguranca)
+- **Prioridade:** media (pre-producao)
+- **Status:** aberto
+- **Descricao:** O `DevAdminBootstrap` e habilitado apenas pela property `erpell.bootstrap.dev-admin` (env `ERPELL_BOOTSTRAP_DEV_ADMIN`). Se a variavel vazar para producao, um admin e criado.
+- **Impacto:** Baixo em desenvolvimento; relevante em producao.
+- **Quando revisar:** Antes de producao.
+- **Observacoes:** Adicionar trava adicional por profile (`@Profile("!prod")` ou equivalente), mantendo a property.
+
+## DT-013 — Migrar token de localStorage para cookie httpOnly + refresh token
+
+- **ID:** DT-013
+- **Modulo:** Seguranca/Frontend
+- **Origem:** Etapa 5 (decisao pragmatica do MVP)
+- **Prioridade:** media (pos-MVP)
+- **Status:** aberto
+- **Descricao:** O JWT fica no `localStorage` (exposto a XSS) e nao ha refresh token; a sessao dura ate a expiracao do token. Toda leitura/escrita passa por `tokenStorage.ts` para facilitar a troca de estrategia.
+- **Impacto:** Risco de XSS aceito conscientemente no MVP; documentado em `frontend/README.md` e `docs/modules/autenticacao.md`.
+- **Quando revisar:** Evolucao de seguranca pos-MVP ou antes de producao com dados sensiveis.
+- **Observacoes:** A migracao para cookie httpOnly implica revisitar CSRF/CORS (`allowCredentials`).

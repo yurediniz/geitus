@@ -374,3 +374,24 @@ A futura migration de autenticação deve considerar esse vínculo desde o iníc
 
 **Observações futuras:**
 Definir o módulo Empresa completo em etapa própria, com especificação dedicada.
+
+---
+
+## DEC-017 — Claude Code como único orquestrador (remoção do Codex)
+
+**Data:** 2026-07-14
+**Status:** Aceita
+**Contexto:**
+Durante as Etapas 6 e 7, o Codex foi usado como segundo orquestrador, com um `AGENTS.md` na raiz (espelho do `CLAUDE.md`) e agentes próprios em `.codex/`. A duplicação dos documentos-guia exigia sincronização manual entre `CLAUDE.md` e `AGENTS.md`, e o drift entre eles já havia começado.
+
+**Decisão:**
+O ERPell passa a usar **apenas o Claude Code** como engenheiro/orquestrador principal. O `AGENTS.md` da raiz e o diretório `.codex/` foram removidos do repositório.
+
+**Motivo:**
+Eliminar a dupla manutenção de documentos-guia quase idênticos (~1000 linhas espelhadas) e o risco de divergência entre eles, simplificando o fluxo de trabalho.
+
+**Impacto:**
+`CLAUDE.md` volta a ser a única fonte de orientação de orquestração. Os agentes especializados continuam definidos em `.claude/agents/` (ver `.claude/agents/AGENTS.md`). Nenhuma regra de produto, escopo, arquitetura ou segurança foi alterada por esta decisão.
+
+**Observações futuras:**
+Se outra ferramenta de orquestração for adotada no futuro, preferir referenciar os documentos existentes em `docs/` em vez de duplicar o conteúdo do `CLAUDE.md`.

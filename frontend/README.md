@@ -1,6 +1,6 @@
 # ERPell — Frontend
 
-Frontend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Esta é a **base inicial**: sobe a aplicação React com o layout principal, o roteamento e um cartão de status que consome o health check do backend. As telas dos módulos ainda **não** foram implementadas.
+Frontend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Contém a aplicação React com o layout principal, **autenticação** (login + proteção de rotas), a página de **Empresa** (`/empresa`) e a página de **Produtos** (`/produtos`). As telas dos demais módulos (clientes, PDV, caixa, financeiro) ainda não foram implementadas.
 
 ---
 
@@ -10,10 +10,10 @@ Frontend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Esta é a *
 - React + TypeScript
 - Vite
 - Tailwind CSS (v4)
-- shadcn/ui (preparado — tokens, `cn` e `components.json` prontos)
+- shadcn/ui
 - React Router
 - TanStack Query
-- React Hook Form + Zod (preparados para os formulários das próximas etapas)
+- React Hook Form + Zod (usados nos formulários de login, empresa e produtos)
 - Vitest + Testing Library (testes)
 - Oxlint (lint)
 - npm (gerenciador de pacotes)
@@ -26,15 +26,17 @@ Frontend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Esta é a *
 - Tailwind CSS v4 com tokens de tema (claro/escuro) e atalho de importação `@` para `src`.
 - Layout base: sidebar com a identidade do ERPell, cabeçalho e área principal com espaço para as rotas futuras.
 - Roteamento com React Router, separado em **rotas públicas** (`/login`) e **rotas privadas** (área principal), com um guard de autenticação.
-- **Autenticação inicial**: tela de login, estado de sessão e proteção de rotas (ver seção "Autenticação" abaixo).
+- **Autenticação**: tela de login, estado de sessão e proteção de rotas (ver seção "Autenticação" abaixo).
+- **Empresa** (`/empresa`): exibição e edição do nome da empresa do usuário autenticado; nome da empresa visível na sidebar.
+- **Produtos** (`/produtos`): listagem com busca e filtro de status, cadastro, edição, inativação e reativação.
 - Cartão de **status do backend** consumindo `GET /api/health`, com tratamento de **carregando**, **sucesso** e **erro**.
-- Cliente HTTP base (`services/httpClient.ts`, com `apiGet`/`apiPost` e injeção de token) e serviços de `health` e `auth`.
+- Cliente HTTP base (`services/httpClient.ts`, com `apiGet`/`apiPost`/`apiPatch` e injeção de token) e serviços de `health`, `auth`, `empresa` e `produto`.
 
 ### O que ainda NÃO existe (próximas etapas)
 
-- Refresh token e revalidação automática de sessão.
-- Cadastro de usuários/empresa e recuperação de senha.
-- Módulos: produtos, clientes, PDV, caixa, financeiro, dashboard real.
+- Refresh token e recuperação de senha.
+- Cadastro/gestão de usuários.
+- Módulos: clientes, PDV, caixa, financeiro, dashboard real.
 
 ---
 

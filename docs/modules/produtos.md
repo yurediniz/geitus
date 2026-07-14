@@ -51,6 +51,47 @@ Campo | Tipo (conceitual) | Observações
 
 **Observação sobre estoque:** não existe campo de "estoque atual" neste modelo conceitual. O estoque atual **não deve ser armazenado nem editado diretamente**; ele deve ser **derivado de movimentações** quando o módulo Estoque básico for implementado. Um "estoque inicial" pode existir futuramente como uma entrada operacional (ou seja, a primeira movimentação de entrada), não como um campo editável do cadastro de produto.
 
+### Modelo de dados atual (implementado — migration `V3__produtos.sql`)
+
+Tabela `produtos`:
+
+| Coluna | Tipo | Observações |
+|---|---|---|
+| `id` | `BIGINT` identity | PK (DEC-015) |
+| `empresa_id` | `BIGINT` | NOT NULL, FK → `empresa(id)`, com índice (DEC-016) |
+| `nome` | `VARCHAR(150)` | NOT NULL |
+| `categoria` | `VARCHAR(100)` | |
+| `unidade` | `VARCHAR(20)` | |
+| `preco_venda` | `NUMERIC(12,2)` | NOT NULL, CHECK `>= 0` |
+| `custo` | `NUMERIC(12,2)` | CHECK `>= 0` quando informado |
+| `estoque_minimo` | `NUMERIC(12,3)` | 3 casas para unidades fracionárias (kg/litro); CHECK `>= 0` |
+| `codigo_barras` | `VARCHAR(50)` | único por empresa (`UNIQUE (empresa_id, codigo_barras)`) |
+| `sku` | `VARCHAR(50)` | único por empresa (`UNIQUE (empresa_id, sku)`) |
+| `ativo` | `BOOLEAN` | NOT NULL, default `true` |
+| `criado_em` / `atualizado_em` | `TIMESTAMP` | mesmo padrão de empresa/usuário |
+
+Strings vazias de SKU/código de barras são normalizadas para `NULL` no service (múltiplos `NULL` não conflitam na constraint UNIQUE do Postgres).
+
+### Endpoints implementados (autenticados)
+
+Todos derivam a empresa do usuário autenticado (JWT); nenhum aceita `empresaId` por path, query ou body.
+
+| Endpoint | Descrição | Respostas |
+|---|---|---|
+| `GET /api/produtos` | Lista produtos da empresa; filtros opcionais `busca` (nome, SKU ou código de barras, sem diferenciar maiúsculas) e `ativo` (`true`/`false`) | 200 |
+| `GET /api/produtos/{id}` | Busca por id dentro da empresa | 200 / 404 |
+| `POST /api/produtos` | Cadastra produto | 201 / 400 |
+| `PATCH /api/produtos/{id}` | Atualiza dados básicos | 200 / 400 / 404 |
+| `PATCH /api/produtos/{id}/inativar` | Inativa o produto | 200 / 404 |
+| `PATCH /api/produtos/{id}/reativar` | Reativa o produto | 200 / 404 |
+
+- Produto inexistente **ou de outra empresa** → 404 (mesma resposta, sem revelar existência entre tenants).
+- Violação de regra de negócio (ex.: SKU duplicado na empresa) → 400 com mensagem da regra; validação de campos → 400 com `campos`.
+- Sem token → 401. Não há `DELETE` (inativação é o caminho padrão).
+- A resposta (`ProdutoResponse`) não expõe `empresaId` nem a entidade JPA.
+
+No frontend, a página protegida `/produtos` consome esses endpoints (listagem com busca/filtro, cadastro, edição, inativação e reativação).
+
 ## 5. Regras de negócio iniciais
 
 - Produto deve pertencer a uma empresa (`empresaId` obrigatório).

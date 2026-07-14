@@ -10,11 +10,11 @@ Cada módulo do sistema terá o seu próprio documento, descrevendo o que ele fa
 
 Conforme o escopo definido no [CLAUDE.md](../../CLAUDE.md):
 
-- Autenticação
+- [Autenticação](autenticacao.md) ✔
 - Layout principal
-- Empresa
+- [Empresa](empresa.md) ✔
 - Usuários
-- Produtos
+- [Produtos](produtos.md) ✔
 - Clientes
 - PDV
 - Caixa
@@ -24,7 +24,7 @@ Conforme o escopo definido no [CLAUDE.md](../../CLAUDE.md):
 - Relatórios básicos
 - Configurações básicas
 
-> Cada item acima ganhará um arquivo próprio (ex.: `produtos.md`, `pdv.md`, `caixa.md`) assim que for iniciado.
+> Cada item ganha um arquivo próprio (ex.: `produtos.md`, `pdv.md`, `caixa.md`) assim que é iniciado — os já especificados estão linkados acima.
 
 ---
 

@@ -1,6 +1,6 @@
 # ERPell — Backend
 
-Backend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Esta é a **base inicial**: sobe a aplicação Spring Boot, uma configuração mínima de segurança e um endpoint de health check. Os módulos de negócio ainda **não** foram implementados.
+Backend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Contém a aplicação Spring Boot com **autenticação por JWT**, o contexto de **Empresa** do usuário autenticado e o módulo inicial de **Produtos**, além dos health checks. Os demais módulos de negócio (clientes, PDV, caixa, estoque, financeiro) ainda não foram implementados.
 
 ---
 
@@ -25,15 +25,17 @@ Backend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Esta é a **
 - Flyway habilitado, com uma migration inicial (`V1__baseline.sql`) apenas para validação.
 - Health check da aplicação em `GET /api/health` e health check padrão do Actuator em `GET /actuator/health`.
 - CORS básico liberado para o frontend local (Vite).
-- **Autenticação inicial (Etapa 5):** login por e-mail/senha (BCrypt) com emissão de JWT (HS256), filtro de autenticação por Bearer token e endpoint de dados do usuário autenticado.
+- **Autenticação:** login por e-mail/senha (BCrypt) com emissão de JWT (HS256), filtro de autenticação por Bearer token e endpoint de dados do usuário autenticado (`GET /api/auth/me`, com a empresa aninhada).
+- **Empresa:** `GET/PATCH /api/empresas/minha` — sempre derivada do usuário autenticado, nunca de parâmetro externo.
+- **Produtos:** `GET/POST /api/produtos`, `GET/PATCH /api/produtos/{id}`, `PATCH /api/produtos/{id}/inativar` e `/reativar`, com filtros opcionais `busca` e `ativo`; isolamento por empresa e unicidade de SKU/código de barras por empresa.
 - Segurança liberando os health checks (`/api/health`, `/actuator/health`), o `POST /api/auth/login` e a documentação Swagger; qualquer outra rota exige um JWT válido (responde `401` sem token/token inválido e `403` sem permissão).
 - Documentação da API via Swagger UI (apenas para desenvolvimento).
 
 ### O que ainda NÃO existe (próximas etapas)
 
-- Módulo Empresa completo e CRUD de usuários (a Etapa 5 cria apenas o mínimo para autenticar).
+- CRUD de usuários e módulo Empresa completo (existe apenas o mínimo para autenticar e editar o nome).
 - Refresh token, recuperação de senha, MFA, OAuth/SSO, RBAC avançado (fora do escopo do MVP).
-- Entidades e regras de negócio (produtos, clientes, PDV, caixa, estoque, financeiro).
+- Clientes, PDV, caixa, estoque e financeiro.
 
 ---
 
@@ -41,11 +43,11 @@ Backend do **ERPell**, a plataforma SaaS de gestão da **UpeFlow**. Esta é a **
 
 ```text
 com.upeflow.erpell
-├── config/          # Configurações (segurança, CORS)
-├── auth/            # Autenticação (etapa futura)
-├── company/         # Empresa (etapa futura)
-├── user/            # Usuários (etapa futura)
-├── product/         # Produtos (etapa futura)
+├── config/          # Configurações (segurança, CORS, OpenAPI)
+├── auth/            # Autenticação (login, JWT, bootstrap dev)
+├── company/         # Empresa (contexto da empresa autenticada)
+├── user/            # Usuários (entidade mínima para autenticação)
+├── product/         # Produtos (CRUD inicial)
 ├── customer/        # Clientes (etapa futura)
 ├── sale/            # Vendas / PDV (etapa futura)
 ├── cashregister/    # Caixa (etapa futura)
@@ -170,7 +172,13 @@ Resposta (200):
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiJ9...",
-  "usuario": { "id": 1, "nome": "Administrador Dev", "email": "admin@erpell.dev", "perfil": "ADMIN", "empresaId": 1 }
+  "usuario": {
+    "id": 1,
+    "nome": "Administrador",
+    "email": "admin@erpell.dev",
+    "perfil": "ADMIN",
+    "empresa": { "id": 1, "nome": "Empresa de Desenvolvimento", "ativo": true, "criadoEm": "...", "atualizadoEm": null }
+  }
 }
 ```
 

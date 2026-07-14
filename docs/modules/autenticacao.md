@@ -145,6 +145,8 @@ Rodar novamente não duplica dados. Detalhes em [backend/README.md](../../backen
 
 ## Limitações conhecidas
 
+> As pendências pré-produção desta lista são rastreadas com prioridade e prazo em [`docs/technical-debt.md`](../technical-debt.md) (DT-010 a DT-013).
+
 - **Token no `localStorage`** (frontend): decisão pragmática do MVP, exposta a XSS. Toda leitura/escrita passa por `tokenStorage.ts` para facilitar troca futura por cookie `httpOnly` + refresh.
 - **Sem refresh token**: sessão dura até a expiração do JWT; um usuário inativado após a emissão continua com token válido em rotas que não recarregam o usuário (o `/me` já bloqueia inativos).
 - **Swagger liberado sem gate técnico por perfil**: hoje a restrição a desenvolvimento é documental (DEC-012). **Antes de qualquer deploy de produção**, fechar o Swagger por perfil (`@Profile("dev")` ou `springdoc.*.enabled=false` fora de dev).

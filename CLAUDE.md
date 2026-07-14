@@ -247,9 +247,9 @@ Essas funcionalidades podem ser previstas para o futuro, mas não devem ser impl
 * Bean Validation
 * PostgreSQL
 * Flyway para migrations
-* BCrypt para hash de senha (quando a autenticação for implementada)
-* JWT para autenticação (quando a autenticação for implementada)
-* OpenAPI/Swagger via springdoc-openapi para documentação da API (quando endpoints reais forem implementados)
+* BCrypt para hash de senha
+* JWT (jjwt) para autenticação
+* OpenAPI/Swagger via springdoc-openapi para documentação da API (Swagger UI habilitado apenas em desenvolvimento)
 
 ### Frontend
 
@@ -487,6 +487,8 @@ Exemplos:
 
 ## Módulo Produtos — diretriz inicial
 
+> Especificação detalhada (endpoints, modelo de dados, regras completas): `docs/modules/produtos.md`.
+
 Inicialmente, o ERPell trabalhará apenas com produtos físicos.
 
 Serviços serão tratados futuramente em módulo ou aba separada.
@@ -506,18 +508,19 @@ Campos essenciais iniciais:
 * Unidade
 * Preço de venda
 * Custo
-* Estoque inicial
 * Estoque mínimo
 * Código de barras
 * SKU
 * Status ativo/inativo
 
+Estoque inicial **não** é um campo do cadastro: quando o módulo Estoque existir, será registrado como a primeira movimentação de entrada (o estoque atual é sempre derivado de movimentações).
+
 Regras iniciais:
 
 * Produto deve possuir nome.
 * Produto deve possuir preço de venda.
-* SKU deve ser único.
-* Código de barras, quando informado, deve ser único.
+* SKU, quando informado, deve ser único **por empresa**.
+* Código de barras, quando informado, deve ser único **por empresa**.
 * Produto vendido não deve ser excluído fisicamente.
 * Produto com movimentação de estoque não deve ser excluído fisicamente.
 * Produto inativo não deve aparecer para venda no PDV.

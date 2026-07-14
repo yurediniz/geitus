@@ -101,7 +101,7 @@ Conceitos que orientam essas escolhas:
 * Erros devem ter formato padronizado.
 * **Não** expor entidades diretamente.
 * Validar entrada no backend.
-* Documentar APIs com OpenAPI/Swagger (springdoc-openapi) quando endpoints reais forem implementados.
+* Documentar APIs com OpenAPI/Swagger (springdoc-openapi); novos endpoints devem nascer anotados como os existentes.
 * Swagger/OpenAPI **não substitui** a documentação de regras de negócio, UX, produto ou decisões arquiteturais.
 
 ---
@@ -114,6 +114,7 @@ Conceitos que orientam essas escolhas:
 * Frontend deve ter testes para componentes e fluxos importantes.
 * Testes devem ser claros e úteis, não apenas para aumentar cobertura.
 * **Não** criar testes frágeis ou excessivamente acoplados à implementação.
+* **Queries derivadas e JPQL devem ser exercitadas contra o repositório real** antes de a etapa ser considerada concluída — testes de fatia web com mocks (`@WebMvcTest` + `@MockBean`) não instanciam os repositórios e não detectam erros de nome de propriedade nem de tipagem de parâmetros no banco. Usar um smoke test que carregue o contexto/repositórios reais ou validação manual contra o PostgreSQL (lição das correções `Empresa_Id` e `lower(bytea)` do módulo Produtos).
 
 ---
 
@@ -123,7 +124,7 @@ Conceitos que orientam essas escolhas:
 * **Nunca** confiar apenas no frontend.
 * **Nunca** commitar `.env` com dados reais.
 * **Nunca** commitar tokens, senhas ou chaves.
-* Usar hash forte para senhas (BCrypt quando a autenticação for implementada).
+* Usar hash forte para senhas (BCrypt, já em uso na autenticação).
 * O `security-reviewer` deve revisar tarefas sensíveis.
 * Mensagens de erro **não** devem expor detalhes internos desnecessários.
 * CORS deve ser restrito ao necessário.
