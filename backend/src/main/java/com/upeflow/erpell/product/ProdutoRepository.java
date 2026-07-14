@@ -35,22 +35,39 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
 
     boolean existsByCodigoBarrasAndEmpresa_IdAndIdNot(String codigoBarras, Long empresaId, Long id);
 
+    // Nota: a listagem com filtros usa duas queries em vez de uma unica com
+    // ":busca IS NULL OR ...": quando :busca era null, o PostgreSQL inferia o
+    // parametro dentro de LOWER(CONCAT(...)) como bytea e a query falhava em
+    // runtime com "function lower(bytea) does not exist". Separar os casos
+    // garante que :busca nunca seja null na query que o utiliza.
+
     /**
-     * Lista produtos da empresa com filtros opcionais de busca (nome, SKU ou
-     * codigo de barras contendo o termo, sem diferenciar maiusculas/minusculas)
-     * e status ativo/inativo. Os parametros {@code busca} e {@code ativo} sao
-     * ignorados quando {@code null}.
+     * Lista produtos da empresa, com filtro opcional de status ativo/inativo
+     * ({@code ativo} e ignorado quando {@code null}).
      */
     @Query("""
             SELECT p FROM Produto p
             WHERE p.empresa.id = :empresaId
-              AND (:busca IS NULL
-                   OR LOWER(p.nome) LIKE LOWER(CONCAT('%', :busca, '%'))
+              AND (:ativo IS NULL OR p.ativo = :ativo)
+            ORDER BY p.nome
+            """)
+    List<Produto> buscarPorEmpresa(@Param("empresaId") Long empresaId, @Param("ativo") Boolean ativo);
+
+    /**
+     * Lista produtos da empresa cujo nome, SKU ou codigo de barras contenha o
+     * termo de busca (sem diferenciar maiusculas/minusculas), com filtro
+     * opcional de status. {@code busca} NUNCA deve ser {@code null} aqui; o
+     * service usa {@link #buscarPorEmpresa} quando nao ha termo de busca.
+     */
+    @Query("""
+            SELECT p FROM Produto p
+            WHERE p.empresa.id = :empresaId
+              AND (LOWER(p.nome) LIKE LOWER(CONCAT('%', :busca, '%'))
                    OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :busca, '%'))
                    OR LOWER(p.codigoBarras) LIKE LOWER(CONCAT('%', :busca, '%')))
               AND (:ativo IS NULL OR p.ativo = :ativo)
             ORDER BY p.nome
             """)
-    List<Produto> buscarPorEmpresaComFiltros(@Param("empresaId") Long empresaId, @Param("busca") String busca,
+    List<Produto> buscarPorEmpresaComBusca(@Param("empresaId") Long empresaId, @Param("busca") String busca,
             @Param("ativo") Boolean ativo);
 }

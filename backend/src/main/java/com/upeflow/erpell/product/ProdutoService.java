@@ -107,8 +107,12 @@ public class ProdutoService {
 
     @Transactional(readOnly = true)
     public List<Produto> listarPorEmpresaComFiltros(Long empresaId, String busca, Boolean ativo) {
-        String buscaNormalizada = StringUtils.hasText(busca) ? busca.trim() : null;
-        return produtoRepository.buscarPorEmpresaComFiltros(empresaId, buscaNormalizada, ativo);
+        // Sem termo de busca, usa a query sem o parametro :busca — passar null
+        // para dentro de LOWER(CONCAT(...)) falha no PostgreSQL (bytea).
+        if (!StringUtils.hasText(busca)) {
+            return produtoRepository.buscarPorEmpresa(empresaId, ativo);
+        }
+        return produtoRepository.buscarPorEmpresaComBusca(empresaId, busca.trim(), ativo);
     }
 
     /**

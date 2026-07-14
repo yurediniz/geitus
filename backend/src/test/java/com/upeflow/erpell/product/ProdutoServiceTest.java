@@ -244,4 +244,27 @@ class ProdutoServiceTest {
         assertThatThrownBy(() -> produtoService.buscarPorId(2L, 5L))
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
     }
+
+    @Test
+    void listarSemTermoDeBuscaDeveUsarQuerySemParametroDeBusca() {
+        // Regressao do bug "function lower(bytea) does not exist": sem termo de
+        // busca (null ou em branco), a query que usa :busca NAO deve ser chamada.
+        when(produtoRepository.buscarPorEmpresa(1L, true)).thenReturn(java.util.List.of());
+
+        produtoService.listarPorEmpresaComFiltros(1L, null, true);
+        produtoService.listarPorEmpresaComFiltros(1L, "   ", true);
+
+        verify(produtoRepository, org.mockito.Mockito.times(2)).buscarPorEmpresa(1L, true);
+        verify(produtoRepository, never()).buscarPorEmpresaComBusca(any(), any(), any());
+    }
+
+    @Test
+    void listarComTermoDeBuscaDeveUsarQueryComBusca() {
+        when(produtoRepository.buscarPorEmpresaComBusca(1L, "arroz", null)).thenReturn(java.util.List.of());
+
+        produtoService.listarPorEmpresaComFiltros(1L, " arroz ", null);
+
+        verify(produtoRepository).buscarPorEmpresaComBusca(1L, "arroz", null);
+        verify(produtoRepository, never()).buscarPorEmpresa(any(), any());
+    }
 }
