@@ -419,7 +419,7 @@ O projeto adotou a modelagem conceitual de um PDV completo (documento de visão 
 Simplicidade de marca; a organização por domínio dá coesão, isolabilidade (ex.: o fiscal pode virar artefato próprio) e prepara o terreno para Spring Modulith quando os domínios crescerem.
 
 **Impacto:**
-Rebrand mecânico em todo o repositório (Fase 0b), sem mudança de comportamento. Migrations V1–V3 permanecem imutáveis: a tabela técnica `erpell_baseline` da V1 e as menções a "ERPell" em comentários são **mantidas de propósito** — editar migration já aplicada quebra o checksum do Flyway em bases existentes. **Não "corrigir" o nome legado nas migrations**; se um dia for desejável, fazê-lo apenas via nova migration de rename (descarte/renomeação da tabela-marcador). A modelagem completa passa a ser o norte de longo prazo, adotada de forma incremental.
+Rebrand mecânico em todo o repositório (Fase 0b), sem mudança de comportamento. As migrations foram tratadas na sequência pela **DEC-020** (consolidação do baseline), que removeu o nome legado do banco enquanto o projeto ainda é pré-produção. A modelagem completa passa a ser o norte de longo prazo, adotada de forma incremental.
 
 **Observações futuras:**
 Introduzir Spring Modulith a partir do módulo de Vendas; avaliar `com.geitus.fiscal` como artefato separado quando o subsistema fiscal for implementado.
@@ -444,3 +444,24 @@ Novos módulos já nascem com o UUID público. Empresa/Produto recebem o UUID em
 
 **Observações futuras:**
 Definir se o UUID público entra por migration com `DEFAULT gen_random_uuid()` (pgcrypto) ou gerado na aplicação; padronizar antes do retrofit.
+
+---
+
+## DEC-020 — Consolidação do baseline das migrations (enquanto pré-produção)
+
+**Data:** 2026-07-15
+**Status:** Aceita
+**Contexto:**
+Após o rebrand (DEC-018), sobravam no banco vestígios do nome antigo: uma tabela-marcador técnica `erpell_baseline` (criada só para validar o Flyway) e comentários "ERPell", presos nas migrations `V1__baseline.sql`, `V2__auth_inicial.sql` e `V3__produtos.sql`. A regra usual "migration aplicada é imutável" (protege o checksum do Flyway) levaria a manter esse legado. Mas o projeto ainda é **pré-produção**: não há deploy, não há outros desenvolvedores com bancos próprios, e o único banco (`geitus_db` de desenvolvimento) é **descartável**.
+
+**Decisão:**
+Consolidar as três migrations em um **único `V1__baseline.sql` limpo** (cria `empresa`, `usuario`, `produtos`, com todas as constraints e índices), **remover a tabela `erpell_baseline`** e apagar `V2`/`V3`. O `geitus_db` é recriado do zero.
+
+**Motivo:**
+A regra de imutabilidade de migration existe para proteger **bancos que já aplicaram a migration e não podem ser recriados** (produção, ambientes compartilhados). Nada disso existe ainda, então o checksum não é um obstáculo real — e este é o momento mais barato para limpar. Um baseline único e limpo dá um ponto de partida melhor para o schema.
+
+**Impacto:**
+Schema idêntico ao anterior (validado pelo `data-reviewer`: tabelas, tipos, FKs, UNIQUEs, CHECKs e índices preservados; `ddl-auto: validate`). Nenhuma mudança de comportamento na aplicação.
+
+**Regra a partir de agora (limite desta decisão):**
+Consolidar/editar migrations aplicadas é permitido **apenas enquanto não houver produção nem bancos compartilhados** que não possamos recriar. **A partir do primeiro deploy/base compartilhada, as migrations voltam a ser append-only** (V2, V3, ... aditivas; nunca editar uma já aplicada) — ver a lição registrada em `docs/engineering-guidelines.md`.
