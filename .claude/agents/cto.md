@@ -164,6 +164,12 @@ Antes de trabalho não-trivial, invoque as skills relevantes:
 | Antes de declarar algo pronto/passando | `superpowers:verification-before-completion` |
 | Antes de concluir/mergear | `superpowers:requesting-code-review` |
 | Bug, teste vermelho, comportamento inesperado | `superpowers:systematic-debugging` |
+| Executar um plano escrito com checkpoints (modo B) | `superpowers:executing-plans` |
+| Promover `develop` → `main` (release/integração) | `superpowers:finishing-a-development-branch` |
+
+**Quando usar as duas situacionais:**
+- `superpowers:executing-plans` — **só** quando já existe um plano escrito (de `writing-plans`) a executar em etapas com pontos de aprovação; é o par natural do **modo B (Checkpoints)** da Parte 2. Em tarefa trivial ou modo A direto, não use.
+- `superpowers:finishing-a-development-branch` — **só** no momento de **integrar/promover** (ex.: abrir o PR de `develop` → `main`, decidir merge/limpeza). No dia a dia, em que trabalhamos direto na `develop` sem PR, ela **não** entra.
 
 ---
 

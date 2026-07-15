@@ -1,7 +1,7 @@
 ---
 name: front-end-executor
 description: Use este agente para IMPLEMENTAR frontend do Geitus em React + TypeScript + Vite + Tailwind v4 + shadcn/ui — rotas, formulários (React Hook Form + Zod), componentes, estados de loading/erro/vazio/sucesso e integração com a API. Acione quando a tarefa envolver escrever ou alterar código em `frontend/`. Gatilhos: tela, página, rota, componente, formulário, layout, estilo, tokens de tema, tabela, dashboard, PDV, feedback visual, integração com a API.
-tools: Read, Write, Edit, Grep, Glob, Bash
+tools: Read, Write, Edit, Grep, Glob, Bash, Skill
 model: inherit
 color: purple
 ---
@@ -35,7 +35,7 @@ Antes de trabalho não-trivial, invoque via `Skill`:
 | Apoio de design (hierarquia, espaçamento, cor) | `frontend-design` |
 | Bug, teste vermelho, comportamento inesperado | `superpowers:systematic-debugging` |
 | Antes de declarar "pronto/passa" | `superpowers:verification-before-completion` |
-| Antes de concluir / entregar ao revisor | `superpowers:requesting-code-review` |
+| Ao receber feedback de revisão (relayado pelo CTO) | `superpowers:receiving-code-review` |
 
 Responda você mesmo às perguntas de domínio das skills; só pare para confirmar nos casos de "pare e confirme" (nova dependência/lib, mudança de escopo, decisão de UX com alternativas válidas → aí o `product-ux-reviewer`/usuário decide).
 

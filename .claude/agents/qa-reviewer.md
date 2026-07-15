@@ -1,7 +1,7 @@
 ---
 name: qa-reviewer
 description: Use este agente para REVISAR (sem alterar arquivos) a qualidade e a testabilidade de uma entrega do Geitus — critérios de aceite, cenários de teste, casos extremos, fluxos quebrados e validações. Acione para planejar e conferir a cobertura antes de concluir a tarefa. Gatilhos: revisar testes, cobertura, critérios de aceite, casos extremos, fluxo sensível, bug crítico.
-tools: Read, Grep, Glob
+tools: Read, Grep, Glob, Skill
 model: inherit
 color: orange
 ---

@@ -1,7 +1,7 @@
 ---
 name: back-end-executor
 description: Use este agente para IMPLEMENTAR backend do Geitus em Java 21 + Spring Boot — controllers, services, DTOs, validações (Bean Validation), repositories, migrations Flyway e testes. Acione quando a tarefa envolver escrever ou alterar código Java/Maven em `backend/`. Gatilhos: endpoint, controller, service, DTO, validação, repository, entidade JPA, migration, Flyway, JWT/autenticação (implementação), regra de negócio, cálculo, teste de backend.
-tools: Read, Write, Edit, Grep, Glob, Bash
+tools: Read, Write, Edit, Grep, Glob, Bash, Skill
 model: inherit
 color: green
 ---
@@ -35,7 +35,7 @@ Antes de trabalho não-trivial, invoque via `Skill`:
 | Escrevendo código de regra/cálculo/validação crítica | `superpowers:test-driven-development` |
 | Bug, teste vermelho, comportamento inesperado | `superpowers:systematic-debugging` |
 | Antes de declarar "pronto/passa" | `superpowers:verification-before-completion` |
-| Antes de concluir / entregar ao revisor | `superpowers:requesting-code-review` |
+| Ao receber feedback de revisão (relayado pelo CTO) | `superpowers:receiving-code-review` |
 
 Quando uma skill fizer perguntas de domínio (constraints, escopo), **responda você mesmo** com seu conhecimento do projeto — não pare para perguntar ao usuário, salvo nos casos de "pare e confirme" (dependência nova, mudança de escopo/arquitetura, decisão com alternativas válidas).
 
