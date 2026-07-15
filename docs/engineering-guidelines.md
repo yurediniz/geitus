@@ -4,7 +4,7 @@
 
 Este documento define os padrões técnicos do Geitus para manter o produto **simples, sustentável, consistente, testável e evolutivo**.
 
-Ele complementa o `CLAUDE.md` (visão de produto, escopo e regras) e o `.claude/agents/AGENTS.md` (papéis de execução e revisão). Em caso de conflito, o `CLAUDE.md` prevalece.
+Ele complementa o `CLAUDE.md` (visão de produto, escopo e regras) e o `.claude/agents/cto.md` (orquestração e papéis de execução e revisão). Em caso de conflito, o `CLAUDE.md` prevalece.
 
 Decisões que motivaram muitas das regras abaixo estão registradas em [`docs/decision-log.md`](decision-log.md).
 
@@ -154,7 +154,7 @@ As revisões devem verificar:
 * Testabilidade.
 * Segurança.
 * Consistência com o `CLAUDE.md`.
-* Consistência com o `.claude/agents/AGENTS.md`.
+* Consistência com o `.claude/agents/cto.md`.
 * Consistência com o `docs/engineering-guidelines.md`.
 * Consistência com o `docs/decision-log.md` quando houver decisão relacionada.
 * Se houve criação de complexidade prematura.
@@ -187,4 +187,4 @@ As revisões devem verificar:
 * O **`product-ux-reviewer`** deve observar principalmente a seção de UX aplicada ao código (seção 9).
 * Em tarefas pequenas e claras, consultar apenas a(s) seção(ões) relevante(s) em vez de reler o documento inteiro (modo econômico de contexto, ver `CLAUDE.md`).
 
-Os papéis e as obrigatoriedades de cada agente estão detalhados em [`.claude/agents/AGENTS.md`](../.claude/agents/AGENTS.md).
+Os papéis e as obrigatoriedades de cada agente estão detalhados em [`.claude/agents/cto.md`](../.claude/agents/cto.md).

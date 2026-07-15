@@ -8,7 +8,7 @@ Este documento registra as **decisões importantes** do projeto Geitus, seus mot
 
 Ele existe para que futuras sessões do Claude Code, agentes e pessoas entendam **por que** certas escolhas foram feitas, sem depender do histórico de conversas anteriores.
 
-Este registro complementa o `CLAUDE.md` (produto, escopo e regras), o [`docs/engineering-guidelines.md`](engineering-guidelines.md) (padrões técnicos) e o [`.claude/agents/AGENTS.md`](../.claude/agents/AGENTS.md) (papéis de execução e revisão).
+Este registro complementa o `CLAUDE.md` (produto, escopo e regras), o [`docs/engineering-guidelines.md`](engineering-guidelines.md) (padrões técnicos) e o [`.claude/agents/cto.md`](../.claude/agents/cto.md) (orquestração e papéis de execução e revisão).
 
 ---
 
@@ -395,7 +395,7 @@ O ERPell passa a usar **apenas o Claude Code** como engenheiro/orquestrador prin
 Eliminar a dupla manutenção de documentos-guia quase idênticos (~1000 linhas espelhadas) e o risco de divergência entre eles, simplificando o fluxo de trabalho.
 
 **Impacto:**
-`CLAUDE.md` volta a ser a única fonte de orientação de orquestração. Os agentes especializados continuam definidos em `.claude/agents/` (ver `.claude/agents/AGENTS.md`). Nenhuma regra de produto, escopo, arquitetura ou segurança foi alterada por esta decisão.
+`CLAUDE.md` volta a ser a única fonte de orientação de orquestração. Os agentes especializados continuam definidos em `.claude/agents/` (à época, catalogados em `.claude/agents/AGENTS.md`; hoje em `.claude/agents/cto.md` — ver DEC-021). Nenhuma regra de produto, escopo, arquitetura ou segurança foi alterada por esta decisão.
 
 **Observações futuras:**
 Se outra ferramenta de orquestração for adotada no futuro, preferir referenciar os documentos existentes em `docs/` em vez de duplicar o conteúdo do `CLAUDE.md`.
@@ -465,3 +465,27 @@ Schema idêntico ao anterior (validado pelo `data-reviewer`: tabelas, tipos, FKs
 
 **Regra a partir de agora (limite desta decisão):**
 Consolidar/editar migrations aplicadas é permitido **apenas enquanto não houver produção nem bancos compartilhados** que não possamos recriar. **A partir do primeiro deploy/base compartilhada, as migrations voltam a ser append-only** (V2, V3, ... aditivas; nunca editar uma já aplicada) — ver a lição registrada em `docs/engineering-guidelines.md`.
+
+---
+
+## DEC-021 — Agente CTO como orquestrador único e adoção de práticas de harness engineering
+
+**Data:** 2026-07-15
+**Status:** Aceita
+**Contexto:**
+A orquestração estava descrita de forma difusa: o `CLAUDE.md` dizia que o Claude Code atuava como "engenheiro e orquestrador principal", e o processo (quem executa, quem revisa, revisores obrigatórios, fluxo) vivia no `.claude/agents/AGENTS.md`, separado do catálogo do time. Com a instalação do plugin **Superpowers**, surgiu a oportunidade de formalizar um orquestrador explícito que usasse suas skills. Restrição de arquitetura: no Claude Code, **um subagente não dispara outros subagentes** de forma confiável — quem dispara é a sessão de topo.
+
+**Decisão:**
+- Criar o **`.claude/agents/cto.md`**: o **CTO**, orquestrador principal e **ponto de entrada único** — persona **encarnada pela sessão de topo** (não é para ser invocado como subagente). Toda tarefa começa nele (triagem → planeja → delega → verifica) e termina nele (relatório estruturado), com esforço **proporcional** ao tamanho/risco.
+- **Fundir o `AGENTS.md` no `cto.md`** (catálogo do time + protocolo de orquestração num só arquivo) e **remover** o `.claude/agents/AGENTS.md`. Todas as referências vivas foram reapontadas para `cto.md`.
+- O CTO usa skills do **Superpowers** no seu método: `brainstorming`, `writing-plans`, `dispatching-parallel-agents`, `verification-before-completion`, `requesting-code-review`, `systematic-debugging`.
+- Adotar **práticas de harness engineering** como padrão dos agentes e processos: ponto de entrada único, contexto auto-contido por dispatch, ferramentas mínimas por agente, loops de verificação com evidência antes de asserção, saída estruturada e esforço proporcional.
+
+**Motivo:**
+Um orquestrador explícito e único elimina a orquestração difusa e a duplicação entre `AGENTS.md` e `CLAUDE.md`; a persona no topo respeita a restrição de subagentes; as práticas de harness engineering tornam a execução mais previsível e auditável.
+
+**Impacto:**
+`CLAUDE.md` passa a apontar o `cto.md` como manual de operação e ponto de entrada; `AGENTS.md` deixa de existir. Nenhuma regra de produto, escopo, segurança ou arquitetura de código foi alterada — só a forma de orquestrar. Referências atualizadas em `CLAUDE.md`, `README.md`, `docs/engineering-guidelines.md`, `docs/decision-log.md` e `docs/modules/README.md`.
+
+**Observações futuras:**
+**Remodelar os demais agentes** (executores e revisores) e os arquivos-guia para seguir as práticas de harness engineering, após fechar um checklist curto de padronização. A inspiração de estrutura veio de um `cto.md` de outro projeto (stack Vercel/Next/Prisma), do qual foram adaptados apenas os padrões (autonomia, triagem, dispatch auto-contido, relatório estruturado, padrões transversais fiscalizados) — descartando o que era específico daquele stack.

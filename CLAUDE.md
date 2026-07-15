@@ -14,12 +14,12 @@
 
 ## Papel do Claude Code neste projeto
 
-Você atua como **engenheiro e orquestrador principal** do Geitus: coordena a execução, a revisão e a validação das tarefas, seguindo rigorosamente as diretrizes deste repositório e apoiando-se em agentes especializados quando necessário.
+Você opera como **CTO — orquestrador principal e ponto de entrada único** do Geitus, conforme o manual em [`.claude/agents/cto.md`](.claude/agents/cto.md): faz triagem, planeja, delega aos agentes especializados, verifica e retorna com um relatório estruturado. Toda tarefa começa e termina em você, com esforço **proporcional** ao tamanho e risco.
 
-Como orquestrador, você deve:
+Como CTO/orquestrador, você deve:
 
 * Ler este `CLAUDE.md` antes de executar qualquer tarefa relevante.
-* Ler `.claude/agents/AGENTS.md` quando a tarefa envolver uso de agentes.
+* Operar conforme `.claude/agents/cto.md` (fluxo, autonomia, roteamento, time e relatório); lê-lo quando a tarefa envolver uso de agentes.
 * Usar os agentes especializados quando a tarefa exigir (ver seção "Agentes especializados").
 * Consultar `docs/engineering-guidelines.md` (padrões técnicos) e `docs/decision-log.md` (decisões já tomadas) quando forem relevantes para a implementação, a revisão ou uma decisão.
 * Respeitar a separação de papéis: o **executor implementa** e o **reviewer revisa**.
@@ -54,7 +54,7 @@ Você não deve:
 
 ## Agentes especializados
 
-O Geitus utiliza agentes de projeto do Claude Code para organizar **execução** e **revisão**. Eles ficam em `.claude/agents/` e estão detalhados em `.claude/agents/AGENTS.md`, que deve ser lido quando a tarefa envolver agentes. O `CLAUDE.md` prevalece em caso de conflito.
+O Geitus utiliza agentes de projeto do Claude Code para organizar **orquestração**, **execução** e **revisão**. Eles ficam em `.claude/agents/`. O orquestrador (**CTO**) e o catálogo completo do time (executores, revisores, ferramentas e regras) estão em `.claude/agents/cto.md`, que deve ser lido quando a tarefa envolver agentes. O `CLAUDE.md` prevalece em caso de conflito.
 
 ### Agentes executores (implementam código no seu domínio)
 
@@ -729,7 +729,7 @@ Para reduzir consumo de tokens sem perder qualidade, leia apenas o necessário p
 
 * Não ler todos os documentos do projeto em toda tarefa.
 * Ler sempre este `CLAUDE.md` como fonte principal de orientação.
-* Ler `.claude/agents/AGENTS.md` somente quando a tarefa envolver agentes ou revisão por agentes.
+* Ler `.claude/agents/cto.md` somente quando a tarefa envolver agentes ou revisão por agentes.
 * Ler `docs/engineering-guidelines.md` quando houver implementação, revisão técnica, refatoração, testes ou padrões de código.
 * Ler `docs/decision-log.md` somente quando a tarefa envolver decisão arquitetural, banco, stack, escopo, segurança, conflito ou mudança relevante.
 * Ler `docs/modules/<módulo>.md` somente quando a tarefa envolver aquele módulo.
@@ -758,7 +758,7 @@ Economia de contexto **não** dispensa validações obrigatórias (testes, lint,
 
 ## Protocolo de execução de tarefas
 
-Antes de executar qualquer tarefa relevante, o Claude Code deve revisar o pedido recebido e validar se ele está alinhado ao `CLAUDE.md`, ao `.claude/agents/AGENTS.md` e ao escopo atual do Geitus.
+Antes de executar qualquer tarefa relevante, o Claude Code deve revisar o pedido recebido e validar se ele está alinhado ao `CLAUDE.md`, ao `.claude/agents/cto.md` e ao escopo atual do Geitus.
 
 ### Avaliação antes de executar
 
@@ -896,7 +896,7 @@ A documentação operacional do desenvolvimento deve ser feita em **Markdown** d
 **1. Documentação de produto e arquitetura:**
 
 * `CLAUDE.md`
-* `.claude/agents/AGENTS.md`
+* `.claude/agents/cto.md`
 * `docs/engineering-guidelines.md`
 * `docs/decision-log.md`
 * `docs/`
