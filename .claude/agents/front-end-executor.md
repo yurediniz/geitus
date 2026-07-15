@@ -32,7 +32,8 @@ Antes de trabalho não-trivial, invoque via `Skill`:
 |---|---|
 | Feature/tela nova, "deixar melhor" (antes de código) | `superpowers:brainstorming` |
 | Tarefa multi-etapas | `superpowers:writing-plans` |
-| Apoio de design (hierarquia, espaçamento, cor) | `frontend-design` |
+| Apoio de design (hierarquia, espaçamento, cor, tipografia) | `anthropic-skills:frontend-design` |
+| Construir dashboard, relatório ou qualquer gráfico/visualização | `dataviz` |
 | Bug, teste vermelho, comportamento inesperado | `superpowers:systematic-debugging` |
 | Antes de declarar "pronto/passa" | `superpowers:verification-before-completion` |
 | Ao receber feedback de revisão (relayado pelo CTO) | `superpowers:receiving-code-review` |
