@@ -188,3 +188,23 @@ As revisões devem verificar:
 * Em tarefas pequenas e claras, consultar apenas a(s) seção(ões) relevante(s) em vez de reler o documento inteiro (modo econômico de contexto, ver `CLAUDE.md`).
 
 Os papéis e as obrigatoriedades de cada agente estão detalhados em [`.claude/agents/cto.md`](../.claude/agents/cto.md).
+
+---
+
+## 13. Harness engineering (padrão dos agentes)
+
+"Harness engineering" é a engenharia do **scaffolding em volta do modelo**: como cada agente é definido, que contexto e ferramentas recebe, como verifica e como reporta. Estes 7 itens são o padrão para **auditar/remodelar** os agentes em `.claude/agents/` e para **criar novos**. O CTO (`.claude/agents/cto.md`) é o primeiro exemplo.
+
+1. **Propósito único e fronteira explícita.** Cada agente faz uma coisa bem, com escopo claro do que faz **e do que não faz**; a `description` traz gatilhos concretos. *No Geitus:* cada arquivo tem um bloco "O que faz / O que NÃO faz" (revisor aponta, não corrige; executor de um domínio não invade o outro).
+
+2. **Ferramentas mínimas (menor privilégio).** O agente recebe só as ferramentas necessárias ao papel. *No Geitus:* revisores = `Read, Grep, Glob`; executores = `+ Write, Edit, Bash`; `qa-reviewer` e `ci-cd-reviewer` seguem sem `Bash` até haver necessidade real.
+
+3. **Contexto auto-contido.** O agente não depende de "lembrar da conversa" — opera a partir do prompt + arquivos-fonte. Todo dispatch carrega tarefa + contexto (paths/estado/decisões) + escopo + formato de saída. *No Geitus:* cada agente lista suas fontes canônicas (`CLAUDE.md`, este documento, `docs/decision-log.md`, spec do módulo).
+
+4. **Evidência antes de asserção.** Nunca declarar "pronto/passa" sem rodar a validação e conferir a saída (testes, lint, build ou o fluxo real). *No Geitus:* executores rodam `./mvnw test`/`npm test`/build e colam o resultado; revisores exigem a evidência (skill `superpowers:verification-before-completion`).
+
+5. **Saída estruturada e previsível.** Todo agente retorna no mesmo formato — o que mudou, arquivos `path:linha`, decisões-chave, validações rodadas, **pendências** (mesmo que "Nenhuma") — para o CTO consolidar sem retrabalho.
+
+6. **Proporcionalidade e economia de contexto.** Ler só o necessário, escalar esforço ao tamanho/risco, não acionar todos os revisores por padrão; auditoria completa só em marcos.
+
+7. **Papéis, não-autoaprovação e guard-rails fiscalizados.** Executor implementa, revisor revisa; o mesmo agente não aprova a própria entrega; revisores obrigatórios em segurança/banco. Guard-rails transversais checados no retorno: migration Flyway acompanha mudança de schema (aditiva; DEC-020), validação no backend, `BigDecimal` para dinheiro, nada de segredo/dado sensível exposto, isolamento por empresa (DEC-016).
