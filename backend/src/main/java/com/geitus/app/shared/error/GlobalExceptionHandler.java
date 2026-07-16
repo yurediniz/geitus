@@ -11,6 +11,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.geitus.app.iam.CredenciaisInvalidasException;
+import com.geitus.app.iam.ConflitoDeUsuarioException;
+import com.geitus.app.iam.DadosUsuarioInvalidosException;
+import com.geitus.app.iam.UsuarioNaoEncontradoException;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
 import com.geitus.app.catalog.RegraDeNegocioException;
 
@@ -124,6 +127,55 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(RegraDeNegocioException.class)
     public ResponseEntity<ApiError> tratarRegraDeNegocio(RegraDeNegocioException ex, HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+
+        return ResponseEntity.badRequest().body(corpo);
+    }
+
+    /**
+     * Usuario nao encontrado para a empresa do usuario autenticado (inclui
+     * usuario de outra empresa: comportamento identico, para nunca vazar dados
+     * entre empresas — DEC-016).
+     */
+    @ExceptionHandler(UsuarioNaoEncontradoException.class)
+    public ResponseEntity<ApiError> tratarUsuarioNaoEncontrado(UsuarioNaoEncontradoException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.NOT_FOUND.value(),
+                HttpStatus.NOT_FOUND.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(corpo);
+    }
+
+    /**
+     * Conflito de estado ou de regra de autoprotecao na gestao de usuarios
+     * (e-mail duplicado, ultimo ADMIN ativo, auto-inativacao).
+     */
+    @ExceptionHandler(ConflitoDeUsuarioException.class)
+    public ResponseEntity<ApiError> tratarConflitoDeUsuario(ConflitoDeUsuarioException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(corpo);
+    }
+
+    /**
+     * Dados invalidos na gestao de usuarios verificados no service (perfil fora
+     * da allow-list, senha abaixo do minimo, senha atual incorreta).
+     */
+    @ExceptionHandler(DadosUsuarioInvalidosException.class)
+    public ResponseEntity<ApiError> tratarDadosUsuarioInvalidos(DadosUsuarioInvalidosException ex,
+            HttpServletRequest request) {
         ApiError corpo = ApiError.de(
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),

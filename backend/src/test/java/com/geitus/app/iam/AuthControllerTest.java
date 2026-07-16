@@ -59,7 +59,8 @@ class AuthControllerTest {
 
     @Test
     void loginValidoDeveRetornar200ComToken() throws Exception {
-        UsuarioResponse usuario = new UsuarioResponse(1L, "Admin", "admin@geitus.dev", "ADMIN", empresaFake());
+        UsuarioResponse usuario = new UsuarioResponse(1L, "Admin", "admin@geitus.dev", "ADMIN",
+                true, null, null, empresaFake());
         when(authService.login(any())).thenReturn(new LoginResponse("token-fake", usuario));
 
         mockMvc.perform(post("/api/auth/login")
@@ -133,7 +134,8 @@ class AuthControllerTest {
 
     @Test
     void meComTokenValidoDeveRetornar200() throws Exception {
-        UsuarioResponse usuario = new UsuarioResponse(1L, "Admin", "admin@geitus.dev", "ADMIN", empresaFake());
+        UsuarioResponse usuario = new UsuarioResponse(1L, "Admin", "admin@geitus.dev", "ADMIN",
+                true, null, null, empresaFake());
         when(authService.buscarUsuarioAutenticado(1L)).thenReturn(usuario);
 
         String token = jwtService.gerarToken(criarUsuario(1L, "ADMIN"));
