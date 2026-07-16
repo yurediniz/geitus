@@ -2,90 +2,164 @@
 
 /*
   Tokens de tema do Geitus (base para o shadcn/ui).
-  Usamos variaveis CSS para cores, permitindo tema claro e escuro.
+  Fonte da verdade: brandbook da marca. Os hex ficam somente aqui, na definicao
+  dos tokens; os componentes usam apenas os tokens semanticos (bg-primary, etc.).
+
+  Paleta da marca:
+    Ambar        #D99A2B  primary / CTA
+    Grafite      #2E2A26  foreground (texto/estrutura)
+    Creme        #F7F1E8  background (fundo de pagina)
+    Tan claro    #EFE7D8  muted / neutro
+    Ambar claro  #FAEEDA  accent (destaque suave)
+    Ambar escuro #854F0B  texto sobre ambar claro
 */
 :root {
   --radius: 0.625rem;
 
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* Canvas creme, texto grafite. */
+  --background: #f7f1e8;
+  --foreground: #2e2a26;
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  /* Cards em branco para "elevar" sobre o creme. */
+  --card: #ffffff;
+  --card-foreground: #2e2a26;
 
-  --primary: oklch(0.55 0.18 260);
-  --primary-foreground: oklch(0.985 0 0);
+  --popover: #ffffff;
+  --popover-foreground: #2e2a26;
 
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
+  /*
+    Ambar e um tom medio: texto branco sobre ele fica em ~2.4:1 (reprova).
+    Por isso o primary-foreground e o grafite (~5.8:1, aprova AA).
+  */
+  --primary: #d99a2b;
+  --primary-foreground: #2e2a26;
 
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  /* Tan claro como neutro para blocos secundarios. */
+  --secondary: #efe7d8;
+  --secondary-foreground: #2e2a26;
 
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --muted: #efe7d8;
+  --muted-foreground: #6b6259;
 
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  /* Destaque suave da marca (usado no item ativo da navegacao). */
+  --accent: #faeeda;
+  --accent-foreground: #854f0b;
 
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* Bordas num tom tan neutro; borda e o ultimo recurso de separacao. */
+  --border: #e4d9c6;
+  --input: #d9cdb6;
+  --ring: #d99a2b;
 
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-border: oklch(0.922 0 0);
+  /*
+    Ladder de elevacao por cor de fundo: sidebar (tan) < conteudo (creme) < card (branco).
+    O item ativo usa o accent ambar-claro, que "sobe" sobre o tan.
+  */
+  --sidebar: #efe7d8;
+  --sidebar-foreground: #2e2a26;
+  --sidebar-border: #e1d5c0;
 
-  --success: oklch(0.62 0.17 150);
-  --destructive: oklch(0.58 0.22 27);
-  --destructive-foreground: oklch(0.985 0 0);
+  /*
+    Paleta funcional de estados (pagamentos, pedidos, caixa).
+    Cada estado tem a cor forte (+ foreground de contraste) e uma variante
+    suave (fundo claro + texto da mesma familia) para badges/etiquetas.
+  */
+  --success: #3a8f4a;
+  --success-foreground: #ffffff;
+  --success-soft: #eaf6ee;
+  --success-soft-foreground: #2f6b3f;
+
+  /* Laranja e claro: texto grafite reprova em branco, aprova em grafite. */
+  --warning: #f97316;
+  --warning-foreground: #2e2a26;
+  --warning-soft: #fff3e6;
+  --warning-soft-foreground: #b45309;
+
+  --info: #2f6fdb;
+  --info-foreground: #ffffff;
+  --info-soft: #eaf1ff;
+  --info-soft-foreground: #2f5fbb;
+
+  --destructive: #c94a3a;
+  --destructive-foreground: #ffffff;
+  --destructive-soft: #fdecec;
+  --destructive-soft-foreground: #a33a2e;
 }
 
+/*
+  Dark mode: variante sobria e legivel da marca. O brandbook e primariamente
+  claro; aqui mantemos o grafite como canvas e o ambar como acento.
+*/
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
+  --background: #1f1c19;
+  --foreground: #f7f1e8;
 
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
+  --card: #2a2622;
+  --card-foreground: #f7f1e8;
 
-  --primary: oklch(0.7 0.15 260);
-  --primary-foreground: oklch(0.205 0 0);
+  --popover: #2a2622;
+  --popover-foreground: #f7f1e8;
 
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
+  --primary: #d99a2b;
+  --primary-foreground: #241f1b;
 
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
+  --secondary: #33302b;
+  --secondary-foreground: #f7f1e8;
 
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --muted: #33302b;
+  --muted-foreground: #a79e92;
 
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  --accent: #3a332a;
+  --accent-foreground: #f0c579;
 
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: #35302a;
+  --input: #40392f;
+  --ring: #d99a2b;
 
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar: #241f1b;
+  --sidebar-foreground: #f7f1e8;
+  --sidebar-border: #35302a;
 
-  --success: oklch(0.7 0.16 150);
-  --destructive: oklch(0.7 0.19 25);
-  --destructive-foreground: oklch(0.985 0 0);
+  --success: #4ca85f;
+  --success-foreground: #10230f;
+  --success-soft: #16281a;
+  --success-soft-foreground: #7fd08e;
+
+  --warning: #fb8b3c;
+  --warning-foreground: #241f1b;
+  --warning-soft: #2e2212;
+  --warning-soft-foreground: #f0b36a;
+
+  --info: #5b8de8;
+  --info-foreground: #0e1a2e;
+  --info-soft: #16233d;
+  --info-soft-foreground: #8fb4f0;
+
+  --destructive: #e0685a;
+  --destructive-foreground: #2a1512;
+  --destructive-soft: #301a17;
+  --destructive-soft-foreground: #ec9086;
 }
 
-/* Expoe as variaveis como tokens do Tailwind (ex.: bg-background, text-muted-foreground) */
+/* Expoe as variaveis como tokens do Tailwind (ex.: bg-background, text-muted-foreground). */
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
 
+  /* Tipografia: Inter para interface/corpo, Outfit para marca e titulos. */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  --font-brand: "Outfit", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  --font-display: "Outfit", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
@@ -94,17 +168,29 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-border: var(--sidebar-border);
+
   --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-foreground: var(--success-soft-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-foreground: var(--warning-soft-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-soft: var(--info-soft);
+  --color-info-soft-foreground: var(--info-soft-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-soft-foreground: var(--destructive-soft-foreground);
 }
 
 @layer base {
@@ -116,7 +202,18 @@
     margin: 0;
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+      Roboto, Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
+  }
+
+  /* Titulos usam a fonte de marca (Outfit); o corpo permanece em Inter. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-brand);
   }
 }

@@ -54,7 +54,7 @@ export function RootLayout() {
             G
           </span>
           <div className="leading-tight">
-            <p className="font-semibold">Geitus</p>
+            <p className="font-brand text-lg font-semibold tracking-tight">Geitus</p>
           </div>
         </div>
 
@@ -93,7 +93,7 @@ export function RootLayout() {
 
       <div className="flex flex-1 flex-col">
         <header className="flex h-16 items-center border-b px-6">
-          <span className="font-semibold md:hidden">Geitus</span>
+          <span className="font-brand font-semibold tracking-tight md:hidden">Geitus</span>
           <span className="hidden text-sm text-muted-foreground md:inline">
             Plataforma de gestão para pequenos negócios
           </span>

@@ -79,7 +79,7 @@ export function LoginPage() {
             G
           </span>
           <div>
-            <p className="text-lg font-semibold">Geitus</p>
+            <p className="font-brand text-lg font-semibold tracking-tight">Geitus</p>
           </div>
         </div>
 
