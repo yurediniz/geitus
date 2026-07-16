@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 
@@ -52,6 +53,21 @@ function renderComProvider() {
   )
 }
 
+/**
+ * Renderiza dentro de <StrictMode> para reproduzir o double-invoke de efeitos
+ * do React em desenvolvimento (mount -> unmount -> mount), que e exatamente o
+ * cenario onde a app roda no dev (ver main.tsx).
+ */
+function renderComProviderStrict() {
+  return render(
+    <StrictMode>
+      <AuthProvider>
+        <Consumidor />
+      </AuthProvider>
+    </StrictMode>,
+  )
+}
+
 describe('AuthProvider - reidratacao do usuario no boot', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -84,6 +100,42 @@ describe('AuthProvider - reidratacao do usuario no boot', () => {
     await waitFor(() => {
       expect(getStoredToken()).toBeNull()
     })
+    expect(screen.getByTestId('autenticado')).toHaveTextContent('false')
+  })
+})
+
+describe('AuthProvider - reidratacao sob StrictMode (double-invoke)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  it('reidrata a sessao mesmo com o double-invoke de efeitos do StrictMode', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    renderComProviderStrict()
+
+    // Regressao: sob StrictMode a app ficava presa em carregandoSessao=true
+    // para sempre (o resultado do getMe era descartado). Apos a correcao, a
+    // sessao deve concluir a reidratacao e expor o usuario.
+    expect(await screen.findByText('Ana Souza')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByTestId('carregando')).toHaveTextContent('false')
+    })
+    expect(screen.getByTestId('autenticado')).toHaveTextContent('true')
+  })
+
+  it('faz logout quando a reidratacao falha, mesmo sob StrictMode', async () => {
+    setStoredToken('token-invalido')
+    getMeMock.mockRejectedValue(new Error('falha'))
+
+    renderComProviderStrict()
+
+    await waitFor(() => {
+      expect(getStoredToken()).toBeNull()
+    })
+    expect(screen.getByTestId('carregando')).toHaveTextContent('false')
     expect(screen.getByTestId('autenticado')).toHaveTextContent('false')
   })
 })

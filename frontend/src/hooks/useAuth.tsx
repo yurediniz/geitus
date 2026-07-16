@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -86,25 +85,29 @@ export function AuthProvider({ children, onUnauthorized }: AuthProviderProps) {
   }, [logout, onUnauthorized])
 
   // Reidrata o usuario apos um F5: com token no armazenamento mas sem usuario
-  // em memoria, busca o usuario via GET /api/auth/me. O ref garante que a
-  // chamada ocorra uma unica vez, evitando loops de re-render / requisicoes
-  // repetidas. Em caso de falha (ex.: token invalido/expirado), faz logout —
-  // um 401 ja dispara o mesmo fluxo pelo handler de nao-autorizado.
-  const reidratacaoIniciada = useRef(false)
+  // em memoria, busca o usuario via GET /api/auth/me. A guarda de re-fetch e o
+  // proprio estado — o efeito retorna cedo quando ja ha usuario e so re-roda
+  // quando token/usuario mudam. Cada execucao do efeito inicia o seu proprio
+  // getMe com uma flag "ignorar" no cleanup (padrao React de data-fetching em
+  // efeito). Isso torna a reidratacao robusta ao double-invoke do StrictMode em
+  // dev: a segunda execucao reata e aplica o resultado; um ref compartilhado
+  // como guarda deixaria a app presa em "carregando sessao" (a Run 1 seria
+  // descartada no cleanup e a Run 2 nunca reiniciaria a busca). Em producao
+  // roda uma unica vez. Em caso de falha (ex.: token invalido/expirado), faz
+  // logout — um 401 ja dispara o mesmo fluxo pelo handler de nao-autorizado.
   useEffect(() => {
-    if (!token || usuario || reidratacaoIniciada.current) {
+    if (!token || usuario) {
       return
     }
-    reidratacaoIniciada.current = true
 
-    let cancelado = false
+    let ignorar = false
     getMe()
       .then((dados) => {
-        // Aplica o usuario apenas se a reidratacao ainda for valida: nao houve
-        // unmount (cancelado) e a sessao nao foi encerrada nesse meio-tempo
-        // (ex.: um logout durante o getMe pendente removeria o token). Sem essa
+        // Aplica o usuario apenas se esta execucao ainda for valida: nao houve
+        // unmount (ignorar) e a sessao nao foi encerrada nesse meio-tempo (ex.:
+        // um logout durante o getMe pendente removeria o token). Sem essa
         // verificacao, a Promise tardia reabriria a sessao indevidamente.
-        if (!cancelado && getStoredToken() !== null) {
+        if (!ignorar && getStoredToken() !== null) {
           setUsuario(dados)
           setCarregandoSessao(false)
         }
@@ -112,11 +115,13 @@ export function AuthProvider({ children, onUnauthorized }: AuthProviderProps) {
       .catch(() => {
         // Falha ao reidratar: sessao invalida. Limpa o token de forma segura
         // (o logout tambem encerra o estado de "carregando sessao").
-        logout()
+        if (!ignorar) {
+          logout()
+        }
       })
 
     return () => {
-      cancelado = true
+      ignorar = true
     }
   }, [token, usuario, logout])
 
