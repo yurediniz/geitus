@@ -50,14 +50,14 @@ O acesso é concedido por um **Vínculo Usuário↔Empresa** (associação M:N) 
 | Entidade | Papel | Fase |
 |---|---|---|
 | Empresa | Tenant isolado; **cada unidade/filial é uma Empresa** (sem Matriz/Filial) | **MVP** (existe) |
-| Usuário | Identidade global (um login; acessa N Empresas) | **MVP** (existe — hoje 1:1, evolui para M:N) |
+| Usuário | Identidade global (um login; acessa N Empresas) | **MVP** (existe — hoje N:1, evolui para M:N) |
 | Vínculo Usuário↔Empresa | Associação M:N com **perfil + status por empresa** (ADMIN por empresa) | **Evolução do módulo Usuários** |
 | TerminalPDV | Ponto de venda dentro da Empresa; define se exige caixa | **Fase PDV** |
 | Perfil / Permissão | RBAC (vender, cancelar, desconto, abrir/fechar caixa...) — o perfil vive no vínculo | **Futuro** |
 | Operador | Papel operacional do usuário na sessão (limites de desconto/cancelamento) | **Fase PDV** (papel, não tabela) |
 
 > **Consequência:** um dono com 3 lojas terá 3 Empresas; um relatório consolidado das unidades exigirá agregação cross-empresa no futuro (não é escopo agora).
-> **Estado atual:** `usuario.empresa_id` é único (1:1). Migrar para o modelo de vínculo é um refactor + migration, **agendado** para quando o módulo de Usuários amadurecer.
+> **Estado atual:** cada usuário é vinculado a **uma única empresa (N:1)** — `usuario.empresa_id` é `NOT NULL` e **não** é único. Migrar para o modelo de vínculo (N:1 → M:N) é um refactor + migration, **agendado** para quando o módulo de Usuários amadurecer. O e-mail permanece **único global** (identidade), conforme a DEC-024 — não migrar para único-por-empresa.
 
 ### 3.2 Catálogo — `catalog`
 | Entidade | Papel | Fase |
@@ -68,7 +68,7 @@ O acesso é concedido por um **Vínculo Usuário↔Empresa** (associação M:N) 
 | VariacaoProduto / AtributoProduto / ValorAtributo | Versões vendáveis (cor/tamanho...) — grade | **Futuro** (roupas) |
 | CodigoBarrasProduto | Múltiplos GTIN/EAN por produto/variação | **Futuro** |
 
-> O produto do MVP é físico e mínimo. Os campos avançados (fiscais, estoque, variação, múltiplos códigos) são do norte — entram por capacidade.
+> O produto do MVP é físico e mínimo. Os campos avançados (fiscais, estoque, variação, múltiplos códigos) são do norte — entram por capacidade. Quando `CodigoBarrasProduto` (múltiplos GTIN) entrar, a unicidade de código de barras migra da coluna no produto para a tabela-filha.
 
 ### 3.3 Preços — `pricing` (futuro)
 | Entidade | Papel | Fase |
@@ -81,7 +81,7 @@ O acesso é concedido por um **Vínculo Usuário↔Empresa** (associação M:N) 
 | Entidade | Papel | Fase |
 |---|---|---|
 | Cliente | Pessoa física/jurídica; **opcional** na venda comum | **Fase 3** (próximo módulo) |
-| Endereço | Objeto reutilizável (empresa/estab./cliente/entrega) | **Futuro** (quando entrega/fiscal) |
+| Endereço | Objeto reutilizável (empresa/cliente/entrega) | **Futuro** (quando entrega/fiscal) |
 
 ### 3.5 Estoque — `inventory` (futuro)
 | Entidade | Papel | Fase |
@@ -176,4 +176,4 @@ Registradas como norte (não implementar antes da hora):
 - **Não é escopo do MVP** — o escopo vigente está no `CLAUDE.md` e prevalece.
 - **Não autoriza implementação antecipada** — entidades/campos só entram quando a etapa e a capacidade os exigirem.
 - **Não substitui as specs de módulo** (`docs/modules/`), que detalham cada módulo quando ele entra em desenvolvimento.
-- **Fonte:** modelagem conceitual completa do PDV Geitus (documento externo), curada e adaptada às decisões do projeto (DEC-015/016/018/019/023).
+- **Fonte:** modelagem conceitual completa do PDV Geitus (documento externo), curada e adaptada às decisões do projeto (DEC-015/016/018/019/023/024).
