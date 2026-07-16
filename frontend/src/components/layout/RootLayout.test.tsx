@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
 import { RootLayout } from '@/components/layout/RootLayout'
@@ -85,5 +85,54 @@ describe('RootLayout - logout', () => {
 
     expect(await screen.findByText(/tela de login/i)).toBeInTheDocument()
     expect(getStoredToken()).toBeNull()
+  })
+})
+
+describe('RootLayout - navegacao mobile (drawer)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  it('abre o drawer pelo botao de menu e da acesso a navegacao', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    renderLayout()
+    await screen.findByText('Ana Souza')
+
+    // Sem o drawer aberto nao ha dialogo na tela.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /abrir menu/i }))
+
+    const dialog = await screen.findByRole('dialog')
+    // A mesma navegacao da sidebar fica acessivel dentro do drawer.
+    expect(within(dialog).getByRole('link', { name: /produtos/i })).toHaveAttribute(
+      'href',
+      '/produtos',
+    )
+    expect(within(dialog).getByRole('link', { name: /empresa/i })).toBeInTheDocument()
+  })
+
+  it('fecha o drawer ao escolher um item de navegacao', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    renderLayout()
+    await screen.findByText('Ana Souza')
+
+    fireEvent.click(screen.getByRole('button', { name: /abrir menu/i }))
+    const dialog = await screen.findByRole('dialog')
+
+    fireEvent.click(within(dialog).getByRole('link', { name: /produtos/i }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    // Fechado o drawer, resta o link da sidebar — agora marcado como ativo,
+    // confirmando que a navegacao ocorreu.
+    expect(screen.getByRole('link', { name: /produtos/i })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
   })
 })

@@ -217,3 +217,67 @@
     font-family: var(--font-brand);
   }
 }
+
+/*
+  Animacoes do drawer lateral (Sheet). Definidas aqui, no tema, porque o projeto
+  nao usa a lib tailwindcss-animate. Radix precisa de uma animacao CSS real para
+  reproduzir a saida antes de desmontar o conteudo (evita o "flash" ao fechar).
+*/
+@keyframes geitus-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes geitus-overlay-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes geitus-sheet-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes geitus-sheet-out-left {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+[data-slot="sheet-overlay"][data-state="open"] {
+  animation: geitus-overlay-in 200ms ease-out;
+}
+
+[data-slot="sheet-overlay"][data-state="closed"] {
+  animation: geitus-overlay-out 200ms ease-in;
+}
+
+[data-slot="sheet-content"][data-state="open"] {
+  animation: geitus-sheet-in-left 320ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+[data-slot="sheet-content"][data-state="closed"] {
+  animation: geitus-sheet-out-left 260ms ease-in;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="sheet-overlay"],
+  [data-slot="sheet-content"] {
+    animation-duration: 1ms;
+  }
+}
