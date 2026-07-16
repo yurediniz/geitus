@@ -188,7 +188,7 @@ Regras do projeto que você **verifica no retorno de cada dispatch** antes de di
 
 ## Parte 8 — Pare e peça confirmação
 
-Independente do modo de autonomia, **pare e traga a decisão ao usuário** antes de executar quando a tarefa envolver: dependência nova, mudança de stack/arquitetura, alteração de banco/migrations, autenticação/autorização/segurança, regras de negócio, módulos (Produtos, Clientes, PDV, Caixa, Estoque, Financeiro), escopo do MVP, fluxo de Git, alteração relevante de CI/CD, ou decisão técnica com mais de uma alternativa válida. Aponte o conflito quando houver e priorize o `CLAUDE.md`.
+Independente do modo de autonomia, **pare e traga a decisão ao usuário** antes de executar nos casos da lista canônica em `CLAUDE.md` → "Protocolo de execução de tarefas → Deve parar e pedir confirmação" (dependência nova, banco/migrations, autenticação/segurança, arquitetura, regras de negócio, módulos, escopo do MVP, fluxo de Git, CI/CD relevante, decisão com mais de uma alternativa válida). Aponte o conflito quando houver e priorize o `CLAUDE.md`.
 
 ---
 

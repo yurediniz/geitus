@@ -489,3 +489,27 @@ Um orquestrador explícito e único elimina a orquestração difusa e a duplica�
 
 **Observações futuras:**
 **Remodelar os demais agentes** (executores e revisores) e os arquivos-guia para seguir as práticas de harness engineering, após fechar um checklist curto de padronização. A inspiração de estrutura veio de um `cto.md` de outro projeto (stack Vercel/Next/Prisma), do qual foram adaptados apenas os padrões (autonomia, triagem, dispatch auto-contido, relatório estruturado, padrões transversais fiscalizados) — descartando o que era específico daquele stack.
+
+---
+
+## DEC-022 — Divisão de responsabilidade dos guias: `CLAUDE.md` (o quê) × `cto.md` (o como)
+
+**Data:** 2026-07-16
+**Status:** Aceita
+**Contexto:**
+Após a remodelagem dos agentes (DEC-021), o `CLAUDE.md` — documento **lido em toda tarefa** — ainda repetia o **processo de orquestração** que já vivia no `cto.md`: roteamento de reviewers (em "Agentes especializados" e "Uso proporcional de agentes"), "parar e pedir confirmação" (no "Protocolo de execução" e na Parte 8 do `cto.md`), formato de relatório/classificação (no "Protocolo" e no "Padrão de resposta") e proporcionalidade/economia (em quatro seções + `cto.md`). O próprio "Modo econômico de contexto" era uma lista verbosa de meta-instruções paga em todas as tarefas — contraditório com a economia que pregava. Duplicação em documento sempre carregado custa tokens e gera drift (como já ocorreu com o antigo `AGENTS.md`).
+
+**Decisão:**
+Adotar uma divisão clara de responsabilidade entre os guias, com **cada regra em um único lugar**:
+- **`CLAUDE.md` = o "quê"**: produto, escopo do MVP, regras de negócio, stack, padrões e as **regras que prevalecem** (a lista canônica "Deve parar e pedir confirmação", a classificação de sugestões, os revisores obrigatórios, "economia não dispensa validações/revisores", "conflito → `CLAUDE.md` prevalece").
+- **`cto.md` = o "como"**: triagem, autonomia, roteamento de agentes, regras do time, dispatch auto-contido, verificação e formato de relatório.
+- Deduplicar o `CLAUDE.md` contra o `cto.md`: condensar "Modo econômico de contexto" a um princípio; reduzir "Fluxo de trabalho", "Uso proporcional de agentes" e as "Regras de uso" dos agentes a ponteiros; manter no "Protocolo de execução" apenas o que prevalece. O `cto.md` (Parte 8) passa a **apontar** para a lista canônica do `CLAUDE.md`.
+
+**Motivo:**
+Otimização de desempenho (harness engineering): o documento sempre carregado fica mais enxuto (~75 linhas a menos), sem perder nenhuma regra; a economia real passa a vir da **estrutura** (docs modulares, dispatch auto-contido, `CLAUDE.md` menor), não de uma política verbosa lida em toda tarefa. Menos duplicação = menos drift.
+
+**Impacto:**
+Nenhuma regra de negócio, escopo, segurança ou padrão técnico foi perdida — apenas movida para um único dono e referenciada nos demais. Títulos de seção do `CLAUDE.md` foram preservados para não quebrar referências (`cto.md`, `engineering-guidelines`). Arquivos tocados: `CLAUDE.md`, `.claude/agents/cto.md`.
+
+**Observações futuras:**
+Corte opcional maior (não feito agora): reduzir as **diretrizes de módulo** no `CLAUDE.md` (Produtos/PDV/Caixa/Clientes/Financeiro) a resumos + ponteiro, movendo o detalhe para specs próprias em `docs/modules/` (várias ainda não existem). Avaliar quando cada módulo entrar em desenvolvimento.

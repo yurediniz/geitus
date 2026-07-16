@@ -73,16 +73,10 @@ O Geitus utiliza agentes de projeto do Claude Code para organizar **orquestraç�
 
 ### Regras de uso
 
-* Agentes executores podem implementar código dentro do seu domínio (backend ou frontend).
-* Agentes revisores apenas revisam: apontam riscos, problemas, inconsistências e melhorias. **Não alteram arquivos.**
-* `qa-reviewer` e `ci-cd-reviewer` **não usam Bash** neste momento (não executam comandos).
-* O mesmo agente que implementa **não deve aprovar** a própria entrega.
-* `back-end-reviewer` deve revisar entregas relevantes de backend.
-* `front-end-reviewer` deve revisar entregas relevantes de frontend.
-* `security-reviewer` é **obrigatório** em tarefas de autenticação, autorização, JWT, senhas, permissões, CORS, dados sensíveis e proteção de rotas.
-* `data-reviewer` é **obrigatório** em tarefas com banco de dados, migrations, modelagem, constraints, índices ou integridade.
-* `product-ux-reviewer` deve revisar telas, fluxos importantes e decisões que afetem a experiência.
-* `ci-cd-reviewer` deve revisar workflows, pipelines e automações.
+* Executores implementam no seu domínio; revisores apenas apontam riscos e melhorias — **não alteram arquivos**. `qa-reviewer` e `ci-cd-reviewer` **não usam Bash** (não executam comandos).
+* O mesmo agente que implementa **não aprova** a própria entrega.
+* **Revisores obrigatórios:** `security-reviewer` em autenticação, autorização, JWT, senhas, permissões, CORS, dados sensíveis e proteção de rotas; `data-reviewer` em banco, migrations, modelagem, constraints, índices e integridade.
+* O roteamento completo (qual revisor para cada tipo de tarefa) e as demais regras do time estão em [`.claude/agents/cto.md`](.claude/agents/cto.md).
 
 ---
 
@@ -697,89 +691,29 @@ chore(projeto): configura estrutura do repositório
 
 ## Fluxo de trabalho com Claude Code
 
-Ao iniciar uma tarefa:
+Você opera como **CTO** conforme [`.claude/agents/cto.md`](.claude/agents/cto.md): triagem → planejar (esforço **proporcional** ao tamanho e risco) → delegar/implementar → verificar → relatório. Em toda tarefa: ler este `CLAUDE.md`; trabalhar na `develop` (salvo decisão explícita); implementar a menor parte funcional possível; rodar lint, testes e build quando aplicável; ler a spec do módulo em `docs/` e o `docs/decision-log.md` quando houver decisão relacionada.
 
-1. Ler este `CLAUDE.md`.
-2. Ler o documento específico do módulo em `docs/`, se existir.
-3. Consultar, em tarefas de implementação e revisão, o `docs/engineering-guidelines.md` e o `docs/decision-log.md` quando houver decisão relacionada.
-4. Verificar o estado atual do projeto.
-5. Confirmar que está na branch `develop`, salvo decisão explícita em contrário.
-6. Implementar a menor parte funcional possível.
-7. Rodar lint, testes e build quando aplicável.
-8. Explicar o que foi alterado.
-9. Sugerir próximos passos.
-
-Antes de implementar, quando a tarefa for grande:
-
-* Dividir em etapas.
-* Explicar plano curto.
-* Aguardar confirmação se houver ambiguidade importante.
-
-Quando houver conflito entre este documento e uma solicitação solta:
-
-* Priorizar este documento.
-* Apontar o conflito.
-* Solicitar decisão do usuário.
+**Conflito** entre este documento e uma solicitação: priorize o `CLAUDE.md`, aponte o conflito e peça decisão.
 
 ---
 
 ## Modo econômico de contexto
 
-Para reduzir consumo de tokens sem perder qualidade, leia apenas o necessário para cada tarefa:
+Escale o esforço ao **tamanho e risco** da tarefa e leia **apenas o documento que ela exige** — os `docs/` são modulares para isso e o `cto.md` lista as fontes canônicas de cada agente. Sempre leia este `CLAUDE.md`; os demais (`engineering-guidelines`, `decision-log`, spec do módulo, READMEs) só quando a tarefa os tocar. No relatório, seja objetivo e **não repita regras já documentadas**; detalhe mais só em erro, risco, decisão importante, banco, segurança ou a pedido (ver "Padrão de resposta esperado do Claude Code").
 
-* Não ler todos os documentos do projeto em toda tarefa.
-* Ler sempre este `CLAUDE.md` como fonte principal de orientação.
-* Ler `.claude/agents/cto.md` somente quando a tarefa envolver agentes ou revisão por agentes.
-* Ler `docs/engineering-guidelines.md` quando houver implementação, revisão técnica, refatoração, testes ou padrões de código.
-* Ler `docs/decision-log.md` somente quando a tarefa envolver decisão arquitetural, banco, stack, escopo, segurança, conflito ou mudança relevante.
-* Ler `docs/modules/<módulo>.md` somente quando a tarefa envolver aquele módulo.
-* Ler `README.md`, `backend/README.md` ou `frontend/README.md` somente quando a tarefa envolver documentação, execução, setup ou uso dessas áreas.
-* Não repetir no relatório final regras já documentadas, salvo quando forem diretamente relevantes.
-* Preferir respostas finais objetivas (ver "Padrão de resposta esperado do Claude Code").
-* Detalhar mais apenas quando houver erro, risco, decisão importante, mudança de banco, segurança/autenticação ou solicitação explícita do usuário.
-
-Economia de contexto **não** dispensa validações obrigatórias (testes, lint, build) nem os revisores obrigatórios em tarefas sensíveis.
+Economia de contexto **não** dispensa as validações obrigatórias (testes, lint, build) nem os revisores obrigatórios em tarefas sensíveis.
 
 ---
 
 ## Uso proporcional de agentes
 
-* Não acionar todos os reviewers por padrão; usar apenas os agentes necessários para a tarefa.
-* `back-end-reviewer` para mudanças relevantes no backend.
-* `front-end-reviewer` para mudanças relevantes no frontend.
-* `security-reviewer` quando houver autenticação, autorização, CORS, JWT, senha, permissões, dados sensíveis ou proteção de rotas — permanece **obrigatório** nesses casos.
-* `data-reviewer` quando houver banco, migrations, modelagem, constraints, índices ou integridade — permanece **obrigatório** nesses casos.
-* `product-ux-reviewer` quando houver tela, fluxo importante ou decisão de experiência.
-* `qa-reviewer` quando houver testes, critérios de aceite, bug crítico ou fluxo sensível.
-* `ci-cd-reviewer` apenas quando houver workflow, pipeline ou automação.
-* Auditoria completa com múltiplos reviewers deve ser reservada para marcos importantes ou tarefas críticas, não para ajustes pequenos.
+Acione **apenas os agentes que a tarefa exige** — não todos por padrão. Auditoria com múltiplos revisores fica reservada a **marcos ou tarefas críticas**, não a ajustes pequenos. O roteamento (qual agente para cada sinal) está no [`.claude/agents/cto.md`](.claude/agents/cto.md); permanecem **obrigatórios** o `security-reviewer` (autenticação/autorização/segurança) e o `data-reviewer` (banco/migrations/modelagem).
 
 ---
 
 ## Protocolo de execução de tarefas
 
-Antes de executar qualquer tarefa relevante, o Claude Code deve revisar o pedido recebido e validar se ele está alinhado ao `CLAUDE.md`, ao `.claude/agents/cto.md` e ao escopo atual do Geitus.
-
-### Avaliação antes de executar
-
-* O objetivo está claro?
-* Existe conflito com o escopo do MVP?
-* A tarefa exige agente especializado?
-* A tarefa envolve backend, frontend, segurança, banco, UX, QA ou CI/CD?
-* Há risco de alterar arquitetura, regras de negócio, dependências ou banco de dados?
-* Há necessidade de pedir confirmação antes de seguir?
-
-### Pode executar diretamente
-
-Quando a tarefa for clara, segura e limitada, como:
-
-* ajustes simples de documentação;
-* correções de lint;
-* ajustes pequenos de estilo;
-* organização de arquivos;
-* melhorias pequenas de README;
-* testes simples;
-* correções que não alterem arquitetura, segurança, banco ou regras de negócio.
+A triagem, a avaliação da tarefa e o formato do relatório seguem o [`.claude/agents/cto.md`](.claude/agents/cto.md) e o "Padrão de resposta esperado" abaixo. Tarefas claras, seguras e limitadas (ajustes de documentação, lint, estilo pequeno, testes simples, correções que não tocam arquitetura/segurança/banco/regras) podem ser executadas diretamente. Duas regras deste documento **prevalecem**:
 
 ### Deve parar e pedir confirmação
 
@@ -797,24 +731,15 @@ Quando a tarefa envolver:
 * alteração relevante em CI/CD;
 * decisão técnica com mais de uma alternativa válida.
 
-### Após executar
+O Claude Code **não deve aplicar automaticamente** sugestões que envolvam escopo, arquitetura, segurança, banco, dependências ou regras de negócio.
 
-Apresentar:
+### Classificação de sugestões
 
-* resumo do que foi feito;
-* arquivos alterados;
-* comandos executados;
-* validações realizadas;
-* limitações conhecidas;
-* sugestões de melhoria.
-
-As sugestões devem ser classificadas em:
+Ao final, classifique as sugestões em:
 
 * **Aplicar agora:** melhorias pequenas, seguras e alinhadas à tarefa atual.
 * **Deixar para depois:** melhorias úteis, mas não necessárias neste momento.
 * **Fora do escopo:** ideias que não devem ser implementadas no MVP atual.
-
-O Claude Code **não deve aplicar automaticamente** sugestões que envolvam escopo, arquitetura, segurança, banco, dependências ou regras de negócio.
 
 ---
 
