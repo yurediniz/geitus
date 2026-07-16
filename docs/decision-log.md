@@ -513,3 +513,60 @@ Nenhuma regra de negócio, escopo, segurança ou padrão técnico foi perdida �
 
 **Observações futuras:**
 Corte opcional maior (não feito agora): reduzir as **diretrizes de módulo** no `CLAUDE.md` (Produtos/PDV/Caixa/Clientes/Financeiro) a resumos + ponteiro, movendo o detalhe para specs próprias em `docs/modules/` (várias ainda não existem). Avaliar quando cada módulo entrar em desenvolvimento.
+
+---
+
+## DEC-023 — Princípios Geitus de domínio (PDV) e norte de longo prazo
+
+**Data:** 2026-07-16
+**Status:** Aceita
+**Contexto:**
+Adotamos a modelagem conceitual completa do PDV Geitus (~49 entidades, fluxos, capacidades e regras) como **norte de longo prazo** (ver DEC-018), a ser seguido de forma **incremental**. Faltava (a) um documento de visão curado desse norte e (b) a formalização dos princípios que regem como cada módulo é construído.
+
+**Decisão:**
+- Criar o **`docs/visao-dominio-pdv.md`**: visão de domínio **curada por contexto** (identidade/organização, catálogo, preços, clientes, estoque, caixa, vendas/PDV, financeiro, fiscal, comissões, transversais), marcando **MVP × futuro** e reconciliando com as decisões do projeto (PK BIGINT interno + UUID público — DEC-015/019; isolamento por empresa — DEC-016). É norte, **não** escopo do MVP (o `CLAUDE.md` prevalece no escopo).
+- Formalizar os **princípios Geitus** como decisão do projeto:
+  1. Venda como agregado central;
+  2. Produto como elemento contínuo (capacidades calculadas, não "completo/incompleto");
+  3. **Movimentos como fonte de verdade** (saldos derivados de movimentos imutáveis; correção por estorno/ajuste);
+  4. **Snapshots na venda** (o item congela os dados usados);
+  5. **Capacidades progressivas** (exigir só o necessário à ação/capacidade em uso);
+  6. **Idempotência** da conclusão e suas consequências;
+  7. **Separação comercial × fiscal** (falha fiscal não apaga a venda; fiscal é subsistema à parte);
+  8. Conclusão **transacional** + eventos internos;
+  9. Concorrência de estoque controlada;
+  10. Histórico imutável (cancelamento/devolução/estorno/ajuste).
+
+**Motivo:**
+Dar um destino claro e consultável para cada módulo nascer alinhado, sem inflar o MVP. Os princípios evitam decisões locais que comprometeriam consistência (ex.: editar saldo em vez de gerar movimento; não congelar snapshot na venda).
+
+**Impacto:**
+Nenhuma implementação agora — é documentação/norte. Os módulos futuros (Clientes → Caixa → PDV → Estoque → Financeiro) seguem estes princípios; `data-reviewer` e `product-ux-reviewer` passam a checá-los quando aplicável. Fiscal, comissões, variações, lote/série, preços/promoções e multiloja permanecem faseados.
+
+**Observações futuras:**
+Direções arquiteturais registradas no doc de visão (Spring Modulith a partir de Vendas; eventos internos; máquina de estados; motor de capacidades; motor de regras; modo offline do PDV; observabilidade) — avaliar em cada etapa. A relação Empresa/Usuário e a dispensa do `Estabelecimento` (cada unidade = Empresa) foram definidas na **DEC-024**.
+
+---
+
+## DEC-024 — Relação Empresa × Usuário: identidade global, vínculo M:N e unidade = Empresa
+
+**Data:** 2026-07-16
+**Status:** Aceita
+**Contexto:**
+A modelagem de referência organiza multiloja como Empresa → Estabelecimento → Terminal (uma Empresa com várias unidades). O Geitus atual tem `usuario.empresa_id` **único** (1 usuário → 1 empresa, DEC-016). Precisávamos definir como tratar multiunidade e múltiplos acessos, evitando a complexidade fiscal de Matriz/Filial, que **não** está no escopo.
+
+**Decisão:**
+- **Usuário = identidade global** (um e-mail/login, uma senha). Loga uma vez.
+- **Cada unidade/loja/filial é uma Empresa própria e isolada.** O Geitus **não** usa a entidade `Estabelecimento` nem a relação Matriz/Filial. Onde a modelagem referencia `estabelecimento_id`, no Geitus vale `empresa_id`; `TerminalPDV`/`Caixa` penduram na Empresa quando o PDV entrar.
+- **Vínculo Usuário↔Empresa (M:N):** uma associação carrega o **perfil e o status por empresa**. Um usuário pode ser **ADMIN** (responsável da Empresa, acima de todos) em uma e **operador** em outra.
+- **Login → seleção de Empresa ativa:** um único vínculo entra direto (tela adiantada); vários vínculos exibem uma tela de seleção. A Empresa ativa é o tenant da sessão.
+- **Sessão/segurança (refina a DEC-016):** o token carrega a **Empresa ativa** (reemitido na seleção) + o perfil do usuário nela; o backend **valida o vínculo** em toda requisição; acesso a Empresa sem vínculo → **404**. O isolamento por empresa continua valendo, agora pela Empresa ativa selecionada.
+
+**Motivo:**
+Tratar cada unidade como Empresa isolada evita a complexidade fiscal de Matriz/Filial (fora do escopo) e mantém o multi-tenant limpo; o vínculo M:N + seleção pós-login é o padrão consagrado de SaaS (troca de workspace) e serve bem ao pequeno negócio com mais de uma loja.
+
+**Impacto:**
+Refina a **DEC-016** (empresa deixa de ser "a única do usuário" e passa a ser "a Empresa ativa selecionada, validada por vínculo"). Muda o modelo atual: `usuario.empresa_id` único evoluirá para **usuário (identidade) + vínculo usuário–empresa** (perfil por empresa), exigindo migration + refactor de auth (token com empresa ativa) e uma tela de seleção no frontend — **não agora** (registrado só como norte na Fase 1; implementação agendada para a maturação do módulo de Usuários). Consequência: relatório consolidado entre unidades de um mesmo dono exigirá agregação cross-empresa no futuro.
+
+**Observações futuras:**
+Quando implementar: modelar `usuario` (identidade global, e-mail único) + `usuario_empresa` (usuario_id, empresa_id, perfil, status); ajustar o login para o fluxo de seleção; o `security-reviewer` é **obrigatório** (mudança no modelo de autenticação/autorização) e o `data-reviewer` na migration.

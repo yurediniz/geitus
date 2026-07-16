@@ -12,6 +12,7 @@ O objetivo é manter, em um só lugar, as decisões, regras de negócio e especi
 - **[docs/](.)** (esta pasta): documentação de apoio, decisões técnicas e materiais de referência que não pertencem ao código.
 - **[docs/engineering-guidelines.md](engineering-guidelines.md)**: guia de padrões técnicos — engenharia, código, arquitetura, testes, segurança e revisão.
 - **[docs/decision-log.md](decision-log.md)**: registro de decisões importantes do projeto, com motivos e impactos.
+- **[docs/visao-dominio-pdv.md](visao-dominio-pdv.md)**: visão de domínio do PDV — o **norte de longo prazo** (entidades por contexto, MVP × futuro) e os **princípios Geitus**. Não é o escopo do MVP; orienta cada módulo a nascer alinhado.
 - **[docs/technical-debt.md](technical-debt.md)**: registro de pendências e dívidas técnicas não bloqueantes, com prioridade e momento de revisão.
 - **[docs/modules/](modules/)**: especificação detalhada de cada módulo do sistema (Produtos, Clientes, PDV, Caixa, Financeiro, etc.). Cada módulo terá seu próprio documento.
 
