@@ -80,6 +80,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         // Documentacao (Swagger UI / api-docs) liberada apenas nesta fase de desenvolvimento
                         .requestMatchers(CAMINHOS_SWAGGER).permitAll()
+                        // Troca da propria senha: qualquer usuario autenticado (inclusive OPERADOR).
+                        // Precede a regra de gestao abaixo para nao cair na exigencia de ADMIN.
+                        .requestMatchers(HttpMethod.PATCH, "/api/usuarios/me/senha").authenticated()
+                        // Gestao de usuarios (RBAC basico): exige perfil ADMIN.
+                        .requestMatchers("/api/usuarios/**").hasRole("ADMIN")
                         // Todo o restante exige autenticacao (JWT valido)
                         .anyRequest().authenticated())
                 // Respostas de erro padronizadas (sem vazar detalhes internos)
