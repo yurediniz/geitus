@@ -173,3 +173,63 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Impacto:** Fluxo de autorizacao por tenant sem cobertura direta; baixo risco pois a logica e simples e identica ao padrao ja testado em `EmpresaServiceTest`.
 - **Quando revisar:** Proxima manutencao dos testes de Produtos.
 - **Observacoes:** Adicionar teste de service cobrindo `cadastrarParaUsuario`/`buscarPorIdParaUsuario` com usuario inativo/inexistente.
+
+## DT-015 — Mapear DataIntegrityViolationException para 409 na criacao de usuario
+
+- **ID:** DT-015
+- **Modulo:** Usuarios
+- **Origem:** Revisao (back-end-reviewer e data-reviewer) do modulo de Usuarios
+- **Prioridade:** baixa
+- **Status:** aberto
+- **Descricao:** Ha uma janela TOCTOU entre `existsByEmail` e `save` no `UsuarioService.criarParaUsuario`: duas requisicoes concorrentes com o mesmo e-mail escapam do 409 na aplicacao; a segunda gravacao falha na constraint `uq_usuario_email` e emerge como `DataIntegrityViolationException` -> **500** em vez de **409**.
+- **Impacto:** Integridade protegida pelo banco (nao ha duplicata), mas o status fica incoerente numa corrida (janela estreita). Baixo impacto no MVP.
+- **Quando revisar:** Proxima manutencao do modulo Usuarios ou ao endurecer o tratamento de erros.
+- **Observacoes:** Mapear `DataIntegrityViolationException` no `GlobalExceptionHandler` para 409 com mensagem generica de conflito.
+
+## DT-016 — E-mail de usuario case-sensitive
+
+- **ID:** DT-016
+- **Modulo:** Usuarios/Seguranca
+- **Origem:** Revisao (data-reviewer) do modulo de Usuarios (pre-existente ao baseline)
+- **Prioridade:** media (pre-producao)
+- **Status:** aberto
+- **Descricao:** `existsByEmail`/`findByEmail` e a constraint `uq_usuario_email` comparam a string crua; a criacao so faz `trim()`, sem `lower()`. Permite coexistirem `Ana@x.com` e `ana@x.com` como contas distintas, e o login fica sensivel a caixa.
+- **Impacto:** Risco de identidade/UX (contas duplicadas por caixa; login confuso). Pre-existente, nao introduzido pela gestao de usuarios.
+- **Quando revisar:** Ao evoluir a identidade (relaciona-se com a DEC-024) ou antes de producao.
+- **Observacoes:** Normalizar e-mail para minusculas na escrita + indice unico sobre `lower(email)` via migration propria.
+
+## DT-017 — Escapar curingas do LIKE na busca textual
+
+- **ID:** DT-017
+- **Modulo:** Backend (Produtos e Usuarios)
+- **Origem:** Revisao (back-end-reviewer) do modulo de Usuarios
+- **Prioridade:** baixa
+- **Status:** aberto
+- **Descricao:** Nas buscas por termo (`ProdutoRepository` e `UsuarioRepository`), os caracteres `%` e `_` no termo agem como curinga (LIKE injection — nao e SQL injection). Padrao herdado do `ProdutoRepository`.
+- **Impacto:** Resultados de busca podem ser mais amplos que o esperado quando o usuario digita `%`/`_`. Sem risco de seguranca de dados.
+- **Quando revisar:** Tratar nos dois repositorios juntos numa proxima manutencao de busca.
+- **Observacoes:** Escapar `%`/`_` no termo (ex.: `ESCAPE`) ou sanear na aplicacao.
+
+## DT-018 — Revogacao de token na inativacao de usuario
+
+- **ID:** DT-018
+- **Modulo:** Seguranca
+- **Origem:** Revisao (security-reviewer) do modulo de Usuarios
+- **Prioridade:** media (pos-MVP)
+- **Status:** aberto
+- **Descricao:** Um usuario inativado apos a emissao do JWT continua com token valido em rotas que nao recarregam o usuario (ex.: `catalog`), ate a expiracao. O `/auth/me` e as rotas de `iam` ja bloqueiam inativos; outros modulos nao rechecam `ativo`.
+- **Impacto:** Janela de acesso de usuario recem-inativado ate o token expirar. Limitacao inerente ao JWT stateless sem revogacao. Relaciona-se com a **DT-013** (refresh token).
+- **Quando revisar:** Junto com refresh token / denylist de tokens (pos-MVP).
+- **Observacoes:** Alternativas: revalidar `ativo` por request (custo) ou denylist/versao de sessao ao inativar.
+
+## DT-019 — Testes de integracao de repositorio contra Postgres (Testcontainers)
+
+- **ID:** DT-019
+- **Modulo:** Testes/Infra
+- **Origem:** Revisao (back-end-reviewer) do modulo de Usuarios
+- **Prioridade:** media
+- **Status:** aberto
+- **Descricao:** As queries de repositorio (JPQL/derivadas) sao validadas hoje apenas por smoke manual do CTO contra o `geitus_db` (Docker), pois `@WebMvcTest`+`@MockBean` nao instancia repositorios e nao ha `@DataJpaTest`/Testcontainers no projeto. A licao do `lower(bytea)` mostra que mocks nao pegam esses defeitos.
+- **Impacto:** Cobertura automatica ausente para queries; risco depende de smoke manual (e Docker disponivel).
+- **Quando revisar:** Quando o volume de queries de repositorio crescer (Vendas/Estoque) ou ao endurecer o CI.
+- **Observacoes:** Adicionar **Testcontainers** (dependencia de teste) + `@DataJpaTest` contra Postgres; decisao de dependencia + impacto no CI (Docker no CI) a cargo do CTO.
