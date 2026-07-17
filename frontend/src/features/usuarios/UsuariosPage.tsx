@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useForm } from 'react-hook-form'
 import type { UseFormRegisterReturn } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -103,11 +103,21 @@ function formatarData(valor: string | null): string {
   return data.toLocaleDateString('pt-BR')
 }
 
+/**
+ * Mensagem generica de 409 (conflito de regra de negocio) surfada pelo
+ * httpClient quando o backend nao curou um texto proprio. Nesse caso preferimos
+ * o fallback contextual da tela ao texto tecnico.
+ */
+const FALLBACK_409 = 'Requisicao falhou (HTTP 409).'
+
 /** Mensagem amigavel para falhas ao salvar (criar/editar) um usuario. */
 function mensagemErroSalvar(erro: unknown, editando: boolean): string {
   if (erro instanceof HttpError) {
-    if (erro.status === 409) {
-      return 'Já existe um usuário com este e-mail.'
+    // 409 e um conflito de regra de negocio (e-mail duplicado, rebaixar o
+    // ultimo ADMIN, etc.). O backend envia a mensagem exata do motivo; usa-la
+    // evita supor "e-mail" para todo 409.
+    if (erro.status === 409 && erro.message && erro.message !== FALLBACK_409) {
+      return erro.message
     }
     if (erro.status === 400) {
       const mensagensCampos = erro.campos ? Object.values(erro.campos).filter(Boolean) : []
@@ -127,10 +137,10 @@ function mensagemErroSalvar(erro: unknown, editando: boolean): string {
 
 /** Mensagem amigavel para falhas ao alterar o status (inativar/reativar). */
 function mensagemErroStatus(erro: unknown): string {
-  if (erro instanceof HttpError && erro.status === 409) {
-    return erro.message && erro.message !== `Requisicao falhou (HTTP 409).`
-      ? erro.message
-      : 'Não é possível inativar o último administrador ativo da empresa.'
+  // 409 aqui pode ser "ultimo ADMIN ativo" ou "ADMIN nao inativa a si mesmo":
+  // usa a mensagem exata do backend em vez de supor um motivo fixo.
+  if (erro instanceof HttpError && erro.status === 409 && erro.message && erro.message !== FALLBACK_409) {
+    return erro.message
   }
   return 'Não foi possível alterar o status do usuário. Tente novamente.'
 }
@@ -693,6 +703,14 @@ interface RedefinirSenhaDialogProps {
 /** Formulario administrativo para um ADMIN redefinir a senha de outro usuario. */
 function RedefinirSenhaDialog({ usuario, onFechar, onSucesso }: RedefinirSenhaDialogProps) {
   const [erro, setErro] = useState<string | null>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+
+  // Em listas longas o card fica no fim da pagina; ao abrir, traz o formulario
+  // a vista e foca o primeiro campo para deixar claro que a acao respondeu.
+  useEffect(() => {
+    cardRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+    document.getElementById('nova-senha-admin')?.focus({ preventScroll: true })
+  }, [])
 
   const {
     register,
@@ -717,7 +735,7 @@ function RedefinirSenhaDialog({ usuario, onFechar, onSucesso }: RedefinirSenhaDi
   const salvando = mutation.isPending
 
   return (
-    <Card className="max-w-md">
+    <Card ref={cardRef} className="max-w-md">
       <CardHeader>
         <CardTitle>Redefinir senha</CardTitle>
         <CardDescription>

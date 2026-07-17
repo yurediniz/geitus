@@ -146,6 +146,26 @@ describe('httpClient', () => {
       expect((erro as HttpError).campos).toBeUndefined()
     })
 
+    it('surface a mensagem de regra de negocio em 409 (conflito)', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(
+        respostaFake(409, { mensagem: 'Não é possível rebaixar o último administrador ativo da empresa.' }),
+      )
+
+      await expect(apiPost('/usuarios', {}, { autenticada: true })).rejects.toMatchObject({
+        status: 409,
+        message: 'Não é possível rebaixar o último administrador ativo da empresa.',
+      })
+    })
+
+    it('usa fallback generico em 409 sem corpo', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(409))
+
+      const erro = await apiPost('/usuarios', {}, { autenticada: true }).catch((e: unknown) => e)
+      expect(erro).toBeInstanceOf(HttpError)
+      expect((erro as HttpError).status).toBe(409)
+      expect((erro as HttpError).message).toBe('Requisicao falhou (HTTP 409).')
+    })
+
     it('mapeia demais status de erro para HttpError com o status correspondente', async () => {
       vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(500))
 
@@ -175,6 +195,13 @@ describe('httpClient', () => {
 
       const dados = await apiGet<{ valor: number }>('/health')
       expect(dados).toEqual({ valor: 42 })
+    })
+
+    it('retorna undefined em resposta 204 sem corpo (nao tenta parsear JSON)', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(204))
+
+      const dados = await apiPost('/usuarios/me/senha', { senhaAtual: 'a', novaSenha: 'b' }, { autenticada: true })
+      expect(dados).toBeUndefined()
     })
 
     it('envia o corpo serializado e Content-Type JSON em POST', async () => {

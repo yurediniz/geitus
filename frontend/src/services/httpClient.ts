@@ -96,6 +96,14 @@ async function tratarErro(resposta: Response, autenticada: boolean): Promise<nev
     throw new HttpError(400, corpo?.mensagem ?? 'Dados invalidos.', campos)
   }
 
+  if (resposta.status === 409) {
+    // Conflito de regra de negocio (ex.: e-mail duplicado, ultimo ADMIN). O
+    // backend curou uma mensagem clara em `ApiError.mensagem`; surface-a para a
+    // interface exibir o motivo correto, sem vazar detalhe interno.
+    const corpo = await lerCorpoDoErro(resposta)
+    throw new HttpError(409, corpo?.mensagem ?? 'Requisicao falhou (HTTP 409).')
+  }
+
   throw new HttpError(resposta.status, `Requisicao falhou (HTTP ${resposta.status}).`)
 }
 

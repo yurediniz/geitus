@@ -162,9 +162,9 @@ describe('UsuariosPage', () => {
     expect(await screen.findByText(/usuário criado com sucesso/i)).toBeInTheDocument()
   })
 
-  it('mostra erro no e-mail quando o backend responde 409', async () => {
+  it('mostra a mensagem do backend quando a criação responde 409 (e-mail duplicado)', async () => {
     listarUsuariosMock.mockResolvedValue([])
-    criarUsuarioMock.mockRejectedValue(new HttpError(409, 'Conflito.'))
+    criarUsuarioMock.mockRejectedValue(new HttpError(409, 'Já existe um usuário com este e-mail.'))
 
     renderComProviders(<UsuariosPage />)
     await abrirFormularioNovo()
@@ -198,6 +198,27 @@ describe('UsuariosPage', () => {
       expect(atualizarUsuarioMock).toHaveBeenCalledWith(1, { nome: 'Ana Maria', perfil: 'ADMIN' })
     })
     expect(await screen.findByText(/usuário atualizado com sucesso/i)).toBeInTheDocument()
+  })
+
+  it('ao editar, um 409 mostra a mensagem do backend (autoproteção), não a de e-mail', async () => {
+    listarUsuariosMock.mockResolvedValue([admin])
+    atualizarUsuarioMock.mockRejectedValue(
+      new HttpError(409, 'Não é possível rebaixar o último administrador ativo da empresa.'),
+    )
+
+    renderComProviders(<UsuariosPage />)
+
+    const item = await screen.findByText('Ana Admin')
+    const card = item.closest('article')
+    fireEvent.click(within(card as HTMLElement).getByRole('button', { name: /editar/i }))
+
+    fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Ana Maria' } })
+    fireEvent.click(screen.getByRole('button', { name: /salvar alterações/i }))
+
+    expect(
+      await screen.findByText(/não é possível rebaixar o último administrador ativo/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/já existe um usuário com este e-mail/i)).not.toBeInTheDocument()
   })
 
   it('inativa usuario com sucesso', async () => {
