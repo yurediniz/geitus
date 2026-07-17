@@ -124,6 +124,10 @@ export async function apiGet<T>(
     await tratarErro(resposta, autenticada)
   }
 
+  if (resposta.status === 204) {
+    return undefined as T
+  }
+
   return (await resposta.json()) as T
 }
 
@@ -155,6 +159,10 @@ export async function apiPost<T>(
     await tratarErro(resposta, autenticada)
   }
 
+  if (resposta.status === 204) {
+    return undefined as T
+  }
+
   return (await resposta.json()) as T
 }
 
@@ -184,6 +192,10 @@ export async function apiPatch<T>(
 
   if (!resposta.ok) {
     await tratarErro(resposta, autenticada)
+  }
+
+  if (resposta.status === 204) {
+    return undefined as T
   }
 
   return (await resposta.json()) as T
