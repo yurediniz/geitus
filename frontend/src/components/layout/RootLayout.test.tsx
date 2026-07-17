@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { RootLayout } from '@/components/layout/RootLayout'
 import { AuthProvider } from '@/hooks/useAuth'
@@ -25,18 +26,23 @@ const usuarioFake: Usuario = {
 
 /** Monta o RootLayout dentro de rotas, com uma tela de login de destino. */
 function renderLayout(entrada = '/') {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
   return render(
-    <AuthProvider>
-      <MemoryRouter initialEntries={[entrada]}>
-        <Routes>
-          <Route path="/" element={<RootLayout />}>
-            <Route index element={<div>Conteudo</div>} />
-            <Route path="produtos" element={<div>Produtos</div>} />
-          </Route>
-          <Route path="/login" element={<div>Tela de login</div>} />
-        </Routes>
-      </MemoryRouter>
-    </AuthProvider>,
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <MemoryRouter initialEntries={[entrada]}>
+          <Routes>
+            <Route path="/" element={<RootLayout />}>
+              <Route index element={<div>Conteudo</div>} />
+              <Route path="produtos" element={<div>Produtos</div>} />
+            </Route>
+            <Route path="/login" element={<div>Tela de login</div>} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>
+    </QueryClientProvider>,
   )
 }
 
@@ -85,6 +91,33 @@ describe('RootLayout - logout', () => {
 
     expect(await screen.findByText(/tela de login/i)).toBeInTheDocument()
     expect(getStoredToken()).toBeNull()
+  })
+})
+
+describe('RootLayout - item de Usuarios por perfil', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  it('mostra o item "Usuários" na sidebar para ADMIN', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    renderLayout()
+
+    await screen.findByText('Ana Souza')
+    expect(screen.getByRole('link', { name: /usuários/i })).toHaveAttribute('href', '/usuarios')
+  })
+
+  it('nao mostra o item "Usuários" para OPERADOR', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue({ ...usuarioFake, perfil: 'OPERADOR' })
+
+    renderLayout()
+
+    await screen.findByText('Ana Souza')
+    expect(screen.queryByRole('link', { name: /usuários/i })).not.toBeInTheDocument()
   })
 })
 

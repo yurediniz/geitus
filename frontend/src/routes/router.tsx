@@ -4,6 +4,8 @@ import { RootLayout } from '@/components/layout/RootLayout'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { EmpresaPage } from '@/features/company/EmpresaPage'
 import { ProdutosPage } from '@/features/products/ProdutosPage'
+import { UsuariosPage } from '@/features/usuarios/UsuariosPage'
+import { AdminRoute } from '@/routes/AdminRoute'
 import { HomePage } from '@/routes/HomePage'
 import { NotFoundPage } from '@/routes/NotFoundPage'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
@@ -41,6 +43,11 @@ const privateRoutes: RouteObject[] = [
           { index: true, element: <HomePage /> },
           { path: 'produtos', element: <ProdutosPage /> },
           { path: 'empresa', element: <EmpresaPage /> },
+          {
+            // Area restrita a ADMIN (RBAC no frontend; o backend tambem exige ADMIN).
+            element: <AdminRoute />,
+            children: [{ path: 'usuarios', element: <UsuariosPage /> }],
+          },
         ],
       },
     ],

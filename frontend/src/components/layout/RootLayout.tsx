@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Package,
   Users,
+  UserCog,
   ShoppingCart,
   Wallet,
   LineChart,
@@ -21,6 +22,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
+import { TrocarSenhaSheet } from '@/features/usuarios/TrocarSenhaSheet'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
 import type { Usuario } from '@/types/auth'
@@ -33,15 +35,23 @@ interface NavItem {
   emBreve?: boolean
 }
 
-const itensNavegacao: NavItem[] = [
-  { rotulo: 'Início', to: '/', icone: LayoutDashboard },
-  { rotulo: 'Produtos', to: '/produtos', icone: Package },
-  { rotulo: 'Clientes', icone: Users, emBreve: true },
-  { rotulo: 'PDV', icone: ShoppingCart, emBreve: true },
-  { rotulo: 'Caixa', icone: Wallet, emBreve: true },
-  { rotulo: 'Financeiro', icone: LineChart, emBreve: true },
-  { rotulo: 'Empresa', to: '/empresa', icone: Building2 },
-]
+/**
+ * Monta os itens da sidebar. "Usuários" (gestao) so aparece para ADMIN — o
+ * RBAC do backend tambem exige ADMIN nessas rotas; aqui e apenas a UX de nao
+ * expor uma area sem permissao.
+ */
+function montarItensNavegacao(ehAdmin: boolean): NavItem[] {
+  return [
+    { rotulo: 'Início', to: '/', icone: LayoutDashboard },
+    { rotulo: 'Produtos', to: '/produtos', icone: Package },
+    { rotulo: 'Clientes', icone: Users, emBreve: true },
+    { rotulo: 'PDV', icone: ShoppingCart, emBreve: true },
+    { rotulo: 'Caixa', icone: Wallet, emBreve: true },
+    { rotulo: 'Financeiro', icone: LineChart, emBreve: true },
+    { rotulo: 'Empresa', to: '/empresa', icone: Building2 },
+    ...(ehAdmin ? [{ rotulo: 'Usuários', to: '/usuarios', icone: UserCog }] : []),
+  ]
+}
 
 /**
  * Shell principal da aplicacao: uma sidebar fixa (md+) com a identidade do
@@ -52,6 +62,8 @@ export function RootLayout() {
   const navigate = useNavigate()
   const { usuario, logout } = useAuth()
   const [menuAberto, setMenuAberto] = useState(false)
+
+  const itensNavegacao = montarItensNavegacao(usuario?.perfil === 'ADMIN')
 
   const aoSair = () => {
     setMenuAberto(false)
@@ -173,6 +185,7 @@ function RodapeSessao({
           </p>
         </div>
       )}
+      {usuario && <TrocarSenhaSheet />}
       <Button variant="outline" size="sm" className="w-full" onClick={aoSair}>
         <LogOut className="h-4 w-4" />
         Sair
