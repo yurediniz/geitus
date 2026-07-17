@@ -168,6 +168,8 @@ Registradas como norte (não implementar antes da hora):
 - **Motor de regras** versionadas para preço, desconto, promoção, tributação e comissão.
 - **Modo offline controlado** para o PDV presencial (cache local, fila de sincronização, contingência fiscal, reconciliação) — coerente com a observação de PDV desktop/offline do `CLAUDE.md`, **sem alterar o escopo atual**.
 - **Observabilidade** (tempo de conclusão, falhas de pagamento, rejeições fiscais, divergências de estoque, duplicidades evitadas).
+- **Periféricos (impressora térmica, TEF/pinpad, gaveta) via agente local** — o navegador (SaaS web) é sandboxed e não dirige esses dispositivos de forma robusta. O caminho futuro é um **agente local** instalado na máquina, que a app web chama por `localhost` (ou terminal inteligente/API de adquirente para o TEF), mantendo a versão web. O **leitor de código de barras** já funciona nativo na web (emula teclado — *keyboard wedge*). Futuro, **fora do MVP**.
+- **Comprovante de venda em PDF (comercial, não fiscal)** — enquanto não há agente/impressora térmica, o comprovante é gerado como **PDF** (imprime em qualquer impressora, salva/envia por e-mail/WhatsApp). Preferência por **gerar no backend** (reproduzível, arquivável, reemissível, pronto para envio), amarrado ao registro da venda; largada leve possível via tela HTML impressa/"salva como PDF" pelo SO. Este é o **comprovante NÃO fiscal**; o documento fiscal (NFC-e/DANFE) é o subsistema `fiscal` à parte (princípio "separação comercial × fiscal").
 
 ---
 
