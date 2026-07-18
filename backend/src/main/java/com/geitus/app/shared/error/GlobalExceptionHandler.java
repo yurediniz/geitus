@@ -16,6 +16,8 @@ import com.geitus.app.iam.DadosUsuarioInvalidosException;
 import com.geitus.app.iam.UsuarioNaoEncontradoException;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
 import com.geitus.app.catalog.RegraDeNegocioException;
+import com.geitus.app.company.ConflitoDeEmpresaException;
+import com.geitus.app.company.DadosEmpresaInvalidosException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -183,6 +185,38 @@ public class GlobalExceptionHandler {
                 request.getRequestURI());
 
         return ResponseEntity.badRequest().body(corpo);
+    }
+
+    /**
+     * Dados invalidos do cadastro da empresa verificados no service (digitos de
+     * CPF/CNPJ/telefone, CEP, coerencia PJ/PF, tipo de pessoa).
+     */
+    @ExceptionHandler(DadosEmpresaInvalidosException.class)
+    public ResponseEntity<ApiError> tratarDadosEmpresaInvalidos(DadosEmpresaInvalidosException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+
+        return ResponseEntity.badRequest().body(corpo);
+    }
+
+    /**
+     * Conflito no cadastro da empresa: CNPJ ja utilizado por outra empresa
+     * (constraint {@code uq_empresa_cnpj}).
+     */
+    @ExceptionHandler(ConflitoDeEmpresaException.class)
+    public ResponseEntity<ApiError> tratarConflitoDeEmpresa(ConflitoDeEmpresaException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(corpo);
     }
 
     /**

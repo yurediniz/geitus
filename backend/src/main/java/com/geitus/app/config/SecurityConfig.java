@@ -85,6 +85,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/api/usuarios/me/senha").authenticated()
                         // Gestao de usuarios (RBAC basico): exige perfil ADMIN.
                         .requestMatchers("/api/usuarios/**").hasRole("ADMIN")
+                        // Edicao do cadastro da empresa: exige ADMIN. A leitura (GET)
+                        // segue liberada a qualquer autenticado pela regra final.
+                        .requestMatchers(HttpMethod.PATCH, "/api/empresas/minha").hasRole("ADMIN")
                         // Todo o restante exige autenticacao (JWT valido)
                         .anyRequest().authenticated())
                 // Respostas de erro padronizadas (sem vazar detalhes internos)
