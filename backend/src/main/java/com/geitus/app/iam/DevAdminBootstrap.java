@@ -12,6 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.geitus.app.company.Empresa;
 import com.geitus.app.company.EmpresaRepository;
+import com.geitus.app.company.Endereco;
+import com.geitus.app.company.RepresentanteLegal;
+import com.geitus.app.company.TipoPessoa;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 
@@ -35,6 +38,27 @@ public class DevAdminBootstrap implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(DevAdminBootstrap.class);
 
     private static final String PERFIL_ADMIN = "ADMIN";
+
+    // Dados cadastrais fixos da empresa de DESENVOLVIMENTO. Nao sao segredos:
+    // servem apenas para o geitus_db local nascer com uma empresa completa e
+    // valida (as colunas do cadastro sao NOT NULL). CPF e CNPJ tem digitos
+    // verificadores validos (documentos de teste consagrados).
+    private static final String DEV_REPRESENTANTE_NOME = "Representante de Desenvolvimento";
+    private static final String DEV_REPRESENTANTE_CPF = "11144477735";
+    private static final String DEV_REPRESENTANTE_TELEFONE = "11987654321";
+    private static final String DEV_REPRESENTANTE_EMAIL = "representante@geitus.dev";
+    private static final String DEV_EMPRESA_TELEFONE = "1133224455";
+    private static final String DEV_EMPRESA_EMAIL = "contato@geitus.dev";
+    private static final TipoPessoa DEV_TIPO_PESSOA = TipoPessoa.JURIDICA;
+    private static final String DEV_CNPJ = "11222333000181";
+    private static final String DEV_RAZAO_SOCIAL = "Empresa de Desenvolvimento LTDA";
+    private static final String DEV_INSCRICAO_ESTADUAL = "1234567890";
+    private static final String DEV_ENDERECO_CEP = "01001000";
+    private static final String DEV_ENDERECO_LOGRADOURO = "Praça da Sé";
+    private static final String DEV_ENDERECO_NUMERO = "S/N";
+    private static final String DEV_ENDERECO_BAIRRO = "Sé";
+    private static final String DEV_ENDERECO_MUNICIPIO = "São Paulo";
+    private static final String DEV_ENDERECO_UF = "SP";
 
     private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
@@ -79,8 +103,8 @@ public class DevAdminBootstrap implements ApplicationRunner {
 
         Empresa empresa = empresaRepository.findByNome(companyName)
                 .orElseGet(() -> {
-                    log.info("Bootstrap dev-admin: criando empresa '{}'.", companyName);
-                    return empresaRepository.save(new Empresa(companyName));
+                    log.info("Bootstrap dev-admin: criando empresa '{}' com cadastro completo.", companyName);
+                    return empresaRepository.save(criarEmpresaDeDesenvolvimento(companyName));
                 });
 
         Usuario admin = new Usuario(
@@ -93,5 +117,38 @@ public class DevAdminBootstrap implements ApplicationRunner {
 
         log.info("Bootstrap dev-admin: usuario administrador '{}' criado para a empresa '{}'.",
                 adminEmail, companyName);
+    }
+
+    /**
+     * Monta a empresa de desenvolvimento ja com o cadastro completo (representante
+     * legal, dados da empresa e endereco), necessario porque as colunas do
+     * cadastro sao NOT NULL a partir da migration V3.
+     */
+    private Empresa criarEmpresaDeDesenvolvimento(String nomeFantasia) {
+        Empresa empresa = new Empresa(nomeFantasia);
+        RepresentanteLegal representante = new RepresentanteLegal(
+                DEV_REPRESENTANTE_NOME,
+                DEV_REPRESENTANTE_CPF,
+                DEV_REPRESENTANTE_TELEFONE,
+                DEV_REPRESENTANTE_EMAIL);
+        Endereco endereco = new Endereco(
+                DEV_ENDERECO_CEP,
+                DEV_ENDERECO_LOGRADOURO,
+                DEV_ENDERECO_NUMERO,
+                null,
+                DEV_ENDERECO_BAIRRO,
+                DEV_ENDERECO_MUNICIPIO,
+                DEV_ENDERECO_UF);
+        empresa.atualizarCadastro(
+                nomeFantasia,
+                DEV_EMPRESA_TELEFONE,
+                DEV_EMPRESA_EMAIL,
+                DEV_TIPO_PESSOA,
+                DEV_CNPJ,
+                DEV_RAZAO_SOCIAL,
+                DEV_INSCRICAO_ESTADUAL,
+                representante,
+                endereco);
+        return empresa;
     }
 }
