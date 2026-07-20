@@ -31,6 +31,7 @@ import com.geitus.app.iam.UsuarioRepository;
 public class EmpresaService {
 
     private static final int TAMANHO_CEP = 8;
+    private static final String SEM_NUMERO = "S/N";
 
     private final UsuarioRepository usuarioRepository;
     private final EmpresaRepository empresaRepository;
@@ -105,11 +106,20 @@ public class EmpresaService {
         return new Endereco(
                 cep,
                 request.logradouro().trim(),
-                request.numero().trim(),
+                numeroNormalizado(request.numero()),
                 textoOuNulo(request.complemento()),
                 request.bairro().trim(),
                 request.municipio().trim(),
                 request.uf().trim().toUpperCase());
+    }
+
+    /**
+     * Normaliza o numero do endereco: "sem numero" (em qualquer caixa) e gravado
+     * como {@code "S/N"} maiusculo (spec); numeros comuns permanecem como estao.
+     */
+    private String numeroNormalizado(String valor) {
+        String numero = valor.trim();
+        return numero.equalsIgnoreCase(SEM_NUMERO) ? SEM_NUMERO : numero;
     }
 
     private TipoPessoa resolverTipoPessoa(String valor) {

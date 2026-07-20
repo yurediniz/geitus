@@ -37,14 +37,14 @@ public class Empresa {
     @Column(nullable = false, length = 150)
     private String nome;
 
-    @Column(length = 20)
+    @Column(nullable = false, length = 20)
     private String telefone;
 
-    @Column(length = 180)
+    @Column(nullable = false, length = 180)
     private String email;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "tipo_pessoa", length = 10)
+    @Column(name = "tipo_pessoa", nullable = false, length = 10)
     private TipoPessoa tipoPessoa;
 
     @Column(length = 14)

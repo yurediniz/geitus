@@ -115,6 +115,24 @@ class EmpresaServiceTest {
     }
 
     @Test
+    void atualizarNormalizaNumeroSemNumeroParaMaiusculo() {
+        Usuario usuario = usuarioComEmpresa(7L);
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+        when(empresaRepository.save(any(Empresa.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        EnderecoRequest enderecoSemNumero = new EnderecoRequest(
+                "01001-000", "Praça da Sé", "s/n", null, "Sé", "São Paulo", "SP");
+        EmpresaAtualizarRequest request = new EmpresaAtualizarRequest(
+                "Barraca da Ana", "(11) 3322-4455", "ana@barraca.com",
+                "FISICA", null, null, null,
+                representanteValido(), enderecoSemNumero);
+
+        EmpresaDetalheResponse resposta = empresaService.atualizarEmpresa(1L, request);
+
+        assertThat(resposta.endereco().numero()).isEqualTo("S/N");
+    }
+
+    @Test
     void atualizarPessoaFisicaNaoGravaCnpjNemRazaoSocial() {
         Usuario usuario = usuarioComEmpresa(7L);
         when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
