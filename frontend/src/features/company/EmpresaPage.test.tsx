@@ -4,21 +4,42 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { EmpresaPage } from '@/features/company/EmpresaPage'
-import { atualizarMinhaEmpresa, getMinhaEmpresa } from '@/services/empresaService'
+import { atualizarEmpresa, obterEmpresa } from '@/services/empresaService'
 import type { Empresa } from '@/types/empresa'
 
 // Mocka o service de empresa para evitar rede real e controlar cada cenario.
 vi.mock('@/services/empresaService', () => ({
-  getMinhaEmpresa: vi.fn(),
-  atualizarMinhaEmpresa: vi.fn(),
+  obterEmpresa: vi.fn(),
+  atualizarEmpresa: vi.fn(),
 }))
 
-const getMinhaEmpresaMock = vi.mocked(getMinhaEmpresa)
-const atualizarMinhaEmpresaMock = vi.mocked(atualizarMinhaEmpresa)
+const getMinhaEmpresaMock = vi.mocked(obterEmpresa)
+const atualizarMinhaEmpresaMock = vi.mocked(atualizarEmpresa)
 
 const empresaFake: Empresa = {
   id: 1,
   nome: 'Mercado Central',
+  telefone: '11999990000',
+  email: 'contato@mercado.com',
+  tipoPessoa: 'JURIDICA',
+  cnpj: '11222333000181',
+  razaoSocial: 'Mercado Central LTDA',
+  inscricaoEstadual: null,
+  representanteLegal: {
+    nome: 'Ana Souza',
+    cpf: '39053344705',
+    telefone: '11988887777',
+    email: 'ana@mercado.com',
+  },
+  endereco: {
+    cep: '01001000',
+    logradouro: 'Praça da Sé',
+    numero: 'S/N',
+    complemento: null,
+    bairro: 'Sé',
+    municipio: 'São Paulo',
+    uf: 'SP',
+  },
   ativo: true,
   criadoEm: '2026-01-15T00:00:00Z',
   atualizadoEm: null,
@@ -89,7 +110,9 @@ describe('EmpresaPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /salvar alterações/i }))
 
     await waitFor(() => {
-      expect(atualizarMinhaEmpresaMock).toHaveBeenCalledWith('Mercado Central II')
+      expect(atualizarMinhaEmpresaMock).toHaveBeenCalledWith(
+        expect.objectContaining({ nome: 'Mercado Central II' }),
+      )
     })
     expect(await screen.findByText(/dados salvos com sucesso/i)).toBeInTheDocument()
   })

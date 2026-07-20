@@ -8,8 +8,27 @@ import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { atualizarMinhaEmpresa, getMinhaEmpresa } from '@/services/empresaService'
-import type { Empresa } from '@/types/empresa'
+import { atualizarEmpresa, obterEmpresa } from '@/services/empresaService'
+import type { Empresa, EmpresaAtualizarRequest } from '@/types/empresa'
+
+/**
+ * Monta o corpo do PATCH a partir do detalhe carregado, sobrescrevendo apenas
+ * o nome. Placeholder ate a tela de cadastro completa (F2) substituir esta
+ * pagina; mantem o contrato expandido do backend intacto.
+ */
+function montarRequest(empresa: Empresa, nome: string): EmpresaAtualizarRequest {
+  return {
+    nome,
+    telefone: empresa.telefone,
+    email: empresa.email,
+    tipoPessoa: empresa.tipoPessoa,
+    cnpj: empresa.cnpj,
+    razaoSocial: empresa.razaoSocial,
+    inscricaoEstadual: empresa.inscricaoEstadual,
+    representanteLegal: empresa.representanteLegal,
+    endereco: empresa.endereco,
+  }
+}
 
 /** Chave de cache da empresa do usuario autenticado. */
 const EMPRESA_QUERY_KEY = ['empresa', 'minha'] as const
@@ -46,7 +65,7 @@ export function EmpresaPage() {
     refetch,
   } = useQuery<Empresa>({
     queryKey: EMPRESA_QUERY_KEY,
-    queryFn: getMinhaEmpresa,
+    queryFn: obterEmpresa,
   })
 
   const {
@@ -67,7 +86,12 @@ export function EmpresaPage() {
   }, [empresa, reset])
 
   const mutation = useMutation<Empresa, unknown, EmpresaFormValues>({
-    mutationFn: (valores) => atualizarMinhaEmpresa(valores.nome),
+    mutationFn: (valores) => {
+      if (!empresa) {
+        return Promise.reject(new Error('Empresa nao carregada.'))
+      }
+      return atualizarEmpresa(montarRequest(empresa, valores.nome))
+    },
     onSuccess: (dados) => {
       queryClient.setQueryData(EMPRESA_QUERY_KEY, dados)
       setSalvoComSucesso(true)

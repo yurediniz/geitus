@@ -5,7 +5,7 @@
  * enviada: ela e sempre derivada do usuario autenticado (DEC-016). O
  * `UsuarioResponse` do backend traz a empresa aninhada e os timestamps.
  */
-import type { Empresa } from '@/types/empresa'
+import type { EmpresaResumo } from '@/types/empresa'
 
 /** Perfis de acesso (allow-list) do Geitus. */
 export type Perfil = 'ADMIN' | 'OPERADOR'
@@ -19,7 +19,7 @@ export interface Usuario {
   ativo: boolean
   criadoEm: string
   atualizadoEm: string | null
-  empresa: Empresa
+  empresa: EmpresaResumo
 }
 
 /** Corpo enviado para criar um usuario (senha exigida apenas na criacao). */
