@@ -13,7 +13,7 @@ Conforme o escopo definido no [CLAUDE.md](../../CLAUDE.md):
 - [Autenticação](autenticacao.md) ✔
 - Layout principal
 - [Empresa](empresa.md) ✔
-- Usuários
+- [Usuários](usuarios.md) ✔
 - [Produtos](produtos.md) ✔
 - Clientes
 - PDV
