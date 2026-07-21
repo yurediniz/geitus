@@ -275,8 +275,8 @@ function montarRequest(valores: EmpresaFormValues): EmpresaAtualizarRequest {
   }
 }
 
-/** Mensagem generica de 409 surfada pelo httpClient quando o backend nao curou texto. */
-const FALLBACK_409 = 'Requisicao falhou (HTTP 409).'
+/** Mensagem unica de CNPJ duplicado (409): usada no banner e no erro do campo. */
+const CNPJ_DUPLICADO = 'Este CNPJ já está em uso por outra empresa.'
 
 /** Mensagem amigavel (pt-BR) para falhas ao salvar, sem vazar detalhe interno. */
 function mensagemErroSalvar(erro: unknown): string {
@@ -285,9 +285,8 @@ function mensagemErroSalvar(erro: unknown): string {
       return 'Você não tem permissão para editar os dados da empresa.'
     }
     if (erro.status === 409) {
-      return erro.message && erro.message !== FALLBACK_409
-        ? erro.message
-        : 'Este CNPJ já está em uso por outra empresa.'
+      // Mensagem unica para o CNPJ duplicado: mesma frase do banner e do campo.
+      return CNPJ_DUPLICADO
     }
     if (erro.status === 400) {
       const mensagens = erro.campos ? Object.values(erro.campos).filter(Boolean) : []
@@ -342,6 +341,7 @@ export function EmpresaPage() {
     formState: { errors },
   } = useForm<EmpresaFormValues>({
     resolver: zodResolver(empresaFormSchema),
+    mode: 'onTouched',
     defaultValues: valoresIniciais,
   })
 
@@ -368,7 +368,7 @@ export function EmpresaPage() {
       setSalvoComSucesso(false)
       // CNPJ duplicado: destaca o campo, alem do aviso no topo.
       if (erro instanceof HttpError && erro.status === 409) {
-        setError('cnpj', { type: 'server', message: 'Este CNPJ já está em uso por outra empresa.' })
+        setError('cnpj', { type: 'server', message: CNPJ_DUPLICADO })
       }
       setErroSalvar(mensagemErroSalvar(erro))
       feedbackRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
@@ -385,6 +385,14 @@ export function EmpresaPage() {
     setErroSalvar(null)
     setSalvoComSucesso(false)
     mutation.mutate(valores)
+  }
+
+  // Submit barrado pela validacao do cliente: em form longo, um campo invalido
+  // fora da viewport passaria despercebido. Traz o feedback a vista.
+  const aoSubmeterInvalido = () => {
+    setSalvoComSucesso(false)
+    setErroSalvar('Revise os campos destacados e tente novamente.')
+    feedbackRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
   }
 
   // Ao trocar "Já possui CNPJ?", limpa os campos de PJ quando vira "não".
@@ -470,7 +478,7 @@ export function EmpresaPage() {
       )}
 
       {!isPending && !isError && empresa && (
-        <form onSubmit={handleSubmit(aoSubmeter)} noValidate className="space-y-6">
+        <form onSubmit={handleSubmit(aoSubmeter, aoSubmeterInvalido)} noValidate className="space-y-6">
           <div ref={feedbackRef} className="max-w-3xl space-y-3 empty:hidden">
             {somenteLeitura && (
               <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
@@ -536,6 +544,7 @@ export function EmpresaPage() {
                   disabled={desabilitado}
                   onValorAlterado={aoAlterarCampo}
                   inputMode="tel"
+                  autoComplete="tel"
                   placeholder="(00) 00000-0000"
                 />
                 <CampoTexto
@@ -605,6 +614,7 @@ export function EmpresaPage() {
                   disabled={desabilitado}
                   onValorAlterado={aoAlterarCampo}
                   inputMode="tel"
+                  autoComplete="tel"
                   placeholder="(00) 00000-0000"
                 />
                 <CampoTexto
@@ -614,6 +624,7 @@ export function EmpresaPage() {
                   erro={errors.email?.message}
                   inputProps={register('email', { onChange: aoAlterarCampo })}
                   disabled={desabilitado}
+                  autoComplete="email"
                   placeholder="contato@empresa.com"
                 />
               </div>
@@ -673,6 +684,7 @@ export function EmpresaPage() {
                       void aoAlterarCep(valor)
                     }}
                     inputMode="numeric"
+                    autoComplete="postal-code"
                     placeholder="00000-000"
                   />
                   {buscandoCep && (
@@ -740,6 +752,7 @@ export function EmpresaPage() {
                   erro={errors.bairro?.message}
                   inputProps={register('bairro', { onChange: aoAlterarCampo })}
                   disabled={desabilitado}
+                  autoComplete="address-level3"
                 />
 
                 <CampoTexto
@@ -748,6 +761,7 @@ export function EmpresaPage() {
                   erro={errors.municipio?.message}
                   inputProps={register('municipio', { onChange: aoAlterarCampo })}
                   disabled={desabilitado}
+                  autoComplete="address-level2"
                 />
 
                 <div className="space-y-1.5">
@@ -757,7 +771,9 @@ export function EmpresaPage() {
                   <select
                     id="uf"
                     disabled={desabilitado}
+                    autoComplete="address-level1"
                     aria-invalid={errors.uf ? true : undefined}
+                    aria-describedby={errors.uf ? 'uf-erro' : undefined}
                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     {...register('uf', { onChange: aoAlterarCampo })}
                   >
@@ -768,7 +784,11 @@ export function EmpresaPage() {
                       </option>
                     ))}
                   </select>
-                  {errors.uf && <p className="text-sm text-destructive">{errors.uf.message}</p>}
+                  {errors.uf && (
+                    <p id="uf-erro" className="text-sm text-destructive">
+                      {errors.uf.message}
+                    </p>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -847,6 +867,7 @@ interface CampoMascaradoProps {
   disabled?: boolean
   placeholder?: string
   inputMode?: 'numeric' | 'tel'
+  autoComplete?: string
   /** Notifica o valor ja mascarado (para limpar feedback e disparar autofill). */
   onValorAlterado?: (valor: string) => void
 }
@@ -866,6 +887,7 @@ function CampoMascarado({
   disabled,
   placeholder,
   inputMode,
+  autoComplete,
   onValorAlterado,
 }: CampoMascaradoProps) {
   const erroId = `${id}-erro`
@@ -881,6 +903,7 @@ function CampoMascarado({
           <Input
             id={id}
             inputMode={inputMode}
+            autoComplete={autoComplete}
             placeholder={placeholder}
             disabled={disabled}
             aria-invalid={erro ? true : undefined}

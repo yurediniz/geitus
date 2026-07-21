@@ -272,7 +272,7 @@ describe('EmpresaPage', () => {
     })
   })
 
-  it('destaca o campo CNPJ e avisa quando o backend responde 409', async () => {
+  it('destaca o campo CNPJ e avisa com a mesma frase quando o backend responde 409', async () => {
     getMinhaEmpresaMock.mockResolvedValue(empresaJuridica)
     atualizarMinhaEmpresaMock.mockRejectedValue(
       new HttpError(409, 'CNPJ já cadastrado para outra empresa.'),
@@ -283,9 +283,11 @@ describe('EmpresaPage', () => {
     await screen.findByDisplayValue('Mercado Central')
     fireEvent.click(screen.getByRole('button', { name: /salvar alterações/i }))
 
-    expect(await screen.findByText(/cnpj já cadastrado para outra empresa/i)).toBeInTheDocument()
-    // Erro tambem no campo CNPJ.
-    expect(screen.getByText(/este cnpj já está em uso por outra empresa/i)).toBeInTheDocument()
+    // Uma unica frase, exibida no banner do topo e no erro do campo CNPJ
+    // (ignora o texto cru do backend).
+    const ocorrencias = await screen.findAllByText(/este cnpj já está em uso por outra empresa/i)
+    expect(ocorrencias).toHaveLength(2)
+    expect(screen.queryByText(/cnpj já cadastrado para outra empresa/i)).not.toBeInTheDocument()
   })
 
   it('OPERADOR vê os dados em modo leitura, sem botão salvar', async () => {
@@ -297,6 +299,59 @@ describe('EmpresaPage', () => {
     expect(await screen.findByText(/somente administradores podem editar/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /salvar alterações/i })).not.toBeInTheDocument()
     expect(screen.getByDisplayValue('Mercado Central')).toBeDisabled()
+  })
+
+  it('mostra mensagem de permissão quando o backend responde 403', async () => {
+    getMinhaEmpresaMock.mockResolvedValue(empresaJuridica)
+    atualizarMinhaEmpresaMock.mockRejectedValue(new HttpError(403, 'Nao autorizado.'))
+
+    renderComProviders(<EmpresaPage />)
+
+    await screen.findByDisplayValue('Mercado Central')
+    fireEvent.click(screen.getByRole('button', { name: /salvar alterações/i }))
+
+    expect(
+      await screen.findByText(/você não tem permissão para editar os dados da empresa/i),
+    ).toBeInTheDocument()
+  })
+
+  it('concatena as mensagens de campo quando o backend responde 400', async () => {
+    getMinhaEmpresaMock.mockResolvedValue(empresaJuridica)
+    atualizarMinhaEmpresaMock.mockRejectedValue(
+      new HttpError(400, 'Dados invalidos.', {
+        cnpj: 'CNPJ inválido.',
+        email: 'E-mail inválido.',
+      }),
+    )
+
+    renderComProviders(<EmpresaPage />)
+
+    await screen.findByDisplayValue('Mercado Central')
+    fireEvent.click(screen.getByRole('button', { name: /salvar alterações/i }))
+
+    expect(await screen.findByText(/cnpj inválido\.\s*e-mail inválido\./i)).toBeInTheDocument()
+  })
+
+  it('ao alternar de PJ para PF envia cnpj, razão social e IE como null', async () => {
+    getMinhaEmpresaMock.mockResolvedValue(empresaJuridica)
+    atualizarMinhaEmpresaMock.mockResolvedValue(empresaFisica)
+
+    renderComProviders(<EmpresaPage />)
+
+    await screen.findByDisplayValue('Mercado Central')
+    fireEvent.click(screen.getByRole('radio', { name: /não tenho cnpj/i }))
+    fireEvent.click(screen.getByRole('button', { name: /salvar alterações/i }))
+
+    await waitFor(() => {
+      expect(atualizarMinhaEmpresaMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipoPessoa: 'FISICA',
+          cnpj: null,
+          razaoSocial: null,
+          inscricaoEstadual: null,
+        }),
+      )
+    })
   })
 
   it('mostra mensagem amigável quando a atualização falha por rede', async () => {
