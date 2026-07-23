@@ -57,8 +57,9 @@ public class ProdutoService {
         Empresa empresa = empresaRepository.findById(empresaId)
                 .orElseThrow(() -> new RegraDeNegocioException("Empresa informada não encontrada."));
 
-        Produto produto = new Produto(empresa, nome.trim(), categoria, unidade, precoVenda, custo,
-                estoqueMinimo, codigoBarrasNormalizado, skuNormalizado);
+        Produto produto = new Produto(empresa, nome.trim(), normalizarOuNulo(categoria),
+                normalizarOuNulo(unidade), precoVenda, custo, estoqueMinimo, codigoBarrasNormalizado,
+                skuNormalizado);
 
         return produtoRepository.save(produto);
     }
@@ -73,8 +74,8 @@ public class ProdutoService {
         String codigoBarrasNormalizado = normalizarOuNulo(codigoBarras);
         validarUnicidadeParaAtualizacao(empresaId, produtoId, skuNormalizado, codigoBarrasNormalizado);
 
-        produto.atualizarDadosBasicos(nome.trim(), categoria, unidade, precoVenda, custo, estoqueMinimo,
-                codigoBarrasNormalizado, skuNormalizado);
+        produto.atualizarDadosBasicos(nome.trim(), normalizarOuNulo(categoria), normalizarOuNulo(unidade),
+                precoVenda, custo, estoqueMinimo, codigoBarrasNormalizado, skuNormalizado);
 
         return produtoRepository.save(produto);
     }
@@ -186,22 +187,22 @@ public class ProdutoService {
 
     private void validarUnicidadeParaNovoProduto(Long empresaId, String sku, String codigoBarras) {
         if (StringUtils.hasText(sku) && produtoRepository.existsBySkuAndEmpresa_Id(sku, empresaId)) {
-            throw new RegraDeNegocioException("Já existe um produto com este SKU nesta empresa.");
+            throw new ProdutoConflitoException("Já existe um produto com este SKU nesta empresa.");
         }
         if (StringUtils.hasText(codigoBarras)
                 && produtoRepository.existsByCodigoBarrasAndEmpresa_Id(codigoBarras, empresaId)) {
-            throw new RegraDeNegocioException("Já existe um produto com este código de barras nesta empresa.");
+            throw new ProdutoConflitoException("Já existe um produto com este código de barras nesta empresa.");
         }
     }
 
     private void validarUnicidadeParaAtualizacao(Long empresaId, Long produtoId, String sku, String codigoBarras) {
         if (StringUtils.hasText(sku)
                 && produtoRepository.existsBySkuAndEmpresa_IdAndIdNot(sku, empresaId, produtoId)) {
-            throw new RegraDeNegocioException("Já existe um produto com este SKU nesta empresa.");
+            throw new ProdutoConflitoException("Já existe um produto com este SKU nesta empresa.");
         }
         if (StringUtils.hasText(codigoBarras)
                 && produtoRepository.existsByCodigoBarrasAndEmpresa_IdAndIdNot(codigoBarras, empresaId, produtoId)) {
-            throw new RegraDeNegocioException("Já existe um produto com este código de barras nesta empresa.");
+            throw new ProdutoConflitoException("Já existe um produto com este código de barras nesta empresa.");
         }
     }
 }

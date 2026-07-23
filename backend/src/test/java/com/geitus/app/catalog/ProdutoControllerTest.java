@@ -70,9 +70,13 @@ class ProdutoControllerTest {
     }
 
     private String tokenParaUsuario(Long idUsuario) {
+        return tokenParaUsuarioComPerfil(idUsuario, "ADMIN");
+    }
+
+    private String tokenParaUsuarioComPerfil(Long idUsuario, String perfil) {
         Usuario usuario = org.mockito.Mockito.mock(Usuario.class);
         when(usuario.getId()).thenReturn(idUsuario);
-        when(usuario.getPerfil()).thenReturn("ADMIN");
+        when(usuario.getPerfil()).thenReturn(perfil);
         when(usuario.getEmpresaId()).thenReturn(7L);
         return jwtService.gerarToken(usuario);
     }
@@ -117,6 +121,64 @@ class ProdutoControllerTest {
     void reativarSemTokenDeveRetornar401() throws Exception {
         mockMvc.perform(patch("/api/produtos/5/reativar"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ---------- RBAC: escrita exige ADMIN, leitura livre ----------
+
+    @Test
+    void listarComPerfilOperadorDeveRetornar200() throws Exception {
+        when(produtoService.listarParaUsuario(eq(2L), isNull(), isNull())).thenReturn(List.of());
+
+        String token = tokenParaUsuarioComPerfil(2L, "OPERADOR");
+
+        mockMvc.perform(get("/api/produtos").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void cadastrarComPerfilOperadorDeveRetornar403() throws Exception {
+        String token = tokenParaUsuarioComPerfil(2L, "OPERADOR");
+
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"nome\": \"Produto\", \"precoVenda\": 10.00 }"))
+                .andExpect(status().isForbidden());
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void atualizarComPerfilOperadorDeveRetornar403() throws Exception {
+        String token = tokenParaUsuarioComPerfil(2L, "OPERADOR");
+
+        mockMvc.perform(patch("/api/produtos/5")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ \"nome\": \"Produto\", \"precoVenda\": 10.00 }"))
+                .andExpect(status().isForbidden());
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void inativarComPerfilOperadorDeveRetornar403() throws Exception {
+        String token = tokenParaUsuarioComPerfil(2L, "OPERADOR");
+
+        mockMvc.perform(patch("/api/produtos/5/inativar").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void reativarComPerfilOperadorDeveRetornar403() throws Exception {
+        String token = tokenParaUsuarioComPerfil(2L, "OPERADOR");
+
+        mockMvc.perform(patch("/api/produtos/5/reativar").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
     }
 
     // ---------- Listagem ----------
@@ -231,10 +293,10 @@ class ProdutoControllerTest {
     }
 
     @Test
-    void cadastrarComSkuDuplicadoDeveRetornar400() throws Exception {
+    void cadastrarComSkuDuplicadoDeveRetornar409() throws Exception {
         when(produtoService.cadastrarParaUsuario(eq(1L), eq("Produto"), isNull(), isNull(),
                 eq(new BigDecimal("10.00")), isNull(), isNull(), isNull(), eq("SKU-1")))
-                .thenThrow(new RegraDeNegocioException("Já existe um produto com este SKU nesta empresa."));
+                .thenThrow(new ProdutoConflitoException("Já existe um produto com este SKU nesta empresa."));
 
         String token = tokenParaUsuario(1L);
 
@@ -242,15 +304,15 @@ class ProdutoControllerTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{ \"nome\": \"Produto\", \"precoVenda\": 10.00, \"sku\": \"SKU-1\" }"))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.mensagem").value("Já existe um produto com este SKU nesta empresa."));
     }
 
     @Test
-    void cadastrarComCodigoBarrasDuplicadoDeveRetornar400() throws Exception {
+    void cadastrarComCodigoBarrasDuplicadoDeveRetornar409() throws Exception {
         when(produtoService.cadastrarParaUsuario(eq(1L), eq("Produto"), isNull(), isNull(),
                 eq(new BigDecimal("10.00")), isNull(), isNull(), eq("789123"), isNull()))
-                .thenThrow(new RegraDeNegocioException("Já existe um produto com este código de barras nesta empresa."));
+                .thenThrow(new ProdutoConflitoException("Já existe um produto com este código de barras nesta empresa."));
 
         String token = tokenParaUsuario(1L);
 
@@ -258,7 +320,7 @@ class ProdutoControllerTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{ \"nome\": \"Produto\", \"precoVenda\": 10.00, \"codigoBarras\": \"789123\" }"))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.mensagem").value("Já existe um produto com este código de barras nesta empresa."));
     }
 
@@ -322,10 +384,10 @@ class ProdutoControllerTest {
     }
 
     @Test
-    void atualizarComSkuDuplicadoDeOutroProdutoDeveRetornar400() throws Exception {
+    void atualizarComSkuDuplicadoDeOutroProdutoDeveRetornar409() throws Exception {
         when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(5L), eq("Produto"), isNull(), isNull(),
                 eq(new BigDecimal("10.00")), isNull(), isNull(), isNull(), eq("SKU-DE-OUTRO")))
-                .thenThrow(new RegraDeNegocioException("Já existe um produto com este SKU nesta empresa."));
+                .thenThrow(new ProdutoConflitoException("Já existe um produto com este SKU nesta empresa."));
 
         String token = tokenParaUsuario(1L);
 
@@ -333,7 +395,7 @@ class ProdutoControllerTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{ \"nome\": \"Produto\", \"precoVenda\": 10.00, \"sku\": \"SKU-DE-OUTRO\" }"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isConflict());
     }
 
     @Test

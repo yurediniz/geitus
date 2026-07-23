@@ -2,6 +2,7 @@ package com.geitus.app.shared.error;
 
 import java.util.List;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -14,6 +15,7 @@ import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.ConflitoDeUsuarioException;
 import com.geitus.app.iam.DadosUsuarioInvalidosException;
 import com.geitus.app.iam.UsuarioNaoEncontradoException;
+import com.geitus.app.catalog.ProdutoConflitoException;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
 import com.geitus.app.catalog.RegraDeNegocioException;
 import com.geitus.app.company.ConflitoDeEmpresaException;
@@ -124,8 +126,10 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Violacao de regra de negocio do modulo Produtos (por exemplo, SKU ou
-     * codigo de barras duplicado na mesma empresa).
+     * Violacao de regra de negocio do modulo Produtos com dado invalido (por
+     * exemplo, nome vazio ou preco/custo/estoque negativo) -> 400. Conflitos de
+     * unicidade (SKU/codigo de barras duplicado) usam {@code ProdutoConflitoException}
+     * e retornam 409.
      */
     @ExceptionHandler(RegraDeNegocioException.class)
     public ResponseEntity<ApiError> tratarRegraDeNegocio(RegraDeNegocioException ex, HttpServletRequest request) {
@@ -136,6 +140,22 @@ public class GlobalExceptionHandler {
                 request.getRequestURI());
 
         return ResponseEntity.badRequest().body(corpo);
+    }
+
+    /**
+     * Conflito de unicidade no modulo Produtos (SKU ou codigo de barras ja
+     * usado por outro produto da mesma empresa). Mapeado para HTTP 409.
+     */
+    @ExceptionHandler(ProdutoConflitoException.class)
+    public ResponseEntity<ApiError> tratarConflitoDeProduto(ProdutoConflitoException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(corpo);
     }
 
     /**
@@ -214,6 +234,25 @@ public class GlobalExceptionHandler {
                 HttpStatus.CONFLICT.value(),
                 HttpStatus.CONFLICT.getReasonPhrase(),
                 ex.getMessage(),
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(corpo);
+    }
+
+    /**
+     * Violacao de integridade do banco (constraint UNIQUE, FK, CHECK). Fecha a
+     * janela de corrida TOCTOU (DT-015): mesmo que duas requisicoes concorrentes
+     * passem pela checagem de unicidade em memoria, a constraint do banco garante
+     * a integridade e o erro chega aqui. Responde 409 com mensagem generica, sem
+     * vazar detalhe do banco (nome de constraint, SQL, etc.).
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiError> tratarViolacaoIntegridade(DataIntegrityViolationException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                "Registro em conflito com dados já existentes.",
                 request.getRequestURI());
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(corpo);

@@ -21,6 +21,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.geitus.app.company.Empresa;
 import com.geitus.app.company.EmpresaRepository;
+import com.geitus.app.iam.CredenciaisInvalidasException;
+import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 
 /**
@@ -116,7 +118,7 @@ class ProdutoServiceTest {
 
         assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
                 new BigDecimal("10"), null, null, null, "SKU-1"))
-                .isInstanceOf(RegraDeNegocioException.class);
+                .isInstanceOf(ProdutoConflitoException.class);
 
         verify(produtoRepository, never()).save(any());
     }
@@ -147,7 +149,7 @@ class ProdutoServiceTest {
 
         assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
                 new BigDecimal("10"), null, null, "789123", null))
-                .isInstanceOf(RegraDeNegocioException.class);
+                .isInstanceOf(ProdutoConflitoException.class);
 
         verify(produtoRepository, never()).save(any());
     }
@@ -201,9 +203,39 @@ class ProdutoServiceTest {
 
         assertThatThrownBy(() -> produtoService.atualizarDadosBasicos(1L, 5L, "Produto", null, null,
                 new BigDecimal("10"), null, null, null, "SKU-DE-OUTRO"))
-                .isInstanceOf(RegraDeNegocioException.class);
+                .isInstanceOf(ProdutoConflitoException.class);
 
         verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void atualizarComCodigoBarrasJaUsadoPorOutroProdutoDaMesmaEmpresaDeveFalhar() {
+        Empresa empresa = empresaComId(1L);
+        Produto produtoExistente = produtoComId(5L, empresa, null, "111222333");
+        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
+        when(produtoRepository.existsByCodigoBarrasAndEmpresa_IdAndIdNot("999888777", 1L, 5L)).thenReturn(true);
+
+        assertThatThrownBy(() -> produtoService.atualizarDadosBasicos(1L, 5L, "Produto", null, null,
+                new BigDecimal("10"), null, null, "999888777", null))
+                .isInstanceOf(ProdutoConflitoException.class);
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void atualizarMantendoOProprioCodigoBarrasNaoDeveFalhar() {
+        Empresa empresa = empresaComId(1L);
+        Produto produtoExistente = produtoComId(5L, empresa, null, "111222333");
+        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
+        when(produtoRepository.existsByCodigoBarrasAndEmpresa_IdAndIdNot("111222333", 1L, 5L)).thenReturn(false);
+        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+
+        Produto atualizado = produtoService.atualizarDadosBasicos(1L, 5L, "Produto Atualizado", null, null,
+                new BigDecimal("15"), null, null, "111222333", null);
+
+        assertThat(atualizado.getCodigoBarras()).isEqualTo("111222333");
+        verify(produtoRepository).existsByCodigoBarrasAndEmpresa_IdAndIdNot("111222333", 1L, 5L);
+        verify(produtoRepository).save(any(Produto.class));
     }
 
     @Test
@@ -265,5 +297,72 @@ class ProdutoServiceTest {
 
         verify(produtoRepository).buscarPorEmpresaComBusca(1L, "arroz", null);
         verify(produtoRepository, never()).buscarPorEmpresa(any(), any());
+    }
+
+    // ---------- Normalizacao de campos opcionais (vazio/branco -> null; trim) ----------
+
+    @Test
+    void cadastrarComCamposOpcionaisEmBrancoDeveNormalizarParaNull() {
+        Empresa empresa = empresaComId(1L);
+        when(empresaRepository.findById(1L)).thenReturn(Optional.of(empresa));
+        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+
+        Produto produto = produtoService.cadastrar(1L, "Produto", "  ", "", new BigDecimal("10"),
+                null, null, "   ", "");
+
+        assertThat(produto.getCategoria()).isNull();
+        assertThat(produto.getUnidade()).isNull();
+        assertThat(produto.getSku()).isNull();
+        assertThat(produto.getCodigoBarras()).isNull();
+        // Sem SKU/codigo apos normalizacao, a checagem de unicidade nem e consultada.
+        verify(produtoRepository, never()).existsBySkuAndEmpresa_Id(any(), anyLong());
+        verify(produtoRepository, never()).existsByCodigoBarrasAndEmpresa_Id(any(), anyLong());
+    }
+
+    @Test
+    void cadastrarDeveAplicarTrimNosCamposInformados() {
+        Empresa empresa = empresaComId(1L);
+        when(empresaRepository.findById(1L)).thenReturn(Optional.of(empresa));
+        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+
+        Produto produto = produtoService.cadastrar(1L, "  Produto  ", "  Mercearia  ", "  UN  ",
+                new BigDecimal("10"), null, null, "  789123  ", "  SKU-1  ");
+
+        assertThat(produto.getNome()).isEqualTo("Produto");
+        assertThat(produto.getCategoria()).isEqualTo("Mercearia");
+        assertThat(produto.getUnidade()).isEqualTo("UN");
+        assertThat(produto.getSku()).isEqualTo("SKU-1");
+        assertThat(produto.getCodigoBarras()).isEqualTo("789123");
+    }
+
+    @Test
+    void atualizarComCamposOpcionaisEmBrancoDeveNormalizarParaNull() {
+        Empresa empresa = empresaComId(1L);
+        Produto produtoExistente = produtoComId(5L, empresa, "SKU-ANTIGO", "111222333");
+        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
+        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+
+        Produto atualizado = produtoService.atualizarDadosBasicos(1L, 5L, "Produto", "  ", "",
+                new BigDecimal("10"), null, null, "   ", "");
+
+        assertThat(atualizado.getCategoria()).isNull();
+        assertThat(atualizado.getUnidade()).isNull();
+        assertThat(atualizado.getSku()).isNull();
+        assertThat(atualizado.getCodigoBarras()).isNull();
+    }
+
+    // ---------- Resolucao da empresa a partir do usuario autenticado ----------
+
+    @Test
+    void cadastrarParaUsuarioInativoDeveFalharComCredenciaisInvalidas() {
+        Usuario usuarioInativo = org.mockito.Mockito.mock(Usuario.class);
+        when(usuarioInativo.isAtivo()).thenReturn(false);
+        when(usuarioRepository.findById(9L)).thenReturn(Optional.of(usuarioInativo));
+
+        assertThatThrownBy(() -> produtoService.cadastrarParaUsuario(9L, "Produto", null, null,
+                new BigDecimal("10"), null, null, null, null))
+                .isInstanceOf(CredenciaisInvalidasException.class);
+
+        verify(produtoRepository, never()).save(any());
     }
 }
