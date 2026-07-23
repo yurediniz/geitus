@@ -117,7 +117,37 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- Testcontainers: Postgres real para exercer as queries do repository
+             (queries derivadas/JPQL nao sao exercidas em @WebMvcTest com mock).
+             As versoes sao gerenciadas pelo BOM do Testcontainers, que por sua
+             vez tem a versao definida pelo dependency management do Spring Boot. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- BOM do Testcontainers: alinha as versoes dos modulos (postgresql,
+                 junit-jupiter). A versao herda do dependency management do
+                 Spring Boot (propriedade testcontainers.version). -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <build>
         <plugins>
@@ -125,6 +155,23 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- Testes de integracao (*IT): executados na fase integration-test do
+                 'verify'. O surefire roda os testes unitarios (*Test); o failsafe
+                 roda os de integracao, como o ProdutoRepositoryIT (Postgres real
+                 via Testcontainers). A versao vem do gerenciamento do Spring Boot. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
 
             <!-- Garante que o build so rode em Java 21 (21.x), evitando conflito
