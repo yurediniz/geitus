@@ -570,3 +570,55 @@ Refina a **DEC-016** (empresa deixa de ser "a única do usuário" e passa a ser 
 
 **Observações futuras:**
 Quando implementar: modelar `usuario` (identidade global, e-mail único global) + `usuario_empresa` (usuario_id, empresa_id, perfil, status); ajustar o login para o fluxo de seleção; o `security-reviewer` é **obrigatório** (mudança no modelo de autenticação/autorização) e o `data-reviewer` na migration. A migration deve **preservar dados**: popular `usuario_empresa` a partir do par atual `usuario.empresa_id` + `usuario.perfil` **antes** de remover essas colunas (sem exclusão física). O modelo atual é **N:1** (não 1:1): `usuario.empresa_id` não é único.
+
+## DEC-025 — RBAC de Produtos: escrita exige ADMIN, leitura livre
+
+**Data:** 2026-07-23
+**Status:** Aceita
+**Contexto:**
+Na auditoria de maturação do módulo Produtos, os endpoints de escrita (cadastrar, atualizar, inativar, reativar) exigiam apenas autenticação — qualquer perfil, inclusive OPERADOR, podia alterar cadastro, **preço e custo** de produtos. A spec de Produtos não restringia por perfil, mas Empresa (`PATCH /api/empresas/minha`) e Usuários (`/api/usuarios/**`) já tratam escrita como **ADMIN-only**.
+
+**Decisão:**
+- **Escrita em Produtos exige `ADMIN`:** `POST /api/produtos` e `PATCH /api/produtos/**` (dados, inativar, reativar) → `hasRole("ADMIN")`.
+- **Leitura livre a qualquer autenticado:** `GET /api/produtos` e `GET /api/produtos/{id}` seguem apenas autenticados. OPERADOR vê o catálogo, mas não o altera.
+- **Frontend:** a rota `/produtos` continua acessível a qualquer autenticado; o **controle é na página** (modo leitura para OPERADOR: ações escondidas + aviso), espelhando o padrão de Empresa (não usa `AdminRoute`).
+
+**Motivo:**
+Alinha Produtos ao padrão já consolidado (Empresa/Usuários) e protege dados sensíveis de gestão (preço/custo) de alteração por operador de PDV. Backend continua sendo a autoridade (o modo leitura do frontend é só UX).
+
+**Impacto:**
+Mudança localizada no `SecurityConfig` (matchers por método) + testes de controller (OPERADOR → 403 em escrita; ADMIN → 200). Frontend ganha modo leitura para OPERADOR. Conecta com a futura regra de histórico de alteração de preço/custo.
+
+## DEC-026 — Conflito de unicidade padronizado em HTTP 409 + mapeamento global de DataIntegrityViolationException
+
+**Data:** 2026-07-23
+**Status:** Aceita
+**Contexto:**
+SKU/código de barras duplicado em Produtos retornava **400**, enquanto CNPJ (Empresa) e e-mail (Usuários) retornavam **409 CONFLICT**. Além disso, havia a janela TOCTOU (DT-015): entre a checagem `existsBy...` e o `save`, duas requisições concorrentes escapavam da validação e a segunda gravação emergia como `DataIntegrityViolationException` → **500** em vez de 409.
+
+**Decisão:**
+- **Conflito de unicidade retorna 409** em todo o backend: SKU/código de barras duplicado em Produtos passa de 400 → **409** (via exceção de conflito nomeada, mantendo `RegraDeNegocioException` → 400 para nome/preço/custo/estoque).
+- **Mapear `DataIntegrityViolationException` → 409** no `GlobalExceptionHandler`, com mensagem genérica de conflito (sem vazar detalhe de banco). Cobre a corrida TOCTOU em Produtos, Empresa e Usuários de uma vez.
+
+**Motivo:**
+Consistência de contrato entre módulos (o cliente/frontend trata conflito de unicidade da mesma forma em todo lugar) e correção do status na corrida concorrente. Fecha o débito **DT-015**.
+
+**Impacto:**
+Ajuste no `GlobalExceptionHandler` + exceção de conflito no `catalog`; testes de Produtos atualizados (duplicidade → 409). Spec `produtos.md` atualizada (400 → 409). **Resolve DT-015.**
+
+## DEC-027 — Adoção de Testcontainers para testes de integração de repositório
+
+**Data:** 2026-07-23
+**Status:** Aceita
+**Contexto:**
+As queries de repositório (isolamento por empresa, unicidade por empresa, busca case-insensitive) eram validadas apenas contra mocks (`@WebMvcTest`+`@MockBean`, `@Mock` do repositório) e por smoke manual do CTO contra o `geitus_db`. A lição do `lower(bytea)` (bug de SQL só reproduzível contra Postgres) mostrou que mocks não pegam esses defeitos. Débito registrado como **DT-019**.
+
+**Decisão:**
+- **Adotar Testcontainers** (dependência de teste, versão gerenciada pelo Spring Boot) para testes de integração de repositório contra **Postgres real**.
+- Primeiro alvo: `ProdutoRepositoryIT` (`@DataJpaTest` + `@Testcontainers` + `PostgreSQLContainer`), cobrindo isolamento cross-empresa, busca case-insensitive (nome/SKU/código), filtro `ativo` e unicidade/NULLs que não colidem.
+
+**Motivo:**
+Fechar a lacuna de cobertura das queries — justamente as garantias mais críticas da spec (isolamento e unicidade por empresa) — com testes automáticos contra o banco real, não presumidos por mock. Fecha o débito **DT-019** para Produtos.
+
+**Impacto:**
+Nova dependência de teste (Testcontainers) e requisito de **Docker disponível no ambiente de teste/CI**. Padrão reutilizável para os próximos módulos com queries (Vendas/Estoque). **Resolve DT-019** (para o módulo Produtos; estende-se aos demais conforme forem cobertos).

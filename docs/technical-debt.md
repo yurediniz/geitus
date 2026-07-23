@@ -180,11 +180,11 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Modulo:** Usuarios
 - **Origem:** Revisao (back-end-reviewer e data-reviewer) do modulo de Usuarios
 - **Prioridade:** baixa
-- **Status:** aberto
+- **Status:** RESOLVIDO (DEC-026, 2026-07-23)
 - **Descricao:** Ha uma janela TOCTOU entre `existsByEmail` e `save` no `UsuarioService.criarParaUsuario`: duas requisicoes concorrentes com o mesmo e-mail escapam do 409 na aplicacao; a segunda gravacao falha na constraint `uq_usuario_email` e emerge como `DataIntegrityViolationException` -> **500** em vez de **409**.
 - **Impacto:** Integridade protegida pelo banco (nao ha duplicata), mas o status fica incoerente numa corrida (janela estreita). Baixo impacto no MVP.
 - **Quando revisar:** Proxima manutencao do modulo Usuarios ou ao endurecer o tratamento de erros.
-- **Observacoes:** Mapear `DataIntegrityViolationException` no `GlobalExceptionHandler` para 409 com mensagem generica de conflito.
+- **Observacoes:** Mapear `DataIntegrityViolationException` no `GlobalExceptionHandler` para 409 com mensagem generica de conflito. **Resolvido** na maturacao de Produtos (DEC-026): handler global de `DataIntegrityViolationException` -> 409 cobre Usuarios, Empresa e Produtos.
 
 ## DT-016 — E-mail de usuario case-sensitive
 
@@ -228,8 +228,8 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Modulo:** Testes/Infra
 - **Origem:** Revisao (back-end-reviewer) do modulo de Usuarios
 - **Prioridade:** media
-- **Status:** aberto
+- **Status:** RESOLVIDO para Produtos (DEC-027, 2026-07-23); estende-se aos demais modulos conforme forem cobertos
 - **Descricao:** As queries de repositorio (JPQL/derivadas) sao validadas hoje apenas por smoke manual do CTO contra o `geitus_db` (Docker), pois `@WebMvcTest`+`@MockBean` nao instancia repositorios e nao ha `@DataJpaTest`/Testcontainers no projeto. A licao do `lower(bytea)` mostra que mocks nao pegam esses defeitos.
 - **Impacto:** Cobertura automatica ausente para queries; risco depende de smoke manual (e Docker disponivel).
 - **Quando revisar:** Quando o volume de queries de repositorio crescer (Vendas/Estoque) ou ao endurecer o CI.
-- **Observacoes:** Adicionar **Testcontainers** (dependencia de teste) + `@DataJpaTest` contra Postgres; decisao de dependencia + impacto no CI (Docker no CI) a cargo do CTO.
+- **Observacoes:** Adicionar **Testcontainers** (dependencia de teste) + `@DataJpaTest` contra Postgres; decisao de dependencia + impacto no CI (Docker no CI) a cargo do CTO. **Adotado** na maturacao de Produtos (DEC-027): `ProdutoRepositoryIT` cobre isolamento, unicidade e busca contra Postgres real. Requer Docker no ambiente de teste/CI. Aplicar o mesmo padrao aos proximos modulos com queries (Vendas/Estoque).

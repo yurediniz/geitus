@@ -51,7 +51,9 @@ Campo | Tipo (conceitual) | Observações
 
 **Observação sobre estoque:** não existe campo de "estoque atual" neste modelo conceitual. O estoque atual **não deve ser armazenado nem editado diretamente**; ele deve ser **derivado de movimentações** quando o módulo Estoque básico for implementado. Um "estoque inicial" pode existir futuramente como uma entrada operacional (ou seja, a primeira movimentação de entrada), não como um campo editável do cadastro de produto.
 
-### Modelo de dados atual (implementado — migration `V3__produtos.sql`)
+### Modelo de dados atual (implementado — tabela `produtos` no baseline `V1__baseline.sql`)
+
+> A tabela `produtos` foi um dos primeiros módulos do projeto e, na consolidação do baseline (**DEC-020**), seu DDL foi absorvido pelo `V1__baseline.sql` (não existe um `V3__produtos.sql` — o `V3` atual é `V3__empresa_cadastro.sql`). Fonte do schema: `backend/src/main/resources/db/migration/V1__baseline.sql`.
 
 Tabela `produtos`:
 
@@ -80,13 +82,14 @@ Todos derivam a empresa do usuário autenticado (JWT); nenhum aceita `empresaId`
 |---|---|---|
 | `GET /api/produtos` | Lista produtos da empresa; filtros opcionais `busca` (nome, SKU ou código de barras, sem diferenciar maiúsculas) e `ativo` (`true`/`false`) | 200 |
 | `GET /api/produtos/{id}` | Busca por id dentro da empresa | 200 / 404 |
-| `POST /api/produtos` | Cadastra produto | 201 / 400 |
-| `PATCH /api/produtos/{id}` | Atualiza dados básicos | 200 / 400 / 404 |
-| `PATCH /api/produtos/{id}/inativar` | Inativa o produto | 200 / 404 |
-| `PATCH /api/produtos/{id}/reativar` | Reativa o produto | 200 / 404 |
+| `POST /api/produtos` | Cadastra produto (**ADMIN**) | 201 / 400 / 403 / 409 |
+| `PATCH /api/produtos/{id}` | Atualiza dados básicos (**ADMIN**) | 200 / 400 / 403 / 404 / 409 |
+| `PATCH /api/produtos/{id}/inativar` | Inativa o produto (**ADMIN**) | 200 / 403 / 404 |
+| `PATCH /api/produtos/{id}/reativar` | Reativa o produto (**ADMIN**) | 200 / 403 / 404 |
 
+- **RBAC (DEC-025):** **escrita** (POST/PATCH — cadastrar, atualizar, inativar, reativar) exige **ADMIN**; **leitura** (GET) é livre a qualquer autenticado. OPERADOR vê o catálogo, mas não o altera (backend → 403; frontend em modo leitura).
 - Produto inexistente **ou de outra empresa** → 404 (mesma resposta, sem revelar existência entre tenants).
-- Violação de regra de negócio (ex.: SKU duplicado na empresa) → 400 com mensagem da regra; validação de campos → 400 com `campos`.
+- **SKU ou código de barras duplicado na empresa → 409** (conflito de unicidade, padronizado com CNPJ/e-mail — DEC-026); validação de campos (nome/preço/custo/estoque) → 400 com `campos`.
 - Sem token → 401. Não há `DELETE` (inativação é o caminho padrão).
 - A resposta (`ProdutoResponse`) não expõe `empresaId` nem a entidade JPA.
 
@@ -136,7 +139,7 @@ No frontend, a página protegida `/produtos` consome esses endpoints (listagem c
 
 ### Backend futuro
 
-- CRUD inicial protegido por autenticação.
+- CRUD protegido por autenticação; **escrita exige ADMIN, leitura livre** (DEC-025).
 - Produtos sempre filtrados pela empresa do usuário autenticado (mesmo padrão de isolamento já usado em `/api/empresas/minha`, ver [docs/modules/empresa.md](empresa.md)).
 - Nenhum endpoint deve receber `empresaId` como parâmetro para acessar dados de outra empresa — a empresa é sempre derivada do usuário autenticado.
 - Validações no backend (nome obrigatório, preço de venda obrigatório e não negativo, custo/estoque mínimo não negativos quando informados).
@@ -168,11 +171,13 @@ No frontend, a página protegida `/produtos` consome esses endpoints (listagem c
 - Estoque atual não é um campo do cadastro de produto; será sempre derivado de movimentações no módulo Estoque.
 - SKU e código de barras são opcionais, mas únicos por empresa quando informados.
 - Exclusão física não é prioridade; inativação é o mecanismo padrão.
+- **Migration e nomes técnicos das colunas** definidos: a tabela `produtos` vive no `V1__baseline.sql` (consolidação DEC-020); precisão monetária com tipo decimal exato (`NUMERIC(12,2)` / `BigDecimal`).
+- **RBAC (DEC-025):** escrita (cadastrar/atualizar/inativar/reativar) exige ADMIN; leitura livre a qualquer autenticado.
+- **Conflito de unicidade (DEC-026):** SKU/código de barras duplicado retorna 409 (padronizado com CNPJ/e-mail).
+- **Testes de integração (DEC-027):** queries de repositório cobertas por Testcontainers (`ProdutoRepositoryIT`) contra Postgres real.
 
 **Deixar para depois:**
 - Histórico de alteração de preço/custo.
-- Definição de migration e nomes técnicos definitivos das colunas.
-- Regras específicas de arredondamento/precisão monetária na implementação (usar tipo decimal exato, a confirmar na Etapa 7B).
 - Categorias como entidade própria (hoje é apenas um campo texto) — avaliar se vira tabela própria quando houver necessidade real.
 
 **Fora do escopo:**
