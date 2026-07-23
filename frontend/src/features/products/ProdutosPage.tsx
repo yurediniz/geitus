@@ -8,6 +8,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Loader2,
+  Lock,
   Package,
   Pencil,
   Plus,
@@ -19,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { useAuth } from '@/hooks/useAuth'
 import { HttpError } from '@/services/httpClient'
 import {
   atualizarProduto,
@@ -113,16 +115,36 @@ function formatarMoeda(valor: number | null): string {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+/** Estoque mínimo formatado (pt-BR) com a unidade quando houver. */
+function formatarEstoqueMinimo(produto: Produto): string {
+  if (produto.estoqueMinimo === null) {
+    return 'Não informado'
+  }
+  const valor = produto.estoqueMinimo.toLocaleString('pt-BR')
+  return produto.unidade ? `${valor} ${produto.unidade}` : valor
+}
+
+/** Mensagem amigavel (pt-BR) para falhas ao salvar, sem vazar detalhe interno. */
 function mensagemErroSalvar(erro: unknown): string {
-  if (erro instanceof HttpError && erro.status === 400) {
-    const mensagensCampos = erro.campos ? Object.values(erro.campos).filter(Boolean) : []
-    if (mensagensCampos.length > 0) {
-      return mensagensCampos.join(' ')
+  if (erro instanceof HttpError) {
+    if (erro.status === 409) {
+      // Duplicidade de SKU ou código de barras: usa a mensagem do backend
+      // quando houver, com fallback amigável.
+      if (erro.message && erro.message.trim() !== '') {
+        return erro.message
+      }
+      return 'Já existe um produto com este SKU ou código de barras nesta empresa.'
     }
-    if (erro.message && erro.message !== 'Dados invalidos.') {
-      return erro.message
+    if (erro.status === 400) {
+      const mensagensCampos = erro.campos ? Object.values(erro.campos).filter(Boolean) : []
+      if (mensagensCampos.length > 0) {
+        return mensagensCampos.join(' ')
+      }
+      if (erro.message && erro.message !== 'Dados invalidos.') {
+        return erro.message
+      }
+      return 'Revise os dados do produto e tente novamente.'
     }
-    return 'Revise os dados do produto e tente novamente.'
   }
   return 'Não foi possível salvar o produto. Tente novamente.'
 }
@@ -130,6 +152,8 @@ function mensagemErroSalvar(erro: unknown): string {
 /** Pagina inicial do modulo Produtos. */
 export function ProdutosPage() {
   const queryClient = useQueryClient()
+  const { usuario } = useAuth()
+  const somenteLeitura = usuario?.perfil !== 'ADMIN'
   const [busca, setBusca] = useState('')
   const [buscaAplicada, setBuscaAplicada] = useState('')
   const [status, setStatus] = useState<ProdutoStatusFiltro>('todos')
@@ -267,11 +291,20 @@ export function ProdutosPage() {
           </p>
         </div>
 
-        <Button type="button" onClick={abrirNovoProduto}>
-          <Plus className="h-4 w-4" />
-          Novo produto
-        </Button>
+        {!somenteLeitura && (
+          <Button type="button" onClick={abrirNovoProduto}>
+            <Plus className="h-4 w-4" />
+            Novo produto
+          </Button>
+        )}
       </div>
+
+      {somenteLeitura && (
+        <div className="flex max-w-2xl items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+          <Lock className="h-4 w-4 shrink-0" />
+          <span>Somente administradores podem gerenciar produtos. Você está no modo leitura.</span>
+        </div>
+      )}
 
       {mensagemSucesso && (
         <div
@@ -366,22 +399,6 @@ export function ProdutosPage() {
                   disabled={salvando}
                 />
                 <CampoTexto
-                  id="categoria"
-                  label="Categoria"
-                  erro={errors.categoria?.message}
-                  inputProps={register('categoria', { onChange: aoAlterarCampo })}
-                  disabled={salvando}
-                  placeholder="Ex.: Mercearia"
-                />
-                <CampoTexto
-                  id="unidade"
-                  label="Unidade"
-                  erro={errors.unidade?.message}
-                  inputProps={register('unidade', { onChange: aoAlterarCampo })}
-                  disabled={salvando}
-                  placeholder="Ex.: UN, kg, cx"
-                />
-                <CampoTexto
                   id="precoVenda"
                   label="Preço de venda"
                   erro={errors.precoVenda?.message}
@@ -392,39 +409,66 @@ export function ProdutosPage() {
                   min="0"
                 />
                 <CampoTexto
-                  id="custo"
-                  label="Custo"
-                  erro={errors.custo?.message}
-                  inputProps={register('custo', { onChange: aoAlterarCampo })}
+                  id="categoria"
+                  label="Categoria (opcional)"
+                  erro={errors.categoria?.message}
+                  inputProps={register('categoria', { onChange: aoAlterarCampo })}
                   disabled={salvando}
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  placeholder="Ex.: Mercearia"
                 />
                 <CampoTexto
-                  id="estoqueMinimo"
-                  label="Estoque mínimo"
-                  erro={errors.estoqueMinimo?.message}
-                  inputProps={register('estoqueMinimo', { onChange: aoAlterarCampo })}
+                  id="unidade"
+                  label="Unidade (opcional)"
+                  erro={errors.unidade?.message}
+                  inputProps={register('unidade', { onChange: aoAlterarCampo })}
                   disabled={salvando}
-                  type="number"
-                  step="0.001"
-                  min="0"
+                  placeholder="Ex.: UN, kg, cx"
                 />
-                <CampoTexto
-                  id="codigoBarras"
-                  label="Código de barras"
-                  erro={errors.codigoBarras?.message}
-                  inputProps={register('codigoBarras', { onChange: aoAlterarCampo })}
-                  disabled={salvando}
-                />
-                <CampoTexto
-                  id="sku"
-                  label="SKU"
-                  erro={errors.sku?.message}
-                  inputProps={register('sku', { onChange: aoAlterarCampo })}
-                  disabled={salvando}
-                />
+              </div>
+
+              <div className="space-y-4 rounded-md bg-muted/40 p-4">
+                <div>
+                  <h3 className="text-sm font-medium">Custo e identificação (opcional)</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Campos de apoio para margem, estoque e busca. Preencha se fizer sentido para o seu negócio.
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <CampoTexto
+                    id="custo"
+                    label="Custo (opcional)"
+                    erro={errors.custo?.message}
+                    inputProps={register('custo', { onChange: aoAlterarCampo })}
+                    disabled={salvando}
+                    type="number"
+                    step="0.01"
+                    min="0"
+                  />
+                  <CampoTexto
+                    id="estoqueMinimo"
+                    label="Estoque mínimo (opcional)"
+                    erro={errors.estoqueMinimo?.message}
+                    inputProps={register('estoqueMinimo', { onChange: aoAlterarCampo })}
+                    disabled={salvando}
+                    type="number"
+                    step="0.001"
+                    min="0"
+                  />
+                  <CampoTexto
+                    id="codigoBarras"
+                    label="Código de barras (opcional)"
+                    erro={errors.codigoBarras?.message}
+                    inputProps={register('codigoBarras', { onChange: aoAlterarCampo })}
+                    disabled={salvando}
+                  />
+                  <CampoTexto
+                    id="sku"
+                    label="SKU (opcional)"
+                    erro={errors.sku?.message}
+                    inputProps={register('sku', { onChange: aoAlterarCampo })}
+                    disabled={salvando}
+                  />
+                </div>
               </div>
 
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -491,6 +535,7 @@ export function ProdutosPage() {
                 <ProdutoItem
                   key={produto.id}
                   produto={produto}
+                  somenteLeitura={somenteLeitura}
                   onEditar={() => abrirEdicao(produto)}
                   onAlterarStatus={() =>
                     statusMutation.mutate({ produto, proximoAtivo: !produto.ativo })
@@ -557,12 +602,19 @@ function CampoTexto({
 
 interface ProdutoItemProps {
   produto: Produto
+  somenteLeitura: boolean
   onEditar: () => void
   onAlterarStatus: () => void
   alterandoStatus: boolean
 }
 
-function ProdutoItem({ produto, onEditar, onAlterarStatus, alterandoStatus }: ProdutoItemProps) {
+function ProdutoItem({
+  produto,
+  somenteLeitura,
+  onEditar,
+  onAlterarStatus,
+  alterandoStatus,
+}: ProdutoItemProps) {
   return (
     <article className="rounded-md border p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -607,33 +659,35 @@ function ProdutoItem({ produto, onEditar, onAlterarStatus, alterandoStatus }: Pr
             </div>
             <div>
               <dt className="font-medium text-foreground">Estoque mínimo</dt>
-              <dd>{produto.estoqueMinimo ?? 'Não informado'}</dd>
+              <dd>{formatarEstoqueMinimo(produto)}</dd>
             </div>
           </dl>
         </div>
 
-        <div className="flex flex-wrap gap-2 lg:justify-end">
-          <Button type="button" variant="outline" size="sm" onClick={onEditar}>
-            <Pencil className="h-4 w-4" />
-            Editar
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onAlterarStatus}
-            disabled={alterandoStatus}
-          >
-            {alterandoStatus ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : produto.ativo ? (
-              <XCircle className="h-4 w-4" />
-            ) : (
-              <RotateCcw className="h-4 w-4" />
-            )}
-            {produto.ativo ? 'Inativar' : 'Reativar'}
-          </Button>
-        </div>
+        {!somenteLeitura && (
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            <Button type="button" variant="outline" size="sm" onClick={onEditar}>
+              <Pencil className="h-4 w-4" />
+              Editar
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onAlterarStatus}
+              disabled={alterandoStatus}
+            >
+              {alterandoStatus ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : produto.ativo ? (
+                <XCircle className="h-4 w-4" />
+              ) : (
+                <RotateCcw className="h-4 w-4" />
+              )}
+              {produto.ativo ? 'Inativar' : 'Reativar'}
+            </Button>
+          </div>
+        )}
       </div>
     </article>
   )

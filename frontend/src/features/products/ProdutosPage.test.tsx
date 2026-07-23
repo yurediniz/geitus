@@ -4,6 +4,8 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { ProdutosPage } from '@/features/products/ProdutosPage'
+import { HttpError } from '@/services/httpClient'
+import { useAuth } from '@/hooks/useAuth'
 import {
   atualizarProduto,
   cadastrarProduto,
@@ -21,11 +23,34 @@ vi.mock('@/services/produtoService', () => ({
   reativarProduto: vi.fn(),
 }))
 
+// Mocka o hook de auth para alternar o perfil (ADMIN gerencia / OPERADOR leitura).
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: vi.fn(),
+}))
+
 const listarProdutosMock = vi.mocked(listarProdutos)
 const cadastrarProdutoMock = vi.mocked(cadastrarProduto)
 const atualizarProdutoMock = vi.mocked(atualizarProduto)
 const inativarProdutoMock = vi.mocked(inativarProduto)
 const reativarProdutoMock = vi.mocked(reativarProduto)
+const useAuthMock = vi.mocked(useAuth)
+
+function definirPerfil(perfil: 'ADMIN' | 'OPERADOR') {
+  useAuthMock.mockReturnValue({
+    usuario: {
+      id: 1,
+      nome: 'Ana Souza',
+      email: 'ana@mercado.com',
+      perfil,
+      empresa: { id: 1, nome: 'Mercado Central', ativo: true, criadoEm: '2026-01-01T00:00:00Z', atualizadoEm: null },
+    },
+    token: 'token',
+    estaAutenticado: true,
+    carregandoSessao: false,
+    login: vi.fn(),
+    logout: vi.fn(),
+  })
+}
 
 const produtoAtivo: Produto = {
   id: 1,
@@ -66,6 +91,7 @@ async function abrirFormularioNovo() {
 describe('ProdutosPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    definirPerfil('ADMIN')
   })
 
   it('renderiza o titulo e o estado de carregamento', () => {
@@ -173,7 +199,7 @@ describe('ProdutosPage', () => {
     await abrirFormularioNovo()
     fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Produto' } })
     fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10' } })
-    fireEvent.change(screen.getByLabelText(/^custo$/i), { target: { value: '-1' } })
+    fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '-1' } })
     fireEvent.change(screen.getByLabelText(/estoque mínimo/i), { target: { value: '-2' } })
     fireEvent.change(screen.getByLabelText(/sku/i), { target: { value: 'A'.repeat(51) } })
     fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
@@ -306,7 +332,7 @@ describe('ProdutosPage', () => {
     expect(await screen.findByText(/não foi possível carregar os produtos/i)).toBeInTheDocument()
   })
 
-  it('mostra erro ao salvar produto', async () => {
+  it('mostra erro ao salvar produto (rede)', async () => {
     listarProdutosMock.mockResolvedValue([])
     cadastrarProdutoMock.mockRejectedValue(new Error('falha ao salvar'))
 
@@ -318,5 +344,70 @@ describe('ProdutosPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
 
     expect(await screen.findByText(/não foi possível salvar o produto/i)).toBeInTheDocument()
+  })
+
+  it('concatena as mensagens de campo quando o backend responde 400', async () => {
+    listarProdutosMock.mockResolvedValue([])
+    cadastrarProdutoMock.mockRejectedValue(
+      new HttpError(400, 'Dados invalidos.', {
+        precoVenda: 'Preço de venda inválido.',
+        sku: 'SKU inválido.',
+      }),
+    )
+
+    renderComProviders(<ProdutosPage />)
+
+    await abrirFormularioNovo()
+    fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Produto' } })
+    fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10' } })
+    fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
+
+    expect(
+      await screen.findByText(/preço de venda inválido\.\s*sku inválido\./i),
+    ).toBeInTheDocument()
+  })
+
+  it('mostra a mensagem do backend quando o SKU está duplicado (409)', async () => {
+    listarProdutosMock.mockResolvedValue([])
+    cadastrarProdutoMock.mockRejectedValue(
+      new HttpError(409, 'Já existe um produto com este SKU nesta empresa.'),
+    )
+
+    renderComProviders(<ProdutosPage />)
+
+    await abrirFormularioNovo()
+    fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Produto' } })
+    fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10' } })
+    fireEvent.change(screen.getByLabelText(/sku/i), { target: { value: 'SKU-DUP' } })
+    fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
+
+    expect(
+      await screen.findByText(/já existe um produto com este sku nesta empresa/i),
+    ).toBeInTheDocument()
+  })
+
+  it('OPERADOR vê a lista em modo leitura, sem ações de gestão', async () => {
+    definirPerfil('OPERADOR')
+    listarProdutosMock.mockResolvedValue([produtoAtivo])
+
+    renderComProviders(<ProdutosPage />)
+
+    expect(await screen.findByText('Arroz 5kg')).toBeInTheDocument()
+    expect(screen.getByText(/somente administradores podem gerenciar produtos/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /novo produto/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /editar/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /inativar/i })).not.toBeInTheDocument()
+  })
+
+  it('ADMIN vê as ações de gestão e o botão de novo produto', async () => {
+    listarProdutosMock.mockResolvedValue([produtoAtivo])
+
+    renderComProviders(<ProdutosPage />)
+
+    expect(await screen.findByText('Arroz 5kg')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /novo produto/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /editar/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /inativar/i })).toBeInTheDocument()
+    expect(screen.queryByText(/somente administradores podem gerenciar produtos/i)).not.toBeInTheDocument()
   })
 })
