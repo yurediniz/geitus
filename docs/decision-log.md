@@ -622,3 +622,22 @@ Fechar a lacuna de cobertura das queries — justamente as garantias mais críti
 
 **Impacto:**
 Nova dependência de teste (Testcontainers) e requisito de **Docker disponível no ambiente de teste/CI**. Padrão reutilizável para os próximos módulos com queries (Vendas/Estoque). **Resolve DT-019** (para o módulo Produtos; estende-se aos demais conforme forem cobertos).
+
+## DEC-028 — Incremento cadastral do Produto (campos + derivados) alinhado à modelagem
+
+**Data:** 2026-07-24
+**Status:** Aceita
+**Contexto:**
+A maturação anterior de Produtos foi auditoria/endurecimento (RBAC, 409, Testcontainers) sem incrementar campos — diferente de Empresa e Usuários, que absorveram partes da modelagem conceitual do PDV (`geitus_pdv_modelagem_completa.md`). O `Produto` tinha ~10 campos; a modelagem descreve um Produto muito mais rico, com grupos progressivos de capacidades. Decidiu-se um incremento **equilibrado** (utilidade imediata + hints estruturais de baixo custo), respeitando a filosofia da própria modelagem ("obrigatório só o necessário para uma venda comum; campos extras só quando a capacidade for usada").
+
+**Decisão:**
+- **Migration V4 (aditiva, nullable):** adiciona à tabela `produtos` as colunas `marca VARCHAR(100)`, `descricao VARCHAR(1000)`, `estoque_maximo NUMERIC(12,3)`, `ponto_reposicao NUMERIC(12,3)` e `preco_minimo NUMERIC(12,2)`, com CHECKs `>= 0` (nullable-safe) nos numéricos. V1/V2/V3 intactas.
+- **Derivados (sem coluna):** a `ProdutoResponse` calcula `markup` = (preço − custo)/custo × 100 e `margem` = (preço − custo)/preço × 100, quando há custo; `null` caso contrário (e `markup` `null` quando `custo = 0`). Alinha ao princípio "calcular automaticamente".
+- **Validações:** não-negativos nos novos numéricos + **cruzadas** (quando ambos informados): `preco_minimo ≤ preco_venda` e `estoque_maximo ≥ estoque_minimo` (igualdade permitida), no service (não como CHECK de banco).
+- **Frontend:** `marca` nos campos comuns; preço mínimo/estoque máximo/ponto de reposição/descrição no bloco avançado; margem/markup exibidos na lista (só quando há custo).
+
+**Motivo:**
+Aproxima o Produto da modelagem com utilidade imediata para os segmentos-alvo (marca, descrição) e prepara o terreno para Estoque/PDV (hints), sem trazer a complexidade de ERP/fiscal. Mudança aditiva e de baixo risco.
+
+**Impacto:**
+Migration V4 + entidade/DTO/service/response + frontend + testes (incl. `ProdutoRepositoryIT` contra Postgres). `data-reviewer` acionado (migration). **Fora do escopo (norte futuro):** status como enum de ciclo de vida (fica o booleano `ativo`), fiscal (NCM/CEST/origem/CFOP/CST/IBS/CBS), variações e atributos, lote/série/validade, multi-estoque, tabelas de preço/promoções, imagem/upload, peso/dimensões, marca/categoria como entidades, múltiplos códigos/GTIN/PLU, campos de serviço.

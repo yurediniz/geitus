@@ -69,10 +69,19 @@ Tabela `produtos`:
 | `estoque_minimo` | `NUMERIC(12,3)` | 3 casas para unidades fracionárias (kg/litro); CHECK `>= 0` |
 | `codigo_barras` | `VARCHAR(50)` | único por empresa (`UNIQUE (empresa_id, codigo_barras)`) |
 | `sku` | `VARCHAR(50)` | único por empresa (`UNIQUE (empresa_id, sku)`) |
+| `marca` | `VARCHAR(100)` | opcional; texto (não é entidade). **V4** (DEC-028) |
+| `descricao` | `VARCHAR(1000)` | opcional; descrição/observações livres. **V4** (DEC-028) |
+| `estoque_maximo` | `NUMERIC(12,3)` | opcional; CHECK `>= 0`; hint p/ o futuro Estoque. **V4** (DEC-028) |
+| `ponto_reposicao` | `NUMERIC(12,3)` | opcional; CHECK `>= 0`; hint p/ o futuro Estoque. **V4** (DEC-028) |
+| `preco_minimo` | `NUMERIC(12,2)` | opcional; CHECK `>= 0`; piso de venda. **V4** (DEC-028) |
 | `ativo` | `BOOLEAN` | NOT NULL, default `true` |
 | `criado_em` / `atualizado_em` | `TIMESTAMP` | mesmo padrão de empresa/usuário |
 
-Strings vazias de SKU/código de barras são normalizadas para `NULL` no service (múltiplos `NULL` não conflitam na constraint UNIQUE do Postgres).
+> **Incremento cadastral (migration `V4__produtos_incremento_cadastral.sql`, DEC-028):** as colunas `marca`, `descricao`, `estoque_maximo`, `ponto_reposicao` e `preco_minimo` foram acrescentadas de forma **aditiva** (todas nullable; V1/V2/V3 intactas), alinhando o Produto à modelagem do PDV sem trazer fiscal, variações, lote/série ou multi-estoque.
+
+Strings vazias de SKU/código de barras — e agora também de `marca`/`descricao` — são normalizadas para `NULL` no service (múltiplos `NULL` não conflitam na constraint UNIQUE do Postgres).
+
+**Campos derivados (não são colunas):** a `ProdutoResponse` calcula, quando há custo, **`markup`** = (preço − custo) / custo × 100 (marcação sobre o custo; `null` quando `custo` ausente ou `0`) e **`margem`** = (preço − custo) / preço × 100 (margem sobre a venda; `null` quando `custo` ausente). Ambos com 2 casas (HALF_UP). Alinha ao princípio "calcular automaticamente".
 
 ### Endpoints implementados (autenticados)
 
@@ -103,6 +112,8 @@ No frontend, a página protegida `/produtos` consome esses endpoints (listagem c
 - Preço de venda não pode ser negativo.
 - Custo, se informado, não pode ser negativo.
 - Estoque mínimo, se informado, não pode ser negativo.
+- Estoque máximo, ponto de reposição e preço mínimo, se informados, não podem ser negativos.
+- **Coerência (DEC-028):** quando ambos informados, `preco_minimo` ≤ `preco_venda` e `estoque_maximo` ≥ `estoque_minimo` (igualdade permitida); violação → 400. Validado no service (não como CHECK de banco, para não engessar).
 - SKU deve ser único **por empresa** quando informado.
 - Código de barras deve ser único **por empresa** quando informado.
 - Produto pode ser ativado/inativado.
@@ -119,6 +130,8 @@ No frontend, a página protegida `/produtos` consome esses endpoints (listagem c
 - Campos essenciais aparecem primeiro; campos avançados ficam ocultos/agrupados.
 - Evitar tela poluída.
 - Feedback claro ao salvar, editar, inativar ou quando ocorrer erro.
+- Marca junto dos campos comuns; custo, estoque (máx/mín/reposição), preço mínimo e descrição agrupados no bloco avançado.
+- Margem/markup exibidos de forma derivada (só-leitura) quando há custo — o sistema calcula, não pede.
 - Busca por nome, SKU e código de barras.
 - Ações frequentes (buscar, cadastrar, inativar) com o menor número possível de cliques.
 - Não obrigar informações que o pequeno negócio talvez ainda não tenha (ex.: código de barras, SKU são opcionais).
