@@ -51,12 +51,41 @@ const produtoSchema = z.object({
     .min(1, 'Informe o nome do produto.')
     .max(150, 'Nome deve ter no máximo 150 caracteres.'),
   categoria: textoOpcional(100, 'Categoria deve ter no máximo 100 caracteres.'),
+  marca: textoOpcional(100, 'Marca deve ter no máximo 100 caracteres.'),
   unidade: textoOpcional(20, 'Unidade deve ter no máximo 20 caracteres.'),
+  descricao: textoOpcional(1000, 'Descrição deve ter no máximo 1000 caracteres.'),
   precoVenda: numeroObrigatorio,
   custo: numeroOpcional('Custo não pode ser negativo.'),
+  precoMinimo: numeroOpcional('Preço mínimo não pode ser negativo.'),
   estoqueMinimo: numeroOpcional('Estoque mínimo não pode ser negativo.'),
+  estoqueMaximo: numeroOpcional('Estoque máximo não pode ser negativo.'),
+  pontoReposicao: numeroOpcional('Ponto de reposição não pode ser negativo.'),
   codigoBarras: textoOpcional(50, 'Código de barras deve ter no máximo 50 caracteres.'),
   sku: textoOpcional(50, 'SKU deve ter no máximo 50 caracteres.'),
+}).superRefine((valores, ctx) => {
+  const preenchido = (valor: string) => valor.trim() !== ''
+  if (
+    preenchido(valores.precoMinimo) &&
+    preenchido(valores.precoVenda) &&
+    Number(valores.precoMinimo) > Number(valores.precoVenda)
+  ) {
+    ctx.addIssue({
+      path: ['precoMinimo'],
+      code: z.ZodIssueCode.custom,
+      message: 'Preço mínimo não pode ser maior que o preço de venda.',
+    })
+  }
+  if (
+    preenchido(valores.estoqueMaximo) &&
+    preenchido(valores.estoqueMinimo) &&
+    Number(valores.estoqueMaximo) < Number(valores.estoqueMinimo)
+  ) {
+    ctx.addIssue({
+      path: ['estoqueMaximo'],
+      code: z.ZodIssueCode.custom,
+      message: 'Estoque máximo não pode ser menor que o estoque mínimo.',
+    })
+  }
 })
 
 type ProdutoFormValues = z.infer<typeof produtoSchema>
@@ -64,10 +93,15 @@ type ProdutoFormValues = z.infer<typeof produtoSchema>
 const valoresIniciais: ProdutoFormValues = {
   nome: '',
   categoria: '',
+  marca: '',
   unidade: '',
+  descricao: '',
   precoVenda: '',
   custo: '',
+  precoMinimo: '',
   estoqueMinimo: '',
+  estoqueMaximo: '',
+  pontoReposicao: '',
   codigoBarras: '',
   sku: '',
 }
@@ -86,10 +120,15 @@ function montarRequest(valores: ProdutoFormValues): ProdutoRequest {
   return {
     nome: valores.nome.trim(),
     categoria: textoOuNulo(valores.categoria),
+    marca: textoOuNulo(valores.marca),
     unidade: textoOuNulo(valores.unidade),
+    descricao: textoOuNulo(valores.descricao),
     precoVenda: Number(valores.precoVenda),
     custo: numeroOuNulo(valores.custo),
+    precoMinimo: numeroOuNulo(valores.precoMinimo),
     estoqueMinimo: numeroOuNulo(valores.estoqueMinimo),
+    estoqueMaximo: numeroOuNulo(valores.estoqueMaximo),
+    pontoReposicao: numeroOuNulo(valores.pontoReposicao),
     codigoBarras: textoOuNulo(valores.codigoBarras),
     sku: textoOuNulo(valores.sku),
   }
@@ -99,10 +138,15 @@ function valoresDoProduto(produto: Produto): ProdutoFormValues {
   return {
     nome: produto.nome,
     categoria: produto.categoria ?? '',
+    marca: produto.marca ?? '',
     unidade: produto.unidade ?? '',
+    descricao: produto.descricao ?? '',
     precoVenda: String(produto.precoVenda),
     custo: produto.custo === null ? '' : String(produto.custo),
+    precoMinimo: produto.precoMinimo === null ? '' : String(produto.precoMinimo),
     estoqueMinimo: produto.estoqueMinimo === null ? '' : String(produto.estoqueMinimo),
+    estoqueMaximo: produto.estoqueMaximo === null ? '' : String(produto.estoqueMaximo),
+    pontoReposicao: produto.pontoReposicao === null ? '' : String(produto.pontoReposicao),
     codigoBarras: produto.codigoBarras ?? '',
     sku: produto.sku ?? '',
   }
@@ -115,13 +159,21 @@ function formatarMoeda(valor: number | null): string {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-/** Estoque mínimo formatado (pt-BR) com a unidade quando houver. */
-function formatarEstoqueMinimo(produto: Produto): string {
-  if (produto.estoqueMinimo === null) {
+/** Quantidade formatada (pt-BR) com a unidade quando houver; "Não informado" se nula. */
+function formatarQuantidade(valor: number | null, unidade: string | null): string {
+  if (valor === null) {
     return 'Não informado'
   }
-  const valor = produto.estoqueMinimo.toLocaleString('pt-BR')
-  return produto.unidade ? `${valor} ${produto.unidade}` : valor
+  const formatado = valor.toLocaleString('pt-BR')
+  return unidade ? `${formatado} ${unidade}` : formatado
+}
+
+/** Percentual derivado (margem/markup) formatado como "X,XX%"; null quando não há custo. */
+function formatarPercentual(valor: number | null): string | null {
+  if (valor === null) {
+    return null
+  }
+  return `${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
 }
 
 /** Mensagem amigavel (pt-BR) para falhas ao salvar, sem vazar detalhe interno. */
@@ -424,13 +476,21 @@ export function ProdutosPage() {
                   disabled={salvando}
                   placeholder="Ex.: UN, kg, cx"
                 />
+                <CampoTexto
+                  id="marca"
+                  label="Marca (opcional)"
+                  erro={errors.marca?.message}
+                  inputProps={register('marca', { onChange: aoAlterarCampo })}
+                  disabled={salvando}
+                  placeholder="Ex.: Tio João"
+                />
               </div>
 
               <div className="space-y-4 rounded-md bg-muted/40 p-4">
                 <div>
-                  <h3 className="text-sm font-medium">Custo e identificação (opcional)</h3>
+                  <h3 className="text-sm font-medium">Custo, estoque e identificação (opcional)</h3>
                   <p className="text-xs text-muted-foreground">
-                    Campos de apoio para margem, estoque e busca. Preencha se fizer sentido para o seu negócio.
+                    Custo e preços, níveis de estoque, códigos e descrição. Preencha se fizer sentido para o seu negócio.
                   </p>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
@@ -445,10 +505,40 @@ export function ProdutosPage() {
                     min="0"
                   />
                   <CampoTexto
+                    id="precoMinimo"
+                    label="Preço mínimo (opcional)"
+                    erro={errors.precoMinimo?.message}
+                    inputProps={register('precoMinimo', { onChange: aoAlterarCampo })}
+                    disabled={salvando}
+                    type="number"
+                    step="0.01"
+                    min="0"
+                  />
+                  <CampoTexto
                     id="estoqueMinimo"
                     label="Estoque mínimo (opcional)"
                     erro={errors.estoqueMinimo?.message}
                     inputProps={register('estoqueMinimo', { onChange: aoAlterarCampo })}
+                    disabled={salvando}
+                    type="number"
+                    step="0.001"
+                    min="0"
+                  />
+                  <CampoTexto
+                    id="estoqueMaximo"
+                    label="Estoque máximo (opcional)"
+                    erro={errors.estoqueMaximo?.message}
+                    inputProps={register('estoqueMaximo', { onChange: aoAlterarCampo })}
+                    disabled={salvando}
+                    type="number"
+                    step="0.001"
+                    min="0"
+                  />
+                  <CampoTexto
+                    id="pontoReposicao"
+                    label="Ponto de reposição (opcional)"
+                    erro={errors.pontoReposicao?.message}
+                    inputProps={register('pontoReposicao', { onChange: aoAlterarCampo })}
                     disabled={salvando}
                     type="number"
                     step="0.001"
@@ -468,6 +558,27 @@ export function ProdutosPage() {
                     inputProps={register('sku', { onChange: aoAlterarCampo })}
                     disabled={salvando}
                   />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="descricao" className="text-sm font-medium">
+                    Descrição (opcional)
+                  </label>
+                  <textarea
+                    id="descricao"
+                    rows={3}
+                    disabled={salvando}
+                    aria-invalid={errors.descricao ? true : undefined}
+                    aria-describedby={errors.descricao ? 'descricao-erro' : undefined}
+                    placeholder="Observações e detalhes do produto"
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    {...register('descricao', { onChange: aoAlterarCampo })}
+                  />
+                  {errors.descricao && (
+                    <p id="descricao-erro" className="text-sm text-destructive">
+                      {errors.descricao.message}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -615,12 +726,18 @@ function ProdutoItem({
   onAlterarStatus,
   alterandoStatus,
 }: ProdutoItemProps) {
+  const margem = formatarPercentual(produto.margem)
+  const markup = formatarPercentual(produto.markup)
+
   return (
     <article className="rounded-md border p-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="truncate text-base font-medium">{produto.nome}</h2>
+            {produto.marca && (
+              <span className="truncate text-sm text-muted-foreground">{produto.marca}</span>
+            )}
             <span
               className={
                 produto.ativo
@@ -637,30 +754,72 @@ function ProdutoItem({
               <dt className="font-medium text-foreground">Preço</dt>
               <dd>{formatarMoeda(produto.precoVenda)}</dd>
             </div>
-            <div>
-              <dt className="font-medium text-foreground">Custo</dt>
-              <dd>{formatarMoeda(produto.custo)}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-foreground">SKU</dt>
-              <dd>{produto.sku ?? 'Não informado'}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-foreground">Código de barras</dt>
-              <dd>{produto.codigoBarras ?? 'Não informado'}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-foreground">Categoria</dt>
-              <dd>{produto.categoria ?? 'Não informada'}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-foreground">Unidade</dt>
-              <dd>{produto.unidade ?? 'Não informada'}</dd>
-            </div>
-            <div>
-              <dt className="font-medium text-foreground">Estoque mínimo</dt>
-              <dd>{formatarEstoqueMinimo(produto)}</dd>
-            </div>
+            {produto.custo !== null && (
+              <div>
+                <dt className="font-medium text-foreground">Custo</dt>
+                <dd>{formatarMoeda(produto.custo)}</dd>
+              </div>
+            )}
+            {margem && (
+              <div>
+                <dt className="font-medium text-foreground">Margem</dt>
+                <dd>{margem}</dd>
+              </div>
+            )}
+            {markup && (
+              <div>
+                <dt className="font-medium text-foreground">Markup</dt>
+                <dd>{markup}</dd>
+              </div>
+            )}
+            {produto.precoMinimo !== null && (
+              <div>
+                <dt className="font-medium text-foreground">Preço mínimo</dt>
+                <dd>{formatarMoeda(produto.precoMinimo)}</dd>
+              </div>
+            )}
+            {produto.sku && (
+              <div>
+                <dt className="font-medium text-foreground">SKU</dt>
+                <dd>{produto.sku}</dd>
+              </div>
+            )}
+            {produto.codigoBarras && (
+              <div>
+                <dt className="font-medium text-foreground">Código de barras</dt>
+                <dd>{produto.codigoBarras}</dd>
+              </div>
+            )}
+            {produto.categoria && (
+              <div>
+                <dt className="font-medium text-foreground">Categoria</dt>
+                <dd>{produto.categoria}</dd>
+              </div>
+            )}
+            {produto.unidade && (
+              <div>
+                <dt className="font-medium text-foreground">Unidade</dt>
+                <dd>{produto.unidade}</dd>
+              </div>
+            )}
+            {produto.estoqueMinimo !== null && (
+              <div>
+                <dt className="font-medium text-foreground">Estoque mínimo</dt>
+                <dd>{formatarQuantidade(produto.estoqueMinimo, produto.unidade)}</dd>
+              </div>
+            )}
+            {produto.estoqueMaximo !== null && (
+              <div>
+                <dt className="font-medium text-foreground">Estoque máximo</dt>
+                <dd>{formatarQuantidade(produto.estoqueMaximo, produto.unidade)}</dd>
+              </div>
+            )}
+            {produto.pontoReposicao !== null && (
+              <div>
+                <dt className="font-medium text-foreground">Ponto de reposição</dt>
+                <dd>{formatarQuantidade(produto.pontoReposicao, produto.unidade)}</dd>
+              </div>
+            )}
           </dl>
         </div>
 
