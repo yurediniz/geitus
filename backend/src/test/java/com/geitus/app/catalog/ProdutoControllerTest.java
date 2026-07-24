@@ -64,7 +64,7 @@ class ProdutoControllerTest {
         Empresa empresa = new Empresa("Empresa " + empresaId);
         ReflectionTestUtils.setField(empresa, "id", empresaId);
         Produto produto = new Produto(empresa, nome, null, null, new BigDecimal("10.00"),
-                null, null, null, sku);
+                null, null, null, sku, null, null, null, null, null);
         ReflectionTestUtils.setField(produto, "id", id);
         return produto;
     }
@@ -255,7 +255,8 @@ class ProdutoControllerTest {
     void cadastrarProdutoValidoDeveRetornar201() throws Exception {
         Produto produto = produtoComId(10L, 7L, "Produto Novo", "SKU-10");
         when(produtoService.cadastrarParaUsuario(eq(1L), eq("Produto Novo"), isNull(), isNull(),
-                eq(new BigDecimal("10.00")), isNull(), isNull(), isNull(), isNull()))
+                eq(new BigDecimal("10.00")), isNull(), isNull(), isNull(), isNull(),
+                isNull(), isNull(), isNull(), isNull(), isNull()))
                 .thenReturn(produto);
 
         String token = tokenParaUsuario(1L);
@@ -295,7 +296,8 @@ class ProdutoControllerTest {
     @Test
     void cadastrarComSkuDuplicadoDeveRetornar409() throws Exception {
         when(produtoService.cadastrarParaUsuario(eq(1L), eq("Produto"), isNull(), isNull(),
-                eq(new BigDecimal("10.00")), isNull(), isNull(), isNull(), eq("SKU-1")))
+                eq(new BigDecimal("10.00")), isNull(), isNull(), isNull(), eq("SKU-1"),
+                isNull(), isNull(), isNull(), isNull(), isNull()))
                 .thenThrow(new ProdutoConflitoException("Já existe um produto com este SKU nesta empresa."));
 
         String token = tokenParaUsuario(1L);
@@ -311,7 +313,8 @@ class ProdutoControllerTest {
     @Test
     void cadastrarComCodigoBarrasDuplicadoDeveRetornar409() throws Exception {
         when(produtoService.cadastrarParaUsuario(eq(1L), eq("Produto"), isNull(), isNull(),
-                eq(new BigDecimal("10.00")), isNull(), isNull(), eq("789123"), isNull()))
+                eq(new BigDecimal("10.00")), isNull(), isNull(), eq("789123"), isNull(),
+                isNull(), isNull(), isNull(), isNull(), isNull()))
                 .thenThrow(new ProdutoConflitoException("Já existe um produto com este código de barras nesta empresa."));
 
         String token = tokenParaUsuario(1L);
@@ -355,7 +358,8 @@ class ProdutoControllerTest {
     void atualizarProdutoDaPropriaEmpresaDeveRetornar200() throws Exception {
         Produto produto = produtoComId(5L, 7L, "Produto Atualizado", null);
         when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(5L), eq("Produto Atualizado"), isNull(),
-                isNull(), eq(new BigDecimal("15.00")), isNull(), isNull(), isNull(), isNull()))
+                isNull(), eq(new BigDecimal("15.00")), isNull(), isNull(), isNull(), isNull(),
+                isNull(), isNull(), isNull(), isNull(), isNull()))
                 .thenReturn(produto);
 
         String token = tokenParaUsuario(1L);
@@ -371,7 +375,8 @@ class ProdutoControllerTest {
     @Test
     void atualizarProdutoDeOutraEmpresaDeveRetornar404() throws Exception {
         when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(99L), eq("Produto"), isNull(), isNull(),
-                eq(new BigDecimal("10.00")), isNull(), isNull(), isNull(), isNull()))
+                eq(new BigDecimal("10.00")), isNull(), isNull(), isNull(), isNull(),
+                isNull(), isNull(), isNull(), isNull(), isNull()))
                 .thenThrow(new ProdutoNaoEncontradoException());
 
         String token = tokenParaUsuario(1L);
@@ -386,7 +391,8 @@ class ProdutoControllerTest {
     @Test
     void atualizarComSkuDuplicadoDeOutroProdutoDeveRetornar409() throws Exception {
         when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(5L), eq("Produto"), isNull(), isNull(),
-                eq(new BigDecimal("10.00")), isNull(), isNull(), isNull(), eq("SKU-DE-OUTRO")))
+                eq(new BigDecimal("10.00")), isNull(), isNull(), isNull(), eq("SKU-DE-OUTRO"),
+                isNull(), isNull(), isNull(), isNull(), isNull()))
                 .thenThrow(new ProdutoConflitoException("Já existe um produto com este SKU nesta empresa."));
 
         String token = tokenParaUsuario(1L);
@@ -402,7 +408,8 @@ class ProdutoControllerTest {
     void atualizarMantendoOProprioSkuDeveRetornar200() throws Exception {
         Produto produto = produtoComId(5L, 7L, "Produto", "SKU-PROPRIO");
         when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(5L), eq("Produto"), isNull(), isNull(),
-                eq(new BigDecimal("10.00")), isNull(), isNull(), isNull(), eq("SKU-PROPRIO")))
+                eq(new BigDecimal("10.00")), isNull(), isNull(), isNull(), eq("SKU-PROPRIO"),
+                isNull(), isNull(), isNull(), isNull(), isNull()))
                 .thenReturn(produto);
 
         String token = tokenParaUsuario(1L);

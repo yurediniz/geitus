@@ -79,7 +79,8 @@ public class ProdutoController {
             @Valid @RequestBody ProdutoRequest request) {
         Produto produto = produtoService.cadastrarParaUsuario(idUsuario, request.nome(), request.categoria(),
                 request.unidade(), request.precoVenda(), request.custo(), request.estoqueMinimo(),
-                request.codigoBarras(), request.sku());
+                request.codigoBarras(), request.sku(), request.marca(), request.descricao(),
+                request.estoqueMaximo(), request.pontoReposicao(), request.precoMinimo());
         return ResponseEntity.status(HttpStatus.CREATED).body(ProdutoResponse.de(produto));
     }
 
@@ -92,7 +93,8 @@ public class ProdutoController {
             @Valid @RequestBody ProdutoRequest request) {
         Produto produto = produtoService.atualizarDadosBasicosParaUsuario(idUsuario, id, request.nome(),
                 request.categoria(), request.unidade(), request.precoVenda(), request.custo(),
-                request.estoqueMinimo(), request.codigoBarras(), request.sku());
+                request.estoqueMinimo(), request.codigoBarras(), request.sku(), request.marca(),
+                request.descricao(), request.estoqueMaximo(), request.pontoReposicao(), request.precoMinimo());
         return ResponseEntity.ok(ProdutoResponse.de(produto));
     }
 

@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase.Replace;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -56,6 +57,9 @@ class ProdutoRepositoryIT {
     }
 
     @Autowired
+    private TestEntityManager entityManager;
+
+    @Autowired
     private ProdutoRepository produtoRepository;
 
     @Autowired
@@ -81,11 +85,34 @@ class ProdutoRepositoryIT {
 
     private Produto novoProduto(Empresa empresa, String nome, String sku, String codigoBarras, boolean ativo) {
         Produto produto = new Produto(empresa, nome, "Mercearia", "UN", new BigDecimal("10.00"),
-                null, null, codigoBarras, sku);
+                null, null, codigoBarras, sku, null, null, null, null, null);
         if (!ativo) {
             produto.inativar();
         }
         return produtoRepository.saveAndFlush(produto);
+    }
+
+    // ---------- Campos cadastrais V4 (marca, descricao, hints de estoque/preco) ----------
+
+    @Test
+    void devePersistirERelerOsCamposCadastraisDaV4() {
+        Empresa empresa = novaEmpresa("Empresa V4");
+        Produto produto = new Produto(empresa, "Arroz 5kg", "Mercearia", "UN", new BigDecimal("25.90"),
+                new BigDecimal("18.00"), new BigDecimal("2"), "789100200300", "SKU-V4",
+                "Tio João", "Arroz branco tipo 1, pacote de 5kg.", new BigDecimal("50.000"),
+                new BigDecimal("10.000"), new BigDecimal("20.00"));
+        Long id = produtoRepository.saveAndFlush(produto).getId();
+
+        // Limpa o contexto de persistencia (cache de 1o nivel) para forcar um
+        // SELECT real no banco em vez de devolver a instancia ja gerenciada.
+        entityManager.clear();
+        Produto relido = produtoRepository.findById(id).orElseThrow();
+
+        assertThat(relido.getMarca()).isEqualTo("Tio João");
+        assertThat(relido.getDescricao()).isEqualTo("Arroz branco tipo 1, pacote de 5kg.");
+        assertThat(relido.getEstoqueMaximo()).isEqualByComparingTo("50.000");
+        assertThat(relido.getPontoReposicao()).isEqualByComparingTo("10.000");
+        assertThat(relido.getPrecoMinimo()).isEqualByComparingTo("20.00");
     }
 
     // ---------- Isolamento por empresa (DEC-016) ----------

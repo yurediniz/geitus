@@ -47,8 +47,14 @@ public class Produto {
     @Column(length = 100)
     private String categoria;
 
+    @Column(length = 100)
+    private String marca;
+
     @Column(length = 20)
     private String unidade;
+
+    @Column(length = 1000)
+    private String descricao;
 
     @Column(name = "preco_venda", nullable = false, precision = 12, scale = 2)
     private BigDecimal precoVenda;
@@ -58,6 +64,15 @@ public class Produto {
 
     @Column(name = "estoque_minimo", precision = 12, scale = 3)
     private BigDecimal estoqueMinimo;
+
+    @Column(name = "estoque_maximo", precision = 12, scale = 3)
+    private BigDecimal estoqueMaximo;
+
+    @Column(name = "ponto_reposicao", precision = 12, scale = 3)
+    private BigDecimal pontoReposicao;
+
+    @Column(name = "preco_minimo", precision = 12, scale = 2)
+    private BigDecimal precoMinimo;
 
     @Column(name = "codigo_barras", length = 50)
     private String codigoBarras;
@@ -85,10 +100,13 @@ public class Produto {
      * regras de negocio antes de instanciar.
      */
     public Produto(Empresa empresa, String nome, String categoria, String unidade, BigDecimal precoVenda,
-            BigDecimal custo, BigDecimal estoqueMinimo, String codigoBarras, String sku) {
+            BigDecimal custo, BigDecimal estoqueMinimo, String codigoBarras, String sku,
+            String marca, String descricao, BigDecimal estoqueMaximo, BigDecimal pontoReposicao,
+            BigDecimal precoMinimo) {
         this.empresa = empresa;
         this.ativo = true;
-        atualizarDadosBasicos(nome, categoria, unidade, precoVenda, custo, estoqueMinimo, codigoBarras, sku);
+        atualizarDadosBasicos(nome, categoria, unidade, precoVenda, custo, estoqueMinimo, codigoBarras, sku,
+                marca, descricao, estoqueMaximo, pontoReposicao, precoMinimo);
     }
 
     @PrePersist
@@ -107,7 +125,9 @@ public class Produto {
      * de barras) ja terem sido feitas.
      */
     public void atualizarDadosBasicos(String nome, String categoria, String unidade, BigDecimal precoVenda,
-            BigDecimal custo, BigDecimal estoqueMinimo, String codigoBarras, String sku) {
+            BigDecimal custo, BigDecimal estoqueMinimo, String codigoBarras, String sku,
+            String marca, String descricao, BigDecimal estoqueMaximo, BigDecimal pontoReposicao,
+            BigDecimal precoMinimo) {
         this.nome = nome;
         this.categoria = categoria;
         this.unidade = unidade;
@@ -116,6 +136,11 @@ public class Produto {
         this.estoqueMinimo = estoqueMinimo;
         this.codigoBarras = codigoBarras;
         this.sku = sku;
+        this.marca = marca;
+        this.descricao = descricao;
+        this.estoqueMaximo = estoqueMaximo;
+        this.pontoReposicao = pontoReposicao;
+        this.precoMinimo = precoMinimo;
     }
 
     public void inativar() {
@@ -146,8 +171,16 @@ public class Produto {
         return categoria;
     }
 
+    public String getMarca() {
+        return marca;
+    }
+
     public String getUnidade() {
         return unidade;
+    }
+
+    public String getDescricao() {
+        return descricao;
     }
 
     public BigDecimal getPrecoVenda() {
@@ -160,6 +193,18 @@ public class Produto {
 
     public BigDecimal getEstoqueMinimo() {
         return estoqueMinimo;
+    }
+
+    public BigDecimal getEstoqueMaximo() {
+        return estoqueMaximo;
+    }
+
+    public BigDecimal getPontoReposicao() {
+        return pontoReposicao;
+    }
+
+    public BigDecimal getPrecoMinimo() {
+        return precoMinimo;
     }
 
     public String getCodigoBarras() {

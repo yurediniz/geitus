@@ -48,8 +48,10 @@ public class ProdutoService {
 
     Produto cadastrar(Long empresaId, String nome, String categoria, String unidade,
             BigDecimal precoVenda, BigDecimal custo, BigDecimal estoqueMinimo,
-            String codigoBarras, String sku) {
+            String codigoBarras, String sku, String marca, String descricao,
+            BigDecimal estoqueMaximo, BigDecimal pontoReposicao, BigDecimal precoMinimo) {
         validarDadosBasicos(nome, precoVenda, custo, estoqueMinimo);
+        validarCamposCadastrais(precoVenda, estoqueMinimo, estoqueMaximo, pontoReposicao, precoMinimo);
         String skuNormalizado = normalizarOuNulo(sku);
         String codigoBarrasNormalizado = normalizarOuNulo(codigoBarras);
         validarUnicidadeParaNovoProduto(empresaId, skuNormalizado, codigoBarrasNormalizado);
@@ -59,23 +61,28 @@ public class ProdutoService {
 
         Produto produto = new Produto(empresa, nome.trim(), normalizarOuNulo(categoria),
                 normalizarOuNulo(unidade), precoVenda, custo, estoqueMinimo, codigoBarrasNormalizado,
-                skuNormalizado);
+                skuNormalizado, normalizarOuNulo(marca), normalizarOuNulo(descricao), estoqueMaximo,
+                pontoReposicao, precoMinimo);
 
         return produtoRepository.save(produto);
     }
 
     Produto atualizarDadosBasicos(Long empresaId, Long produtoId, String nome, String categoria,
             String unidade, BigDecimal precoVenda, BigDecimal custo, BigDecimal estoqueMinimo,
-            String codigoBarras, String sku) {
+            String codigoBarras, String sku, String marca, String descricao,
+            BigDecimal estoqueMaximo, BigDecimal pontoReposicao, BigDecimal precoMinimo) {
         Produto produto = buscarPorId(empresaId, produtoId);
 
         validarDadosBasicos(nome, precoVenda, custo, estoqueMinimo);
+        validarCamposCadastrais(precoVenda, estoqueMinimo, estoqueMaximo, pontoReposicao, precoMinimo);
         String skuNormalizado = normalizarOuNulo(sku);
         String codigoBarrasNormalizado = normalizarOuNulo(codigoBarras);
         validarUnicidadeParaAtualizacao(empresaId, produtoId, skuNormalizado, codigoBarrasNormalizado);
 
         produto.atualizarDadosBasicos(nome.trim(), normalizarOuNulo(categoria), normalizarOuNulo(unidade),
-                precoVenda, custo, estoqueMinimo, codigoBarrasNormalizado, skuNormalizado);
+                precoVenda, custo, estoqueMinimo, codigoBarrasNormalizado, skuNormalizado,
+                normalizarOuNulo(marca), normalizarOuNulo(descricao), estoqueMaximo, pontoReposicao,
+                precoMinimo);
 
         return produtoRepository.save(produto);
     }
@@ -112,18 +119,22 @@ public class ProdutoService {
      */
     @Transactional
     public Produto cadastrarParaUsuario(Long idUsuario, String nome, String categoria, String unidade,
-            BigDecimal precoVenda, BigDecimal custo, BigDecimal estoqueMinimo, String codigoBarras, String sku) {
+            BigDecimal precoVenda, BigDecimal custo, BigDecimal estoqueMinimo, String codigoBarras, String sku,
+            String marca, String descricao, BigDecimal estoqueMaximo, BigDecimal pontoReposicao,
+            BigDecimal precoMinimo) {
         Long empresaId = resolverEmpresaId(idUsuario);
-        return cadastrar(empresaId, nome, categoria, unidade, precoVenda, custo, estoqueMinimo, codigoBarras, sku);
+        return cadastrar(empresaId, nome, categoria, unidade, precoVenda, custo, estoqueMinimo, codigoBarras, sku,
+                marca, descricao, estoqueMaximo, pontoReposicao, precoMinimo);
     }
 
     @Transactional
     public Produto atualizarDadosBasicosParaUsuario(Long idUsuario, Long produtoId, String nome, String categoria,
             String unidade, BigDecimal precoVenda, BigDecimal custo, BigDecimal estoqueMinimo,
-            String codigoBarras, String sku) {
+            String codigoBarras, String sku, String marca, String descricao, BigDecimal estoqueMaximo,
+            BigDecimal pontoReposicao, BigDecimal precoMinimo) {
         Long empresaId = resolverEmpresaId(idUsuario);
         return atualizarDadosBasicos(empresaId, produtoId, nome, categoria, unidade, precoVenda, custo,
-                estoqueMinimo, codigoBarras, sku);
+                estoqueMinimo, codigoBarras, sku, marca, descricao, estoqueMaximo, pontoReposicao, precoMinimo);
     }
 
     @Transactional
@@ -182,6 +193,32 @@ public class ProdutoService {
         }
         if (estoqueMinimo != null && estoqueMinimo.compareTo(BigDecimal.ZERO) < 0) {
             throw new RegraDeNegocioException("Estoque mínimo não pode ser negativo.");
+        }
+    }
+
+    /**
+     * Valida os campos cadastrais do incremento (V4): nao-negativos dos novos
+     * numericos e as regras cruzadas (preco minimo x preco de venda; estoque
+     * maximo x estoque minimo). As regras cruzadas so sao aplicadas quando ambos
+     * os lados estao informados. A violacao gera {@link RegraDeNegocioException}
+     * (400), nunca deixa a constraint do banco falhar.
+     */
+    private void validarCamposCadastrais(BigDecimal precoVenda, BigDecimal estoqueMinimo,
+            BigDecimal estoqueMaximo, BigDecimal pontoReposicao, BigDecimal precoMinimo) {
+        if (estoqueMaximo != null && estoqueMaximo.compareTo(BigDecimal.ZERO) < 0) {
+            throw new RegraDeNegocioException("Estoque máximo não pode ser negativo.");
+        }
+        if (pontoReposicao != null && pontoReposicao.compareTo(BigDecimal.ZERO) < 0) {
+            throw new RegraDeNegocioException("Ponto de reposição não pode ser negativo.");
+        }
+        if (precoMinimo != null && precoMinimo.compareTo(BigDecimal.ZERO) < 0) {
+            throw new RegraDeNegocioException("Preço mínimo não pode ser negativo.");
+        }
+        if (precoMinimo != null && precoVenda != null && precoMinimo.compareTo(precoVenda) > 0) {
+            throw new RegraDeNegocioException("Preço mínimo não pode ser maior que o preço de venda.");
+        }
+        if (estoqueMaximo != null && estoqueMinimo != null && estoqueMaximo.compareTo(estoqueMinimo) < 0) {
+            throw new RegraDeNegocioException("Estoque máximo não pode ser menor que o estoque mínimo.");
         }
     }
 

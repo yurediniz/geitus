@@ -27,7 +27,8 @@ import com.geitus.app.iam.UsuarioRepository;
 
 /**
  * Testa as regras do {@link ProdutoService}: validacoes de cadastro/atualizacao
- * e isolamento por empresa (DEC-016).
+ * (incluindo os campos cadastrais da V4 e as regras cruzadas), normalizacao de
+ * texto e isolamento por empresa (DEC-016).
  */
 @ExtendWith(MockitoExtension.class)
 class ProdutoServiceTest {
@@ -56,7 +57,7 @@ class ProdutoServiceTest {
 
     private Produto produtoComId(Long id, Empresa empresa, String sku, String codigoBarras) {
         Produto produto = new Produto(empresa, "Produto Existente", null, null, new BigDecimal("10.00"),
-                null, null, codigoBarras, sku);
+                null, null, codigoBarras, sku, null, null, null, null, null);
         ReflectionTestUtils.setField(produto, "id", id);
         return produto;
     }
@@ -68,7 +69,8 @@ class ProdutoServiceTest {
         when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
 
         Produto produto = produtoService.cadastrar(1L, "Arroz 5kg", "Mercearia", "UN",
-                new BigDecimal("25.90"), new BigDecimal("18.00"), new BigDecimal("2"), "789123", "SKU-1");
+                new BigDecimal("25.90"), new BigDecimal("18.00"), new BigDecimal("2"), "789123", "SKU-1",
+                null, null, null, null, null);
 
         assertThat(produto.getNome()).isEqualTo("Arroz 5kg");
         assertThat(produto.getEmpresaId()).isEqualTo(1L);
@@ -79,7 +81,7 @@ class ProdutoServiceTest {
     @Test
     void cadastrarComNomeVazioDeveFalhar() {
         assertThatThrownBy(() -> produtoService.cadastrar(1L, "   ", null, null,
-                new BigDecimal("10"), null, null, null, null))
+                new BigDecimal("10"), null, null, null, null, null, null, null, null, null))
                 .isInstanceOf(RegraDeNegocioException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -88,7 +90,7 @@ class ProdutoServiceTest {
     @Test
     void cadastrarComPrecoVendaNegativoDeveFalhar() {
         assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("-1"), null, null, null, null))
+                new BigDecimal("-1"), null, null, null, null, null, null, null, null, null))
                 .isInstanceOf(RegraDeNegocioException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -97,7 +99,7 @@ class ProdutoServiceTest {
     @Test
     void cadastrarComCustoNegativoDeveFalhar() {
         assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("10"), new BigDecimal("-0.01"), null, null, null))
+                new BigDecimal("10"), new BigDecimal("-0.01"), null, null, null, null, null, null, null, null))
                 .isInstanceOf(RegraDeNegocioException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -106,7 +108,7 @@ class ProdutoServiceTest {
     @Test
     void cadastrarComEstoqueMinimoNegativoDeveFalhar() {
         assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("10"), null, new BigDecimal("-1"), null, null))
+                new BigDecimal("10"), null, new BigDecimal("-1"), null, null, null, null, null, null, null))
                 .isInstanceOf(RegraDeNegocioException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -117,7 +119,7 @@ class ProdutoServiceTest {
         when(produtoRepository.existsBySkuAndEmpresa_Id("SKU-1", 1L)).thenReturn(true);
 
         assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("10"), null, null, null, "SKU-1"))
+                new BigDecimal("10"), null, null, null, "SKU-1", null, null, null, null, null))
                 .isInstanceOf(ProdutoConflitoException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -135,7 +137,7 @@ class ProdutoServiceTest {
         when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
 
         Produto produto = produtoService.cadastrar(2L, "Produto", null, null,
-                new BigDecimal("10"), null, null, null, "SKU-1");
+                new BigDecimal("10"), null, null, null, "SKU-1", null, null, null, null, null);
 
         assertThat(produto.getSku()).isEqualTo("SKU-1");
         assertThat(produto.getEmpresaId()).isEqualTo(2L);
@@ -148,7 +150,7 @@ class ProdutoServiceTest {
         when(produtoRepository.existsByCodigoBarrasAndEmpresa_Id("789123", 1L)).thenReturn(true);
 
         assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("10"), null, null, "789123", null))
+                new BigDecimal("10"), null, null, "789123", null, null, null, null, null, null))
                 .isInstanceOf(ProdutoConflitoException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -161,7 +163,7 @@ class ProdutoServiceTest {
         when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
 
         Produto produto = produtoService.cadastrar(1L, "Produto Sem Codigos", null, null,
-                new BigDecimal("10"), null, null, null, null);
+                new BigDecimal("10"), null, null, null, null, null, null, null, null, null);
 
         assertThat(produto.getSku()).isNull();
         assertThat(produto.getCodigoBarras()).isNull();
@@ -174,7 +176,7 @@ class ProdutoServiceTest {
         when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> produtoService.atualizarDadosBasicos(1L, 5L, "Novo Nome", null, null,
-                new BigDecimal("10"), null, null, null, null))
+                new BigDecimal("10"), null, null, null, null, null, null, null, null, null))
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -188,7 +190,8 @@ class ProdutoServiceTest {
         when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
 
         Produto atualizado = produtoService.atualizarDadosBasicos(1L, 5L, "Nome Atualizado", "Categoria",
-                "UN", new BigDecimal("30.00"), new BigDecimal("20.00"), new BigDecimal("1"), null, null);
+                "UN", new BigDecimal("30.00"), new BigDecimal("20.00"), new BigDecimal("1"), null, null,
+                null, null, null, null, null);
 
         assertThat(atualizado.getNome()).isEqualTo("Nome Atualizado");
         assertThat(atualizado.getPrecoVenda()).isEqualByComparingTo("30.00");
@@ -202,7 +205,7 @@ class ProdutoServiceTest {
         when(produtoRepository.existsBySkuAndEmpresa_IdAndIdNot("SKU-DE-OUTRO", 1L, 5L)).thenReturn(true);
 
         assertThatThrownBy(() -> produtoService.atualizarDadosBasicos(1L, 5L, "Produto", null, null,
-                new BigDecimal("10"), null, null, null, "SKU-DE-OUTRO"))
+                new BigDecimal("10"), null, null, null, "SKU-DE-OUTRO", null, null, null, null, null))
                 .isInstanceOf(ProdutoConflitoException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -216,7 +219,7 @@ class ProdutoServiceTest {
         when(produtoRepository.existsByCodigoBarrasAndEmpresa_IdAndIdNot("999888777", 1L, 5L)).thenReturn(true);
 
         assertThatThrownBy(() -> produtoService.atualizarDadosBasicos(1L, 5L, "Produto", null, null,
-                new BigDecimal("10"), null, null, "999888777", null))
+                new BigDecimal("10"), null, null, "999888777", null, null, null, null, null, null))
                 .isInstanceOf(ProdutoConflitoException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -231,7 +234,7 @@ class ProdutoServiceTest {
         when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
 
         Produto atualizado = produtoService.atualizarDadosBasicos(1L, 5L, "Produto Atualizado", null, null,
-                new BigDecimal("15"), null, null, "111222333", null);
+                new BigDecimal("15"), null, null, "111222333", null, null, null, null, null, null);
 
         assertThat(atualizado.getCodigoBarras()).isEqualTo("111222333");
         verify(produtoRepository).existsByCodigoBarrasAndEmpresa_IdAndIdNot("111222333", 1L, 5L);
@@ -247,7 +250,7 @@ class ProdutoServiceTest {
         when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
 
         Produto atualizado = produtoService.atualizarDadosBasicos(1L, 5L, "Produto Atualizado", null, null,
-                new BigDecimal("15"), null, null, null, "SKU-PROPRIO");
+                new BigDecimal("15"), null, null, null, "SKU-PROPRIO", null, null, null, null, null);
 
         assertThat(atualizado.getSku()).isEqualTo("SKU-PROPRIO");
         verify(produtoRepository).existsBySkuAndEmpresa_IdAndIdNot("SKU-PROPRIO", 1L, 5L);
@@ -308,12 +311,14 @@ class ProdutoServiceTest {
         when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
 
         Produto produto = produtoService.cadastrar(1L, "Produto", "  ", "", new BigDecimal("10"),
-                null, null, "   ", "");
+                null, null, "   ", "", "  ", "   ", null, null, null);
 
         assertThat(produto.getCategoria()).isNull();
         assertThat(produto.getUnidade()).isNull();
         assertThat(produto.getSku()).isNull();
         assertThat(produto.getCodigoBarras()).isNull();
+        assertThat(produto.getMarca()).isNull();
+        assertThat(produto.getDescricao()).isNull();
         // Sem SKU/codigo apos normalizacao, a checagem de unicidade nem e consultada.
         verify(produtoRepository, never()).existsBySkuAndEmpresa_Id(any(), anyLong());
         verify(produtoRepository, never()).existsByCodigoBarrasAndEmpresa_Id(any(), anyLong());
@@ -326,13 +331,16 @@ class ProdutoServiceTest {
         when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
 
         Produto produto = produtoService.cadastrar(1L, "  Produto  ", "  Mercearia  ", "  UN  ",
-                new BigDecimal("10"), null, null, "  789123  ", "  SKU-1  ");
+                new BigDecimal("10"), null, null, "  789123  ", "  SKU-1  ", "  Tio João  ",
+                "  Arroz tipo 1  ", null, null, null);
 
         assertThat(produto.getNome()).isEqualTo("Produto");
         assertThat(produto.getCategoria()).isEqualTo("Mercearia");
         assertThat(produto.getUnidade()).isEqualTo("UN");
         assertThat(produto.getSku()).isEqualTo("SKU-1");
         assertThat(produto.getCodigoBarras()).isEqualTo("789123");
+        assertThat(produto.getMarca()).isEqualTo("Tio João");
+        assertThat(produto.getDescricao()).isEqualTo("Arroz tipo 1");
     }
 
     @Test
@@ -343,12 +351,138 @@ class ProdutoServiceTest {
         when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
 
         Produto atualizado = produtoService.atualizarDadosBasicos(1L, 5L, "Produto", "  ", "",
-                new BigDecimal("10"), null, null, "   ", "");
+                new BigDecimal("10"), null, null, "   ", "", "  ", "   ", null, null, null);
 
         assertThat(atualizado.getCategoria()).isNull();
         assertThat(atualizado.getUnidade()).isNull();
         assertThat(atualizado.getSku()).isNull();
         assertThat(atualizado.getCodigoBarras()).isNull();
+        assertThat(atualizado.getMarca()).isNull();
+        assertThat(atualizado.getDescricao()).isNull();
+    }
+
+    // ---------- Campos cadastrais V4: nao-negativos + regras cruzadas ----------
+
+    @Test
+    void cadastrarComEstoqueMaximoNegativoDeveFalhar() {
+        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
+                new BigDecimal("10"), null, null, null, null, null, null, new BigDecimal("-1"), null, null))
+                .isInstanceOf(RegraDeNegocioException.class);
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void cadastrarComPontoReposicaoNegativoDeveFalhar() {
+        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
+                new BigDecimal("10"), null, null, null, null, null, null, null, new BigDecimal("-0.5"), null))
+                .isInstanceOf(RegraDeNegocioException.class);
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void cadastrarComPrecoMinimoNegativoDeveFalhar() {
+        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
+                new BigDecimal("10"), null, null, null, null, null, null, null, null, new BigDecimal("-1")))
+                .isInstanceOf(RegraDeNegocioException.class);
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void cadastrarComPrecoMinimoMaiorQuePrecoVendaDeveFalhar() {
+        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
+                new BigDecimal("10.00"), null, null, null, null, null, null, null, null, new BigDecimal("15.00")))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Preço mínimo não pode ser maior que o preço de venda.");
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void cadastrarComEstoqueMaximoMenorQueEstoqueMinimoDeveFalhar() {
+        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
+                new BigDecimal("10"), null, new BigDecimal("5"), null, null, null, null,
+                new BigDecimal("2"), null, null))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Estoque máximo não pode ser menor que o estoque mínimo.");
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void cadastrarComEstoqueMaximoIgualAoEstoqueMinimoDevePermitir() {
+        // Limite da regra cruzada: a validacao usa "<" (menor que), nao "<=".
+        // Com estoque maximo IGUAL ao minimo o cadastro deve persistir sem erro.
+        Empresa empresa = empresaComId(1L);
+        when(empresaRepository.findById(1L)).thenReturn(Optional.of(empresa));
+        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+
+        Produto produto = produtoService.cadastrar(1L, "Produto", null, null, new BigDecimal("10"),
+                null, new BigDecimal("10"), null, null, null, null, new BigDecimal("10"), null, null);
+
+        assertThat(produto.getEstoqueMinimo()).isEqualByComparingTo("10");
+        assertThat(produto.getEstoqueMaximo()).isEqualByComparingTo("10");
+        verify(produtoRepository).save(any(Produto.class));
+    }
+
+    @Test
+    void cadastrarComEstoqueMaximoSemEstoqueMinimoNaoDeveAplicarRegraCruzada() {
+        // Regra cruzada so vale quando ambos os lados estao informados.
+        Empresa empresa = empresaComId(1L);
+        when(empresaRepository.findById(1L)).thenReturn(Optional.of(empresa));
+        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+
+        Produto produto = produtoService.cadastrar(1L, "Produto", null, null, new BigDecimal("10"),
+                null, null, null, null, null, null, new BigDecimal("2"), null, null);
+
+        assertThat(produto.getEstoqueMaximo()).isEqualByComparingTo("2");
+        assertThat(produto.getEstoqueMinimo()).isNull();
+    }
+
+    @Test
+    void cadastrarComCamposCadastraisValidosDevePreservarOsValores() {
+        Empresa empresa = empresaComId(1L);
+        when(empresaRepository.findById(1L)).thenReturn(Optional.of(empresa));
+        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+
+        Produto produto = produtoService.cadastrar(1L, "Arroz 5kg", "Mercearia", "UN",
+                new BigDecimal("25.90"), new BigDecimal("18.00"), new BigDecimal("2"), null, null,
+                "Tio João", "Arroz branco tipo 1", new BigDecimal("50"), new BigDecimal("10"),
+                new BigDecimal("20.00"));
+
+        assertThat(produto.getMarca()).isEqualTo("Tio João");
+        assertThat(produto.getDescricao()).isEqualTo("Arroz branco tipo 1");
+        assertThat(produto.getEstoqueMaximo()).isEqualByComparingTo("50");
+        assertThat(produto.getPontoReposicao()).isEqualByComparingTo("10");
+        assertThat(produto.getPrecoMinimo()).isEqualByComparingTo("20.00");
+    }
+
+    @Test
+    void cadastrarComPrecoMinimoIgualAoPrecoVendaDevePermitir() {
+        Empresa empresa = empresaComId(1L);
+        when(empresaRepository.findById(1L)).thenReturn(Optional.of(empresa));
+        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+
+        Produto produto = produtoService.cadastrar(1L, "Produto", null, null, new BigDecimal("10.00"),
+                null, null, null, null, null, null, null, null, new BigDecimal("10.00"));
+
+        assertThat(produto.getPrecoMinimo()).isEqualByComparingTo("10.00");
+    }
+
+    @Test
+    void atualizarComPrecoMinimoMaiorQuePrecoVendaDeveFalhar() {
+        Empresa empresa = empresaComId(1L);
+        Produto produtoExistente = produtoComId(5L, empresa, null, null);
+        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
+
+        assertThatThrownBy(() -> produtoService.atualizarDadosBasicos(1L, 5L, "Produto", null, null,
+                new BigDecimal("10.00"), null, null, null, null, null, null, null, null, new BigDecimal("12.00")))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Preço mínimo não pode ser maior que o preço de venda.");
+
+        verify(produtoRepository, never()).save(any());
     }
 
     // ---------- Resolucao da empresa a partir do usuario autenticado ----------
@@ -360,7 +494,7 @@ class ProdutoServiceTest {
         when(usuarioRepository.findById(9L)).thenReturn(Optional.of(usuarioInativo));
 
         assertThatThrownBy(() -> produtoService.cadastrarParaUsuario(9L, "Produto", null, null,
-                new BigDecimal("10"), null, null, null, null))
+                new BigDecimal("10"), null, null, null, null, null, null, null, null, null))
                 .isInstanceOf(CredenciaisInvalidasException.class);
 
         verify(produtoRepository, never()).save(any());
