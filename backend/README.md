@@ -1,6 +1,6 @@
 # Geitus — Backend
 
-Backend do **Geitus**, a plataforma SaaS de gestão da **Geitus**. Contém a aplicação Spring Boot com **autenticação por JWT**, o contexto de **Empresa** do usuário autenticado e o módulo inicial de **Produtos**, além dos health checks. Os demais módulos de negócio (clientes, PDV, caixa, estoque, financeiro) ainda não foram implementados.
+Backend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Contém a aplicação Spring Boot com **autenticação por JWT**, o cadastro da **Empresa** do usuário autenticado, a gestão de **Usuários** e o módulo de **Produtos**, além dos health checks. Os demais módulos de negócio (clientes, PDV, caixa, estoque, financeiro) ainda não foram implementados.
 
 ---
 
@@ -22,19 +22,20 @@ Backend do **Geitus**, a plataforma SaaS de gestão da **Geitus**. Contém a apl
 - Maven Wrapper (`mvnw` / `mvnw.cmd`) fixado no Maven 3.9.16.
 - Estrutura de pacotes por domínio (ver abaixo).
 - `application.yml` lendo configurações de variáveis de ambiente.
-- Flyway habilitado, com uma migration inicial (`V1__baseline.sql`) apenas para validação.
+- Flyway habilitado, com as migrations `V1__baseline.sql` a `V4__produtos_incremento_cadastral.sql` (empresa, usuário, produtos e seus incrementos).
 - Health check da aplicação em `GET /api/health` e health check padrão do Actuator em `GET /actuator/health`.
 - CORS básico liberado para o frontend local (Vite).
 - **Autenticação:** login por e-mail/senha (BCrypt) com emissão de JWT (HS256), filtro de autenticação por Bearer token e endpoint de dados do usuário autenticado (`GET /api/auth/me`, com a empresa aninhada).
-- **Empresa:** `GET/PATCH /api/empresas/minha` — sempre derivada do usuário autenticado, nunca de parâmetro externo.
-- **Produtos:** `GET/POST /api/produtos`, `GET/PATCH /api/produtos/{id}`, `PATCH /api/produtos/{id}/inativar` e `/reativar`, com filtros opcionais `busca` e `ativo`; isolamento por empresa e unicidade de SKU/código de barras por empresa.
+- **Empresa:** `GET/PATCH /api/empresas/minha` — cadastro com representante legal, tipo de pessoa (PF/PJ, CNPJ único) e endereço; sempre derivada do usuário autenticado, nunca de parâmetro externo. Edição exige `ADMIN`.
+- **Usuários:** `GET/POST /api/usuarios`, `GET/PATCH /api/usuarios/{id}`, `PATCH /api/usuarios/{id}/inativar`, `/reativar` e `/senha` (apenas `ADMIN`), além de `PATCH /api/usuarios/me/senha` (troca da própria senha). Perfis `ADMIN` e `OPERADOR`.
+- **Produtos:** `GET/POST /api/produtos`, `GET/PATCH /api/produtos/{id}`, `PATCH /api/produtos/{id}/inativar` e `/reativar`, com filtros opcionais `busca` e `ativo`; escrita exige `ADMIN` (DEC-025); isolamento por empresa, unicidade de SKU/código de barras por empresa (`409`, DEC-026) e margem/markup calculados na resposta.
 - Segurança liberando os health checks (`/api/health`, `/actuator/health`), o `POST /api/auth/login` e a documentação Swagger; qualquer outra rota exige um JWT válido (responde `401` sem token/token inválido e `403` sem permissão).
 - Documentação da API via Swagger UI (apenas para desenvolvimento).
 
 ### O que ainda NÃO existe (próximas etapas)
 
-- CRUD de usuários e módulo Empresa completo (existe apenas o mínimo para autenticar e editar o nome).
-- Refresh token, recuperação de senha, MFA, OAuth/SSO, RBAC avançado (fora do escopo do MVP).
+- Vínculo M:N usuário↔empresa e seleção de empresa ativa (DEC-024 — norte futuro).
+- Refresh token, recuperação de senha, MFA, OAuth/SSO, RBAC granular (fora do escopo do MVP).
 - Clientes, PDV, caixa, estoque e financeiro.
 
 ---
@@ -46,8 +47,8 @@ com.geitus.app
 ├── config/     # Configurações (segurança, CORS, OpenAPI)
 ├── shared/     # Health check, ApiError e tratamento global de erros
 ├── iam/        # Identidade e acesso: login, JWT, usuário, bootstrap dev
-├── company/    # Empresa (contexto da empresa autenticada)
-└── catalog/    # Produtos (CRUD inicial)
+├── company/    # Empresa (cadastro da empresa autenticada)
+└── catalog/    # Produtos
 ```
 
 Organização **por domínio de negócio**. Domínios futuros (`pricing`, `customer`, `inventory`, `cashier`, `sales`, `finance`, `fiscal`, `commission`) nascem quando o módulo entrar em desenvolvimento — ver o mapa completo no `CLAUDE.md`.
@@ -58,8 +59,9 @@ As migrations do banco ficam em `src/main/resources/db/migration`.
 
 ## Pré-requisitos
 
-- **JDK 21** instalado e ativo (`java -version` deve indicar a versão 21).
-- **PostgreSQL** em execução — necessário apenas para rodar a aplicação (`bootRun`), não para compilar ou testar.
+- **JDK 21** instalado e ativo (`java -version` deve indicar a versão 21). O `maven-enforcer` interrompe o build em qualquer outra versão.
+- **PostgreSQL** em execução — necessário apenas para rodar a aplicação (`spring-boot:run`).
+- **Docker** em execução — necessário para os testes de integração (`*IT`, Testcontainers) executados no `verify`.
 - Não é preciso instalar o Maven: o projeto usa o Maven Wrapper.
 
 ---
@@ -98,9 +100,9 @@ Consulte o arquivo `.env.example` na raiz do repositório para um modelo de conf
 
 Os comandos abaixo usam o Maven Wrapper. No **Windows (PowerShell/CMD)** use `mvnw.cmd`; em **Git Bash / Linux / macOS** use `./mvnw`.
 
-### Rodar os testes
+### Rodar os testes unitários
 
-Não precisa de banco de dados — os testes usam uma fatia web:
+Não precisa de banco nem de Docker (fatias web e mocks):
 
 ```bash
 ./mvnw test
@@ -108,15 +110,36 @@ Não precisa de banco de dados — os testes usam uma fatia web:
 
 ### Build completo (compila, testa e empacota)
 
+Inclui os testes de integração (`*IT`, ex.: `ProdutoRepositoryIT`), que sobem um PostgreSQL real via Testcontainers — **requer Docker em execução**:
+
 ```bash
 ./mvnw verify
 ```
 
 ### Subir a aplicação
 
-Requer um PostgreSQL acessível conforme as variáveis de ambiente:
+Requer um PostgreSQL acessível conforme as variáveis de ambiente.
+
+**Windows (recomendado):** a partir da raiz do repositório, o script carrega o `.env` e sobe o backend:
+
+```powershell
+.\scripts\dev-backend.ps1
+```
+
+O script:
+
+- lê o `.env` da raiz (ou outro arquivo via `-EnvFile <caminho>`) sem exibir valores;
+- aplica as variáveis apenas durante a execução e restaura o ambiente do terminal ao sair;
+- verifica se o Java ativo é o 21 — se a máquina tiver outro JDK como padrão, defina `JAVA_HOME` no próprio `.env`;
+- repassa argumentos extras ao Maven — use aspas quando o argumento tiver ponto, senão o PowerShell o divide (ex.: `.\scripts\dev-backend.ps1 '-Dspring-boot.run.profiles=dev'`).
+
+Se a política de execução do PowerShell bloquear scripts, rode `powershell -ExecutionPolicy Bypass -File .\scripts\dev-backend.ps1`.
+
+**Git Bash / Linux / macOS:**
 
 ```bash
+cd backend
+set -a && source ../.env && set +a
 ./mvnw spring-boot:run
 ```
 
@@ -143,7 +166,7 @@ A autenticação usa JWT (HS256) com senha em hash BCrypt. Requer PostgreSQL rod
 
 ### 1. Criar um usuário para testar
 
-Em desenvolvimento, use o bootstrap do admin. Exemplo (Git Bash):
+Em desenvolvimento, use o bootstrap do admin: defina `GEITUS_BOOTSTRAP_DEV_ADMIN=true` e as variáveis `GEITUS_DEV_ADMIN_*` no `.env` e suba com `.\scripts\dev-backend.ps1`. Equivalente manual (Git Bash):
 
 ```bash
 export JWT_SECRET="um-segredo-forte-com-no-minimo-32-bytes-aqui"
@@ -201,7 +224,7 @@ Exemplo rápido para subir um PostgreSQL local com Docker (opcional):
 
 ```bash
 docker run --name geitus-postgres \
-  -e POSTGRES_DB=geitus \
+  -e POSTGRES_DB=geitus_db \
   -e POSTGRES_USER=geitus \
   -e POSTGRES_PASSWORD=geitus \
   -p 5432:5432 -d postgres:16

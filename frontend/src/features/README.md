@@ -1,8 +1,12 @@
 # features/
 
-Cada módulo do Geitus terá sua própria pasta aqui (ex.: `auth/`, `dashboard/`,
-`products/`, `customers/`, `pdv/`, `cash-register/`, `finance/`), reunindo os
-componentes, hooks e serviços específicos daquele domínio.
+Cada módulo do Geitus tem sua própria pasta aqui, reunindo as páginas,
+componentes e testes específicos daquele domínio:
 
-Nenhum módulo foi implementado ainda — esta pasta está reservada para as
-próximas etapas, conforme o CLAUDE.md.
+- `auth/` — tela de login.
+- `company/` — cadastro da empresa (`/empresa`).
+- `usuarios/` — gestão de usuários (`/usuarios`) e troca de senha.
+- `products/` — cadastro de produtos (`/produtos`).
+
+Os próximos módulos (ex.: `customers/`, `pdv/`, `cash-register/`, `finance/`)
+ganham a sua pasta quando entrarem em desenvolvimento, conforme o CLAUDE.md.

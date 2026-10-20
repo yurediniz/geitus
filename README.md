@@ -10,15 +10,16 @@ Público-alvo inicial:
 - Pet shops
 - Lojas de roupas
 
-> **Status:** MVP em desenvolvimento — etapas 1 a 7 concluídas (fundação, autenticação, empresa e produtos); próximo módulo: **Clientes**.
+> **Status:** MVP em desenvolvimento — etapas 1 a 8 concluídas (fundação, autenticação, layout, empresa, usuários e produtos); próximo módulo: **Clientes** (etapa 9).
 
 Estado atual do repositório:
 
 - Monorepo estruturado, com CI de backend e frontend em `.github/workflows/`.
-- **Autenticação** implementada: login por e-mail/senha (BCrypt), JWT (HS256), proteção de rotas e tela de login.
-- **Empresa**: contexto da empresa do usuário autenticado (`/api/empresas/minha`) e página de edição do nome.
-- **Produtos**: CRUD inicial protegido (`/api/produtos`, com busca e filtro de status) e tela de produtos.
-- Documentação operacional em `docs/` (diretrizes de engenharia, registro de decisões, dívidas técnicas e especificações por módulo).
+- **Autenticação**: login por e-mail/senha (BCrypt), JWT (HS256), proteção de rotas e tela de login.
+- **Empresa**: cadastro da empresa do usuário autenticado (`/api/empresas/minha`) — representante legal, fluxo "Já possui CNPJ?" (PF/PJ) e endereço com autofill por CEP. Edição exige ADMIN.
+- **Usuários**: gestão dos usuários da empresa (`/api/usuarios`, apenas ADMIN), perfis `ADMIN`/`OPERADOR` e troca/redefinição de senha.
+- **Produtos**: cadastro com busca e filtro de status (`/api/produtos`), escrita restrita a ADMIN, unicidade de SKU/código de barras por empresa (409) e margem/markup calculados.
+- Documentação operacional em `docs/` (diretrizes de engenharia, registro de decisões, dívidas técnicas, visão de domínio e especificações por módulo).
 
 ---
 
@@ -94,12 +95,14 @@ O projeto é organizado como monorepo:
 
 ```text
 geitus/
-├── backend/            # Aplicação Java + Spring Boot (base criada)
-├── frontend/           # Aplicação React + TypeScript + Vite (base criada)
+├── backend/            # Aplicação Java + Spring Boot
+├── frontend/           # Aplicação React + TypeScript + Vite
+├── scripts/            # Scripts de desenvolvimento (ex.: dev-backend.ps1)
 ├── docs/               # Documentação do projeto
 │   ├── engineering-guidelines.md  # Padrões de engenharia
 │   ├── decision-log.md            # Registro de decisões
 │   ├── technical-debt.md          # Pendências e dívidas técnicas
+│   ├── visao-dominio-pdv.md       # Norte de longo prazo do domínio
 │   └── modules/                   # Documentação específica de cada módulo
 ├── .claude/
 │   └── agents/         # Agentes especializados (execução e revisão)
@@ -107,6 +110,7 @@ geitus/
 │   └── workflows/      # Automações de CI (backend e frontend)
 ├── CLAUDE.md           # Diretrizes do projeto e regras de negócio
 ├── README.md
+├── .env.example        # Modelo das variáveis de ambiente locais
 ├── .gitignore
 └── .editorconfig
 ```
@@ -115,25 +119,35 @@ geitus/
 
 ## Como começar
 
-O repositório já contém as bases do backend e do frontend. As funcionalidades dos módulos serão implementadas de forma incremental.
-
 Pré-requisitos para o desenvolvimento:
 
-- Java 21 (JDK)
+- Java 21 (JDK) — o build falha de propósito em outras versões (`maven-enforcer`)
 - Maven (via Maven Wrapper incluído no `backend/`)
 - Node.js 24 LTS
-- PostgreSQL
+- Docker — para o PostgreSQL local e para os testes de integração (Testcontainers)
 - Git
 
-Passos iniciais:
+Passos iniciais (Windows/PowerShell):
 
-```bash
-# Clonar o repositório
+```powershell
 git clone <url-do-repositorio>
 cd geitus
+
+# 1. Variáveis locais (o .env é ignorado pelo Git — preencha JWT_SECRET, senha do banco e admin dev)
+Copy-Item .env.example .env
+
+# 2. PostgreSQL local (primeira vez; use a mesma senha do .env)
+docker run --name geitus-postgres -e POSTGRES_DB=geitus_db -e POSTGRES_USER=geitus -e POSTGRES_PASSWORD=<senha-do-.env> -p 5432:5432 -d postgres:16
+# nas próximas vezes: docker start geitus-postgres
+
+# 3. Backend (carrega o .env e roda spring-boot:run)
+.\scripts\dev-backend.ps1
+
+# 4. Frontend (em outro terminal)
+cd frontend; npm install; npm run dev
 ```
 
-Instruções específicas de execução do backend e do frontend estão em `backend/README.md` e `frontend/README.md`, e serão detalhadas conforme cada parte evoluir.
+Abra `http://localhost:5173`. Detalhes de configuração, testes e endpoints estão em [backend/README.md](backend/README.md) e [frontend/README.md](frontend/README.md).
 
 ---
 

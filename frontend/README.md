@@ -1,6 +1,6 @@
 # Geitus — Frontend
 
-Frontend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Contém a aplicação React com o layout principal, **autenticação** (login + proteção de rotas), a página de **Empresa** (`/empresa`) e a página de **Produtos** (`/produtos`). As telas dos demais módulos (clientes, PDV, caixa, financeiro) ainda não foram implementadas.
+Frontend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Contém a aplicação React com o layout principal, **autenticação** (login + proteção de rotas) e as páginas de **Empresa** (`/empresa`), **Usuários** (`/usuarios`) e **Produtos** (`/produtos`). As telas dos demais módulos (clientes, PDV, caixa, financeiro) ainda não foram implementadas.
 
 ---
 
@@ -13,7 +13,7 @@ Frontend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Co
 - shadcn/ui
 - React Router
 - TanStack Query
-- React Hook Form + Zod (usados nos formulários de login, empresa e produtos)
+- React Hook Form + Zod (usados nos formulários de login, empresa, usuários e produtos)
 - Vitest + Testing Library (testes)
 - Oxlint (lint)
 - npm (gerenciador de pacotes)
@@ -27,15 +27,16 @@ Frontend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Co
 - Layout base: sidebar com a identidade do Geitus, cabeçalho e área principal com espaço para as rotas futuras.
 - Roteamento com React Router, separado em **rotas públicas** (`/login`) e **rotas privadas** (área principal), com um guard de autenticação.
 - **Autenticação**: tela de login, estado de sessão e proteção de rotas (ver seção "Autenticação" abaixo).
-- **Empresa** (`/empresa`): exibição e edição do nome da empresa do usuário autenticado; nome da empresa visível na sidebar.
-- **Produtos** (`/produtos`): listagem com busca e filtro de status, cadastro, edição, inativação e reativação.
+- **Empresa** (`/empresa`): cadastro da empresa do usuário autenticado (representante legal, "Já possui CNPJ?", endereço com autofill por CEP); edição apenas para ADMIN, leitura para os demais. Nome da empresa visível na sidebar.
+- **Usuários** (`/usuarios`, apenas ADMIN via `AdminRoute`): listagem, criação, edição, inativação/reativação e redefinição de senha; qualquer usuário pode trocar a própria senha.
+- **Produtos** (`/produtos`): listagem com busca e filtro de status, cadastro, edição, inativação e reativação, margem/markup na lista; modo leitura para OPERADOR.
 - Cartão de **status do backend** consumindo `GET /api/health`, com tratamento de **carregando**, **sucesso** e **erro**.
-- Cliente HTTP base (`services/httpClient.ts`, com `apiGet`/`apiPost`/`apiPatch` e injeção de token) e serviços de `health`, `auth`, `empresa` e `produto`.
+- Cliente HTTP base (`services/httpClient.ts`, com `apiGet`/`apiPost`/`apiPatch` e injeção de token) e serviços de API por domínio.
 
 ### O que ainda NÃO existe (próximas etapas)
 
 - Refresh token e recuperação de senha.
-- Cadastro/gestão de usuários.
+- Seleção de empresa ativa (DEC-024 — norte futuro).
 - Módulos: clientes, PDV, caixa, financeiro, dashboard real.
 
 ---
@@ -76,7 +77,7 @@ src/
 ├── components/    # Componentes de UI genéricos
 │   ├── layout/    # Shell principal (sidebar + área de conteúdo)
 │   └── ui/        # Componentes do shadcn/ui (adicionados sob demanda)
-├── features/      # Módulos de domínio (reservado para as próximas etapas)
+├── features/      # Módulos de domínio (auth, company, products, usuarios)
 ├── hooks/         # Hooks reutilizáveis
 ├── lib/           # Utilitários (ex.: cn)
 ├── routes/        # Páginas e configuração de rotas
@@ -96,7 +97,7 @@ src/
 
 ## Configuração (variáveis de ambiente)
 
-O Vite lê variáveis do arquivo `.env` na raiz do frontend. Copie o exemplo e ajuste se necessário:
+Em desenvolvimento **não é preciso configurar nada**: as chamadas para `/api` são encaminhadas ao backend pelo proxy do Vite (`vite.config.ts`), sem depender de CORS. Para sobrescrever, o Vite lê o arquivo `.env` na pasta `frontend/` (não o `.env` da raiz):
 
 ```bash
 cp .env.example .env
@@ -104,7 +105,8 @@ cp .env.example .env
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
-| `VITE_API_BASE_URL` | `http://localhost:8080/api` | URL base da API do backend (inclui o prefixo `/api`) |
+| `VITE_API_BASE_URL` | `/api` | URL base da API usada pelo cliente HTTP (inclui o prefixo `/api`) |
+| `VITE_DEV_API_TARGET` | `http://localhost:8080` | Destino do proxy de desenvolvimento para `/api` |
 
 ---
 
@@ -130,9 +132,9 @@ Scripts disponíveis:
 
 ## Como testar a integração com /api/health
 
-1. Suba o backend (na pasta `backend/`, com um PostgreSQL disponível):
-   ```bash
-   ./mvnw spring-boot:run
+1. Suba o backend (da raiz do repositório, com um PostgreSQL disponível e o `.env` preenchido — ver `../backend/README.md`):
+   ```powershell
+   .\scripts\dev-backend.ps1
    ```
 2. Suba o frontend:
    ```bash
@@ -143,4 +145,4 @@ Scripts disponíveis:
    - **Conectado (UP)** com o nome da aplicação, em caso de sucesso;
    - **Backend indisponível** com a mensagem do erro, se o backend estiver fora do ar.
 
-O CORS do backend já libera a origem `http://localhost:5173`, portanto nenhuma configuração adicional é necessária em desenvolvimento.
+Como o proxy do Vite encaminha `/api` para o backend, nenhuma configuração adicional é necessária em desenvolvimento (o CORS do backend também libera `http://localhost:5173`, caso a API seja chamada diretamente).
