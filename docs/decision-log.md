@@ -641,3 +641,26 @@ Aproxima o Produto da modelagem com utilidade imediata para os segmentos-alvo (m
 
 **Impacto:**
 Migration V4 + entidade/DTO/service/response + frontend + testes (incl. `ProdutoRepositoryIT` contra Postgres). `data-reviewer` acionado (migration). **Fora do escopo (norte futuro):** status como enum de ciclo de vida (fica o booleano `ativo`), fiscal (NCM/CEST/origem/CFOP/CST/IBS/CBS), variações e atributos, lote/série/validade, multi-estoque, tabelas de preço/promoções, imagem/upload, peso/dimensões, marca/categoria como entidades, múltiplos códigos/GTIN/PLU, campos de serviço.
+
+## DEC-029 — Módulo Clientes: RBAC de escrita aberta, CPF único por empresa e primeiro UUID público
+
+**Data:** 2026-10-20
+**Status:** Aceita
+**Contexto:**
+A etapa 9 (Clientes) cria o domínio `customer`. O cliente é opcional na venda e precisa ser cadastrado rapidamente no balcão — inclusive por operadores. É também o primeiro módulo novo depois da DEC-019, que previa UUID público para entidades expostas, mas deixava em aberto a forma de geração. Os validadores de CPF/telefone existiam apenas em `company.validation`.
+
+**Decisão:**
+- **RBAC:** cadastrar e editar clientes é permitido a qualquer usuário autenticado (ADMIN ou OPERADOR); **inativar/reativar exige ADMIN**. Leitura livre a autenticados.
+- **Documento:** apenas **pessoa física** nesta etapa; CPF opcional, validado por dígitos e **único por empresa** (`UNIQUE (empresa_id, cpf)`; duplicado → 409, DEC-026).
+- **Contato:** um telefone principal + indicador `telefone_e_whatsapp` (padrão `true`); coluna `whatsapp` só quando o número for diferente; a API expõe o WhatsApp **resolvido**. Telefones não são únicos.
+- **UUID público (aplica e fecha a observação da DEC-019):** gerado **na aplicação** (`UUID.randomUUID()`) na criação, coluna `UUID NOT NULL UNIQUE` com `DEFAULT gen_random_uuid()` como rede de segurança (nativo no PostgreSQL 13+, sem pgcrypto). Rotas usam o UUID (`/api/clientes/{id}` com `id` = UUID); o id `BIGINT` nunca é exposto. Padrão para os próximos módulos e para o retrofit de Empresa/Produtos.
+- **Validadores compartilhados:** `Cpf`, `Cnpj`, `Telefone` (anotações/validators), `Documentos` e `Telefones` saem de `company.validation` para **`shared.validation`**.
+
+**Motivo:**
+Operação rápida no balcão sem depender do dono, mantendo com o ADMIN a ação que afeta o PDV (inativação); evitar duplicidade pelo único identificador forte disponível (CPF); "cadastrar uma vez" no contato; fechar a pendência do UUID com uma regra simples e testável; e eliminar acoplamento entre domínios antes do Spring Modulith.
+
+**Impacto:**
+Migration `V5__clientes.sql`, pacote `customer` (entidade, repository, service, controller, DTOs), matchers no `SecurityConfig`, `ClienteRepositoryIT` (Testcontainers), página `/clientes` no frontend e refatoração de pacote dos validadores (sem mudança de comportamento). Spec: `docs/modules/clientes.md`. Revisores obrigatórios: `data-reviewer` e `security-reviewer`.
+
+**Observações futuras:**
+Pessoa jurídica, endereço, e-mail e data de nascimento entram quando uma capacidade exigir (fiscal, entrega, relacionamento). Paginação da listagem registrada como DT-020.

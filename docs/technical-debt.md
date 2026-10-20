@@ -233,3 +233,15 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Impacto:** Cobertura automatica ausente para queries; risco depende de smoke manual (e Docker disponivel).
 - **Quando revisar:** Quando o volume de queries de repositorio crescer (Vendas/Estoque) ou ao endurecer o CI.
 - **Observacoes:** Adicionar **Testcontainers** (dependencia de teste) + `@DataJpaTest` contra Postgres; decisao de dependencia + impacto no CI (Docker no CI) a cargo do CTO. **Adotado** na maturacao de Produtos (DEC-027): `ProdutoRepositoryIT` cobre isolamento, unicidade e busca contra Postgres real. Requer Docker no ambiente de teste/CI. Aplicar o mesmo padrao aos proximos modulos com queries (Vendas/Estoque).
+
+## DT-020 — Paginacao das listagens (Clientes e Produtos)
+
+- **ID:** DT-020
+- **Modulo:** Backend/Frontend (Clientes, Produtos)
+- **Origem:** Design do modulo Clientes (DEC-029)
+- **Prioridade:** baixa
+- **Status:** aberto
+- **Descricao:** `GET /api/clientes` (assim como `GET /api/produtos`) retorna a lista completa da empresa, sem paginacao. Mantido assim por consistencia e simplicidade no MVP.
+- **Impacto:** Em empresas com milhares de clientes/produtos, a listagem pode ficar lenta e pesada para a tela.
+- **Quando revisar:** Quando uma empresa real passar de alguns milhares de registros ou quando o PDV exigir busca incremental com limite.
+- **Observacoes:** Avaliar `Pageable`/limite na API e paginacao ou rolagem infinita na tela, junto com o indice de busca textual (analogo a DT-009).
