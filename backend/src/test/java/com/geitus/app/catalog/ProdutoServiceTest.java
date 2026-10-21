@@ -21,6 +21,10 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+
 import org.assertj.core.api.ThrowingConsumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +32,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.geitus.app.catalog.categoria.Categoria;
@@ -715,6 +720,27 @@ class ProdutoServiceTest {
         InOrder ordem = inOrder(produtoRepository);
         ordem.verify(produtoRepository).delete(produto);
         ordem.verify(produtoRepository).flush();
+    }
+
+    @Test
+    void excluirRegistraLogSoComIdentificadores() {
+        // Lacuna do QA: o rastro provisorio da exclusao traz usuario, empresa e
+        // UUID publico, mas nunca dado do cadastro (nome, SKU).
+        produtoExistente(existente().nome("Ração Secreta 15kg").sku("SKU-SIGILOSO"));
+        Logger logDoService = (Logger) LoggerFactory.getLogger(ProdutoService.class);
+        ListAppender<ILoggingEvent> capturados = new ListAppender<>();
+        capturados.start();
+        logDoService.addAppender(capturados);
+        try {
+            produtoService.excluir(ID_USUARIO, EMPRESA_ID, produtoUuid);
+        } finally {
+            logDoService.detachAppender(capturados);
+        }
+
+        String saida = String.join("\n", capturados.list.stream().map(ILoggingEvent::getFormattedMessage).toList());
+        assertThat(saida)
+                .contains("usuario=" + ID_USUARIO, "empresa=" + EMPRESA_ID, "produto=" + produtoUuid)
+                .doesNotContain("Ração Secreta 15kg", "SKU-SIGILOSO");
     }
 
     @Test

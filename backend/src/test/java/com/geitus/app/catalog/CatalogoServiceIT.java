@@ -377,6 +377,31 @@ class CatalogoServiceIT {
                 .hasMessage("O código de barras 7891000315507 já está cadastrado no produto \"Arroz da B\".");
     }
 
+    /**
+     * Lacuna do QA: na EDICAO (produto atual informado), adicionar o codigo de
+     * outro produto da mesma empresa da 409 com o nome dele e o campo
+     * {@code codigosBarras}, e a lista gravada do produto editado nao muda.
+     */
+    @Test
+    void patchComCodigoDeOutroProdutoDaEmpresaLanca409ComNome() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("Arroz da A").codigosBarras("7891000315507").build());
+        ProdutoResponse feijao = produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("Feijão da A").codigosBarras("96385074").build());
+
+        assertThatThrownBy(() -> produtoService.atualizarDadosBasicosParaUsuario(idUsuario, feijao.id(),
+                ProdutoRequestBuilder.comUnidade(un).nome("Feijão da A").codigosBarras("96385074", "7891000315507")
+                        .build()))
+                .isInstanceOfSatisfying(ProdutoConflitoException.class,
+                        conflito -> assertThat(conflito.campo()).contains("codigosBarras"))
+                .hasMessage("O código de barras 7891000315507 já está cadastrado no produto \"Arroz da A\".");
+
+        assertThat(codigosGravadosEmOrdem(feijao.id())).containsExactly("96385074");
+    }
+
     @Test
     void excluirProdutoApagaCodigos() {
         Empresa empresa = novaEmpresa();
@@ -438,6 +463,16 @@ class CatalogoServiceIT {
                   JOIN produtos p ON p.id = c.produto_id
                 WHERE p.uuid = ? AND c.codigo = ?
                 """, Long.class, produtoId, codigo);
+    }
+
+    /** Codigos gravados do produto, na ordem persistida. */
+    private List<String> codigosGravadosEmOrdem(UUID produtoId) {
+        return jdbcTemplate.queryForList("""
+                SELECT c.codigo FROM produto_codigos_barras c
+                  JOIN produtos p ON p.id = c.produto_id
+                WHERE p.uuid = ?
+                ORDER BY c.ordem
+                """, String.class, produtoId);
     }
 
     private LocalDateTime atualizadoEmGravado(UUID produtoId) {

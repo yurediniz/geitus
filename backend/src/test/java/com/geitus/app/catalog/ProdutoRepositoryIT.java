@@ -219,6 +219,19 @@ class ProdutoRepositoryIT {
     }
 
     @Test
+    void produtoComCodigoNaEdicaoDevolveONomeDeOutroProdutoDaEmpresa() {
+        // Lacuna do QA: com ignorarProdutoId NAO nulo (edicao), a JPQL precisa
+        // devolver o nome do OUTRO produto que ja tem o codigo — nao so vazio.
+        Empresa empresaA = novaEmpresa("Empresa Codigo Edicao A");
+        salvar(produtoDa(empresaA).nome("Arroz da A").codigo("7891000315507"));
+        Produto feijao = salvar(produtoDa(empresaA).nome("Feijão da A"));
+        entityManager.clear();
+
+        assertThat(produtoRepository.produtoComCodigo(empresaA.getId(), "7891000315507", feijao.getId()))
+                .contains("Arroz da A");
+    }
+
+    @Test
     void codigoRepetidoNaMesmaEmpresaViolaAConstraint() {
         Empresa empresa = novaEmpresa("Empresa Codigo Repetido");
         salvar(produtoDa(empresa).nome("Primeiro").codigo("7891000315507"));
