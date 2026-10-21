@@ -858,7 +858,12 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
                     produto={produto}
                     siglaPorId={siglaPorId}
                     desabilitado={desabilitado}
+                    somenteLeitura={somenteLeitura}
                     aoAlterarCampo={aoAlterarCampo}
+                    aoAjustarEstoque={(mensagem) => {
+                      setErroGeral(null)
+                      setMensagemSucesso(mensagem)
+                    }}
                   />
                 </TabsContent>
                 <TabsContent value="codigos">

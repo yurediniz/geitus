@@ -20,6 +20,7 @@ import {
   sugerirSku,
 } from '@/services/produtoService'
 import { cadastrarCategoria, listarCategorias } from '@/services/categoriaService'
+import { ajustarEstoque, listarMovimentosDeEstoque } from '@/services/estoqueService'
 import { listarUnidades } from '@/services/unidadeService'
 import {
   CATEGORIAS,
@@ -35,6 +36,7 @@ import {
   unidade,
 } from '@/test/fixturesProduto'
 import type { Categoria } from '@/types/catalogo'
+import type { MovimentoEstoque } from '@/types/estoque'
 import type { HistoricoPreco, PaginaResponse, Produto, ProdutoRequest } from '@/types/produto'
 
 vi.mock('@/services/produtoService', () => ({
@@ -47,6 +49,11 @@ vi.mock('@/services/produtoService', () => ({
   sugerirSku: vi.fn(),
   listarSugestoes: vi.fn(),
   listarHistoricoDePrecos: vi.fn(),
+}))
+
+vi.mock('@/services/estoqueService', () => ({
+  ajustarEstoque: vi.fn(),
+  listarMovimentosDeEstoque: vi.fn(),
 }))
 
 vi.mock('@/services/unidadeService', () => ({
@@ -71,6 +78,8 @@ const excluirProdutoMock = vi.mocked(excluirProduto)
 const sugerirSkuMock = vi.mocked(sugerirSku)
 const listarSugestoesMock = vi.mocked(listarSugestoes)
 const listarHistoricoDePrecosMock = vi.mocked(listarHistoricoDePrecos)
+const ajustarEstoqueMock = vi.mocked(ajustarEstoque)
+const listarMovimentosDeEstoqueMock = vi.mocked(listarMovimentosDeEstoque)
 const listarUnidadesMock = vi.mocked(listarUnidades)
 const listarCategoriasMock = vi.mocked(listarCategorias)
 const cadastrarCategoriaMock = vi.mocked(cadastrarCategoria)
@@ -223,6 +232,7 @@ describe('ProdutoPage', () => {
     listarUnidadesMock.mockResolvedValue(UNIDADES)
     listarCategoriasMock.mockResolvedValue(CATEGORIAS)
     listarSugestoesMock.mockResolvedValue([])
+    listarMovimentosDeEstoqueMock.mockResolvedValue({ itens: [], pagina: 0, tamanho: 20, totalItens: 0 })
   })
 
   describe('estrutura e abas', () => {
@@ -2747,6 +2757,117 @@ describe('ProdutoPage', () => {
       expect(screen.getByLabelText(/estoque máximo/i)).toBeInTheDocument()
       expect(screen.getByText('O estoque máximo não pode ser menor que o ponto de reposição.')).toBeInTheDocument()
       expect(interruptorControle()).toHaveAttribute('aria-checked', 'false')
+    })
+  })
+
+  describe('ajuste de estoque (Fase D)', () => {
+    const SAIDA: MovimentoEstoque = {
+      id: 'mov-1',
+      tipo: 'SAIDA',
+      motivo: 'PERDA_AVARIA',
+      origem: 'AJUSTE_MANUAL',
+      quantidade: -2,
+      saldoAnterior: 12,
+      saldoNovo: 10,
+      observacao: null,
+      usuarioNome: 'Ana Souza',
+      criadoEm: '2026-10-21T15:20:00',
+    }
+
+    function botaoAjustar(): HTMLElement {
+      return screen.getByRole('button', { name: 'Ajustar estoque' })
+    }
+
+    async function abrirEstoqueDaEdicao(produto: Produto = produtoAtivo) {
+      renderEdicao(produto)
+      await esperarFormulario()
+      abrirAba(/estoque/i)
+    }
+
+    function registrarSaidaDeDois() {
+      const modal = screen.getByRole('dialog', { name: 'Ajustar estoque' })
+      fireEvent.click(within(modal).getByRole('radio', { name: 'Saída' }))
+      fireEvent.change(within(modal).getByRole('textbox', { name: /^quantidade/i }), { target: { value: '2' } })
+      fireEvent.change(within(modal).getByRole('combobox', { name: /^motivo/i }), { target: { value: 'PERDA_AVARIA' } })
+      return modal
+    }
+
+    it('ADMIN vê "Ajustar estoque" no produto salvo com controle ligado', async () => {
+      await abrirEstoqueDaEdicao()
+
+      expect(botaoAjustar()).toBeEnabled()
+      expect(botaoAjustar()).toHaveAttribute('type', 'button')
+    })
+
+    it('não aparece para OPERADOR, que ainda vê o saldo', async () => {
+      definirPerfil('OPERADOR')
+      await abrirEstoqueDaEdicao()
+
+      expect(screen.getByRole('group', { name: 'Saldo atual' })).toHaveTextContent('12 UN')
+      expect(screen.queryByRole('button', { name: 'Ajustar estoque' })).not.toBeInTheDocument()
+    })
+
+    it('não aparece no cadastro novo nem com o controle desligado', async () => {
+      renderNovo()
+      await esperarFormulario()
+      abrirAba(/estoque/i)
+      expect(screen.queryByRole('button', { name: 'Ajustar estoque' })).not.toBeInTheDocument()
+    })
+
+    it('não aparece em produto salvo sem controle de estoque', async () => {
+      await abrirEstoqueDaEdicao({ ...produtoAtivo, controlaEstoque: false, situacaoEstoque: null })
+      expect(screen.queryByRole('button', { name: 'Ajustar estoque' })).not.toBeInTheDocument()
+    })
+
+    it('com alterações pendentes fica desabilitado, com a dica de salvar antes', async () => {
+      await abrirEstoqueDaEdicao()
+
+      fireEvent.change(screen.getByLabelText(/estoque mínimo/i), { target: { value: '3' } })
+
+      expect(botaoAjustar()).toBeDisabled()
+      expect(botaoAjustar()).toHaveAccessibleDescription('Salve o produto antes de ajustar o estoque.')
+    })
+
+    it('sucesso fecha o modal, mostra "Estoque atualizado: 10 UN." e atualiza o saldo sem marcar o formulário', async () => {
+      ajustarEstoqueMock.mockResolvedValue(SAIDA)
+      await abrirEstoqueDaEdicao()
+      buscarProdutoMock.mockResolvedValue({ ...produtoAtivo, estoqueAtual: 10 })
+
+      fireEvent.click(botaoAjustar())
+      registrarSaidaDeDois()
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+      expect(await screen.findByText('Estoque atualizado: 10 UN.')).toBeInTheDocument()
+      expect(screen.queryByRole('dialog', { name: 'Ajustar estoque' })).not.toBeInTheDocument()
+      await waitFor(() => expect(screen.getByRole('group', { name: 'Saldo atual' })).toHaveTextContent('10 UN'))
+      // O ajuste nao e alteracao do formulario: o botao continua liberado e salvar nao foi chamado.
+      expect(botaoAjustar()).toBeEnabled()
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
+      await waitFor(() => expect(botaoAjustar()).toHaveFocus())
+    })
+
+    it('Enter no modal confirma o ajuste e não envia o formulário do produto', async () => {
+      ajustarEstoqueMock.mockResolvedValue(SAIDA)
+      await abrirEstoqueDaEdicao()
+      fireEvent.click(botaoAjustar())
+      const modal = registrarSaidaDeDois()
+
+      await act(async () => {
+        fireEvent.submit(within(modal).getByRole('textbox', { name: /^quantidade/i }).closest('form') as HTMLFormElement)
+      })
+
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('Ctrl+Enter dentro do modal não salva o produto', async () => {
+      await abrirEstoqueDaEdicao()
+      fireEvent.click(botaoAjustar())
+      const modal = registrarSaidaDeDois()
+
+      fireEvent.keyDown(within(modal).getByRole('textbox', { name: /^quantidade/i }), { key: 'Enter', ctrlKey: true })
+
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
     })
   })
 })

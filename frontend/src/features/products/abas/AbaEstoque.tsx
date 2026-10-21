@@ -1,8 +1,11 @@
+import { useRef, useState } from 'react'
 import { Controller, useFormContext } from 'react-hook-form'
-import { Info } from 'lucide-react'
+import { Info, SlidersHorizontal } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { CampoTexto, GrupoCampos } from '@/features/products/CamposFormulario'
+import { ModalAjusteEstoque } from '@/features/products/estoque/ModalAjusteEstoque'
 import { SeloSituacaoEstoque } from '@/features/products/estoque/SeloSituacaoEstoque'
 import { formatarQuantidade } from '@/features/products/formatacaoProduto'
 import type { ProdutoFormValues } from '@/features/products/produtoFormulario'
@@ -14,7 +17,11 @@ export interface AbaEstoqueProps {
   /** Sigla por id de unidade, para o estoque inicial ("em UN"). */
   siglaPorId: ReadonlyMap<string, string>
   desabilitado: boolean
+  /** OPERADOR: ve o saldo, sem o botao de ajuste. */
+  somenteLeitura: boolean
   aoAlterarCampo: () => void
+  /** Ajuste gravado: a pagina mostra a mensagem (ex.: "Estoque atualizado: 10 UN."). */
+  aoAjustarEstoque: (mensagem: string) => void
 }
 
 /** Campos de nivel: texto com teclado decimal (aceitam virgula, como as demais quantidades). */
@@ -30,14 +37,23 @@ const NIVEIS = [
  * de referencia. Com o controle desligado, saldo e niveis saem da tela; os
  * niveis voltam se tiverem erro, para o erro nao ficar escondido.
  */
-export function AbaEstoque({ produto, siglaPorId, desabilitado, aoAlterarCampo }: AbaEstoqueProps) {
+export function AbaEstoque({
+  produto,
+  siglaPorId,
+  desabilitado,
+  somenteLeitura,
+  aoAlterarCampo,
+  aoAjustarEstoque,
+}: AbaEstoqueProps) {
   const {
     control,
     register,
     watch,
     clearErrors,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useFormContext<ProdutoFormValues>()
+  const [ajustando, setAjustando] = useState(false)
+  const botaoAjustarRef = useRef<HTMLButtonElement>(null)
   const [controla, unidadeId] = watch(['controlaEstoque', 'unidadeId'])
   const siglaVenda = siglaPorId.get(unidadeId)
   const erroNosNiveis = NIVEIS.some(({ id }) => errors[id] !== undefined)
@@ -89,6 +105,29 @@ export function AbaEstoque({ produto, siglaPorId, desabilitado, aoAlterarCampo }
               <p className="text-2xl font-semibold tabular-nums">{saldoTexto}</p>
               <SeloSituacaoEstoque situacao={produto.situacaoEstoque} />
             </div>
+            {!somenteLeitura && (
+              <div className="space-y-1 pt-2">
+                {/* type="button": a aba fica dentro do formulario do produto. */}
+                <Button
+                  ref={botaoAjustarRef}
+                  type="button"
+                  variant="outline"
+                  className="min-h-11"
+                  onClick={() => setAjustando(true)}
+                  // Com alteracoes pendentes, o ajuste esperaria um formulario que ainda nao foi salvo.
+                  disabled={desabilitado || isDirty}
+                  aria-describedby={isDirty ? 'ajustar-estoque-dica' : undefined}
+                >
+                  <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+                  Ajustar estoque
+                </Button>
+                {isDirty && (
+                  <p id="ajustar-estoque-dica" className="text-xs text-muted-foreground">
+                    Salve o produto antes de ajustar o estoque.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
         {controla && !produto && (
@@ -140,6 +179,21 @@ export function AbaEstoque({ produto, siglaPorId, desabilitado, aoAlterarCampo }
             ))}
           </div>
         </section>
+      )}
+      {produto && !somenteLeitura && (
+        <ModalAjusteEstoque
+          aberto={ajustando}
+          produtoId={produto.id}
+          saldo={produto.estoqueAtual}
+          sigla={produto.unidade.sigla}
+          fracionada={produto.unidade.fracionada}
+          aoFechar={() => setAjustando(false)}
+          focoAoFechar={() => botaoAjustarRef.current}
+          aoConcluir={(movimento) => {
+            setAjustando(false)
+            aoAjustarEstoque(`Estoque atualizado: ${formatarQuantidade(movimento.saldoNovo, produto.unidade.sigla)}.`)
+          }}
+        />
       )}
     </div>
   )
