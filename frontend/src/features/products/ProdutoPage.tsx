@@ -413,7 +413,9 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     getValues,
     getFieldState,
     watch,
-    formState: { errors, isDirty },
+    trigger,
+    clearErrors,
+    formState: { errors, isDirty, isSubmitted },
   } = form
 
   const { dialogo } = useAvisoAlteracoesNaoSalvas(isDirty && saida === null && !somenteLeitura)
@@ -424,6 +426,24 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
       navigate(saida.para, { state: saida.estado, replace: true })
     }
   }, [saida, navigate])
+
+  // Depois do primeiro envio, os erros que comparam campos acompanham o campo
+  // de que dependem (o RHF so revalida o campo alterado): preco de venda ou
+  // minimo mudou -> revalida minimo, promocional e atacado. Trocar a unidade
+  // apaga o erro de fracao do atacado, checado de novo no proximo envio.
+  useEffect(() => {
+    if (!isSubmitted) {
+      return
+    }
+    const assinatura = watch((_, { name }) => {
+      if (name === 'precoVenda' || name === 'precoMinimo') {
+        void trigger(['precoMinimo', 'precoPromocional', 'precoAtacado'])
+      } else if (name === 'unidadeId' && getFieldState('quantidadeMinimaAtacado').error?.type === 'manual') {
+        clearErrors('quantidadeMinimaAtacado')
+      }
+    })
+    return () => assinatura.unsubscribe()
+  }, [isSubmitted, watch, trigger, getFieldState, clearErrors])
 
   // O resumo de erro do topo sai quando o campo a que ele se refere e alterado.
   const camposDoErroSalvar = erroSalvar?.campos

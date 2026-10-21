@@ -79,6 +79,7 @@ function BlocoComInterruptor({ id, rotulo, descricao, desabilitado, aoAlternar, 
           render={({ field }) => (
             <Switch
               id={id}
+              aria-labelledby={`${id}-rotulo`}
               ref={field.ref}
               checked={field.value}
               onCheckedChange={(valor) => {
@@ -363,6 +364,13 @@ function CalculoPelaMargem({ custo, desabilitado, aoAlterarCampo }: CalculoPelaM
             onChange={(event) => {
               setMargem(event.target.value)
               setConfirmacao(null)
+            }}
+            // Enter aqui calcula (nao salva o produto); Ctrl/Cmd+Enter segue para o formulario.
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey) {
+                event.preventDefault()
+                calcular()
+              }
             }}
             disabled={desabilitado}
             aria-describedby={motivo ? 'margemDesejada-ajuda' : undefined}

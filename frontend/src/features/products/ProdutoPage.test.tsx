@@ -2281,4 +2281,72 @@ describe('ProdutoPage', () => {
       )
     })
   })
+
+  describe('preços: teclado e revalidação entre campos', () => {
+    it('Enter em "Margem desejada" calcula o preço sem salvar; Ctrl+Enter salva', async () => {
+      atualizarProdutoMock.mockResolvedValue(produtoAtivo)
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/preços/i)
+      const margem = screen.getByLabelText('Margem desejada (%)')
+      fireEvent.change(margem, { target: { value: '50' } })
+
+      expect(fireEvent.keyDown(margem, { key: 'Enter' })).toBe(false)
+
+      expect(screen.getByText(/preço de venda atualizado para R\$\s36,00/i)).toBeInTheDocument()
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
+
+      fireEvent.keyDown(margem, { key: 'Enter', ctrlKey: true })
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(ID_ARROZ, expect.objectContaining({ precoVenda: 36 })),
+      )
+    })
+
+    it('Enter em "Margem desejada" sem como calcular só mantém a dica', async () => {
+      renderNovo()
+      await esperarFormulario()
+      abrirAba(/preços/i)
+      const margem = screen.getByLabelText('Margem desejada (%)')
+      fireEvent.change(margem, { target: { value: '50' } })
+
+      expect(fireEvent.keyDown(margem, { key: 'Enter' })).toBe(false)
+
+      expect(screen.getByRole('button', { name: 'Calcular preço' })).toHaveAccessibleDescription(
+        'Informe o custo para calcular o preço.',
+      )
+      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('depois do envio, mudar o preço de venda revalida o preço mínimo', async () => {
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo('Café', '10,00')
+      abrirAba(/preços/i)
+      fireEvent.change(screen.getByLabelText(/preço mínimo/i), { target: { value: '15,00' } })
+      fireEvent.click(botaoSalvar())
+      expect(await screen.findByText(/preço mínimo não pode ser maior que o preço de venda/i)).toBeInTheDocument()
+
+      abrirAba(/geral/i)
+      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '20,00' } })
+
+      await waitFor(() => expect(aba(/preços/i)).toHaveAccessibleName('Preços'))
+    })
+
+    it('trocar a unidade de venda apaga o erro de fração do atacado', async () => {
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo('Café', '10,00')
+      abrirAba(/preços/i)
+      fireEvent.click(screen.getByRole('switch', { name: 'Ativar preço de atacado' }))
+      fireEvent.change(screen.getByLabelText('Preço de atacado'), { target: { value: '9,00' } })
+      fireEvent.change(screen.getByLabelText(/^quantidade mínima|^a partir de/i), { target: { value: '2.5' } })
+      fireEvent.click(botaoSalvar())
+      await waitFor(() => expect(aba(/preços/i)).toHaveAccessibleName('Preços (1 erro)'))
+
+      abrirAba(/geral/i)
+      fireEvent.change(screen.getByLabelText(/unidade de venda/i), { target: { value: 'kg' } })
+
+      await waitFor(() => expect(aba(/preços/i)).toHaveAccessibleName('Preços'))
+    })
+  })
 })
