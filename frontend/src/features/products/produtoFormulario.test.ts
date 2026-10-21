@@ -363,7 +363,7 @@ describe('produtoFormulario', () => {
 
     it('preco promocional maior que zero, menor que o de venda e nao abaixo do minimo', () => {
       expect(erros({ ...base, ...promocao, precoPromocional: '0.00' })).toEqual({
-        precoPromocional: 'O preço promocional deve ser maior que zero.',
+        precoPromocional: 'Preço promocional deve ser maior que zero.',
       })
       expect(erros({ ...base, ...promocao, precoPromocional: '10.00' })).toEqual({
         precoPromocional: 'Preço promocional deve ser menor que o preço de venda.',
@@ -391,7 +391,7 @@ describe('produtoFormulario', () => {
         quantidadeMinimaAtacado: 'A quantidade mínima do atacado deve ser maior que 1.',
       })
       expect(erros({ ...base, ...atacado, quantidadeMinimaAtacado: '1.0005' })).toEqual({
-        quantidadeMinimaAtacado: 'Use até 3 casas decimais.',
+        quantidadeMinimaAtacado: 'A quantidade mínima do atacado deve ter no máximo 3 casas decimais.',
       })
       expect(erros({ ...base, ...atacado, quantidadeMinimaAtacado: '1.001' })).toEqual({})
     })

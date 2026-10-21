@@ -87,7 +87,7 @@ function validarPrecoEspecial(
   if (!Number.isFinite(preco)) {
     erro('Informe um número válido.')
   } else if (preco <= 0) {
-    erro(`O preço ${nome} deve ser maior que zero.`)
+    erro(`Preço ${nome} deve ser maior que zero.`)
   } else if (venda !== null && preco >= venda) {
     erro(`Preço ${nome} deve ser menor que o preço de venda.`)
   } else if (minimo !== null && preco < minimo) {
@@ -128,7 +128,7 @@ function validarAtacado(valores: ValoresPrecoEspecial, ctx: z.RefinementCtx) {
     erro('A quantidade mínima do atacado deve ser maior que 1.')
   } else if (!/^\d+(\.\d{1,3})?$/.test(texto)) {
     // NUMERIC(12,3) no backend.
-    erro('Use até 3 casas decimais.')
+    erro('A quantidade mínima do atacado deve ter no máximo 3 casas decimais.')
   }
 }
 
