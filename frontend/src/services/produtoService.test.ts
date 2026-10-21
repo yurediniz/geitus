@@ -41,6 +41,8 @@ const produtoRequest: ProdutoRequest = {
   precoVenda: 25.9,
   custo: null,
   precoMinimo: null,
+  promocao: null,
+  atacado: null,
   estoqueMinimo: null,
   estoqueMaximo: null,
   pontoReposicao: null,

@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react'
 import { Controller, useFormContext, type UseFormRegisterReturn } from 'react-hook-form'
 import { Link } from 'react-router-dom'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, TriangleAlert } from 'lucide-react'
 
 import { CampoMoeda } from '@/components/ui/campo-moeda'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
+import { formatarMoeda } from '@/features/products/formatacaoProduto'
 import type { OpcaoUnidade, ProdutoFormValues } from '@/features/products/produtoFormulario'
 
 /**
@@ -124,7 +125,7 @@ function EstruturaCampo({ id, label, obrigatorio, erro, ajuda, children }: Estru
 }
 
 /** Campos de dinheiro do formulario (string decimal com ponto, exibidos com a mascara R$). */
-export type CampoDinheiro = 'precoVenda' | 'custo' | 'precoMinimo'
+export type CampoDinheiro = 'precoVenda' | 'custo' | 'precoMinimo' | 'precoPromocional' | 'precoAtacado'
 
 interface CampoMoedaFormularioProps {
   id: CampoDinheiro
@@ -290,5 +291,18 @@ export function GrupoCampos({
       </div>
       {children}
     </section>
+  )
+}
+
+/**
+ * Aviso de preco abaixo do custo: so informa (nao bloqueia o salvamento). Vai
+ * na ajuda do campo, ligado a ele pelo `aria-describedby`; icone + texto, nunca so a cor.
+ */
+export function AvisoAbaixoDoCusto({ custo }: { custo: number }) {
+  return (
+    <span className="inline-flex items-start gap-1 font-medium text-warning-soft-foreground">
+      <TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <span>Abaixo do custo ({formatarMoeda(custo)}). A venda neste preço dá prejuízo.</span>
+    </span>
   )
 }

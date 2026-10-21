@@ -8,6 +8,13 @@ import {
   MENSAGEM_LIMITE_CODIGOS,
   avaliarNovoCodigo,
   calcularMargemMarkup,
+  calcularPrecoPelaMargem,
+  dataLocalHoje,
+  erroFracaoAtacado,
+  precoAbaixoDoCusto,
+  situacaoPromocaoLocal,
+  textoAjudaAtacado,
+  textoSeloPromocao,
   formatosDoProduto,
   idDoCampo,
   montarRequest,
@@ -19,7 +26,7 @@ import {
   valoresParaCadastrarOutro,
   type ProdutoFormValues,
 } from '@/features/products/produtoFormulario'
-import { CX, produtoAtivo, resumo } from '@/test/fixturesProduto'
+import { CX, KG, UN, produtoAtivo, resumo } from '@/test/fixturesProduto'
 import type { FormatoCodigoBarras } from '@/types/produto'
 
 describe('produtoFormulario', () => {
@@ -133,7 +140,48 @@ describe('produtoFormulario', () => {
       pontoReposicao: 10,
       codigosBarras: ['7891000315507', 'ABC-123'],
       sku: 'SKU-ARROZ',
+      promocao: null,
+      atacado: null,
     })
+  })
+
+  it('promocao e atacado gravados voltam ligados no formulario e no request', () => {
+    const produto = {
+      ...produtoAtivo,
+      promocao: { preco: 8.9, inicio: '2026-11-01', fim: '2026-11-15', situacao: 'AGENDADA' as const },
+      atacado: { preco: 4.2, quantidadeMinima: 12 },
+    }
+    const valores = valoresDoProduto(produto)
+    expect(valores).toMatchObject({
+      promocaoAtiva: true,
+      precoPromocional: '8.9',
+      promocaoInicio: '2026-11-01',
+      promocaoFim: '2026-11-15',
+      atacadoAtivo: true,
+      precoAtacado: '4.2',
+      quantidadeMinimaAtacado: '12',
+    })
+    expect(montarRequest(valores)).toMatchObject({
+      promocao: { preco: 8.9, inicio: '2026-11-01', fim: '2026-11-15' },
+      atacado: { preco: 4.2, quantidadeMinima: 12 },
+    })
+  })
+
+  it('interruptor desligado envia promocao e atacado nulos, mesmo com campos preenchidos', () => {
+    const request = montarRequest({
+      ...valoresIniciais('un'),
+      nome: 'Café',
+      precoVenda: '10',
+      promocaoAtiva: false,
+      precoPromocional: '8',
+      promocaoInicio: '2026-11-01',
+      promocaoFim: '2026-11-15',
+      atacadoAtivo: false,
+      precoAtacado: '9',
+      quantidadeMinimaAtacado: '6',
+    })
+    expect(request.promocao).toBeNull()
+    expect(request.atacado).toBeNull()
   })
 
   it('compra igual a venda aparece como "Mesma da venda"', () => {
@@ -197,5 +245,155 @@ describe('produtoFormulario', () => {
     // Corte no 30o caractere caindo num espaco: aparado no fim.
     expect(nomeCurtoEfetivo('Biscoito Recheado Chocolate 1 Pacote', '')).toBe('Biscoito Recheado Chocolate 1')
     expect(nomeCurtoEfetivo('', '')).toBe('')
+  })
+  describe('preco pela margem desejada', () => {
+    it.each([
+      ['10', '50', '20.00'],
+      ['7', '30', '10.00'],
+      ['3', '33,33', '4.50'],
+      ['3', '33.33', '4.50'],
+      ['18', '0', '18.00'],
+      ['10', '99,99', '100000.00'],
+    ])('custo %s e margem %s -> %s', (custo, margem, preco) => {
+      expect(calcularPrecoPelaMargem(custo, margem)).toBe(preco)
+    })
+
+    it.each([
+      ['10', '100'],
+      ['10', '120'],
+      ['', '30'],
+      ['0', '30'],
+      ['10', ''],
+      ['10', '-5'],
+      ['10', 'abc'],
+      ['10', '30,555'],
+    ])('custo "%s" e margem "%s" nao calculam (null)', (custo, margem) => {
+      expect(calcularPrecoPelaMargem(custo, margem)).toBeNull()
+    })
+  })
+
+  describe('situacao da promocao enquanto edita', () => {
+    it('agendada, vigente (inclusive nas pontas) e encerrada', () => {
+      expect(situacaoPromocaoLocal('2026-11-01', '2026-11-15', '2026-10-31')).toBe('AGENDADA')
+      expect(situacaoPromocaoLocal('2026-11-01', '2026-11-15', '2026-11-01')).toBe('VIGENTE')
+      expect(situacaoPromocaoLocal('2026-11-01', '2026-11-15', '2026-11-15')).toBe('VIGENTE')
+      expect(situacaoPromocaoLocal('2026-11-15', '2026-11-15', '2026-11-15')).toBe('VIGENTE')
+      expect(situacaoPromocaoLocal('2026-11-01', '2026-11-15', '2026-11-16')).toBe('ENCERRADA')
+    })
+
+    it('sem datas ou com fim antes do inicio, sem situacao', () => {
+      expect(situacaoPromocaoLocal('', '2026-11-15', '2026-11-05')).toBeNull()
+      expect(situacaoPromocaoLocal('2026-11-15', '2026-11-01', '2026-11-05')).toBeNull()
+    })
+
+    it('textos do selo', () => {
+      expect(textoSeloPromocao('VIGENTE', '2026-11-01', '2026-11-15')).toBe('Vigente até 15/11')
+      expect(textoSeloPromocao('AGENDADA', '2026-11-01', '2026-11-15')).toBe('Agendada para 01/11')
+      expect(textoSeloPromocao('ENCERRADA', '2026-10-01', '2026-10-15')).toBe('Encerrada em 15/10')
+    })
+
+    it('data de hoje no fuso do navegador, em yyyy-mm-dd', () => {
+      expect(dataLocalHoje(new Date(2026, 10, 5, 23, 59))).toBe('2026-11-05')
+      expect(dataLocalHoje(new Date(2026, 0, 9, 0, 1))).toBe('2026-01-09')
+    })
+  })
+
+  it('preco abaixo do custo so com os dois valores informados', () => {
+    expect(precoAbaixoDoCusto('10', '12')).toBe(true)
+    expect(precoAbaixoDoCusto('12', '12')).toBe(false)
+    expect(precoAbaixoDoCusto('', '12')).toBe(false)
+    expect(precoAbaixoDoCusto('10', '')).toBe(false)
+  })
+
+  it('ajuda do atacado com a quantidade e o preco em pt-BR', () => {
+    // O "R$" sai com espaco inseparavel (Intl), como no resto da tela.
+    const comEspacoSimples = (texto: string | null) => texto?.replace(/ /g, ' ')
+    expect(comEspacoSimples(textoAjudaAtacado('12', '4.2', 'UN'))).toBe('A partir de 12 UN, cada unidade sai por R$ 4,20.')
+    expect(comEspacoSimples(textoAjudaAtacado('2.5', '30', 'KG'))).toBe('A partir de 2,5 KG, cada KG sai por R$ 30,00.')
+    expect(comEspacoSimples(textoAjudaAtacado('12', '4.2', undefined))).toBe('A partir de 12, cada unidade sai por R$ 4,20.')
+    expect(textoAjudaAtacado('', '4.2', 'UN')).toBeNull()
+    expect(textoAjudaAtacado('12', '', 'UN')).toBeNull()
+  })
+
+  it('quantidade fracionada do atacado so em unidade fracionada', () => {
+    const fracionada = { ...KG, fracionada: true }
+    const base = { ...valoresIniciais('un'), atacadoAtivo: true, precoAtacado: '4', quantidadeMinimaAtacado: '2.5' }
+    expect(erroFracaoAtacado(base, [UN, fracionada])).toBe('A unidade UN não aceita quantidade fracionada.')
+    expect(erroFracaoAtacado({ ...base, unidadeId: 'kg' }, [UN, fracionada])).toBeNull()
+    expect(erroFracaoAtacado({ ...base, quantidadeMinimaAtacado: '12' }, [UN])).toBeNull()
+    expect(erroFracaoAtacado({ ...base, atacadoAtivo: false }, [UN])).toBeNull()
+    // Unidade desconhecida (lista carregando): o backend decide.
+    expect(erroFracaoAtacado(base, [])).toBeNull()
+  })
+
+  describe('schema da promocao e do atacado', () => {
+    const base: ProdutoFormValues = { ...valoresIniciais('un'), nome: 'Arroz', precoVenda: '10', precoMinimo: '5' }
+    const promocao = { promocaoAtiva: true, precoPromocional: '8', promocaoInicio: '2026-11-01', promocaoFim: '2026-11-15' }
+    const atacado = { atacadoAtivo: true, precoAtacado: '9', quantidadeMinimaAtacado: '12' }
+
+    function erros(valores: ProdutoFormValues): Record<string, string> {
+      const resultado = produtoSchema.safeParse(valores)
+      return Object.fromEntries((resultado.error?.issues ?? []).map((issue) => [issue.path.join('.'), issue.message]))
+    }
+
+    it('aceita promocao e atacado validos, e promocao encerrada', () => {
+      expect(erros({ ...base, ...promocao, ...atacado })).toEqual({})
+      expect(erros({ ...base, ...promocao, promocaoInicio: '2020-01-01', promocaoFim: '2020-01-31' })).toEqual({})
+    })
+
+    it('interruptor desligado ignora os campos do bloco', () => {
+      expect(
+        erros({ ...base, promocaoAtiva: false, precoPromocional: '50', atacadoAtivo: false, quantidadeMinimaAtacado: '1' }),
+      ).toEqual({})
+    })
+
+    it('promocao ligada exige preco, inicio e fim', () => {
+      expect(erros({ ...base, promocaoAtiva: true })).toEqual({
+        precoPromocional: 'Informe o preço promocional.',
+        promocaoInicio: 'Informe o início da promoção.',
+        promocaoFim: 'Informe o fim da promoção.',
+      })
+    })
+
+    it('barra fim antes do inicio', () => {
+      expect(erros({ ...base, ...promocao, promocaoFim: '2026-10-31' })).toEqual({
+        promocaoFim: 'O fim da promoção não pode ser antes do início.',
+      })
+    })
+
+    it('preco promocional maior que zero, menor que o de venda e nao abaixo do minimo', () => {
+      expect(erros({ ...base, ...promocao, precoPromocional: '0.00' })).toEqual({
+        precoPromocional: 'O preço promocional deve ser maior que zero.',
+      })
+      expect(erros({ ...base, ...promocao, precoPromocional: '10.00' })).toEqual({
+        precoPromocional: 'Preço promocional deve ser menor que o preço de venda.',
+      })
+      expect(erros({ ...base, ...promocao, precoPromocional: '4.99' })).toEqual({
+        precoPromocional: 'Preço promocional não pode ser menor que o preço mínimo.',
+      })
+    })
+
+    it('atacado ligado exige preco e quantidade, com as mesmas regras de preco', () => {
+      expect(erros({ ...base, atacadoAtivo: true })).toEqual({
+        precoAtacado: 'Informe o preço de atacado.',
+        quantidadeMinimaAtacado: 'Informe a quantidade mínima do atacado.',
+      })
+      expect(erros({ ...base, ...atacado, precoAtacado: '10' })).toEqual({
+        precoAtacado: 'Preço de atacado deve ser menor que o preço de venda.',
+      })
+      expect(erros({ ...base, ...atacado, precoAtacado: '4' })).toEqual({
+        precoAtacado: 'Preço de atacado não pode ser menor que o preço mínimo.',
+      })
+    })
+
+    it('quantidade minima do atacado maior que 1 e com ate 3 casas', () => {
+      expect(erros({ ...base, ...atacado, quantidadeMinimaAtacado: '1' })).toEqual({
+        quantidadeMinimaAtacado: 'A quantidade mínima do atacado deve ser maior que 1.',
+      })
+      expect(erros({ ...base, ...atacado, quantidadeMinimaAtacado: '1.0005' })).toEqual({
+        quantidadeMinimaAtacado: 'Use até 3 casas decimais.',
+      })
+      expect(erros({ ...base, ...atacado, quantidadeMinimaAtacado: '1.001' })).toEqual({})
+    })
   })
 })

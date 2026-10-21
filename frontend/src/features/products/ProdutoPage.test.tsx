@@ -201,6 +201,8 @@ const REQUEST_VAZIO: ProdutoRequest = {
   precoVenda: 0,
   custo: null,
   precoMinimo: null,
+  promocao: null,
+  atacado: null,
   estoqueMinimo: null,
   estoqueMaximo: null,
   pontoReposicao: null,
@@ -1916,6 +1918,228 @@ describe('ProdutoPage', () => {
 
       expect(await screen.findByText('Nenhuma unidade ativa.')).toBeInTheDocument()
       expect(screen.getByRole('link', { name: 'Cadastrar em Unidades' })).toHaveAttribute('href', '/produtos/unidades')
+    })
+  })
+
+  describe('preços: margem, promoção e atacado (Fase C)', () => {
+    const produtoComPromocao: Produto = {
+      ...produtoAtivo,
+      promocao: { preco: 22.9, inicio: '2026-11-01', fim: '2026-11-15', situacao: 'VIGENTE' },
+      emPromocao: true,
+      atacado: { preco: 21.5, quantidadeMinima: 12 },
+    }
+
+    function interruptorPromocao(): HTMLElement {
+      return screen.getByRole('switch', { name: 'Ativar preço promocional' })
+    }
+
+    function interruptorAtacado(): HTMLElement {
+      return screen.getByRole('switch', { name: 'Ativar preço de atacado' })
+    }
+
+    function preencherPromocao(preco: string, inicio: string, fim: string) {
+      fireEvent.change(screen.getByLabelText('Preço promocional'), { target: { value: preco } })
+      fireEvent.change(screen.getByLabelText('Início'), { target: { value: inicio } })
+      fireEvent.change(screen.getByLabelText('Fim'), { target: { value: fim } })
+    }
+
+    it('avisa preço abaixo do custo na Geral, na Preços e nos blocos, sem impedir o salvamento', async () => {
+      cadastrarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Café' })
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo('Café', '10,00')
+      abrirAba(/preços/i)
+      fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '12,00' } })
+
+      expect(screen.getByText(/abaixo do custo \(R\$\s12,00\)/i)).toBeInTheDocument()
+      fireEvent.click(interruptorPromocao())
+      preencherPromocao('8,00', '2026-11-01', '2026-11-15')
+      expect(screen.getByLabelText('Preço promocional')).toHaveAccessibleDescription(/abaixo do custo/i)
+      fireEvent.click(interruptorAtacado())
+      fireEvent.change(screen.getByLabelText('Preço de atacado'), { target: { value: '9,00' } })
+      fireEvent.change(screen.getByLabelText(/^a partir de/i), { target: { value: '6' } })
+      expect(screen.getByLabelText('Preço de atacado')).toHaveAccessibleDescription(/abaixo do custo/i)
+      abrirAba(/geral/i)
+      expect(screen.getByLabelText(/preço de venda/i)).toHaveAccessibleDescription(/abaixo do custo/i)
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(cadastrarProdutoMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            precoVenda: 10,
+            custo: 12,
+            promocao: { preco: 8, inicio: '2026-11-01', fim: '2026-11-15' },
+            atacado: { preco: 9, quantidadeMinima: 6 },
+          }),
+        ),
+      )
+    })
+
+    it('"Calcular preço" aplica a margem desejada ao preço de venda e confirma', async () => {
+      renderNovo()
+      await esperarFormulario()
+      abrirAba(/preços/i)
+      const botao = screen.getByRole('button', { name: 'Calcular preço' })
+      expect(botao).toBeDisabled()
+      expect(botao).toHaveAccessibleDescription('Informe o custo para calcular o preço.')
+
+      fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '10,00' } })
+      expect(botao).toHaveAccessibleDescription('Informe a margem desejada.')
+      fireEvent.change(screen.getByLabelText('Margem desejada (%)'), { target: { value: '100' } })
+      expect(botao).toBeDisabled()
+      expect(botao).toHaveAccessibleDescription('Use uma margem de 0 a 99,99%, com até 2 casas.')
+      fireEvent.change(screen.getByLabelText('Margem desejada (%)'), { target: { value: '50' } })
+      expect(botao).toBeEnabled()
+
+      fireEvent.click(botao)
+
+      expect(screen.getByText(/preço de venda atualizado para R\$\s20,00\./i)).toBeInTheDocument()
+      expect(screen.getByText('50,00%')).toBeInTheDocument()
+      abrirAba(/geral/i)
+      expect(screen.getByLabelText(/preço de venda/i)).toHaveValue('20,00')
+    })
+
+    it('desligar a promoção esconde e limpa os campos, e o PATCH vai com promocao: null', async () => {
+      atualizarProdutoMock.mockResolvedValue(produtoAtivo)
+      renderEdicao(produtoComPromocao)
+      await esperarFormulario()
+      abrirAba(/preços/i)
+      expect(interruptorPromocao()).toHaveAttribute('aria-checked', 'true')
+      expect(screen.getByLabelText('Preço promocional')).toHaveValue('22,90')
+
+      fireEvent.click(interruptorPromocao())
+      expect(interruptorPromocao()).toHaveAttribute('aria-checked', 'false')
+      expect(screen.queryByLabelText('Preço promocional')).not.toBeInTheDocument()
+      fireEvent.click(interruptorPromocao())
+      expect(screen.getByLabelText('Preço promocional')).toHaveValue('')
+      expect(screen.getByLabelText('Início')).toHaveValue('')
+      fireEvent.click(interruptorPromocao())
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(
+          ID_ARROZ,
+          expect.objectContaining({ promocao: null, atacado: { preco: 21.5, quantidadeMinima: 12 } }),
+        ),
+      )
+    })
+
+    it('valida a promoção antes de enviar: fim antes do início leva à aba Preços', async () => {
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo('Café', '10,00')
+      abrirAba(/preços/i)
+      fireEvent.click(interruptorPromocao())
+      preencherPromocao('8,00', '2026-11-15', '2026-11-01')
+      abrirAba(/geral/i)
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(aba(/preços/i)).toHaveAttribute('aria-selected', 'true'))
+      expect(aba(/preços/i)).toHaveAccessibleName('Preços (1 erro)')
+      expect(screen.getByLabelText('Fim')).toHaveAccessibleDescription('O fim da promoção não pode ser antes do início.')
+      await waitFor(() => expect(screen.getByLabelText('Fim')).toHaveFocus())
+      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('mostra o selo da situação pela data de hoje, e "Remover promoção" desliga o bloco', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date(2026, 10, 5, 12, 0))
+      try {
+        renderEdicao(produtoComPromocao)
+        await esperarFormulario()
+        abrirAba(/preços/i)
+        expect(screen.getByText('Vigente até 15/11')).toBeInTheDocument()
+
+        fireEvent.change(screen.getByLabelText('Início'), { target: { value: '2026-11-10' } })
+        expect(screen.getByText('Agendada para 10/11')).toBeInTheDocument()
+        fireEvent.change(screen.getByLabelText('Início'), { target: { value: '2026-10-01' } })
+        fireEvent.change(screen.getByLabelText('Fim'), { target: { value: '2026-10-15' } })
+        expect(screen.getByText('Encerrada em 15/10')).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Remover promoção' }))
+        expect(interruptorPromocao()).toHaveAttribute('aria-checked', 'false')
+        expect(interruptorPromocao()).toHaveFocus()
+        expect(screen.queryByLabelText('Preço promocional')).not.toBeInTheDocument()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('400 em promocao.preco salta para a aba Preços com o erro no campo (Review Focus 2)', async () => {
+      const mensagem = 'Preço promocional deve ser menor que o preço de venda.'
+      atualizarProdutoMock.mockRejectedValue(new HttpError(400, 'Dados invalidos.', { 'promocao.preco': mensagem }))
+      renderEdicao(produtoComPromocao)
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('O produto não foi salvo. Confira o erro na aba Preços.')).toBeInTheDocument()
+      expect(aba(/preços/i)).toHaveAttribute('aria-selected', 'true')
+      expect(aba(/preços/i)).toHaveAccessibleName('Preços (1 erro)')
+      expect(interruptorPromocao()).toHaveAttribute('aria-checked', 'true')
+      expect(screen.getByLabelText('Preço promocional')).toHaveAccessibleDescription(mensagem)
+      await waitFor(() => expect(screen.getByLabelText('Preço promocional')).toHaveFocus())
+    })
+
+    it('erro do backend num campo do atacado liga o bloco para mostrá-lo', async () => {
+      const mensagem = 'A unidade UN não aceita quantidade fracionada.'
+      atualizarProdutoMock.mockRejectedValue(new HttpError(400, 'Dados invalidos.', { 'atacado.quantidadeMinima': mensagem }))
+      renderEdicao()
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText(mensagem)).toBeInTheDocument()
+      expect(interruptorAtacado()).toHaveAttribute('aria-checked', 'true')
+      expect(screen.getByLabelText(/^a partir de/i)).toHaveAccessibleDescription(mensagem)
+    })
+
+    it('atacado mostra a ajuda com a sigla e o preço', async () => {
+      renderEdicao(produtoComPromocao)
+      await esperarFormulario()
+      abrirAba(/preços/i)
+
+      expect(interruptorAtacado()).toHaveAttribute('aria-checked', 'true')
+      expect(screen.getByLabelText('A partir de (quantidade em UN)')).toHaveValue(12)
+      expect(screen.getByText(/^A partir de 12 UN, cada unidade sai por R\$\s21,50\.$/)).toBeInTheDocument()
+    })
+
+    it('quantidade fracionada no atacado com unidade não fracionada é barrada antes de enviar', async () => {
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo('Café', '10,00')
+      abrirAba(/preços/i)
+      fireEvent.click(interruptorAtacado())
+      fireEvent.change(screen.getByLabelText('Preço de atacado'), { target: { value: '9,00' } })
+      fireEvent.change(screen.getByLabelText(/^a partir de/i), { target: { value: '2.5' } })
+      abrirAba(/geral/i)
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(aba(/preços/i)).toHaveAttribute('aria-selected', 'true'))
+      expect(screen.getByLabelText(/^a partir de/i)).toHaveAccessibleDescription(
+        'A unidade UN não aceita quantidade fracionada.',
+      )
+      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('produto antigo, sem promoção nem atacado, salva com os dois nulos (Review Focus 5)', async () => {
+      atualizarProdutoMock.mockResolvedValue(produtoAtivo)
+      renderEdicao()
+      await esperarFormulario()
+      fireEvent.change(campoNome(), { target: { value: 'Arroz 5kg Tipo 1' } })
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(
+          ID_ARROZ,
+          expect.objectContaining({ nome: 'Arroz 5kg Tipo 1', promocao: null, atacado: null }),
+        ),
+      )
     })
   })
 })

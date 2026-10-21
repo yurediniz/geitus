@@ -20,6 +20,30 @@ export interface CodigoBarras {
   formato: FormatoCodigoBarras
 }
 
+/**
+ * Situacao da promocao na data de hoje (fuso America/Sao_Paulo), calculada pelo
+ * backend: AGENDADA antes do inicio, VIGENTE do inicio ao fim (inclusive) e
+ * ENCERRADA depois do fim.
+ */
+export type SituacaoPromocao = 'AGENDADA' | 'VIGENTE' | 'ENCERRADA'
+
+/** Preco promocional com vigencia por datas (yyyy-mm-dd, inicio e fim inclusivos). */
+export interface PromocaoProduto {
+  preco: number
+  inicio: string
+  fim: string
+  situacao: SituacaoPromocao
+}
+
+/** Preco de atacado: vale a partir da quantidade minima (uma unica faixa por produto). */
+export interface AtacadoProduto {
+  preco: number
+  quantidadeMinima: number
+}
+
+/** Promocao enviada no POST/PATCH (a situacao e sempre derivada pelo backend). */
+export type PromocaoRequest = Omit<PromocaoProduto, 'situacao'>
+
 /** Campos de texto livre com sugestoes dos valores ja usados na empresa. */
 export type CampoSugestaoProduto = 'marca' | 'fornecedor'
 
@@ -49,6 +73,12 @@ export interface Produto {
   precoVenda: number
   custo: number | null
   precoMinimo: number | null
+  /** Promocao gravada (vigente, agendada ou encerrada); null sem promocao. */
+  promocao: PromocaoProduto | null
+  /** Se a promocao esta vigente hoje (`promocao.situacao === 'VIGENTE'`). Só-leitura. */
+  emPromocao: boolean
+  /** Preco de atacado; null sem atacado. */
+  atacado: AtacadoProduto | null
   estoqueMinimo: number | null
   estoqueMaximo: number | null
   pontoReposicao: number | null
@@ -87,6 +117,10 @@ export interface ProdutoRequest {
   precoVenda: number
   custo: number | null
   precoMinimo: number | null
+  /** null = sem promocao (remove a gravada). O formulario sempre envia o estado completo. */
+  promocao: PromocaoRequest | null
+  /** null = sem atacado (remove o gravado). */
+  atacado: AtacadoProduto | null
   estoqueMinimo: number | null
   estoqueMaximo: number | null
   pontoReposicao: number | null

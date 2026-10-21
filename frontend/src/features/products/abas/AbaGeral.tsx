@@ -3,6 +3,7 @@ import { Controller, useFormContext } from 'react-hook-form'
 import type { UseQueryResult } from '@tanstack/react-query'
 
 import {
+  AvisoAbaixoDoCusto,
   AvisoCatalogo,
   CampoMoedaFormulario,
   CampoSelect,
@@ -16,6 +17,7 @@ import {
   TAMANHO_MAXIMO_NOME_CURTO,
   nomeCurtoEfetivo,
   opcoesDeUnidade,
+  precoAbaixoDoCusto,
   textoConversao,
   type ProdutoFormValues,
 } from '@/features/products/produtoFormulario'
@@ -89,13 +91,8 @@ export function AbaGeral({
 
   const unidades = useMemo(() => unidadesQuery.data ?? [], [unidadesQuery.data])
   const categorias = useMemo(() => categoriasQuery.data ?? [], [categoriasQuery.data])
-  const [unidadeIdAtual, unidadeCompraIdAtual, fatorAtual, nomeAtual, nomeCurtoAtual] = watch([
-    'unidadeId',
-    'unidadeCompraId',
-    'fatorConversao',
-    'nome',
-    'nomeCurto',
-  ])
+  const [unidadeIdAtual, unidadeCompraIdAtual, fatorAtual, nomeAtual, nomeCurtoAtual, precoVendaAtual, custoAtual] =
+    watch(['unidadeId', 'unidadeCompraId', 'fatorConversao', 'nome', 'nomeCurto', 'precoVenda', 'custo'])
 
   const opcoesUnidadeVenda = useMemo(
     () => opcoesDeUnidade(unidades, produto?.unidade ?? null),
@@ -175,6 +172,8 @@ export function AbaGeral({
           label={siglaVenda ? `Preço de venda (por ${siglaVenda})` : 'Preço de venda'}
           obrigatorio
           erro={errors.precoVenda?.message}
+          // O custo fica na aba Precos; o aviso aparece aqui tambem, junto ao preco.
+          ajuda={precoAbaixoDoCusto(precoVendaAtual, custoAtual) ? <AvisoAbaixoDoCusto custo={Number(custoAtual)} /> : undefined}
           aoAlterar={aoAlterarCampo}
           disabled={desabilitado}
         />

@@ -27,8 +27,11 @@ import {
   CAMPOS_POR_ABA,
   ROTULO_ABA,
   avaliarNovoCodigo,
+  campoDaChaveDoServidor,
+  erroFracaoAtacado,
   formatosDoProduto,
   idDoCampo,
+  interruptorDoCampo,
   idUnidadePadrao,
   montarRequest,
   primeiroCampoComErro,
@@ -53,7 +56,7 @@ import {
   reativarProduto,
 } from '@/services/produtoService'
 import { listarUnidades } from '@/services/unidadeService'
-import type { Categoria, UnidadeMedida } from '@/types/catalogo'
+import type { Categoria, UnidadeMedida, UnidadeResumo } from '@/types/catalogo'
 import type { Produto } from '@/types/produto'
 
 /** Chave do produto aberto; sob o prefixo de produtos (invalidado junto com as listas). */
@@ -143,7 +146,8 @@ const MENSAGEM_SKU_DUPLICADO = 'Já existe um produto com este SKU nesta empresa
 /**
  * Erros do backend que pertencem a campos do formulario, para marcar cada
  * campo (e a aba dele). Usa `campos` da resposta (400 e 409): a chave sem o
- * indice (`codigosBarras[2]` -> `codigosBarras`). Sem `campos`, o texto e so o
+ * indice (`codigosBarras[2]` -> `codigosBarras`) ou, na promocao e no atacado,
+ * o campo correspondente (`promocao.preco` -> `precoPromocional`). Sem `campos`, o texto e so o
  * fallback: codigo de barras primeiro, pelo inicio fixo da mensagem (o nome de
  * outro produto citado nela pode conter "SKU"), depois a mensagem exata de SKU.
  * `restantes` sao mensagens de chaves que nao sao campos do formulario.
@@ -160,7 +164,7 @@ function errosDeCampoDoServidor(erro: unknown): { erros: ErroDeCampoDoServidor[]
     const porCampo = new Map<keyof ProdutoFormValues, string[]>()
     const restantes: string[] = []
     for (const [chave, mensagem] of Object.entries(erro.campos)) {
-      const campo = chave.split(/[[.]/)[0]
+      const campo = campoDaChaveDoServidor(chave)
       if (ehCampoComErroDoServidor(campo)) {
         const mensagens = porCampo.get(campo) ?? []
         if (!mensagens.includes(mensagem)) {
@@ -479,6 +483,12 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     return mapa
   }, [unidades, produto])
   const formatosGravados = useMemo(() => formatosDoProduto(produto), [produto])
+  // Unidades com o `fracionada` (lista + unidade do produto), para a regra de fracao do atacado.
+  const unidadesConhecidas = useMemo<UnidadeResumo[]>(() => {
+    const lista: UnidadeResumo[] = unidades ?? []
+    const atual = produto?.unidade
+    return atual && !lista.some((unidade) => unidade.id === atual.id) ? [...lista, atual] : lista
+  }, [unidades, produto])
 
   const aoAlterarCampo = () => {
     setMensagemSucesso(null)
@@ -523,6 +533,11 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
         // Cada erro vai para o seu campo (com o indicador da aba); a pagina vai
         // para a primeira aba com erro (ou fica, se a atual mostra o campo).
         for (const { campo, mensagem } of errosDeCampo) {
+          // Erro num campo de promocao/atacado: o bloco abre para o erro aparecer.
+          const interruptor = interruptorDoCampo(campo)
+          if (interruptor && !getValues(interruptor)) {
+            setValue(interruptor, true)
+          }
           setError(campo, { type: 'server', message: mensagem })
         }
         const campos = errosDeCampo.map(({ campo }) => campo)
@@ -640,6 +655,14 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     enviandoRef.current = true
     void handleSubmit(
       (valores) => {
+        // Fracao no atacado depende da unidade escolhida: checada aqui, com a lista carregada.
+        const erroFracao = erroFracaoAtacado(valores, unidadesConhecidas)
+        if (erroFracao) {
+          enviandoRef.current = false
+          setError('quantidadeMinimaAtacado', { type: 'manual', message: erroFracao })
+          aoInvalidar({ quantidadeMinimaAtacado: { type: 'manual', message: erroFracao } })
+          return
+        }
         setErroSalvar(null)
         setMensagemSucesso(null)
         salvarMutation.mutate({ valores, acao })
@@ -783,7 +806,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
                   />
                 </TabsContent>
                 <TabsContent value="precos">
-                  <AbaPrecos desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
+                  <AbaPrecos siglaPorId={siglaPorId} desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
                 </TabsContent>
                 <TabsContent value="estoque">
                   <AbaEstoque desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
