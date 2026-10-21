@@ -15,12 +15,10 @@ import org.springframework.data.repository.query.Param;
  * o {@code uuid} publico. "Empresa_Id" navega ate o id da empresa (mesma nota
  * do {@code ClienteRepository}).
  *
- * <p><b>Contagens de uso em SQL nativo:</b> nesta fase a entidade
- * {@code Produto} ainda nao mapeia {@code unidade}/{@code unidadeCompra}
- * (chega na Task 3 do plano da Fase A), entao as contagens leem direto as
- * colunas {@code produtos.unidade_id} e {@code produtos.unidade_compra_id},
- * criadas pela V6. Podem virar JPQL quando o mapeamento existir. Exercidas
- * contra Postgres real no {@code CatalogoRepositoryIT}.
+ * <p><b>Contagens de uso em SQL nativo:</b> leem direto as colunas
+ * {@code produtos.unidade_id} e {@code produtos.unidade_compra_id} (V6), sem
+ * depender do mapeamento de {@code Produto}; poderiam virar JPQL, mas sao
+ * simples e ja exercidas contra Postgres real no {@code CatalogoRepositoryIT}.
  */
 public interface UnidadeMedidaRepository extends JpaRepository<UnidadeMedida, Long> {
 

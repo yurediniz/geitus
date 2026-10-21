@@ -38,8 +38,9 @@ import com.geitus.app.company.TipoPessoa;
  * migrations reais (inclusive a V6). Exercita as queries derivadas e as
  * contagens nativas de uso — o {@code @WebMvcTest}/Mockito nao as executa.
  *
- * <p>Os produtos sao inseridos por SQL nativo: ate a Task 3 a entidade
- * {@code Produto} ainda nao mapeia {@code unidade_id} (NOT NULL desde a V6).
+ * <p>Os produtos sao inseridos por SQL nativo (JdbcTemplate): o teste mira as
+ * contagens nativas sobre as colunas da V6, independente do mapeamento JPA de
+ * {@code Produto}.
  *
  * <p>Requer Docker disponivel no ambiente.
  */

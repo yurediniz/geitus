@@ -1,16 +1,20 @@
 package com.geitus.app.catalog;
 
+import static com.geitus.app.catalog.ProdutoRequestBuilder.comUnidade;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,6 +23,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.geitus.app.catalog.categoria.Categoria;
+import com.geitus.app.catalog.categoria.CategoriaArvore;
+import com.geitus.app.catalog.categoria.CategoriaService;
+import com.geitus.app.catalog.dto.ProdutoRequest;
+import com.geitus.app.catalog.dto.ProdutoResponse;
+import com.geitus.app.catalog.unidade.UnidadeMedida;
+import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.company.Empresa;
 import com.geitus.app.company.EmpresaRepository;
 import com.geitus.app.iam.CredenciaisInvalidasException;
@@ -28,10 +39,14 @@ import com.geitus.app.iam.UsuarioRepository;
 /**
  * Testa as regras do {@link ProdutoService}: validacoes de cadastro/atualizacao
  * (incluindo os campos cadastrais da V4 e as regras cruzadas), normalizacao de
- * texto e isolamento por empresa (DEC-016).
+ * texto, isolamento por empresa (DEC-016) e os vinculos com unidade de venda,
+ * categoria e unidade de compra (docs/modules/categorias-e-unidades.md, 5.1).
  */
 @ExtendWith(MockitoExtension.class)
 class ProdutoServiceTest {
+
+    private static final Long EMPRESA_ID = 1L;
+    private static final Long PRODUTO_ID = 5L;
 
     @Mock
     private ProdutoRepository produtoRepository;
@@ -42,46 +57,113 @@ class ProdutoServiceTest {
     @Mock
     private UsuarioRepository usuarioRepository;
 
+    @Mock
+    private UnidadeMedidaService unidadeService;
+
+    @Mock
+    private CategoriaService categoriaService;
+
     private ProdutoService produtoService;
+
+    private Empresa empresa;
+    private UnidadeMedida un;
 
     @BeforeEach
     void setUp() {
-        produtoService = new ProdutoService(produtoRepository, empresaRepository, usuarioRepository);
+        produtoService = new ProdutoService(produtoRepository, empresaRepository, usuarioRepository,
+                unidadeService, categoriaService);
+        empresa = empresaComId(EMPRESA_ID);
+        un = unidade(10L, empresa, "UN");
     }
 
-    private Empresa empresaComId(Long id) {
+    // ---------- Fixtures ----------
+
+    private static Empresa empresaComId(Long id) {
         Empresa empresa = new Empresa("Empresa " + id);
         ReflectionTestUtils.setField(empresa, "id", id);
         return empresa;
     }
 
-    private Produto produtoComId(Long id, Empresa empresa, String sku, String codigoBarras) {
-        Produto produto = new Produto(empresa, "Produto Existente", null, null, new BigDecimal("10.00"),
-                null, null, codigoBarras, sku, null, null, null, null, null);
-        ReflectionTestUtils.setField(produto, "id", id);
+    private static UnidadeMedida unidade(Long id, Empresa empresa, String sigla) {
+        UnidadeMedida unidade = new UnidadeMedida(empresa, sigla, "Unidade " + sigla, false);
+        ReflectionTestUtils.setField(unidade, "id", id);
+        return unidade;
+    }
+
+    private static Categoria categoria(Long id, Empresa empresa, Categoria pai, String nome) {
+        Categoria categoria = new Categoria(empresa, pai, nome);
+        ReflectionTestUtils.setField(categoria, "id", id);
+        return categoria;
+    }
+
+    private Produto produtoExistente(String sku, String codigoBarras) {
+        return produtoExistente(un, null, sku, codigoBarras);
+    }
+
+    private Produto produtoExistente(UnidadeMedida unidade, Categoria categoria, String sku, String codigoBarras) {
+        Produto produto = new Produto(empresa, "Produto Existente", unidade, categoria, null, null,
+                new BigDecimal("10.00"), null, null, codigoBarras, sku, null, null, null, null, null);
+        ReflectionTestUtils.setField(produto, "id", PRODUTO_ID);
+        when(produtoRepository.findByIdAndEmpresa_Id(PRODUTO_ID, EMPRESA_ID)).thenReturn(Optional.of(produto));
         return produto;
     }
 
+    private void unidadeDaEmpresa(UnidadeMedida unidade) {
+        when(unidadeService.buscarDaEmpresa(EMPRESA_ID, unidade.getUuid())).thenReturn(unidade);
+    }
+
+    private void categoriaDaEmpresa(Categoria categoria) {
+        when(categoriaService.buscarDaEmpresa(EMPRESA_ID, categoria.getUuid())).thenReturn(categoria);
+    }
+
+    private void arvoreDaEmpresa(Categoria... categorias) {
+        when(categoriaService.arvoreDaEmpresa(EMPRESA_ID)).thenReturn(CategoriaArvore.de(List.of(categorias)));
+    }
+
+    private void cadastroPermitido() {
+        when(empresaRepository.findById(EMPRESA_ID)).thenReturn(Optional.of(empresa));
+        salvamentoDevolveOProduto();
+    }
+
+    private void salvamentoDevolveOProduto() {
+        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+    }
+
+    private ProdutoRequestBuilder requestComUN() {
+        return comUnidade(un.getUuid());
+    }
+
+    private Produto cadastrar(ProdutoRequest request) {
+        return produtoService.cadastrar(EMPRESA_ID, request);
+    }
+
+    private Produto atualizar(ProdutoRequest request) {
+        return produtoService.atualizarDadosBasicos(EMPRESA_ID, PRODUTO_ID, request);
+    }
+
+    // ---------- Cadastro: regras basicas ----------
+
     @Test
     void cadastrarProdutoValidoDeveSalvar() {
-        Empresa empresa = empresaComId(1L);
-        when(empresaRepository.findById(1L)).thenReturn(Optional.of(empresa));
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        unidadeDaEmpresa(un);
+        cadastroPermitido();
 
-        Produto produto = produtoService.cadastrar(1L, "Arroz 5kg", "Mercearia", "UN",
-                new BigDecimal("25.90"), new BigDecimal("18.00"), new BigDecimal("2"), "789123", "SKU-1",
-                null, null, null, null, null);
+        Produto produto = cadastrar(requestComUN().nome("Arroz 5kg").precoVenda("25.90").custo("18.00")
+                .estoqueMinimo("2").codigoBarras("789123").sku("SKU-1").build());
 
         assertThat(produto.getNome()).isEqualTo("Arroz 5kg");
-        assertThat(produto.getEmpresaId()).isEqualTo(1L);
+        assertThat(produto.getEmpresaId()).isEqualTo(EMPRESA_ID);
+        assertThat(produto.getUnidade()).isSameAs(un);
+        assertThat(produto.getCategoria()).isNull();
+        assertThat(produto.getUnidadeCompra()).isNull();
+        assertThat(produto.getFatorConversao()).isNull();
         assertThat(produto.isAtivo()).isTrue();
         verify(produtoRepository).save(any(Produto.class));
     }
 
     @Test
     void cadastrarComNomeVazioDeveFalhar() {
-        assertThatThrownBy(() -> produtoService.cadastrar(1L, "   ", null, null,
-                new BigDecimal("10"), null, null, null, null, null, null, null, null, null))
+        assertThatThrownBy(() -> cadastrar(requestComUN().nome("   ").build()))
                 .isInstanceOf(RegraDeNegocioException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -89,8 +171,7 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComPrecoVendaNegativoDeveFalhar() {
-        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("-1"), null, null, null, null, null, null, null, null, null))
+        assertThatThrownBy(() -> cadastrar(requestComUN().precoVenda("-1").build()))
                 .isInstanceOf(RegraDeNegocioException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -98,8 +179,7 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComCustoNegativoDeveFalhar() {
-        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("10"), new BigDecimal("-0.01"), null, null, null, null, null, null, null, null))
+        assertThatThrownBy(() -> cadastrar(requestComUN().custo("-0.01").build()))
                 .isInstanceOf(RegraDeNegocioException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -107,19 +187,26 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComEstoqueMinimoNegativoDeveFalhar() {
-        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("10"), null, new BigDecimal("-1"), null, null, null, null, null, null, null))
+        assertThatThrownBy(() -> cadastrar(requestComUN().estoqueMinimo("-1").build()))
                 .isInstanceOf(RegraDeNegocioException.class);
 
         verify(produtoRepository, never()).save(any());
     }
 
     @Test
-    void cadastrarComSkuDuplicadoNaMesmaEmpresaDeveFalhar() {
-        when(produtoRepository.existsBySkuAndEmpresa_Id("SKU-1", 1L)).thenReturn(true);
+    void cadastrarSemUnidadeDeveFalhar() {
+        assertThatThrownBy(() -> cadastrar(requestComUN().unidadeId(null).build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Unidade é obrigatória.");
 
-        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("10"), null, null, null, "SKU-1", null, null, null, null, null))
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void cadastrarComSkuDuplicadoNaMesmaEmpresaDeveFalhar() {
+        when(produtoRepository.existsBySkuAndEmpresa_Id("SKU-1", EMPRESA_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().sku("SKU-1").build()))
                 .isInstanceOf(ProdutoConflitoException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -130,14 +217,14 @@ class ProdutoServiceTest {
         // O SKU "SKU-1" existe em outra empresa (1), mas o cadastro e feito na
         // empresa 2: a checagem de unicidade deve considerar apenas a empresa
         // informada, entao a consulta para a empresa 2 retorna "nao existe".
-        when(produtoRepository.existsBySkuAndEmpresa_Id("SKU-1", 2L)).thenReturn(false);
-
         Empresa empresa2 = empresaComId(2L);
+        UnidadeMedida unDaEmpresa2 = unidade(20L, empresa2, "UN");
+        when(produtoRepository.existsBySkuAndEmpresa_Id("SKU-1", 2L)).thenReturn(false);
+        when(unidadeService.buscarDaEmpresa(2L, unDaEmpresa2.getUuid())).thenReturn(unDaEmpresa2);
         when(empresaRepository.findById(2L)).thenReturn(Optional.of(empresa2));
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        salvamentoDevolveOProduto();
 
-        Produto produto = produtoService.cadastrar(2L, "Produto", null, null,
-                new BigDecimal("10"), null, null, null, "SKU-1", null, null, null, null, null);
+        Produto produto = produtoService.cadastrar(2L, comUnidade(unDaEmpresa2.getUuid()).sku("SKU-1").build());
 
         assertThat(produto.getSku()).isEqualTo("SKU-1");
         assertThat(produto.getEmpresaId()).isEqualTo(2L);
@@ -147,10 +234,9 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComCodigoBarrasDuplicadoNaMesmaEmpresaDeveFalhar() {
-        when(produtoRepository.existsByCodigoBarrasAndEmpresa_Id("789123", 1L)).thenReturn(true);
+        when(produtoRepository.existsByCodigoBarrasAndEmpresa_Id("789123", EMPRESA_ID)).thenReturn(true);
 
-        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("10"), null, null, "789123", null, null, null, null, null, null))
+        assertThatThrownBy(() -> cadastrar(requestComUN().codigoBarras("789123").build()))
                 .isInstanceOf(ProdutoConflitoException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -158,12 +244,10 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarSemSkuESemCodigoBarrasDevePermitir() {
-        Empresa empresa = empresaComId(1L);
-        when(empresaRepository.findById(1L)).thenReturn(Optional.of(empresa));
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        unidadeDaEmpresa(un);
+        cadastroPermitido();
 
-        Produto produto = produtoService.cadastrar(1L, "Produto Sem Codigos", null, null,
-                new BigDecimal("10"), null, null, null, null, null, null, null, null, null);
+        Produto produto = cadastrar(requestComUN().nome("Produto Sem Codigos").build());
 
         assertThat(produto.getSku()).isNull();
         assertThat(produto.getCodigoBarras()).isNull();
@@ -171,12 +255,13 @@ class ProdutoServiceTest {
         verify(produtoRepository, never()).existsByCodigoBarrasAndEmpresa_Id(any(), anyLong());
     }
 
+    // ---------- Atualizacao: regras basicas ----------
+
     @Test
     void atualizarProdutoDeOutraEmpresaDeveFalhar() {
-        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.empty());
+        when(produtoRepository.findByIdAndEmpresa_Id(PRODUTO_ID, EMPRESA_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> produtoService.atualizarDadosBasicos(1L, 5L, "Novo Nome", null, null,
-                new BigDecimal("10"), null, null, null, null, null, null, null, null, null))
+        assertThatThrownBy(() -> atualizar(requestComUN().nome("Novo Nome").build()))
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -184,28 +269,26 @@ class ProdutoServiceTest {
 
     @Test
     void atualizarProdutoDentroDaEmpresaCorretaDeveAlterarDados() {
-        Empresa empresa = empresaComId(1L);
-        Produto produtoExistente = produtoComId(5L, empresa, null, null);
-        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        produtoExistente(null, null);
+        UnidadeMedida kg = unidade(11L, empresa, "KG");
+        unidadeDaEmpresa(kg);
+        salvamentoDevolveOProduto();
 
-        Produto atualizado = produtoService.atualizarDadosBasicos(1L, 5L, "Nome Atualizado", "Categoria",
-                "UN", new BigDecimal("30.00"), new BigDecimal("20.00"), new BigDecimal("1"), null, null,
-                null, null, null, null, null);
+        Produto atualizado = atualizar(comUnidade(kg.getUuid()).nome("Nome Atualizado").precoVenda("30.00")
+                .custo("20.00").estoqueMinimo("1").build());
 
         assertThat(atualizado.getNome()).isEqualTo("Nome Atualizado");
         assertThat(atualizado.getPrecoVenda()).isEqualByComparingTo("30.00");
+        assertThat(atualizado.getUnidade()).isSameAs(kg);
     }
 
     @Test
     void atualizarComSkuJaUsadoPorOutroProdutoDaMesmaEmpresaDeveFalhar() {
-        Empresa empresa = empresaComId(1L);
-        Produto produtoExistente = produtoComId(5L, empresa, "SKU-PROPRIO", null);
-        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
-        when(produtoRepository.existsBySkuAndEmpresa_IdAndIdNot("SKU-DE-OUTRO", 1L, 5L)).thenReturn(true);
+        produtoExistente("SKU-PROPRIO", null);
+        when(produtoRepository.existsBySkuAndEmpresa_IdAndIdNot("SKU-DE-OUTRO", EMPRESA_ID, PRODUTO_ID))
+                .thenReturn(true);
 
-        assertThatThrownBy(() -> produtoService.atualizarDadosBasicos(1L, 5L, "Produto", null, null,
-                new BigDecimal("10"), null, null, null, "SKU-DE-OUTRO", null, null, null, null, null))
+        assertThatThrownBy(() -> atualizar(requestComUN().sku("SKU-DE-OUTRO").build()))
                 .isInstanceOf(ProdutoConflitoException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -213,13 +296,11 @@ class ProdutoServiceTest {
 
     @Test
     void atualizarComCodigoBarrasJaUsadoPorOutroProdutoDaMesmaEmpresaDeveFalhar() {
-        Empresa empresa = empresaComId(1L);
-        Produto produtoExistente = produtoComId(5L, empresa, null, "111222333");
-        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
-        when(produtoRepository.existsByCodigoBarrasAndEmpresa_IdAndIdNot("999888777", 1L, 5L)).thenReturn(true);
+        produtoExistente(null, "111222333");
+        when(produtoRepository.existsByCodigoBarrasAndEmpresa_IdAndIdNot("999888777", EMPRESA_ID, PRODUTO_ID))
+                .thenReturn(true);
 
-        assertThatThrownBy(() -> produtoService.atualizarDadosBasicos(1L, 5L, "Produto", null, null,
-                new BigDecimal("10"), null, null, "999888777", null, null, null, null, null, null))
+        assertThatThrownBy(() -> atualizar(requestComUN().codigoBarras("999888777").build()))
                 .isInstanceOf(ProdutoConflitoException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -227,94 +308,111 @@ class ProdutoServiceTest {
 
     @Test
     void atualizarMantendoOProprioCodigoBarrasNaoDeveFalhar() {
-        Empresa empresa = empresaComId(1L);
-        Produto produtoExistente = produtoComId(5L, empresa, null, "111222333");
-        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
-        when(produtoRepository.existsByCodigoBarrasAndEmpresa_IdAndIdNot("111222333", 1L, 5L)).thenReturn(false);
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        produtoExistente(null, "111222333");
+        when(produtoRepository.existsByCodigoBarrasAndEmpresa_IdAndIdNot("111222333", EMPRESA_ID, PRODUTO_ID))
+                .thenReturn(false);
+        unidadeDaEmpresa(un);
+        salvamentoDevolveOProduto();
 
-        Produto atualizado = produtoService.atualizarDadosBasicos(1L, 5L, "Produto Atualizado", null, null,
-                new BigDecimal("15"), null, null, "111222333", null, null, null, null, null, null);
+        Produto atualizado = atualizar(requestComUN().nome("Produto Atualizado").precoVenda("15")
+                .codigoBarras("111222333").build());
 
         assertThat(atualizado.getCodigoBarras()).isEqualTo("111222333");
-        verify(produtoRepository).existsByCodigoBarrasAndEmpresa_IdAndIdNot("111222333", 1L, 5L);
+        verify(produtoRepository).existsByCodigoBarrasAndEmpresa_IdAndIdNot("111222333", EMPRESA_ID, PRODUTO_ID);
         verify(produtoRepository).save(any(Produto.class));
     }
 
     @Test
     void atualizarMantendoOProprioSkuNaoDeveFalhar() {
-        Empresa empresa = empresaComId(1L);
-        Produto produtoExistente = produtoComId(5L, empresa, "SKU-PROPRIO", null);
-        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
-        when(produtoRepository.existsBySkuAndEmpresa_IdAndIdNot("SKU-PROPRIO", 1L, 5L)).thenReturn(false);
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        produtoExistente("SKU-PROPRIO", null);
+        when(produtoRepository.existsBySkuAndEmpresa_IdAndIdNot("SKU-PROPRIO", EMPRESA_ID, PRODUTO_ID))
+                .thenReturn(false);
+        unidadeDaEmpresa(un);
+        salvamentoDevolveOProduto();
 
-        Produto atualizado = produtoService.atualizarDadosBasicos(1L, 5L, "Produto Atualizado", null, null,
-                new BigDecimal("15"), null, null, null, "SKU-PROPRIO", null, null, null, null, null);
+        Produto atualizado = atualizar(requestComUN().nome("Produto Atualizado").precoVenda("15")
+                .sku("SKU-PROPRIO").build());
 
         assertThat(atualizado.getSku()).isEqualTo("SKU-PROPRIO");
-        verify(produtoRepository).existsBySkuAndEmpresa_IdAndIdNot("SKU-PROPRIO", 1L, 5L);
+        verify(produtoRepository).existsBySkuAndEmpresa_IdAndIdNot("SKU-PROPRIO", EMPRESA_ID, PRODUTO_ID);
         verify(produtoRepository).save(any(Produto.class));
     }
 
     @Test
     void inativarEReativarProdutoDevemAlterarStatus() {
-        Empresa empresa = empresaComId(1L);
-        Produto produtoExistente = produtoComId(5L, empresa, null, null);
-        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        produtoExistente(null, null);
+        salvamentoDevolveOProduto();
 
-        Produto inativado = produtoService.inativar(1L, 5L);
+        Produto inativado = produtoService.inativar(EMPRESA_ID, PRODUTO_ID);
         assertThat(inativado.isAtivo()).isFalse();
 
-        Produto reativado = produtoService.reativar(1L, 5L);
+        Produto reativado = produtoService.reativar(EMPRESA_ID, PRODUTO_ID);
         assertThat(reativado.isAtivo()).isTrue();
     }
 
     @Test
     void buscarPorIdDeOutraEmpresaDeveLancarProdutoNaoEncontrado() {
-        when(produtoRepository.findByIdAndEmpresa_Id(5L, 2L)).thenReturn(Optional.empty());
+        when(produtoRepository.findByIdAndEmpresa_Id(PRODUTO_ID, 2L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> produtoService.buscarPorId(2L, 5L))
+        assertThatThrownBy(() -> produtoService.buscarPorId(2L, PRODUTO_ID))
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
     }
+
+    // ---------- Listagem ----------
 
     @Test
     void listarSemTermoDeBuscaDeveUsarQuerySemParametroDeBusca() {
         // Regressao do bug "function lower(bytea) does not exist": sem termo de
         // busca (null ou em branco), a query que usa :busca NAO deve ser chamada.
-        when(produtoRepository.buscarPorEmpresa(1L, true)).thenReturn(java.util.List.of());
+        when(produtoRepository.buscarPorEmpresa(EMPRESA_ID, true)).thenReturn(List.of());
 
-        produtoService.listarPorEmpresaComFiltros(1L, null, true);
-        produtoService.listarPorEmpresaComFiltros(1L, "   ", true);
+        produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, null, true);
+        produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, "   ", true);
 
-        verify(produtoRepository, org.mockito.Mockito.times(2)).buscarPorEmpresa(1L, true);
+        verify(produtoRepository, times(2)).buscarPorEmpresa(EMPRESA_ID, true);
         verify(produtoRepository, never()).buscarPorEmpresaComBusca(any(), any(), any());
     }
 
     @Test
     void listarComTermoDeBuscaDeveUsarQueryComBusca() {
-        when(produtoRepository.buscarPorEmpresaComBusca(1L, "arroz", null)).thenReturn(java.util.List.of());
+        when(produtoRepository.buscarPorEmpresaComBusca(EMPRESA_ID, "arroz", null)).thenReturn(List.of());
 
-        produtoService.listarPorEmpresaComFiltros(1L, " arroz ", null);
+        produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, " arroz ", null);
 
-        verify(produtoRepository).buscarPorEmpresaComBusca(1L, "arroz", null);
+        verify(produtoRepository).buscarPorEmpresaComBusca(EMPRESA_ID, "arroz", null);
         verify(produtoRepository, never()).buscarPorEmpresa(any(), any());
+    }
+
+    @Test
+    void listarParaUsuarioMontaAArvoreUmaUnicaVezComOCaminhoDaCategoria() {
+        usuarioAtivoDaEmpresa(9L);
+        Categoria racao = categoria(100L, empresa, null, "Ração");
+        Categoria umida = categoria(101L, empresa, racao, "Úmida");
+        Produto comCategoria = new Produto(empresa, "Sachê", un, umida, null, null, new BigDecimal("3.00"),
+                null, null, null, null, null, null, null, null, null);
+        Produto semCategoria = new Produto(empresa, "Avulso", un, null, null, null, new BigDecimal("1.00"),
+                null, null, null, null, null, null, null, null, null);
+        when(produtoRepository.buscarPorEmpresa(EMPRESA_ID, null)).thenReturn(List.of(comCategoria, semCategoria));
+        arvoreDaEmpresa(racao, umida);
+
+        List<ProdutoResponse> produtos = produtoService.listarParaUsuario(9L, null, null);
+
+        assertThat(produtos).hasSize(2);
+        assertThat(produtos.get(0).categoria().caminho()).isEqualTo("Ração › Úmida");
+        assertThat(produtos.get(0).unidade().sigla()).isEqualTo("UN");
+        assertThat(produtos.get(1).categoria()).isNull();
+        verify(categoriaService, times(1)).arvoreDaEmpresa(EMPRESA_ID);
     }
 
     // ---------- Normalizacao de campos opcionais (vazio/branco -> null; trim) ----------
 
     @Test
     void cadastrarComCamposOpcionaisEmBrancoDeveNormalizarParaNull() {
-        Empresa empresa = empresaComId(1L);
-        when(empresaRepository.findById(1L)).thenReturn(Optional.of(empresa));
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        unidadeDaEmpresa(un);
+        cadastroPermitido();
 
-        Produto produto = produtoService.cadastrar(1L, "Produto", "  ", "", new BigDecimal("10"),
-                null, null, "   ", "", "  ", "   ", null, null, null);
+        Produto produto = cadastrar(requestComUN().codigoBarras("   ").sku("").marca("  ").descricao("   ").build());
 
-        assertThat(produto.getCategoria()).isNull();
-        assertThat(produto.getUnidade()).isNull();
         assertThat(produto.getSku()).isNull();
         assertThat(produto.getCodigoBarras()).isNull();
         assertThat(produto.getMarca()).isNull();
@@ -326,17 +424,13 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarDeveAplicarTrimNosCamposInformados() {
-        Empresa empresa = empresaComId(1L);
-        when(empresaRepository.findById(1L)).thenReturn(Optional.of(empresa));
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        unidadeDaEmpresa(un);
+        cadastroPermitido();
 
-        Produto produto = produtoService.cadastrar(1L, "  Produto  ", "  Mercearia  ", "  UN  ",
-                new BigDecimal("10"), null, null, "  789123  ", "  SKU-1  ", "  Tio João  ",
-                "  Arroz tipo 1  ", null, null, null);
+        Produto produto = cadastrar(requestComUN().nome("  Produto  ").codigoBarras("  789123  ")
+                .sku("  SKU-1  ").marca("  Tio João  ").descricao("  Arroz tipo 1  ").build());
 
         assertThat(produto.getNome()).isEqualTo("Produto");
-        assertThat(produto.getCategoria()).isEqualTo("Mercearia");
-        assertThat(produto.getUnidade()).isEqualTo("UN");
         assertThat(produto.getSku()).isEqualTo("SKU-1");
         assertThat(produto.getCodigoBarras()).isEqualTo("789123");
         assertThat(produto.getMarca()).isEqualTo("Tio João");
@@ -345,16 +439,13 @@ class ProdutoServiceTest {
 
     @Test
     void atualizarComCamposOpcionaisEmBrancoDeveNormalizarParaNull() {
-        Empresa empresa = empresaComId(1L);
-        Produto produtoExistente = produtoComId(5L, empresa, "SKU-ANTIGO", "111222333");
-        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        produtoExistente("SKU-ANTIGO", "111222333");
+        unidadeDaEmpresa(un);
+        salvamentoDevolveOProduto();
 
-        Produto atualizado = produtoService.atualizarDadosBasicos(1L, 5L, "Produto", "  ", "",
-                new BigDecimal("10"), null, null, "   ", "", "  ", "   ", null, null, null);
+        Produto atualizado = atualizar(requestComUN().codigoBarras("   ").sku("").marca("  ").descricao("   ")
+                .build());
 
-        assertThat(atualizado.getCategoria()).isNull();
-        assertThat(atualizado.getUnidade()).isNull();
         assertThat(atualizado.getSku()).isNull();
         assertThat(atualizado.getCodigoBarras()).isNull();
         assertThat(atualizado.getMarca()).isNull();
@@ -365,8 +456,7 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComEstoqueMaximoNegativoDeveFalhar() {
-        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("10"), null, null, null, null, null, null, new BigDecimal("-1"), null, null))
+        assertThatThrownBy(() -> cadastrar(requestComUN().estoqueMaximo("-1").build()))
                 .isInstanceOf(RegraDeNegocioException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -374,8 +464,7 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComPontoReposicaoNegativoDeveFalhar() {
-        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("10"), null, null, null, null, null, null, null, new BigDecimal("-0.5"), null))
+        assertThatThrownBy(() -> cadastrar(requestComUN().pontoReposicao("-0.5").build()))
                 .isInstanceOf(RegraDeNegocioException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -383,8 +472,7 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComPrecoMinimoNegativoDeveFalhar() {
-        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("10"), null, null, null, null, null, null, null, null, new BigDecimal("-1")))
+        assertThatThrownBy(() -> cadastrar(requestComUN().precoMinimo("-1").build()))
                 .isInstanceOf(RegraDeNegocioException.class);
 
         verify(produtoRepository, never()).save(any());
@@ -392,8 +480,7 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComPrecoMinimoMaiorQuePrecoVendaDeveFalhar() {
-        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("10.00"), null, null, null, null, null, null, null, null, new BigDecimal("15.00")))
+        assertThatThrownBy(() -> cadastrar(requestComUN().precoVenda("10.00").precoMinimo("15.00").build()))
                 .isInstanceOf(RegraDeNegocioException.class)
                 .hasMessage("Preço mínimo não pode ser maior que o preço de venda.");
 
@@ -402,9 +489,7 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComEstoqueMaximoMenorQueEstoqueMinimoDeveFalhar() {
-        assertThatThrownBy(() -> produtoService.cadastrar(1L, "Produto", null, null,
-                new BigDecimal("10"), null, new BigDecimal("5"), null, null, null, null,
-                new BigDecimal("2"), null, null))
+        assertThatThrownBy(() -> cadastrar(requestComUN().estoqueMinimo("5").estoqueMaximo("2").build()))
                 .isInstanceOf(RegraDeNegocioException.class)
                 .hasMessage("Estoque máximo não pode ser menor que o estoque mínimo.");
 
@@ -414,13 +499,10 @@ class ProdutoServiceTest {
     @Test
     void cadastrarComEstoqueMaximoIgualAoEstoqueMinimoDevePermitir() {
         // Limite da regra cruzada: a validacao usa "<" (menor que), nao "<=".
-        // Com estoque maximo IGUAL ao minimo o cadastro deve persistir sem erro.
-        Empresa empresa = empresaComId(1L);
-        when(empresaRepository.findById(1L)).thenReturn(Optional.of(empresa));
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        unidadeDaEmpresa(un);
+        cadastroPermitido();
 
-        Produto produto = produtoService.cadastrar(1L, "Produto", null, null, new BigDecimal("10"),
-                null, new BigDecimal("10"), null, null, null, null, new BigDecimal("10"), null, null);
+        Produto produto = cadastrar(requestComUN().estoqueMinimo("10").estoqueMaximo("10").build());
 
         assertThat(produto.getEstoqueMinimo()).isEqualByComparingTo("10");
         assertThat(produto.getEstoqueMaximo()).isEqualByComparingTo("10");
@@ -429,13 +511,10 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComEstoqueMaximoSemEstoqueMinimoNaoDeveAplicarRegraCruzada() {
-        // Regra cruzada so vale quando ambos os lados estao informados.
-        Empresa empresa = empresaComId(1L);
-        when(empresaRepository.findById(1L)).thenReturn(Optional.of(empresa));
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        unidadeDaEmpresa(un);
+        cadastroPermitido();
 
-        Produto produto = produtoService.cadastrar(1L, "Produto", null, null, new BigDecimal("10"),
-                null, null, null, null, null, null, new BigDecimal("2"), null, null);
+        Produto produto = cadastrar(requestComUN().estoqueMaximo("2").build());
 
         assertThat(produto.getEstoqueMaximo()).isEqualByComparingTo("2");
         assertThat(produto.getEstoqueMinimo()).isNull();
@@ -443,14 +522,12 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComCamposCadastraisValidosDevePreservarOsValores() {
-        Empresa empresa = empresaComId(1L);
-        when(empresaRepository.findById(1L)).thenReturn(Optional.of(empresa));
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        unidadeDaEmpresa(un);
+        cadastroPermitido();
 
-        Produto produto = produtoService.cadastrar(1L, "Arroz 5kg", "Mercearia", "UN",
-                new BigDecimal("25.90"), new BigDecimal("18.00"), new BigDecimal("2"), null, null,
-                "Tio João", "Arroz branco tipo 1", new BigDecimal("50"), new BigDecimal("10"),
-                new BigDecimal("20.00"));
+        Produto produto = cadastrar(requestComUN().nome("Arroz 5kg").precoVenda("25.90").custo("18.00")
+                .estoqueMinimo("2").marca("Tio João").descricao("Arroz branco tipo 1").estoqueMaximo("50")
+                .pontoReposicao("10").precoMinimo("20.00").build());
 
         assertThat(produto.getMarca()).isEqualTo("Tio João");
         assertThat(produto.getDescricao()).isEqualTo("Arroz branco tipo 1");
@@ -461,28 +538,202 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComPrecoMinimoIgualAoPrecoVendaDevePermitir() {
-        Empresa empresa = empresaComId(1L);
-        when(empresaRepository.findById(1L)).thenReturn(Optional.of(empresa));
-        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        unidadeDaEmpresa(un);
+        cadastroPermitido();
 
-        Produto produto = produtoService.cadastrar(1L, "Produto", null, null, new BigDecimal("10.00"),
-                null, null, null, null, null, null, null, null, new BigDecimal("10.00"));
+        Produto produto = cadastrar(requestComUN().precoVenda("10.00").precoMinimo("10.00").build());
 
         assertThat(produto.getPrecoMinimo()).isEqualByComparingTo("10.00");
     }
 
     @Test
     void atualizarComPrecoMinimoMaiorQuePrecoVendaDeveFalhar() {
-        Empresa empresa = empresaComId(1L);
-        Produto produtoExistente = produtoComId(5L, empresa, null, null);
-        when(produtoRepository.findByIdAndEmpresa_Id(5L, 1L)).thenReturn(Optional.of(produtoExistente));
+        produtoExistente(null, null);
 
-        assertThatThrownBy(() -> produtoService.atualizarDadosBasicos(1L, 5L, "Produto", null, null,
-                new BigDecimal("10.00"), null, null, null, null, null, null, null, null, new BigDecimal("12.00")))
+        assertThatThrownBy(() -> atualizar(requestComUN().precoVenda("10.00").precoMinimo("12.00").build()))
                 .isInstanceOf(RegraDeNegocioException.class)
                 .hasMessage("Preço mínimo não pode ser maior que o preço de venda.");
 
         verify(produtoRepository, never()).save(any());
+    }
+
+    // ---------- Unidade, categoria e conversao de compra (spec 5.1) ----------
+
+    @Test
+    void unidadeDeOutraEmpresaLanca404() {
+        UUID unidadeDeOutraEmpresa = UUID.randomUUID();
+        when(unidadeService.buscarDaEmpresa(EMPRESA_ID, unidadeDeOutraEmpresa))
+                .thenThrow(new CatalogoNaoEncontradoException("Unidade de medida não encontrada."));
+
+        assertThatThrownBy(() -> cadastrar(comUnidade(unidadeDeOutraEmpresa).build()))
+                .isInstanceOf(CatalogoNaoEncontradoException.class);
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void categoriaDeOutraEmpresaLanca404() {
+        unidadeDaEmpresa(un);
+        UUID categoriaDeOutraEmpresa = UUID.randomUUID();
+        when(categoriaService.buscarDaEmpresa(EMPRESA_ID, categoriaDeOutraEmpresa))
+                .thenThrow(new CatalogoNaoEncontradoException("Categoria não encontrada."));
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().categoriaId(categoriaDeOutraEmpresa).build()))
+                .isInstanceOf(CatalogoNaoEncontradoException.class);
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void unidadeCompraDeOutraEmpresaLanca404() {
+        unidadeDaEmpresa(un);
+        UUID compraDeOutraEmpresa = UUID.randomUUID();
+        when(unidadeService.buscarDaEmpresa(EMPRESA_ID, compraDeOutraEmpresa))
+                .thenThrow(new CatalogoNaoEncontradoException("Unidade de medida não encontrada."));
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().compra(compraDeOutraEmpresa, "12").build()))
+                .isInstanceOf(CatalogoNaoEncontradoException.class);
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void unidadeCompraSemFatorLanca400() {
+        assertThatThrownBy(() -> cadastrar(requestComUN().compra(UUID.randomUUID(), null).build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Informe a unidade de compra e o fator de conversão juntos.");
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void fatorSemUnidadeCompraLanca400() {
+        assertThatThrownBy(() -> cadastrar(requestComUN().compra(null, "12").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Informe a unidade de compra e o fator de conversão juntos.");
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void mesmaUnidadeComFatorDiferenteDeUmLanca400() {
+        assertThatThrownBy(() -> cadastrar(requestComUN().compra(un.getUuid(), "12").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Quando a unidade de compra é a mesma de venda, o fator deve ser 1.");
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void mesmaUnidadeComFatorUmEPermitido() {
+        unidadeDaEmpresa(un);
+        cadastroPermitido();
+
+        Produto produto = cadastrar(requestComUN().compra(un.getUuid(), "1.0000").build());
+
+        assertThat(produto.getUnidadeCompra()).isSameAs(un);
+        assertThat(produto.getFatorConversao()).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void unidadeCompraEFatorSaoGravados() {
+        UnidadeMedida cx = unidade(12L, empresa, "CX");
+        unidadeDaEmpresa(un);
+        unidadeDaEmpresa(cx);
+        cadastroPermitido();
+
+        Produto produto = cadastrar(requestComUN().compra(cx.getUuid(), "12").build());
+
+        assertThat(produto.getUnidadeCompra()).isSameAs(cx);
+        assertThat(produto.getFatorConversao()).isEqualByComparingTo("12");
+    }
+
+    @Test
+    void unidadeInativaSoSeJaForAAtual() {
+        // Review Focus 4. Cadastrar com unidade inativa -> 400.
+        UnidadeMedida inativa = unidade(13L, empresa, "PCT");
+        inativa.inativar();
+        unidadeDaEmpresa(inativa);
+        assertThatThrownBy(() -> cadastrar(comUnidade(inativa.getUuid()).build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Esta unidade está inativa. Escolha uma unidade ativa.");
+
+        // Editar mantendo a mesma unidade, inativada depois -> salva.
+        produtoExistente(inativa, null, null, null);
+        salvamentoDevolveOProduto();
+        Produto atualizado = atualizar(comUnidade(inativa.getUuid()).nome("Novo nome").build());
+        assertThat(atualizado.getUnidade()).isSameAs(inativa);
+        assertThat(atualizado.getNome()).isEqualTo("Novo nome");
+
+        // Trocar para outra unidade inativa -> 400.
+        UnidadeMedida outraInativa = unidade(14L, empresa, "FD");
+        outraInativa.inativar();
+        unidadeDaEmpresa(outraInativa);
+        assertThatThrownBy(() -> atualizar(comUnidade(outraInativa.getUuid()).build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Esta unidade está inativa. Escolha uma unidade ativa.");
+    }
+
+    @Test
+    void unidadeCompraInativaSoSeJaForAAtual() {
+        UnidadeMedida caixaInativa = unidade(15L, empresa, "CX");
+        caixaInativa.inativar();
+        unidadeDaEmpresa(un);
+        unidadeDaEmpresa(caixaInativa);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().compra(caixaInativa.getUuid(), "12").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Esta unidade está inativa. Escolha uma unidade ativa.");
+
+        Produto existente = produtoExistente(null, null);
+        existente.atualizarDadosBasicos("Produto Existente", un, null, caixaInativa, new BigDecimal("12"),
+                new BigDecimal("10.00"), null, null, null, null, null, null, null, null, null);
+        salvamentoDevolveOProduto();
+        Produto atualizado = atualizar(requestComUN().compra(caixaInativa.getUuid(), "6").build());
+        assertThat(atualizado.getUnidadeCompra()).isSameAs(caixaInativa);
+        assertThat(atualizado.getFatorConversao()).isEqualByComparingTo("6");
+    }
+
+    @Test
+    void categoriaNaoSelecionavelSoSeJaForAAtual() {
+        // Review Focus 4: categoria inativa (ou sob ancestral inativo).
+        Categoria racao = categoria(100L, empresa, null, "Ração");
+        Categoria umida = categoria(101L, empresa, racao, "Úmida");
+        racao.inativar();
+        unidadeDaEmpresa(un);
+        categoriaDaEmpresa(umida);
+        arvoreDaEmpresa(racao, umida);
+
+        // Cadastrar sob ramo inativo -> 400.
+        assertThatThrownBy(() -> cadastrar(requestComUN().categoriaId(umida.getUuid()).build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Esta categoria está inativa. Escolha uma categoria ativa.");
+
+        // Editar mantendo a mesma categoria -> salva (sem consultar a arvore de novo).
+        produtoExistente(un, umida, null, null);
+        salvamentoDevolveOProduto();
+        Produto atualizado = atualizar(requestComUN().categoriaId(umida.getUuid()).nome("Novo nome").build());
+        assertThat(atualizado.getCategoria()).isSameAs(umida);
+        verify(categoriaService, times(1)).arvoreDaEmpresa(EMPRESA_ID);
+
+        // Trocar para outra categoria inativa -> 400.
+        categoriaDaEmpresa(racao);
+        assertThatThrownBy(() -> atualizar(requestComUN().categoriaId(racao.getUuid()).build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Esta categoria está inativa. Escolha uma categoria ativa.");
+    }
+
+    @Test
+    void categoriaSelecionavelEGravada() {
+        Categoria bebidas = categoria(102L, empresa, null, "Bebidas");
+        unidadeDaEmpresa(un);
+        categoriaDaEmpresa(bebidas);
+        arvoreDaEmpresa(bebidas);
+        cadastroPermitido();
+
+        Produto produto = cadastrar(requestComUN().categoriaId(bebidas.getUuid()).build());
+
+        assertThat(produto.getCategoria()).isSameAs(bebidas);
     }
 
     // ---------- Resolucao da empresa a partir do usuario autenticado ----------
@@ -493,10 +744,16 @@ class ProdutoServiceTest {
         when(usuarioInativo.isAtivo()).thenReturn(false);
         when(usuarioRepository.findById(9L)).thenReturn(Optional.of(usuarioInativo));
 
-        assertThatThrownBy(() -> produtoService.cadastrarParaUsuario(9L, "Produto", null, null,
-                new BigDecimal("10"), null, null, null, null, null, null, null, null, null))
+        assertThatThrownBy(() -> produtoService.cadastrarParaUsuario(9L, requestComUN().build()))
                 .isInstanceOf(CredenciaisInvalidasException.class);
 
         verify(produtoRepository, never()).save(any());
+    }
+
+    private void usuarioAtivoDaEmpresa(Long idUsuario) {
+        Usuario usuario = org.mockito.Mockito.mock(Usuario.class);
+        when(usuario.isAtivo()).thenReturn(true);
+        when(usuario.getEmpresaId()).thenReturn(EMPRESA_ID);
+        when(usuarioRepository.findById(idUsuario)).thenReturn(Optional.of(usuario));
     }
 }

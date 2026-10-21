@@ -3,7 +3,9 @@ package com.geitus.app.catalog;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +19,10 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import com.geitus.app.catalog.categoria.Categoria;
+import com.geitus.app.catalog.categoria.CategoriaRepository;
+import com.geitus.app.catalog.unidade.UnidadeMedida;
+import com.geitus.app.catalog.unidade.UnidadeMedidaRepository;
 import com.geitus.app.company.Empresa;
 import com.geitus.app.company.EmpresaRepository;
 import com.geitus.app.company.Endereco;
@@ -29,7 +35,8 @@ import com.geitus.app.company.TipoPessoa;
  * o {@code @WebMvcTest} com mock NAO faz e que ja escondeu um bug de query
  * (function lower(bytea) does not exist). Cobre isolamento por empresa
  * (DEC-016), busca case-insensitive, filtro de status e unicidade de
- * SKU/codigo de barras.
+ * SKU/codigo de barras, alem do mapeamento de unidade de venda, categoria e
+ * unidade de compra (V6) e do JOIN FETCH das listagens.
  *
  * <p>Usa o banco do container (nao o H2 de teste) via
  * {@code @AutoConfigureTestDatabase(replace = NONE)} e deixa o Flyway aplicar
@@ -65,6 +72,15 @@ class ProdutoRepositoryIT {
     @Autowired
     private EmpresaRepository empresaRepository;
 
+    @Autowired
+    private UnidadeMedidaRepository unidadeRepository;
+
+    @Autowired
+    private CategoriaRepository categoriaRepository;
+
+    /** Unidade UN criada para cada empresa do teste (unidade de venda e obrigatoria desde a V6). */
+    private final Map<Long, UnidadeMedida> unidadePorEmpresa = new HashMap<>();
+
     private Empresa novaEmpresa(String nome) {
         Empresa empresa = new Empresa(nome);
         // Empresa FISICA (sem CNPJ): satisfaz as colunas NOT NULL e a coerencia
@@ -80,11 +96,21 @@ class ProdutoRepositoryIT {
                 new RepresentanteLegal("Representante " + nome, "11144477735", "11987654321",
                         "rep@" + nome.toLowerCase().replaceAll("[^a-z0-9]", "") + ".test"),
                 new Endereco("01001000", "Praça da Sé", "S/N", null, "Sé", "São Paulo", "SP"));
-        return empresaRepository.saveAndFlush(empresa);
+        Empresa salva = empresaRepository.saveAndFlush(empresa);
+        unidadePorEmpresa.put(salva.getId(), novaUnidade(salva, "UN"));
+        return salva;
+    }
+
+    private UnidadeMedida novaUnidade(Empresa empresa, String sigla) {
+        return unidadeRepository.saveAndFlush(new UnidadeMedida(empresa, sigla, "Unidade " + sigla, false));
+    }
+
+    private UnidadeMedida unDa(Empresa empresa) {
+        return unidadePorEmpresa.get(empresa.getId());
     }
 
     private Produto novoProduto(Empresa empresa, String nome, String sku, String codigoBarras, boolean ativo) {
-        Produto produto = new Produto(empresa, nome, "Mercearia", "UN", new BigDecimal("10.00"),
+        Produto produto = new Produto(empresa, nome, unDa(empresa), null, null, null, new BigDecimal("10.00"),
                 null, null, codigoBarras, sku, null, null, null, null, null);
         if (!ativo) {
             produto.inativar();
@@ -97,7 +123,7 @@ class ProdutoRepositoryIT {
     @Test
     void devePersistirERelerOsCamposCadastraisDaV4() {
         Empresa empresa = novaEmpresa("Empresa V4");
-        Produto produto = new Produto(empresa, "Arroz 5kg", "Mercearia", "UN", new BigDecimal("25.90"),
+        Produto produto = new Produto(empresa, "Arroz 5kg", unDa(empresa), null, null, null, new BigDecimal("25.90"),
                 new BigDecimal("18.00"), new BigDecimal("2"), "789100200300", "SKU-V4",
                 "Tio João", "Arroz branco tipo 1, pacote de 5kg.", new BigDecimal("50.000"),
                 new BigDecimal("10.000"), new BigDecimal("20.00"));
@@ -113,6 +139,54 @@ class ProdutoRepositoryIT {
         assertThat(relido.getEstoqueMaximo()).isEqualByComparingTo("50.000");
         assertThat(relido.getPontoReposicao()).isEqualByComparingTo("10.000");
         assertThat(relido.getPrecoMinimo()).isEqualByComparingTo("20.00");
+    }
+
+    // ---------- Unidade, categoria e unidade de compra (V6) ----------
+
+    @Test
+    void devePersistirERelerUnidadeCategoriaECompra() {
+        Empresa empresa = novaEmpresa("Empresa Vinculos");
+        UnidadeMedida caixa = novaUnidade(empresa, "CX");
+        Categoria racao = categoriaRepository.saveAndFlush(new Categoria(empresa, null, "Ração"));
+        Produto produto = new Produto(empresa, "Sachê", unDa(empresa), racao, caixa, new BigDecimal("12"),
+                new BigDecimal("3.50"), null, null, null, null, null, null, null, null, null);
+        Long id = produtoRepository.saveAndFlush(produto).getId();
+
+        entityManager.clear();
+        Produto relido = produtoRepository.findByIdAndEmpresa_Id(id, empresa.getId()).orElseThrow();
+
+        assertThat(relido.getUnidade().getSigla()).isEqualTo("UN");
+        assertThat(relido.getCategoria().getNome()).isEqualTo("Ração");
+        assertThat(relido.getUnidadeCompra().getSigla()).isEqualTo("CX");
+        assertThat(relido.getFatorConversao()).isEqualByComparingTo("12");
+    }
+
+    @Test
+    void listagensTrazemOsVinculosSemPerderProdutoSemCategoriaOuCompra() {
+        Empresa empresa = novaEmpresa("Empresa Listagem Vinculos");
+        UnidadeMedida caixa = novaUnidade(empresa, "CX");
+        Categoria bebidas = categoriaRepository.saveAndFlush(new Categoria(empresa, null, "Bebidas"));
+        produtoRepository.saveAndFlush(new Produto(empresa, "Agua", unDa(empresa), bebidas, caixa,
+                new BigDecimal("6"), new BigDecimal("2.00"), null, null, null, "SKU-AGUA", null, null, null, null,
+                null));
+        novoProduto(empresa, "Bala", null, null, true);
+        entityManager.clear();
+
+        List<Produto> todos = produtoRepository.buscarPorEmpresa(empresa.getId(), null);
+        List<Produto> busca = produtoRepository.buscarPorEmpresaComBusca(empresa.getId(), "sku-agua", null);
+
+        assertThat(todos).extracting(Produto::getNome).containsExactly("Agua", "Bala");
+        // JOIN FETCH: os vinculos ja vem carregados (sem proxy pendente).
+        assertThat(org.hibernate.Hibernate.isInitialized(todos.get(0).getUnidade())).isTrue();
+        assertThat(org.hibernate.Hibernate.isInitialized(todos.get(0).getCategoria())).isTrue();
+        assertThat(org.hibernate.Hibernate.isInitialized(todos.get(0).getUnidadeCompra())).isTrue();
+        assertThat(todos.get(0).getCategoria().getNome()).isEqualTo("Bebidas");
+        assertThat(todos.get(1).getCategoria()).isNull();
+        assertThat(todos.get(1).getUnidadeCompra()).isNull();
+        assertThat(busca).singleElement().satisfies(produto -> {
+            assertThat(produto.getUnidadeCompra().getSigla()).isEqualTo("CX");
+            assertThat(produto.getUnidade().getSigla()).isEqualTo("UN");
+        });
     }
 
     // ---------- Isolamento por empresa (DEC-016) ----------

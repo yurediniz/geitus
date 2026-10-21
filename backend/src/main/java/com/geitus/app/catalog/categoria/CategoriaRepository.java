@@ -14,11 +14,10 @@ import org.springframework.data.repository.query.Param;
  * <p>As consultas isolam por empresa (DEC-016); a busca por identificador usa
  * o {@code uuid} publico. "Empresa_Id"/"Pai_Id" navegam ate o id da relacao.
  *
- * <p><b>Contagens de produtos em SQL nativo:</b> nesta fase a entidade
- * {@code Produto} ainda nao mapeia {@code categoria} (chega na Task 3 do plano
- * da Fase A), entao as contagens leem direto {@code produtos.categoria_id},
- * criada pela V6. Podem virar JPQL quando o mapeamento existir. Exercidas
- * contra Postgres real no {@code CatalogoRepositoryIT}.
+ * <p><b>Contagens de produtos em SQL nativo:</b> leem direto
+ * {@code produtos.categoria_id} (V6), sem depender do mapeamento de
+ * {@code Produto}; poderiam virar JPQL, mas sao simples e ja exercidas contra
+ * Postgres real no {@code CatalogoRepositoryIT}.
  */
 public interface CategoriaRepository extends JpaRepository<Categoria, Long> {
 

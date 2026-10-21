@@ -3,6 +3,8 @@ package com.geitus.app.catalog;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import com.geitus.app.catalog.categoria.Categoria;
+import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.company.Empresa;
 
 import jakarta.persistence.Column;
@@ -26,6 +28,13 @@ import jakarta.persistence.Table;
  * {@link #atualizarDadosBasicos} (nao ha setters individuais), garantindo que
  * as alteracoes passem pelas regras do {@code ProdutoService}.
  *
+ * <p>Unidade de venda (obrigatoria), categoria e unidade de compra sao
+ * cadastros da mesma empresa (docs/modules/categorias-e-unidades.md, secao 5);
+ * o service valida a empresa e a V6 garante no banco com FKs compostas
+ * {@code (empresa_id, id)}. As colunas de texto antigas {@code produtos.categoria}
+ * e {@code produtos.unidade} continuam no banco ate a Fase B, mas nao sao mais
+ * mapeadas (a aplicacao nao as le nem escreve).
+ *
  * <p>Nao deve ser exposta diretamente na API: o {@code ProdutoController} usa
  * DTOs ({@code ProdutoRequest}/{@code ProdutoResponse}).
  */
@@ -44,14 +53,23 @@ public class Produto {
     @Column(nullable = false, length = 150)
     private String nome;
 
-    @Column(length = 100)
-    private String categoria;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "unidade_id", nullable = false)
+    private UnidadeMedida unidade;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "categoria_id")
+    private Categoria categoria;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "unidade_compra_id")
+    private UnidadeMedida unidadeCompra;
+
+    @Column(name = "fator_conversao", precision = 12, scale = 4)
+    private BigDecimal fatorConversao;
 
     @Column(length = 100)
     private String marca;
-
-    @Column(length = 20)
-    private String unidade;
 
     @Column(length = 1000)
     private String descricao;
@@ -99,14 +117,15 @@ public class Produto {
      * {@link #atualizarDadosBasicos}. O service e responsavel por validar as
      * regras de negocio antes de instanciar.
      */
-    public Produto(Empresa empresa, String nome, String categoria, String unidade, BigDecimal precoVenda,
+    public Produto(Empresa empresa, String nome, UnidadeMedida unidade, Categoria categoria,
+            UnidadeMedida unidadeCompra, BigDecimal fatorConversao, BigDecimal precoVenda,
             BigDecimal custo, BigDecimal estoqueMinimo, String codigoBarras, String sku,
             String marca, String descricao, BigDecimal estoqueMaximo, BigDecimal pontoReposicao,
             BigDecimal precoMinimo) {
         this.empresa = empresa;
         this.ativo = true;
-        atualizarDadosBasicos(nome, categoria, unidade, precoVenda, custo, estoqueMinimo, codigoBarras, sku,
-                marca, descricao, estoqueMaximo, pontoReposicao, precoMinimo);
+        atualizarDadosBasicos(nome, unidade, categoria, unidadeCompra, fatorConversao, precoVenda, custo,
+                estoqueMinimo, codigoBarras, sku, marca, descricao, estoqueMaximo, pontoReposicao, precoMinimo);
     }
 
     @PrePersist
@@ -122,15 +141,19 @@ public class Produto {
     /**
      * Atualiza os dados basicos do produto. Chamado pelo service apos as
      * validacoes de regra de negocio (nome, preco, unicidade de SKU/codigo
-     * de barras) ja terem sido feitas.
+     * de barras, unidade/categoria da empresa, coerencia da conversao de
+     * compra) ja terem sido feitas.
      */
-    public void atualizarDadosBasicos(String nome, String categoria, String unidade, BigDecimal precoVenda,
+    public void atualizarDadosBasicos(String nome, UnidadeMedida unidade, Categoria categoria,
+            UnidadeMedida unidadeCompra, BigDecimal fatorConversao, BigDecimal precoVenda,
             BigDecimal custo, BigDecimal estoqueMinimo, String codigoBarras, String sku,
             String marca, String descricao, BigDecimal estoqueMaximo, BigDecimal pontoReposicao,
             BigDecimal precoMinimo) {
         this.nome = nome;
-        this.categoria = categoria;
         this.unidade = unidade;
+        this.categoria = categoria;
+        this.unidadeCompra = unidadeCompra;
+        this.fatorConversao = fatorConversao;
         this.precoVenda = precoVenda;
         this.custo = custo;
         this.estoqueMinimo = estoqueMinimo;
@@ -167,16 +190,28 @@ public class Produto {
         return nome;
     }
 
-    public String getCategoria() {
+    /** Unidade de venda (sempre presente). */
+    public UnidadeMedida getUnidade() {
+        return unidade;
+    }
+
+    /** Categoria, ou {@code null} se o produto nao tiver categoria. */
+    public Categoria getCategoria() {
         return categoria;
+    }
+
+    /** Unidade de compra, ou {@code null}; quando presente, {@link #getFatorConversao()} tambem esta. */
+    public UnidadeMedida getUnidadeCompra() {
+        return unidadeCompra;
+    }
+
+    /** Unidades de venda contidas em 1 unidade de compra, ou {@code null}. */
+    public BigDecimal getFatorConversao() {
+        return fatorConversao;
     }
 
     public String getMarca() {
         return marca;
-    }
-
-    public String getUnidade() {
-        return unidade;
     }
 
     public String getDescricao() {

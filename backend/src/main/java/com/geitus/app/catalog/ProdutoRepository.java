@@ -39,12 +39,20 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
     // runtime com "function lower(bytea) does not exist". Separar os casos
     // garante que :busca nunca seja null na query que o utiliza.
 
+    // Nota: as listagens trazem unidade, unidade de compra e categoria no mesmo
+    // SELECT (JOIN FETCH) para a resposta nao disparar uma consulta por produto
+    // ao montar os resumos. A categoria e opcional (LEFT JOIN): produto sem
+    // categoria continua na lista.
+
     /**
      * Lista produtos da empresa, com filtro opcional de status ativo/inativo
      * ({@code ativo} e ignorado quando {@code null}).
      */
     @Query("""
             SELECT p FROM Produto p
+              JOIN FETCH p.unidade
+              LEFT JOIN FETCH p.unidadeCompra
+              LEFT JOIN FETCH p.categoria
             WHERE p.empresa.id = :empresaId
               AND (:ativo IS NULL OR p.ativo = :ativo)
             ORDER BY p.nome
@@ -59,6 +67,9 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
      */
     @Query("""
             SELECT p FROM Produto p
+              JOIN FETCH p.unidade
+              LEFT JOIN FETCH p.unidadeCompra
+              LEFT JOIN FETCH p.categoria
             WHERE p.empresa.id = :empresaId
               AND (LOWER(p.nome) LIKE LOWER(CONCAT('%', :busca, '%'))
                    OR LOWER(p.sku) LIKE LOWER(CONCAT('%', :busca, '%'))

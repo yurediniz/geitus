@@ -55,10 +55,7 @@ public class ProdutoController {
             @RequestParam(required = false) String busca,
             @Parameter(description = "Filtra por status ativo/inativo")
             @RequestParam(required = false) Boolean ativo) {
-        List<ProdutoResponse> produtos = produtoService.listarParaUsuario(idUsuario, busca, ativo).stream()
-                .map(ProdutoResponse::de)
-                .toList();
-        return ResponseEntity.ok(produtos);
+        return ResponseEntity.ok(produtoService.listarParaUsuario(idUsuario, busca, ativo));
     }
 
     @Operation(summary = "Busca um produto por id, limitado a empresa do usuario autenticado",
@@ -67,8 +64,7 @@ public class ProdutoController {
     public ResponseEntity<ProdutoResponse> buscarPorId(
             @AuthenticationPrincipal Long idUsuario,
             @PathVariable Long id) {
-        Produto produto = produtoService.buscarPorIdParaUsuario(idUsuario, id);
-        return ResponseEntity.ok(ProdutoResponse.de(produto));
+        return ResponseEntity.ok(produtoService.buscarPorIdParaUsuario(idUsuario, id));
     }
 
     @Operation(summary = "Cadastra um novo produto na empresa do usuario autenticado",
@@ -77,11 +73,7 @@ public class ProdutoController {
     public ResponseEntity<ProdutoResponse> cadastrar(
             @AuthenticationPrincipal Long idUsuario,
             @Valid @RequestBody ProdutoRequest request) {
-        Produto produto = produtoService.cadastrarParaUsuario(idUsuario, request.nome(), request.categoria(),
-                request.unidade(), request.precoVenda(), request.custo(), request.estoqueMinimo(),
-                request.codigoBarras(), request.sku(), request.marca(), request.descricao(),
-                request.estoqueMaximo(), request.pontoReposicao(), request.precoMinimo());
-        return ResponseEntity.status(HttpStatus.CREATED).body(ProdutoResponse.de(produto));
+        return ResponseEntity.status(HttpStatus.CREATED).body(produtoService.cadastrarParaUsuario(idUsuario, request));
     }
 
     @Operation(summary = "Atualiza os dados basicos de um produto da empresa do usuario autenticado",
@@ -91,11 +83,7 @@ public class ProdutoController {
             @AuthenticationPrincipal Long idUsuario,
             @PathVariable Long id,
             @Valid @RequestBody ProdutoRequest request) {
-        Produto produto = produtoService.atualizarDadosBasicosParaUsuario(idUsuario, id, request.nome(),
-                request.categoria(), request.unidade(), request.precoVenda(), request.custo(),
-                request.estoqueMinimo(), request.codigoBarras(), request.sku(), request.marca(),
-                request.descricao(), request.estoqueMaximo(), request.pontoReposicao(), request.precoMinimo());
-        return ResponseEntity.ok(ProdutoResponse.de(produto));
+        return ResponseEntity.ok(produtoService.atualizarDadosBasicosParaUsuario(idUsuario, id, request));
     }
 
     @Operation(summary = "Inativa um produto da empresa do usuario autenticado",
@@ -104,8 +92,7 @@ public class ProdutoController {
     public ResponseEntity<ProdutoResponse> inativar(
             @AuthenticationPrincipal Long idUsuario,
             @PathVariable Long id) {
-        Produto produto = produtoService.inativarParaUsuario(idUsuario, id);
-        return ResponseEntity.ok(ProdutoResponse.de(produto));
+        return ResponseEntity.ok(produtoService.inativarParaUsuario(idUsuario, id));
     }
 
     @Operation(summary = "Reativa um produto da empresa do usuario autenticado",
@@ -114,7 +101,6 @@ public class ProdutoController {
     public ResponseEntity<ProdutoResponse> reativar(
             @AuthenticationPrincipal Long idUsuario,
             @PathVariable Long id) {
-        Produto produto = produtoService.reativarParaUsuario(idUsuario, id);
-        return ResponseEntity.ok(ProdutoResponse.de(produto));
+        return ResponseEntity.ok(produtoService.reativarParaUsuario(idUsuario, id));
     }
 }
