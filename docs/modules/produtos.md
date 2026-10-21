@@ -1,6 +1,6 @@
 # Módulo: Produtos
 
-> **Evolução em andamento (DEC-030):** o cadastro de produtos está sendo ampliado em 6 fases (A–F). Itens que esta spec lista como fora do escopo — categorias e unidades como cadastros, múltiplos códigos de barras, promoções/atacado e estoque com movimentações — passam a fazer parte do escopo por decisão do usuário. Fase A especificada em [categorias-e-unidades.md](categorias-e-unidades.md); esta spec será atualizada ao fim de cada fase. Fiscal continua fora.
+> **Evolução em andamento (DEC-030):** o cadastro de produtos está sendo ampliado em 6 fases (A–F). Itens que esta spec lista como fora do escopo — categorias e unidades como cadastros, múltiplos códigos de barras, promoções/atacado e estoque com movimentações — passam a fazer parte do escopo por decisão do usuário. **Fase A concluída** ([categorias-e-unidades.md](categorias-e-unidades.md)): `categoria` e `unidade` deixaram de ser texto — o produto referencia `unidade_id` (obrigatório), `categoria_id` (opcional, qualquer nível da árvore), `unidade_compra_id` + `fator_conversao` (migration V6); a API recebe `unidadeId`/`categoriaId`/`unidadeCompraId`/`fatorConversao` e devolve `unidade`/`categoria`/`unidadeCompra` como objetos e `conversaoTexto`. As colunas de texto antigas ainda existem no banco (não lidas) e saem na Fase B. Onde esta spec fala em `categoria`/`unidade` como texto, vale o modelo novo. Fiscal continua fora.
 
 ## 1. Visão geral
 

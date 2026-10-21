@@ -18,7 +18,7 @@ Estado atual do repositório:
 - **Autenticação**: login por e-mail/senha (BCrypt), JWT (HS256), proteção de rotas e tela de login.
 - **Empresa**: cadastro da empresa do usuário autenticado (`/api/empresas/minha`) — representante legal, fluxo "Já possui CNPJ?" (PF/PJ) e endereço com autofill por CEP. Edição exige ADMIN.
 - **Usuários**: gestão dos usuários da empresa (`/api/usuarios`, apenas ADMIN), perfis `ADMIN`/`OPERADOR` e troca/redefinição de senha.
-- **Produtos**: cadastro com busca e filtro de status (`/api/produtos`), escrita restrita a ADMIN, unicidade de SKU/código de barras por empresa (409) e margem/markup calculados.
+- **Produtos**: cadastro com busca e filtro de status (`/api/produtos`), escrita restrita a ADMIN, unicidade de SKU/código de barras por empresa (409) e margem/markup calculados. Em evolução (DEC-030): Fase A concluída — **categorias em árvore** e **unidades de medida** como cadastros próprios.
 - **Clientes**: cadastro rápido de pessoa física (`/api/clientes`, por UUID público) — telefone com indicador de WhatsApp, CPF opcional e único por empresa, busca por nome/CPF/telefone; qualquer usuário cadastra e edita, só ADMIN inativa/reativa.
 - Documentação operacional em `docs/` (diretrizes de engenharia, registro de decisões, dívidas técnicas, visão de domínio e especificações por módulo).
 

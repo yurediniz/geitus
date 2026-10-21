@@ -22,13 +22,16 @@ Backend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Con
 - Maven Wrapper (`mvnw` / `mvnw.cmd`) fixado no Maven 3.9.16.
 - Estrutura de pacotes por domínio (ver abaixo).
 - `application.yml` lendo configurações de variáveis de ambiente.
-- Flyway habilitado, com as migrations `V1__baseline.sql` a `V5__clientes.sql` (empresa, usuário, produtos e seus incrementos, clientes).
+- Flyway habilitado, com as migrations `V1__baseline.sql` a `V6__catalogo_unidades_categorias.sql` (empresa, usuário, produtos e seus incrementos, clientes, unidades de medida e categorias).
 - Health check da aplicação em `GET /api/health` e health check padrão do Actuator em `GET /actuator/health`.
 - CORS básico liberado para o frontend local (Vite).
 - **Autenticação:** login por e-mail/senha (BCrypt) com emissão de JWT (HS256), filtro de autenticação por Bearer token e endpoint de dados do usuário autenticado (`GET /api/auth/me`, com a empresa aninhada).
 - **Empresa:** `GET/PATCH /api/empresas/minha` — cadastro com representante legal, tipo de pessoa (PF/PJ, CNPJ único) e endereço; sempre derivada do usuário autenticado, nunca de parâmetro externo. Edição exige `ADMIN`.
 - **Usuários:** `GET/POST /api/usuarios`, `GET/PATCH /api/usuarios/{id}`, `PATCH /api/usuarios/{id}/inativar`, `/reativar` e `/senha` (apenas `ADMIN`), além de `PATCH /api/usuarios/me/senha` (troca da própria senha). Perfis `ADMIN` e `OPERADOR`.
 - **Produtos:** `GET/POST /api/produtos`, `GET/PATCH /api/produtos/{id}`, `PATCH /api/produtos/{id}/inativar` e `/reativar`, com filtros opcionais `busca` e `ativo`; escrita exige `ADMIN` (DEC-025); isolamento por empresa, unicidade de SKU/código de barras por empresa (`409`, DEC-026) e margem/markup calculados na resposta.
+- **Unidades de medida:** `GET/POST /api/unidades`, `PATCH /api/unidades/{id}`, `/inativar`, `/reativar` e `DELETE` (só sem uso). 10 unidades padrão por empresa (UN, KG, G, L, ML, M, CX, PCT, DZ, FD). Escrita: `ADMIN` (DEC-031).
+- **Categorias (árvore):** `GET/POST /api/categorias`, `PATCH /api/categorias/{id}` (renomear e mover, sem ciclos), `/inativar`, `/reativar` e `DELETE` (só sem subcategorias e produtos). A listagem é plana com `caminho` ("Ração › Úmida › Sachê"). Escrita: `ADMIN`.
+- **Produto** passa a referenciar unidade de venda (obrigatória), categoria e unidade de compra + fator de conversão (`unidadeId`, `categoriaId`, `unidadeCompraId`, `fatorConversao`).
 - **Clientes:** `GET/POST /api/clientes`, `GET/PATCH /api/clientes/{id}`, `PATCH /api/clientes/{id}/inativar` e `/reativar`, com filtros opcionais `busca` (nome, CPF ou telefone, com ou sem máscara) e `ativo`. O `{id}` é o **UUID público** (o id interno nunca é exposto). Cadastrar/editar: qualquer autenticado; inativar/reativar: `ADMIN` (DEC-029). CPF único por empresa (`409`); identificador malformado → `400`.
 - Segurança liberando os health checks (`/api/health`, `/actuator/health`), o `POST /api/auth/login` e a documentação Swagger; qualquer outra rota exige um JWT válido (responde `401` sem token/token inválido e `403` sem permissão).
 - Documentação da API via Swagger UI (apenas para desenvolvimento).
@@ -49,7 +52,7 @@ com.geitus.app
 ├── shared/     # Health check, ApiError e tratamento global de erros
 ├── iam/        # Identidade e acesso: login, JWT, usuário, bootstrap dev
 ├── company/    # Empresa (cadastro da empresa autenticada)
-├── catalog/    # Produtos
+├── catalog/    # Produtos (+ unidade/ e categoria/)
 └── customer/   # Clientes
 ```
 

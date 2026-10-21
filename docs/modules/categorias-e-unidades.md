@@ -1,6 +1,6 @@
 # Catálogo: Categorias e Unidades de medida (Fase A da evolução de Produtos)
 
-> **Status:** especificado em 2026-10-20 — aguardando implementação. Primeira das 6 fases da evolução do cadastro de produtos (DEC-030); decisões de modelagem desta fase em **DEC-031**. Registro de design: [`docs/superpowers/specs/2026-10-20-produtos-fase-a-design.md`](../superpowers/specs/2026-10-20-produtos-fase-a-design.md).
+> **Status:** implementado em 2026-10-21 (migration V6 aplicada; backend `catalog.unidade`/`catalog.categoria`; telas `/produtos/categorias` e `/produtos/unidades`). Ajustes vindos das revisões estão em §10. Primeira das 6 fases da evolução do cadastro de produtos (DEC-030); decisões de modelagem desta fase em **DEC-031**. Registro de design: [`docs/superpowers/specs/2026-10-20-produtos-fase-a-design.md`](../superpowers/specs/2026-10-20-produtos-fase-a-design.md).
 
 ## 1. Visão geral
 
@@ -187,6 +187,34 @@ Tabela com sigla, descrição, "fracionada" (Sim/Não), em uso (nº de produtos)
 - Árvore (expandir, adicionar subcategoria, mover excluindo descendentes do seletor, 409 na exclusão), unidades (desabilitar excluir em uso), seletor de categoria (busca pelo caminho, "+ Nova" cria e seleciona), select de unidade só ativas, texto "1 CX = 12 UN".
 
 **Revisores:** `data-reviewer` (V6 e migração de dados — obrigatório), `security-reviewer` (novas rotas e RBAC — obrigatório), `back-end-reviewer`, `front-end-reviewer`, `product-ux-reviewer` (árvore e seletor), `qa-reviewer`.
+
+## 10. Ajustes incorporados na implementação (revisões)
+
+**Banco (V6):**
+- **FKs compostas `(empresa_id, id)`** em produto → unidade/categoria/unidade de compra e em categoria → pai: o banco rejeita vínculo com outra empresa (além do service).
+- CHECKs extras: sigla maiúscula, aparada e não vazia; descrição não vazia; nome de categoria aparado e não vazio; `parent_id <> id`.
+
+**Regras (backend):**
+- **Mover e excluir categoria travam a árvore da empresa** (`SELECT … FOR UPDATE` na linha da empresa): dois "mover" cruzados simultâneos não criam ciclo (teste concorrente com Spring + Postgres real).
+- Regra "inativa só se já for a atual" vale também para a **unidade de compra**, com mensagem própria: "Esta unidade de compra está inativa. Escolha uma unidade ativa.".
+- Sigla revalidada depois de normalizar (ex.: `ß` → `SS`): 400 "A sigla deve ter no máximo 20 caracteres.". `fracionada` obrigatória no request.
+- Fator ≤ 0 → 400 "O fator de conversão deve ser maior que zero." (também no service). `conversaoTexto` sem separador de milhar ("1 CX = 1500,5 UN").
+- PATCH de categoria substitui nome **e** pai (`parentId` ausente/nulo = categoria principal).
+
+**Telas (frontend):**
+- Termo único **"categoria principal"** (em vez de "raiz"/"primeiro nível").
+- Árvore: só "Adicionar subcategoria" visível; Renomear/Mover/Inativar/Excluir no menu **"⋯ Mais"**; ícones de ocultar (`EyeOff`/`Eye`) distintos da lixeira; contagem de produtos **da subárvore** com plural correto; ramo sob categoria inativa atenuado com o selo "Oculta — categoria acima inativa"; criação de subcategorias em sequência; foco restaurado após diálogos e edições.
+- Excluir categoria com vínculos: o diálogo explica (contagens) e oferece **"Inativar categoria"**.
+- Busca no seletor e no mover **por palavras em qualquer ordem**, sem acento ("racao umida" encontra "Ração › Úmida › Sachê").
+- Produto:
+  - **UN pré-selecionada** em produto novo, com o rótulo "Preço de venda (por {sigla})".
+  - Asterisco em Nome, Preço de venda e Unidade de venda.
+  - Fator oculto até haver unidade de compra; a unidade de venda não aparece na lista de compra.
+  - Rótulo "Quantas {venda} vêm em 1 {compra}?".
+  - Custo e Preço mínimo antes da compra.
+- Unidades: sigla em maiúsculas enquanto digita.
+
+**Dívidas registradas:** DT-026 (teto da árvore), DT-027 (endurecimentos menores), DT-025 atualizada.
 
 ## 9. Pontos em aberto (para fases seguintes)
 - Remoção das colunas de texto antigas (Fase B).

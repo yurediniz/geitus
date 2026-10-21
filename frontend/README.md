@@ -30,6 +30,7 @@ Frontend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Co
 - **Empresa** (`/empresa`): cadastro da empresa do usuário autenticado (representante legal, "Já possui CNPJ?", endereço com autofill por CEP); edição apenas para ADMIN, leitura para os demais. Nome da empresa visível na sidebar.
 - **Usuários** (`/usuarios`, apenas ADMIN via `AdminRoute`): listagem, criação, edição, inativação/reativação e redefinição de senha; qualquer usuário pode trocar a própria senha.
 - **Produtos** (`/produtos`): listagem com busca e filtro de status, cadastro, edição, inativação e reativação, margem/markup na lista; modo leitura para OPERADOR.
+- **Categorias** (`/produtos/categorias`) e **Unidades** (`/produtos/unidades`), em abas dentro de Produtos: árvore de categorias (subcategorias, mover, inativar, excluir) e cadastro de unidades com fracionamento. No formulário de produto: unidade de venda (select), categoria (seletor com busca pelo caminho e "+ Nova") e unidade de compra + fator.
 - **Clientes** (`/clientes`): cadastro rápido (nome, telefone com "Este número é WhatsApp", CPF e observações), busca por nome/CPF/telefone e filtro de status; qualquer perfil cadastra e edita, inativar/reativar só ADMIN. Máscaras e validações de CPF/telefone compartilhadas em `lib/documentos.ts`.
 - Cartão de **status do backend** consumindo `GET /api/health`, com tratamento de **carregando**, **sucesso** e **erro**.
 - Cliente HTTP base (`services/httpClient.ts`, com `apiGet`/`apiPost`/`apiPatch` e injeção de token) e serviços de API por domínio.

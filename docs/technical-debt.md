@@ -301,7 +301,39 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Origem:** Revisao (back-end-reviewer) do modulo Clientes
 - **Prioridade:** baixa
 - **Status:** aberto
-- **Descricao:** `resolverEmpresaId(idUsuario)` esta duplicado em `ProdutoService` e `ClienteService` (com diferenca de excecao quando a empresa nao existe).
+- **Descricao:** `resolverEmpresaId(idUsuario)` esta duplicado em 4 services: `ProdutoService`, `ClienteService`, `UnidadeMedidaService` e `CategoriaService` (Fase A, DEC-031). Ja divergem: quando a empresa nao existe, unidade/categoria lancam `CredenciaisInvalidasException` e produto lanca `RegraDeNegocioException("Empresa informada não encontrada.")`.
 - **Impacto:** Duplicacao de regra de isolamento (DEC-016) que tende a divergir a cada modulo novo.
 - **Quando revisar:** Antes do terceiro modulo de negocio (Caixa).
 - **Observacoes:** Componente em `iam` (ex.: resolvedor da empresa do usuario autenticado) reutilizado pelos services; relaciona-se com a futura empresa ativa da DEC-024.
+
+## DT-026 — Teto de profundidade e de quantidade na arvore de categorias
+
+- **ID:** DT-026
+- **Modulo:** Backend (Catalogo — categorias)
+- **Origem:** Revisao (security-reviewer) da Fase A
+- **Prioridade:** media (antes de cadastro publico de empresas)
+- **Status:** aberto
+- **Descricao:** A spec define profundidade ilimitada e nao ha limite de quantidade. `GET /api/categorias` devolve o `caminho` completo de cada categoria, entao uma corrente de N categorias aninhadas custa O(N²) em memoria e em JSON. Um ADMIN de qualquer empresa poderia, por script, criar milhares de niveis e provocar falta de memoria na JVM compartilhada (afeta todas as empresas).
+- **Impacto:** Disponibilidade multi-tenant. Hoje o risco e baixo: so ha empresas criadas pelo bootstrap de desenvolvimento.
+- **Quando revisar:** Antes de existir onboarding/cadastro publico de empresas, ou antes do primeiro deploy multi-tenant.
+- **Observacoes:** Propor teto compativel com o uso esperado ("dezenas a poucas centenas"): ex.: profundidade maxima 10–20 e ate ~2000 categorias por empresa, 400 com mensagem fixa. E decisao de produto (registrar na DEC-031 ou nova DEC).
+
+## DT-027 — Endurecimentos menores do catalogo (Fase A)
+
+- **ID:** DT-027
+- **Modulo:** Backend (Catalogo)
+- **Origem:** Revisoes (security-reviewer, data-reviewer e back-end-reviewer) da Fase A
+- **Prioridade:** baixa
+- **Status:** aberto
+- **Descricao:** Itens nao bloqueantes, deixados para depois:
+  - nome de categoria/unidade aceita caracteres de controle e de direcao Unicode (Cc/Cf) e o proprio separador ` › ` (permite "falsificar" um caminho na tela; sem XSS, impacto visual dentro do tenant);
+  - contagens nativas (`contarProdutosQueUsam`, `contarProdutos`) nao filtram `empresa_id` (seguras hoje por receberem id ja isolado e pelas FKs compostas; filtrar deixa o isolamento explicito);
+  - `atualizadoEm` sai desatualizado na resposta de PATCH (o `@PreUpdate` roda no flush, depois do DTO montado) — padrao herdado de todos os modulos;
+  - a escrita de produto com categoria carrega a arvore duas vezes (validacao e resposta);
+  - a listagem de produtos le produtos e arvore em comandos separados (corrida rarissima com exclusao de categoria entre os dois);
+  - `ck_unidade_descricao_valida` nao exige descricao aparada (o service apara); so via V7;
+  - exclusao de categoria concorrente com cadastro de produto nela termina em 409 generico (FK) em vez de mensagem amigavel;
+  - `ClienteRepository`/`ProdutoRepository` e os novos `UnidadeMedidaRepository`/`CategoriaRepository` herdam `delete*`/`findById` (ver DT-024).
+- **Impacto:** Baixo; robustez e clareza.
+- **Quando revisar:** Na proxima manutencao do catalogo (Fases B–E).
+- **Observacoes:** Rejeitar Cc/Cf e `›` no nome via validacao; filtrar `empresa_id` nas contagens; `saveAndFlush` ou timestamp no metodo de dominio.
