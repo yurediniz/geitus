@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import {
+  apiDelete,
   apiGet,
   apiPost,
   HttpError,
@@ -245,6 +246,53 @@ describe('httpClient', () => {
       expect(init.method).toBe('POST')
       expect(init.body).toBe(JSON.stringify({ email: 'ana@empresa.com', senha: 'x' }))
       expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json')
+    })
+  })
+  describe('apiDelete', () => {
+    it('envia DELETE autenticado e retorna undefined em 204 sem corpo', async () => {
+      getStoredTokenMock.mockReturnValue('token-abc')
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(204))
+
+      const dados = await apiDelete('/categorias/abc', { autenticada: true })
+
+      const chamada = vi.mocked(globalThis.fetch).mock.calls[0]
+      const init = chamada?.[1] as RequestInit
+      expect(String(chamada?.[0])).toMatch(/\/categorias\/abc$/)
+      expect(init.method).toBe('DELETE')
+      expect(init.body).toBeUndefined()
+      expect(headersDaChamada().Authorization).toBe('Bearer token-abc')
+      expect(headersDaChamada()['Content-Type']).toBeUndefined()
+      expect(dados).toBeUndefined()
+    })
+
+    it('surface a mensagem do backend em 409 no DELETE', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(
+        respostaFake(409, { mensagem: 'Esta unidade está em uso por 3 produto(s).' }),
+      )
+
+      await expect(apiDelete('/unidades/abc', { autenticada: true })).rejects.toMatchObject({
+        status: 409,
+        message: 'Esta unidade está em uso por 3 produto(s).',
+      })
+    })
+
+    it('dispara o handler de 401 em DELETE autenticado', async () => {
+      const handler = vi.fn()
+      setUnauthorizedHandler(handler)
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(401))
+
+      await expect(apiDelete('/unidades/abc', { autenticada: true })).rejects.toMatchObject({
+        status: 401,
+      })
+      expect(handler).toHaveBeenCalledTimes(1)
+    })
+
+    it('falha de rede em DELETE resulta em status 0', async () => {
+      vi.mocked(globalThis.fetch).mockRejectedValue(new TypeError('network error'))
+
+      const erro = await apiDelete('/unidades/abc').catch((e: unknown) => e)
+      expect(erro).toBeInstanceOf(HttpError)
+      expect((erro as HttpError).status).toBe(0)
     })
   })
 })

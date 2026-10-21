@@ -238,3 +238,36 @@ export async function apiPatch<T>(
 
   return (await resposta.json()) as T
 }
+
+/**
+ * Executa um DELETE no caminho informado. Exclusoes bem-sucedidas costumam
+ * responder 204 sem corpo; nesse caso retorna undefined.
+ *
+ * @param path caminho relativo a URL base (ex.: "/categorias/{id}")
+ * @param opcoes.autenticada injeta o header Authorization: Bearer <token>
+ */
+export async function apiDelete<T = void>(
+  path: string,
+  opcoes: { autenticada?: boolean } = {},
+): Promise<T> {
+  const autenticada = opcoes.autenticada ?? false
+  let resposta: Response
+  try {
+    resposta = await fetch(`${baseUrl}${path}`, {
+      method: 'DELETE',
+      headers: montarHeaders(autenticada, false),
+    })
+  } catch {
+    throw new HttpError(0, 'Nao foi possivel conectar ao servidor.')
+  }
+
+  if (!resposta.ok) {
+    await tratarErro(resposta, autenticada)
+  }
+
+  if (resposta.status === 204) {
+    return undefined as T
+  }
+
+  return (await resposta.json()) as T
+}

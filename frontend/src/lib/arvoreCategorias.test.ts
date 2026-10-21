@@ -1,0 +1,99 @@
+import { describe, it, expect } from 'vitest'
+
+import { filtrarPorTermo, idsDescendentes, montarArvore } from '@/lib/arvoreCategorias'
+import type { Categoria } from '@/types/catalogo'
+
+function categoria(
+  id: string,
+  nome: string,
+  parentId: string | null,
+  caminho: string,
+  nivel = 0,
+): Categoria {
+  return {
+    id,
+    nome,
+    parentId,
+    caminho,
+    nivel,
+    ativo: true,
+    selecionavel: true,
+    quantidadeSubcategorias: 0,
+    quantidadeProdutos: 0,
+    criadoEm: '2026-10-20T10:00:00',
+    atualizadoEm: null,
+  }
+}
+
+// Ordem propositalmente fora de ordem alfabetica para testar a ordenacao.
+const categorias: Categoria[] = [
+  categoria('racao', 'Ração', null, 'Ração'),
+  categoria('umida', 'Úmida', 'racao', 'Ração › Úmida', 1),
+  categoria('seca', 'Seca', 'racao', 'Ração › Seca', 1),
+  categoria('sache', 'Sachê', 'umida', 'Ração › Úmida › Sachê', 2),
+  categoria('bebidas', 'Bebidas', null, 'Bebidas'),
+]
+
+describe('montarArvore', () => {
+  it('monta tres niveis com raizes e filhos ordenados por nome', () => {
+    const arvore = montarArvore(categorias)
+
+    expect(arvore.map((no) => no.categoria.nome)).toEqual(['Bebidas', 'Ração'])
+    const racao = arvore[1]
+    expect(racao?.filhos.map((no) => no.categoria.nome)).toEqual(['Seca', 'Úmida'])
+    const umida = racao?.filhos[1]
+    expect(umida?.filhos.map((no) => no.categoria.nome)).toEqual(['Sachê'])
+    expect(umida?.filhos[0]?.filhos).toEqual([])
+  })
+
+  it('trata categoria orfa (pai fora da lista) como raiz', () => {
+    const orfa = categoria('orfa', 'Avulsa', 'inexistente', 'Algo › Avulsa', 1)
+
+    const arvore = montarArvore([...categorias, orfa])
+
+    expect(arvore.map((no) => no.categoria.nome)).toEqual(['Avulsa', 'Bebidas', 'Ração'])
+  })
+
+  it('retorna lista vazia sem categorias', () => {
+    expect(montarArvore([])).toEqual([])
+  })
+})
+
+describe('idsDescendentes', () => {
+  it('raiz inclui ela mesma e todos os descendentes', () => {
+    expect(idsDescendentes(categorias, 'racao')).toEqual(new Set(['racao', 'umida', 'seca', 'sache']))
+  })
+
+  it('no do meio inclui ele mesmo e os filhos', () => {
+    expect(idsDescendentes(categorias, 'umida')).toEqual(new Set(['umida', 'sache']))
+  })
+
+  it('folha inclui so ela mesma', () => {
+    expect(idsDescendentes(categorias, 'sache')).toEqual(new Set(['sache']))
+  })
+})
+
+describe('filtrarPorTermo', () => {
+  it('encontra pelo caminho sem diferenciar maiusculas nem acentos', () => {
+    const resultado = filtrarPorTermo(categorias, 'umida')
+
+    expect(resultado.map((c) => c.caminho)).toEqual(['Ração › Úmida', 'Ração › Úmida › Sachê'])
+  })
+
+  it('casa termo com acento e maiusculas contra texto sem eles', () => {
+    expect(filtrarPorTermo(categorias, 'RAÇÃO').map((c) => c.id)).toEqual([
+      'racao',
+      'umida',
+      'seca',
+      'sache',
+    ])
+  })
+
+  it('termo vazio ou so espacos devolve a lista inteira', () => {
+    expect(filtrarPorTermo(categorias, '   ')).toEqual(categorias)
+  })
+
+  it('sem correspondencia devolve lista vazia', () => {
+    expect(filtrarPorTermo(categorias, 'brinquedo')).toEqual([])
+  })
+})
