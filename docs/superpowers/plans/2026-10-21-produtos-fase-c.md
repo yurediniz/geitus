@@ -274,7 +274,7 @@
     - `('3','33,33')` → "4.50" (margem com vírgula);
   - `situacaoPromocaoLocal`: os três casos;
   - página:
-    - o aviso de abaixo do custo aparece na aba Geral e na aba Preços e o save prossegue;
+    - o aviso de abaixo do custo aparece na aba Geral, na aba Preços e nos blocos de promoção e atacado (preço abaixo do custo), e o save prossegue;
     - "Calcular preço" atualiza o preço de venda e mostra a confirmação;
     - o botão fica desabilitado sem custo, com a dica;
     - ligar a promoção abre os campos, e desligar envia `promocao: null`;
