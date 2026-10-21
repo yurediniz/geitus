@@ -322,7 +322,7 @@ describe('ClientesPage', () => {
     expect(cadastrarClienteMock).toHaveBeenCalledWith(expect.objectContaining({ cpf: '11144477735' }))
   })
 
-  it('409 marca o erro no campo CPF com orientacao para buscar o cadastro existente', async () => {
+  it('409 orienta buscar com filtro Todos', async () => {
     listarClientesMock.mockResolvedValue([])
     cadastrarClienteMock.mockRejectedValue(
       new HttpError(409, 'Já existe um cliente com este CPF nesta empresa.'),
@@ -337,10 +337,31 @@ describe('ClientesPage', () => {
 
     expect(
       await screen.findByText(
-        'Já existe um cliente com este CPF. Busque pelo CPF na lista para usar o cadastro existente.',
+        'Já existe um cliente com este CPF (ele pode estar inativo). Busque pelo CPF com o filtro "Todos". Se estiver inativo, um administrador pode reativá-lo.',
       ),
     ).toBeInTheDocument()
     expect(screen.getByLabelText(/^cpf/i)).toHaveAttribute('aria-invalid', 'true')
+    // A mensagem do backend continua no topo do formulario.
+    expect(screen.getByText('Já existe um cliente com este CPF nesta empresa.')).toBeInTheDocument()
+  })
+
+  it('troca de status mantem a busca aplicada', async () => {
+    listarClientesMock.mockResolvedValue([])
+
+    renderComProviders(<ClientesPage />)
+
+    await screen.findByText('Nenhum cliente ativo.')
+    fireEvent.change(screen.getByLabelText(/busca/i), { target: { value: 'ana' } })
+    fireEvent.click(screen.getByRole('button', { name: /^buscar$/i }))
+    await waitFor(() => {
+      expect(listarClientesMock).toHaveBeenLastCalledWith({ busca: 'ana', status: 'ativos' })
+    })
+
+    fireEvent.change(screen.getByLabelText(/status/i), { target: { value: 'inativos' } })
+
+    await waitFor(() => {
+      expect(listarClientesMock).toHaveBeenLastCalledWith({ busca: 'ana', status: 'inativos' })
+    })
   })
 
   it('exibe as mensagens de campos no proprio campo quando o backend responde 400', async () => {

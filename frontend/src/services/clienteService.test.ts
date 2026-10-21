@@ -60,6 +60,14 @@ describe('clienteService', () => {
     expect(apiGetMock).toHaveBeenCalledWith('/clientes?busca=%2811%29+98765', { autenticada: true })
   })
 
+  it('busca com caracteres especiais e codificada', async () => {
+    apiGetMock.mockResolvedValue([])
+
+    await listarClientes({ busca: '100%' })
+
+    expect(apiGetMock).toHaveBeenCalledWith('/clientes?busca=100%25', { autenticada: true })
+  })
+
   it('lista clientes com status inativo', async () => {
     apiGetMock.mockResolvedValue([])
 

@@ -52,8 +52,10 @@ function ehCampoDoFormulario(campo: string): campo is ClienteCampoFormulario {
   return (CAMPOS_DO_FORMULARIO as readonly string[]).includes(campo)
 }
 
+// O CPF e unico por empresa inclusive entre inativos, e a lista abre em "Ativos":
+// orienta trocar o filtro e lembra que so um administrador reativa.
 const MENSAGEM_CPF_DUPLICADO_CAMPO =
-  'Já existe um cliente com este CPF. Busque pelo CPF na lista para usar o cadastro existente.'
+  'Já existe um cliente com este CPF (ele pode estar inativo). Busque pelo CPF com o filtro "Todos". Se estiver inativo, um administrador pode reativá-lo.'
 
 /** Traduz a falha ao salvar (pt-BR), sem vazar detalhe interno. */
 function interpretarErroSalvar(erro: unknown): ErroSalvarCliente {
