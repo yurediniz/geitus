@@ -492,7 +492,8 @@ describe('ProdutoPage', () => {
     })
 
     it('"Salvar e cadastrar outro" com 409 não limpa o formulário (Review Focus 4)', async () => {
-      cadastrarProdutoMock.mockRejectedValue(new HttpError(409, 'Já existe um produto com este SKU nesta empresa.'))
+      const mensagem = 'Já existe um produto com este SKU nesta empresa.'
+      cadastrarProdutoMock.mockRejectedValue(new HttpError(409, mensagem, { sku: mensagem }))
 
       renderNovo()
       await esperarFormulario()
@@ -599,6 +600,82 @@ describe('ProdutoPage', () => {
         await screen.findByText('Já existe um produto com este SKU ou código de barras nesta empresa.'),
       ).toBeInTheDocument()
       expect(screen.queryByText(/requisicao falhou/i)).not.toBeInTheDocument()
+    })
+
+    it('dois cliques seguidos em Salvar cadastram uma vez só', async () => {
+      cadastrarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Café 500g' })
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+
+      fireEvent.click(botaoSalvar())
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('Produto "Café 500g" cadastrado com sucesso.')).toBeInTheDocument()
+      expect(cadastrarProdutoMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('dois cliques seguidos em "Salvar e cadastrar outro" cadastram uma vez só', async () => {
+      cadastrarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Café 500g' })
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      const botao = screen.getByRole('button', { name: /salvar e cadastrar outro/i })
+
+      fireEvent.click(botao)
+      fireEvent.click(botao)
+
+      expect(await screen.findByText('Produto "Café 500g" cadastrado com sucesso.')).toBeInTheDocument()
+      expect(cadastrarProdutoMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('Ctrl+Enter duas vezes seguidas cadastra uma vez só', async () => {
+      cadastrarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Café 500g' })
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      const preco = screen.getByLabelText(/preço de venda/i)
+
+      fireEvent.keyDown(preco, { key: 'Enter', ctrlKey: true })
+      fireEvent.keyDown(preco, { key: 'Enter', ctrlKey: true })
+
+      expect(await screen.findByText('Produto "Café 500g" cadastrado com sucesso.')).toBeInTheDocument()
+      expect(cadastrarProdutoMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('depois de um erro de validação, um novo clique volta a enviar', async () => {
+      cadastrarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Café 500g' })
+
+      renderNovo()
+      await esperarFormulario()
+      fireEvent.click(botaoSalvar())
+      expect(await screen.findByText(/informe o nome do produto/i)).toBeInTheDocument()
+      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
+
+      await preencherMinimo()
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(cadastrarProdutoMock).toHaveBeenCalledTimes(1))
+    })
+
+    it('depois de uma falha ao salvar, um novo clique volta a enviar', async () => {
+      cadastrarProdutoMock
+        .mockRejectedValueOnce(new Error('falha de rede'))
+        .mockResolvedValueOnce({ ...produtoAtivo, nome: 'Café 500g' })
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      fireEvent.click(botaoSalvar())
+      expect(await screen.findByText(/não foi possível salvar o produto/i)).toBeInTheDocument()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('Produto "Café 500g" cadastrado com sucesso.')).toBeInTheDocument()
+      expect(cadastrarProdutoMock).toHaveBeenCalledTimes(2)
     })
 
     it('mostra erro genérico ao salvar (rede) e continua na página', async () => {
@@ -936,9 +1013,9 @@ describe('ProdutoPage', () => {
       })
     })
 
-    it('409 de código em outro produto aparece no campo da aba Geral, com indicador', async () => {
+    it('409 de código em outro produto (com campos) aparece no campo da aba Geral, com indicador', async () => {
       const mensagem = 'O código de barras 7891000315507 já está cadastrado no produto "Feijão 1kg".'
-      cadastrarProdutoMock.mockRejectedValue(new HttpError(409, mensagem))
+      cadastrarProdutoMock.mockRejectedValue(new HttpError(409, mensagem, { codigosBarras: mensagem }))
 
       renderNovo()
       await esperarFormulario()
@@ -964,11 +1041,10 @@ describe('ProdutoPage', () => {
       )
     })
 
-    it('400 de códigos com índice (codigosBarras[2]) vai para o campo de códigos', async () => {
+    it('400 de dígito inválido (campos.codigosBarras) vai para o campo de códigos', async () => {
+      const mensagem = 'Código de barras 7891000315508 com dígito verificador inválido. Confira a leitura.'
       cadastrarProdutoMock.mockRejectedValue(
-        new HttpError(400, 'Um ou mais campos sao invalidos.', {
-          'codigosBarras[2]': 'O código de barras 7891000315508 tem dígito verificador inválido.',
-        }),
+        new HttpError(400, 'Um ou mais campos sao invalidos.', { codigosBarras: mensagem }),
       )
 
       renderNovo()
@@ -977,11 +1053,26 @@ describe('ProdutoPage', () => {
       abrirAba(/códigos/i)
       fireEvent.click(botaoSalvar())
 
-      expect(
-        await screen.findByText('O código de barras 7891000315508 tem dígito verificador inválido.'),
-      ).toBeInTheDocument()
+      expect(await screen.findByText(mensagem)).toBeInTheDocument()
       // Salvando da aba Codigos, que tambem mostra o campo: fica nela.
       expect(aba(/códigos/i)).toHaveAttribute('aria-selected', 'true')
+      expect(aba(/códigos/i)).toHaveAccessibleName('Códigos (1 erro)')
+    })
+
+    it('400 com índice (codigosBarras[0], limite de 50 caracteres) vai para o campo de códigos', async () => {
+      const mensagem = 'Código de barras deve ter no máximo 50 caracteres.'
+      cadastrarProdutoMock.mockRejectedValue(
+        new HttpError(400, 'Um ou mais campos sao invalidos.', { 'codigosBarras[0]': mensagem }),
+      )
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText(mensagem)).toBeInTheDocument()
+      expect(aba(/geral/i)).toHaveAttribute('aria-selected', 'true')
+      expect(aba(/geral/i)).toHaveAccessibleName('Geral (1 erro)')
       expect(aba(/códigos/i)).toHaveAccessibleName('Códigos (1 erro)')
     })
 
@@ -1003,7 +1094,7 @@ describe('ProdutoPage', () => {
       await waitFor(() => expect(screen.getByLabelText(/^sku/i)).toHaveFocus())
     })
 
-    it('409 com campos (codigosBarras) de produto chamado "Etiqueta SKU 100" vai para os códigos', async () => {
+    it('409 com campos (codigosBarras) de produto chamado "Etiqueta SKU 100" marca o campo de códigos', async () => {
       const mensagem = 'O código de barras 7891000315507 já está cadastrado no produto "Etiqueta SKU 100".'
       cadastrarProdutoMock.mockRejectedValue(new HttpError(409, mensagem, { codigosBarras: mensagem }))
 
@@ -1036,7 +1127,7 @@ describe('ProdutoPage', () => {
       expect(screen.queryByText(/gere outro sku/i)).not.toBeInTheDocument()
     })
 
-    it('400 de códigos (validação por campo) também vai para a aba Códigos', async () => {
+    it('400 de limite de códigos marca o campo na Geral (fica nela) e o indicador da aba Códigos', async () => {
       cadastrarProdutoMock.mockRejectedValue(
         new HttpError(400, 'Um ou mais campos sao invalidos.', { codigosBarras: 'Informe no máximo 20 códigos de barras.' }),
       )
@@ -1047,6 +1138,7 @@ describe('ProdutoPage', () => {
       fireEvent.click(botaoSalvar())
 
       expect(await screen.findByText('Informe no máximo 20 códigos de barras.')).toBeInTheDocument()
+      expect(aba(/geral/i)).toHaveAttribute('aria-selected', 'true')
       expect(aba(/geral/i)).toHaveAccessibleName('Geral (1 erro)')
       expect(aba(/códigos/i)).toHaveAccessibleName('Códigos (1 erro)')
     })
@@ -1334,6 +1426,43 @@ describe('ProdutoPage', () => {
       expect(screen.queryByText(/este código não confere/i)).not.toBeInTheDocument()
     })
 
+    it('com 20 códigos na lista, o pendente ao salvar é barrado pelo limite e nada é enviado', async () => {
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      for (let indice = 1; indice <= 20; indice += 1) {
+        fireEvent.change(campoCodigoGeral(), { target: { value: `INT-${indice}` } })
+        fireEvent.keyDown(campoCodigoGeral(), { key: 'Enter' })
+      }
+      const lista = screen.getByRole('list', { name: /códigos de barras do produto/i })
+      expect(within(lista).getAllByRole('listitem')).toHaveLength(20)
+      fireEvent.change(campoCodigoGeral(), { target: { value: 'INT-21' } })
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('Limite de 20 códigos de barras atingido.')).toBeInTheDocument()
+      expect(screen.getByText('O produto não foi salvo. Confira o erro na aba Geral.')).toBeInTheDocument()
+      await waitFor(() => expect(campoCodigoGeral()).toHaveFocus())
+      expect(campoCodigoGeral()).toHaveValue('INT-21')
+      expect(within(lista).getAllByRole('listitem')).toHaveLength(20)
+      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('Ctrl+Enter com código pendente de dígito inválido não salva e foca o campo de código', async () => {
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      fireEvent.change(campoCodigoGeral(), { target: { value: '7891000315508' } })
+
+      fireEvent.keyDown(screen.getByLabelText(/preço de venda/i), { key: 'Enter', ctrlKey: true })
+
+      expect(
+        await screen.findByText('Este código não confere (o último dígito não bate). Leia de novo ou confira os números.'),
+      ).toBeInTheDocument()
+      await waitFor(() => expect(campoCodigoGeral()).toHaveFocus())
+      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
+    })
+
     it('código pendente repetido, salvando da aba Códigos, fica na aba Códigos', async () => {
       renderNovo()
       await esperarFormulario()
@@ -1420,7 +1549,7 @@ describe('ProdutoPage', () => {
       expect(cadastrarProdutoMock.mock.calls[0][0].codigosBarras).toEqual(['96385074'])
     })
 
-    it('resumo do 409 de SKU sai ao alterar o SKU', async () => {
+    it('fallback pelo texto (409 de SKU sem campos): o resumo sai ao alterar o SKU', async () => {
       cadastrarProdutoMock.mockRejectedValue(new HttpError(409, 'Já existe um produto com este SKU nesta empresa.'))
 
       renderNovo()

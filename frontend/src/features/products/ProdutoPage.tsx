@@ -485,6 +485,14 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     setErroGeral(null)
   }
 
+  /**
+   * Guarda sincrona contra envio duplo: `salvando` vem do ultimo render, e a
+   * mutacao so comeca depois da validacao assincrona do `handleSubmit` — dois
+   * cliques (ou Ctrl+Enter) seguidos passariam pelos dois. Marcada no inicio do
+   * envio; liberada no erro de validacao ou quando a mutacao termina.
+   */
+  const enviandoRef = useRef(false)
+
   const salvarMutation = useMutation<Produto, unknown, { valores: ProdutoFormValues; acao: AcaoAposSalvar }>({
     mutationFn: ({ valores }) => {
       const request = montarRequest(valores)
@@ -536,6 +544,9 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
           queryClient.invalidateQueries({ queryKey: TODAS_CATEGORIAS_QUERY_KEY }),
         ])
       }
+    },
+    onSettled: () => {
+      enviandoRef.current = false
     },
   })
 
@@ -623,14 +634,21 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   const salvando = salvarMutation.isPending || saida !== null
 
   const enviar = (acao: AcaoAposSalvar) => {
-    if (salvando || somenteLeitura || !incorporarCodigoPendente()) {
+    if (enviandoRef.current || salvando || somenteLeitura || !incorporarCodigoPendente()) {
       return
     }
-    void handleSubmit((valores) => {
-      setErroSalvar(null)
-      setMensagemSucesso(null)
-      salvarMutation.mutate({ valores, acao })
-    }, aoInvalidar)()
+    enviandoRef.current = true
+    void handleSubmit(
+      (valores) => {
+        setErroSalvar(null)
+        setMensagemSucesso(null)
+        salvarMutation.mutate({ valores, acao })
+      },
+      (erros) => {
+        enviandoRef.current = false
+        aoInvalidar(erros)
+      },
+    )()
   }
 
   /**
