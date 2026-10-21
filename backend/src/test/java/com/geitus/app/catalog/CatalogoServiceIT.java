@@ -4,6 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mockingDetails;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -20,11 +26,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.stubbing.Answer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -104,6 +112,10 @@ class CatalogoServiceIT {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    /** Spy (chama o real por padrao) para simular falha ao gravar o historico; resetado apos cada teste. */
+    @MockitoSpyBean
+    private HistoricoPrecoRepository historicoPrecoRepository;
 
     // ---------- Fluxo completo ----------
 
@@ -541,6 +553,36 @@ class CatalogoServiceIT {
                 Long.class, idInternoDoProduto(produto), idUsuario)).isEqualTo(4);
     }
 
+    /**
+     * A ordem segue {@code alterado_em} e o id so desempata: duas linhas
+     * inseridas com a data invertida em relacao ao id saem pela data.
+     */
+    @Test
+    void ordemPorAlteradoEmAntesDoId() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID produto = produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder
+                .comUnidade(unidadePadrao(empresa, idUsuario, "UN")).nome("Arroz").precoVenda("10.00").build()).id();
+        Long idInterno = idInternoDoProduto(produto);
+        String inserir = """
+                INSERT INTO produto_historico_precos
+                       (empresa_id, produto_id, campo, valor_anterior, valor_novo, usuario_id, alterado_em)
+                VALUES (?, ?, 'CUSTO', NULL, ?, ?, ?)
+                """;
+        // Id menor com a data mais recente; id maior com a data mais antiga.
+        jdbcTemplate.update(inserir, empresa.getId(), idInterno, new BigDecimal("5.00"), idUsuario,
+                LocalDateTime.of(2020, 1, 2, 10, 0));
+        jdbcTemplate.update(inserir, empresa.getId(), idInterno, new BigDecimal("6.00"), idUsuario,
+                LocalDateTime.of(2020, 1, 1, 10, 0));
+
+        PaginaResponse<HistoricoPrecoResponse> pagina = produtoService.historicoDePrecosParaUsuario(idUsuario,
+                produto, 0, 20);
+
+        assertThat(pagina.itens()).extracting(HistoricoPrecoResponse::valorNovo)
+                .usingElementComparator(BigDecimal::compareTo)
+                .containsExactly(new BigDecimal("10.00"), new BigDecimal("5.00"), new BigDecimal("6.00"));
+    }
+
     @Test
     void historicoPaginado() {
         Empresa empresa = novaEmpresa();
@@ -559,24 +601,33 @@ class CatalogoServiceIT {
         assertThat(produtoService.historicoDePrecosParaUsuario(idUsuario, produto, 2, 2).itens()).isEmpty();
     }
 
+    /**
+     * O historico e gravado na MESMA transacao do produto: se a 2a linha
+     * (CUSTO) falha, a 1a (PRECO_VENDA) e a propria alteracao do produto sao
+     * desfeitas. A falha e simulada no spy do repositorio de historico.
+     */
     @Test
-    void saveQueFalhaPor409_naoGravaHistorico() {
+    void falhaAoGravarOHistoricoDesfazAsLinhasEAAlteracaoDoProduto() {
         Empresa empresa = novaEmpresa();
         Long idUsuario = novoAdmin(empresa);
         UUID un = unidadePadrao(empresa, idUsuario, "UN");
-        produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder.comUnidade(un).nome("A").sku("SKU-A")
-                .build());
-        UUID produtoB = produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder.comUnidade(un)
-                .nome("B").precoVenda("10.00").build()).id();
+        UUID produto = produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder.comUnidade(un)
+                .nome("Arroz").precoVenda("10.00").custo("7.00").build()).id();
+        Long idInterno = idInternoDoProduto(produto);
+        falharNoSegundoSaveDoHistorico();
 
-        assertThatThrownBy(() -> produtoService.atualizarDadosBasicosParaUsuario(idUsuario, produtoB,
-                ProdutoRequestBuilder.comUnidade(un).nome("B").precoVenda("12.00").sku("SKU-A").build()))
-                .isInstanceOf(ProdutoConflitoException.class);
+        assertThatThrownBy(() -> produtoService.atualizarDadosBasicosParaUsuario(idUsuario, produto,
+                ProdutoRequestBuilder.comUnidade(un).nome("Arroz 5kg").precoVenda("12.00").custo("8.00").build()))
+                .isInstanceOf(IllegalStateException.class);
 
-        assertThat(produtoService.historicoDePrecosParaUsuario(idUsuario, produtoB, 0, 20).itens())
-                .extracting(HistoricoPrecoResponse::valorNovo)
-                .usingElementComparator(BigDecimal::compareTo)
-                .containsExactly(new BigDecimal("10.00"));
+        verify(historicoPrecoRepository, times(2)).save(any(HistoricoPreco.class));
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT campo FROM produto_historico_precos WHERE produto_id = ? ORDER BY id", String.class, idInterno))
+                .as("so as linhas do cadastro").containsExactly("PRECO_VENDA", "CUSTO");
+        assertThat(jdbcTemplate.queryForMap("SELECT nome, preco_venda, custo FROM produtos WHERE id = ?", idInterno))
+                .containsEntry("nome", "Arroz")
+                .containsEntry("preco_venda", new BigDecimal("10.00"))
+                .containsEntry("custo", new BigDecimal("7.00"));
     }
 
     @Test
@@ -602,6 +653,25 @@ class CatalogoServiceIT {
 
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM produto_historico_precos WHERE produto_id = ?",
                 Long.class, idInterno)).isZero();
+    }
+
+    /**
+     * O 1o save do historico vai ao banco; o 2o lanca. O spy de um repositorio
+     * Spring Data (proxy de interface) delega pela resposta padrao, entao o
+     * "metodo real" e chamado por ela, e nao por {@code doCallRealMethod}. As
+     * chamadas anteriores (do cadastro) sao descartadas da contagem.
+     */
+    private void falharNoSegundoSaveDoHistorico() {
+        clearInvocations(historicoPrecoRepository);
+        Answer<?> gravarDeVerdade = mockingDetails(historicoPrecoRepository).getMockCreationSettings()
+                .getDefaultAnswer();
+        AtomicInteger salvos = new AtomicInteger();
+        doAnswer(invocacao -> {
+            if (salvos.incrementAndGet() == 2) {
+                throw new IllegalStateException("Falha simulada ao gravar o histórico.");
+            }
+            return gravarDeVerdade.answer(invocacao);
+        }).when(historicoPrecoRepository).save(any(HistoricoPreco.class));
     }
 
     private UUID unidadePadrao(Empresa empresa, Long idUsuario, String sigla) {

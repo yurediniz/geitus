@@ -110,6 +110,7 @@ public class ProdutoService {
     static final String MENSAGEM_UNIDADE_NAO_FRACIONADA = "A unidade %s não aceita quantidade fracionada.";
     static final String MENSAGEM_PAGINA_NEGATIVA = "A página deve ser maior ou igual a zero.";
     static final String MENSAGEM_TAMANHO_DE_PAGINA_INVALIDO = "O tamanho da página deve ser entre 1 e 100.";
+    static final String MENSAGEM_PAGINA_GRANDE_DEMAIS = "A página informada é grande demais.";
 
     /** Campos do {@code ProdutoRequest} devolvidos em {@code campos} nos erros de regra (contrato aditivo). */
     static final String CAMPO_SKU = "sku";
@@ -184,7 +185,10 @@ public class ProdutoService {
      * Mudancas de custo e preco de venda vao para o historico com {@code idUsuario}.
      */
     Produto atualizarDadosBasicos(Long idUsuario, Long empresaId, UUID produtoId, ProdutoRequest request) {
-        Produto produto = buscarPorId(empresaId, produtoId);
+        // Trava a linha antes de ler custo e preco anteriores: edicoes concorrentes
+        // nao podem gravar o mesmo valor_anterior no historico (ver ProdutoRepository).
+        Produto produto = produtoRepository.buscarPorUuidParaAtualizar(produtoId, empresaId)
+                .orElseThrow(ProdutoNaoEncontradoException::new);
 
         validarCampos(request);
         Optional<List<CodigoBarrasValidado>> codigos = Optional.ofNullable(request.codigosBarras())
@@ -700,6 +704,11 @@ public class ProdutoService {
         }
         if (tamanho < 1 || tamanho > TAMANHO_MAXIMO_PAGINA_HISTORICO) {
             throw new RegraDeNegocioException(MENSAGEM_TAMANHO_DE_PAGINA_INVALIDO);
+        }
+        // O deslocamento (pagina * tamanho) vira o OFFSET int da consulta; acima
+        // disso o Spring Data falharia com 500.
+        if ((long) pagina * tamanho > Integer.MAX_VALUE) {
+            throw new RegraDeNegocioException(MENSAGEM_PAGINA_GRANDE_DEMAIS);
         }
     }
 

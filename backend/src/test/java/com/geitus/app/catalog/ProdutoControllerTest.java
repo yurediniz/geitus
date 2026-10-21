@@ -1,8 +1,13 @@
 package com.geitus.app.catalog;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -107,7 +112,7 @@ class ProdutoControllerTest {
     }
 
     private String tokenParaUsuarioComPerfil(Long idUsuario, String perfil) {
-        Usuario usuario = org.mockito.Mockito.mock(Usuario.class);
+        Usuario usuario = mock(Usuario.class);
         when(usuario.getId()).thenReturn(idUsuario);
         when(usuario.getPerfil()).thenReturn(perfil);
         when(usuario.getEmpresaId()).thenReturn(7L);
@@ -178,7 +183,7 @@ class ProdutoControllerTest {
                         .content("{ \"nome\": \"Produto\", \"precoVenda\": 10.00 }"))
                 .andExpect(status().isForbidden());
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     @Test
@@ -191,7 +196,7 @@ class ProdutoControllerTest {
                         .content("{ \"nome\": \"Produto\", \"precoVenda\": 10.00 }"))
                 .andExpect(status().isForbidden());
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     @Test
@@ -201,7 +206,7 @@ class ProdutoControllerTest {
         mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID + "/inativar").header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden());
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     @Test
@@ -211,7 +216,7 @@ class ProdutoControllerTest {
         mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID + "/reativar").header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden());
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     // ---------- Listagem ----------
@@ -228,7 +233,7 @@ class ProdutoControllerTest {
                 .andExpect(jsonPath("$[0].id").value(PRODUTO_ID.toString()))
                 .andExpect(jsonPath("$[0].nome").value("Arroz 5kg"));
 
-        org.mockito.Mockito.verify(produtoService).listarParaUsuario(eq(1L), isNull(), isNull());
+        verify(produtoService).listarParaUsuario(eq(1L), isNull(), isNull());
     }
 
     @Test
@@ -241,7 +246,7 @@ class ProdutoControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
 
-        org.mockito.Mockito.verify(produtoService).listarParaUsuario(eq(1L), eq("arroz"), isNull());
+        verify(produtoService).listarParaUsuario(eq(1L), eq("arroz"), isNull());
     }
 
     @Test
@@ -254,7 +259,7 @@ class ProdutoControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk());
 
-        org.mockito.Mockito.verify(produtoService).listarParaUsuario(eq(1L), isNull(), eq(false));
+        verify(produtoService).listarParaUsuario(eq(1L), isNull(), eq(false));
     }
 
     // ---------- Busca por id ----------
@@ -290,7 +295,7 @@ class ProdutoControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("Identificador inválido."));
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     // ---------- Cadastro ----------
@@ -312,9 +317,9 @@ class ProdutoControllerTest {
                 .andExpect(jsonPath("$.unidade.sigla").value("UN"));
 
         ArgumentCaptor<ProdutoRequest> request = ArgumentCaptor.forClass(ProdutoRequest.class);
-        org.mockito.Mockito.verify(produtoService).cadastrarParaUsuario(eq(1L), request.capture());
-        org.assertj.core.api.Assertions.assertThat(request.getValue().unidadeId()).isEqualTo(UNIDADE_ID);
-        org.assertj.core.api.Assertions.assertThat(request.getValue().precoVenda()).isEqualByComparingTo("10.00");
+        verify(produtoService).cadastrarParaUsuario(eq(1L), request.capture());
+        assertThat(request.getValue().unidadeId()).isEqualTo(UNIDADE_ID);
+        assertThat(request.getValue().precoVenda()).isEqualByComparingTo("10.00");
     }
 
     @Test
@@ -414,7 +419,7 @@ class ProdutoControllerTest {
                 .andExpect(jsonPath("$.campos[?(@.campo=='unidadeId')]").exists())
                 .andExpect(jsonPath("$.campos[?(@.campo=='unidadeId')].mensagem").value("Unidade é obrigatória."));
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     @Test
@@ -431,7 +436,7 @@ class ProdutoControllerTest {
                     .andExpect(jsonPath("$.campos[?(@.campo=='fatorConversao')]").exists());
         }
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     @Test
@@ -632,7 +637,7 @@ class ProdutoControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("Identificador inválido."));
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     @Test
@@ -683,7 +688,7 @@ class ProdutoControllerTest {
                 .andExpect(jsonPath("$.campos[?(@.campo=='codigosBarras')].mensagem")
                         .value("Informe no máximo 20 códigos de barras."));
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     @Test
@@ -699,7 +704,7 @@ class ProdutoControllerTest {
                 .andExpect(jsonPath("$.campos[?(@.campo=='codigosBarras[0]')]").exists())
                 .andExpect(jsonPath("$.campos[?(@.campo=='nomeCurto')]").exists());
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     @Test
@@ -719,8 +724,8 @@ class ProdutoControllerTest {
                 .andExpect(jsonPath("$.campos[?(@.campo=='codigosBarras')].mensagem").value(mensagem));
 
         ArgumentCaptor<ProdutoRequest> request = ArgumentCaptor.forClass(ProdutoRequest.class);
-        org.mockito.Mockito.verify(produtoService).cadastrarParaUsuario(eq(1L), request.capture());
-        org.assertj.core.api.Assertions.assertThat(request.getValue().codigosBarras())
+        verify(produtoService).cadastrarParaUsuario(eq(1L), request.capture());
+        assertThat(request.getValue().codigosBarras())
                 .containsExactly("7891000315508");
     }
 
@@ -733,7 +738,7 @@ class ProdutoControllerTest {
         mockMvc.perform(delete("/api/produtos/" + PRODUTO_ID).header("Authorization", "Bearer " + token))
                 .andExpect(status().isNoContent());
 
-        org.mockito.Mockito.verify(produtoService).excluirParaUsuario(1L, PRODUTO_ID);
+        verify(produtoService).excluirParaUsuario(1L, PRODUTO_ID);
     }
 
     @Test
@@ -743,7 +748,7 @@ class ProdutoControllerTest {
         mockMvc.perform(delete("/api/produtos/" + PRODUTO_ID).header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden());
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     @Test
@@ -754,7 +759,7 @@ class ProdutoControllerTest {
 
     @Test
     void excluirDeOutraEmpresaRetorna404() throws Exception {
-        org.mockito.Mockito.doThrow(new ProdutoNaoEncontradoException())
+        doThrow(new ProdutoNaoEncontradoException())
                 .when(produtoService).excluirParaUsuario(1L, OUTRO_PRODUTO_ID);
 
         String token = tokenParaUsuario(1L);
@@ -767,7 +772,7 @@ class ProdutoControllerTest {
     void excluirBloqueadoRetorna409ComMensagem() throws Exception {
         String mensagem = "Este produto já teve movimentação e não pode ser excluído. "
                 + "Inative-o para que não apareça na venda.";
-        org.mockito.Mockito.doThrow(new ProdutoConflitoException(mensagem))
+        doThrow(new ProdutoConflitoException(mensagem))
                 .when(produtoService).excluirParaUsuario(1L, PRODUTO_ID);
 
         String token = tokenParaUsuario(1L);
@@ -798,7 +803,7 @@ class ProdutoControllerTest {
         mockMvc.perform(get("/api/produtos/sku/sugestao").header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden());
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     @Test
@@ -847,7 +852,36 @@ class ProdutoControllerTest {
                 .andExpect(jsonPath("$.campos[?(@.campo=='promocao.inicio')].mensagem")
                         .value("Informe o início da promoção."));
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void regraDoServiceEmPromocaoPrecoSaiEmCampos() throws Exception {
+        String mensagem = "Preço promocional deve ser menor que o preço de venda.";
+        when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
+                .thenThrow(new RegraDeNegocioException(mensagem, "promocao.preco"));
+
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corpo("Produto", "10.00",
+                                "\"promocao\": { \"preco\": 10.00, \"inicio\": \"2026-11-01\", \"fim\": \"2026-11-15\" }")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value(mensagem))
+                .andExpect(jsonPath("$.campos[?(@.campo=='promocao.preco')].mensagem").value(mensagem));
+    }
+
+    @Test
+    void dataInvalidaNaPromocao_400() throws Exception {
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corpo("Produto", "10.00",
+                                "\"promocao\": { \"preco\": 8.90, \"inicio\": \"2026-02-30\", \"fim\": \"2026-03-15\" }")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Requisicao invalida: nao foi possivel ler o corpo enviado."));
+
+        verifyNoInteractions(produtoService);
     }
 
     @Test
@@ -863,7 +897,7 @@ class ProdutoControllerTest {
                 .andExpect(jsonPath("$.campos[?(@.campo=='atacado.preco')]").exists())
                 .andExpect(jsonPath("$.campos[?(@.campo=='atacado.quantidadeMinima')]").exists());
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     @Test
@@ -888,10 +922,10 @@ class ProdutoControllerTest {
                 .andExpect(jsonPath("$.atacado.quantidadeMinima").value(12));
 
         ArgumentCaptor<ProdutoRequest> request = ArgumentCaptor.forClass(ProdutoRequest.class);
-        org.mockito.Mockito.verify(produtoService).cadastrarParaUsuario(eq(1L), request.capture());
-        org.assertj.core.api.Assertions.assertThat(request.getValue().promocao().inicio())
+        verify(produtoService).cadastrarParaUsuario(eq(1L), request.capture());
+        assertThat(request.getValue().promocao().inicio())
                 .isEqualTo(LocalDate.of(2026, 11, 1));
-        org.assertj.core.api.Assertions.assertThat(request.getValue().atacado().quantidadeMinima())
+        assertThat(request.getValue().atacado().quantidadeMinima())
                 .isEqualByComparingTo("12");
     }
 
@@ -904,7 +938,7 @@ class ProdutoControllerTest {
         mockMvc.perform(get(HISTORICO))
                 .andExpect(status().isUnauthorized());
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     @Test
@@ -954,7 +988,7 @@ class ProdutoControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("Parâmetro inválido."));
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     @Test
@@ -964,7 +998,7 @@ class ProdutoControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("Identificador inválido."));
 
-        org.mockito.Mockito.verifyNoInteractions(produtoService);
+        verifyNoInteractions(produtoService);
     }
 
     @Test

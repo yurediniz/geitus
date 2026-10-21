@@ -154,6 +154,26 @@ class ProdutoRepositoryIT {
         assertThat(relido.getPrecoMinimo()).isEqualByComparingTo("20.00");
     }
 
+    // ---------- Fase C: busca com trava para a edicao ----------
+
+    /**
+     * {@code buscarPorUuidParaAtualizar} (SELECT ... FOR UPDATE) roda no
+     * Postgres real dentro da transacao do teste e respeita a empresa
+     * (DEC-016). A concorrencia em si nao e simulada aqui.
+     */
+    @Test
+    void buscarPorUuidParaAtualizarTravaSoProdutoDaEmpresa() {
+        Empresa empresaA = novaEmpresa("Empresa Trava A");
+        Empresa empresaB = novaEmpresa("Empresa Trava B");
+        Produto produto = salvar(produtoDa(empresaA).nome("Arroz").precoVenda("10.00"));
+        entityManager.clear();
+
+        assertThat(produtoRepository.buscarPorUuidParaAtualizar(produto.getUuid(), empresaA.getId()))
+                .get().extracting(Produto::getNome).isEqualTo("Arroz");
+        assertThat(produtoRepository.buscarPorUuidParaAtualizar(produto.getUuid(), empresaB.getId())).isEmpty();
+        assertThat(produtoRepository.buscarPorUuidParaAtualizar(UUID.randomUUID(), empresaA.getId())).isEmpty();
+    }
+
     // ---------- Identificacao (V7): uuid, nome curto, fornecedor e codigos ----------
 
     @Test

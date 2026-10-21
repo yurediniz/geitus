@@ -102,12 +102,22 @@ class MigracaoV8IT {
         assertViolacao("UPDATE produtos SET preco_promocional = 8.90, promocao_inicio = DATE '2026-11-15',"
                 + " promocao_fim = DATE '2026-11-14' WHERE id = " + produto,
                 "ck_produto_promocao_periodo", VIOLACAO_DE_CHECK);
-        assertViolacao("UPDATE produtos SET preco_promocional = 0, promocao_inicio = DATE '2026-11-15',"
-                + " promocao_fim = DATE '2026-11-15' WHERE id = " + produto,
-                "ck_produto_preco_promocional_positivo", VIOLACAO_DE_CHECK);
 
         executar("UPDATE produtos SET preco_promocional = 8.90, promocao_inicio = DATE '2026-11-15',"
                 + " promocao_fim = DATE '2026-11-15' WHERE id = " + produto);
+    }
+
+    @Test
+    void rejeitaPrecoPromocionalNaoPositivo() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        long produto = inserirProduto(empresa, "Arroz");
+        aplicarV8();
+
+        for (String preco : new String[] {"0", "-1"}) {
+            assertViolacao("UPDATE produtos SET preco_promocional = " + preco + ", promocao_inicio = DATE '2026-11-01',"
+                    + " promocao_fim = DATE '2026-11-15' WHERE id = " + produto,
+                    "ck_produto_preco_promocional_positivo", VIOLACAO_DE_CHECK);
+        }
     }
 
     @Test
@@ -120,10 +130,20 @@ class MigracaoV8IT {
                 "ck_produto_atacado_completo", VIOLACAO_DE_CHECK);
         assertViolacao("UPDATE produtos SET quantidade_minima_atacado = 12 WHERE id = " + produto,
                 "ck_produto_atacado_completo", VIOLACAO_DE_CHECK);
-        assertViolacao("UPDATE produtos SET preco_atacado = 0, quantidade_minima_atacado = 12 WHERE id = " + produto,
-                "ck_produto_preco_atacado_positivo", VIOLACAO_DE_CHECK);
 
         executar("UPDATE produtos SET preco_atacado = 8.50, quantidade_minima_atacado = 12 WHERE id = " + produto);
+    }
+
+    @Test
+    void rejeitaPrecoAtacadoNaoPositivo() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        long produto = inserirProduto(empresa, "Arroz");
+        aplicarV8();
+
+        for (String preco : new String[] {"0", "-1"}) {
+            assertViolacao("UPDATE produtos SET preco_atacado = " + preco + ", quantidade_minima_atacado = 12"
+                    + " WHERE id = " + produto, "ck_produto_preco_atacado_positivo", VIOLACAO_DE_CHECK);
+        }
     }
 
     @Test
@@ -183,6 +203,23 @@ class MigracaoV8IT {
 
         assertViolacao(inserirHistoricoSql(empresa, produto, "PRECO_VENDA", "10.00", null, usuario),
                 "ck_historico_preco_venda_nao_nulo", VIOLACAO_DE_CHECK);
+    }
+
+    /** Usuario com historico nao pode ser excluido fisicamente: FK RESTRICT (spec 3.2). */
+    @Test
+    void rejeitaExcluirUsuarioComHistorico() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        long produto = inserirProduto(empresa, "Arroz");
+        long comHistorico = inserirUsuario(empresa, "a");
+        long semHistorico = inserirUsuario(empresa, "b");
+        aplicarV8();
+        executar(inserirHistoricoSql(empresa, produto, "PRECO_VENDA", null, "10.00", comHistorico));
+
+        assertViolacao("DELETE FROM usuario WHERE id = " + comHistorico, "fk_historico_preco_usuario",
+                VIOLACAO_DE_FK);
+
+        executar("DELETE FROM usuario WHERE id = " + semHistorico);
+        assertThat(contar("SELECT count(*) FROM produto_historico_precos")).isEqualTo(1);
     }
 
     @Test

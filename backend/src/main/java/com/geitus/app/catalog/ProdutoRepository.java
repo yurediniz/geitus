@@ -5,8 +5,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import jakarta.persistence.LockModeType;
 
 /**
  * Acesso a dados da entidade {@link Produto} e dos seus codigos de barras.
@@ -42,6 +45,28 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
               AND p.empresa.id = :empresaId
             """)
     Optional<Produto> findByUuidAndEmpresa_Id(@Param("uuid") UUID uuid, @Param("empresaId") Long empresaId);
+
+    /**
+     * Produto da empresa pelo UUID com trava de escrita na linha
+     * ({@code SELECT ... FOR UPDATE}), para a edicao do cadastro.
+     *
+     * <p>A edicao le o custo e o preco de venda atuais e os grava como
+     * {@code valor_anterior} no historico de precos (V8). Sem a trava, duas
+     * edicoes concorrentes leriam o mesmo valor anterior e o historico deixaria
+     * de formar a cadeia {@code valor_anterior -> valor_novo}; com ela, a
+     * segunda espera a primeira confirmar e le o valor ja gravado.
+     *
+     * <p>Sem {@code JOIN FETCH} de proposito: o PostgreSQL nao aceita
+     * {@code FOR UPDATE} no lado anulavel de um {@code LEFT JOIN}. Os vinculos
+     * LAZY sao carregados depois, dentro da mesma transacao. Exige transacao.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT p FROM Produto p
+            WHERE p.uuid = :uuid
+              AND p.empresa.id = :empresaId
+            """)
+    Optional<Produto> buscarPorUuidParaAtualizar(@Param("uuid") UUID uuid, @Param("empresaId") Long empresaId);
 
     boolean existsBySkuAndEmpresa_Id(String sku, Long empresaId);
 

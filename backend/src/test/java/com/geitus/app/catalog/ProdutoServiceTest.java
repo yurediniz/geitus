@@ -3,19 +3,26 @@ package com.geitus.app.catalog;
 import static com.geitus.app.catalog.ProdutoRequestBuilder.comUnidade;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -29,7 +36,9 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 
+import org.assertj.core.api.ListAssert;
 import org.assertj.core.api.ThrowingConsumer;
+import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +47,8 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.geitus.app.catalog.categoria.Categoria;
@@ -73,11 +84,14 @@ class ProdutoServiceTest {
     private static final String EAN13_VALIDO = "7891000315507";
     private static final String EAN13_DIGITO_INVALIDO = "7891000315508";
     private static final String EAN8_VALIDO = "96385074";
-    /** 08/11/2026 12:00 em Sao Paulo. */
-    private static final Clock RELOGIO = Clock.fixed(Instant.parse("2026-11-08T15:00:00Z"),
+    /**
+     * 08/03/2020 12:00 em Sao Paulo: longe da data real, para que nenhum teste
+     * passe por acaso lendo o relogio do sistema em vez do injetado.
+     */
+    private static final Clock RELOGIO = Clock.fixed(Instant.parse("2020-03-08T15:00:00Z"),
             ZoneId.of("America/Sao_Paulo"));
-    private static final LocalDate INICIO_PROMOCAO = LocalDate.of(2026, 11, 1);
-    private static final LocalDate FIM_PROMOCAO = LocalDate.of(2026, 11, 15);
+    private static final LocalDate INICIO_PROMOCAO = LocalDate.of(2020, 3, 1);
+    private static final LocalDate FIM_PROMOCAO = LocalDate.of(2020, 3, 15);
 
     @Mock
     private ProdutoRepository produtoRepository;
@@ -136,10 +150,19 @@ class ProdutoServiceTest {
     }
 
     /** Registra o produto como o encontrado pelo UUID dentro da empresa. */
+    /**
+     * Registra o produto como o encontrado pelo UUID dentro da empresa, tanto
+     * na busca simples quanto na busca com trava da edicao. Os dois stubs sao
+     * {@code lenient}: cada operacao usa so um deles (a escolha e conferida em
+     * {@link #atualizarBuscaOProdutoComTravaDeEscrita()}).
+     */
     private Produto produtoExistente(ProdutoTesteBuilder builder) {
         Produto produto = builder.build();
         produtoUuid = produto.getUuid();
-        when(produtoRepository.findByUuidAndEmpresa_Id(produtoUuid, EMPRESA_ID)).thenReturn(Optional.of(produto));
+        lenient().when(produtoRepository.findByUuidAndEmpresa_Id(produtoUuid, EMPRESA_ID))
+                .thenReturn(Optional.of(produto));
+        lenient().when(produtoRepository.buscarPorUuidParaAtualizar(produtoUuid, EMPRESA_ID))
+                .thenReturn(Optional.of(produto));
         return produto;
     }
 
@@ -311,10 +334,36 @@ class ProdutoServiceTest {
 
     // ---------- Atualizacao: regras basicas ----------
 
+    /**
+     * A edicao trava a linha do produto (SELECT ... FOR UPDATE) antes de ler o
+     * custo e o preco anteriores: duas edicoes concorrentes nao podem gravar o
+     * mesmo valor anterior e quebrar a cadeia valor_anterior -> valor_novo.
+     */
+    @Test
+    void atualizarBuscaOProdutoComTravaDeEscrita() {
+        produtoExistente();
+        edicaoPermitida();
+
+        atualizar(requestComUN().nome("Outro nome").build());
+
+        verify(produtoRepository).buscarPorUuidParaAtualizar(produtoUuid, EMPRESA_ID);
+        verify(produtoRepository, never()).findByUuidAndEmpresa_Id(any(), anyLong());
+    }
+
+    @Test
+    void inativarNaoTravaOProduto() {
+        produtoExistente();
+        salvamentoDevolveOProduto();
+
+        produtoService.inativar(EMPRESA_ID, produtoUuid);
+
+        verify(produtoRepository, never()).buscarPorUuidParaAtualizar(any(), anyLong());
+    }
+
     @Test
     void atualizarProdutoDeOutraEmpresaDeveFalhar() {
         produtoUuid = UUID.randomUUID();
-        when(produtoRepository.findByUuidAndEmpresa_Id(produtoUuid, EMPRESA_ID)).thenReturn(Optional.empty());
+        when(produtoRepository.buscarPorUuidParaAtualizar(produtoUuid, EMPRESA_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> atualizar(requestComUN().nome("Novo Nome").build()))
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
@@ -863,6 +912,26 @@ class ProdutoServiceTest {
         verify(categoriaService, times(1)).arvoreDaEmpresa(EMPRESA_ID);
     }
 
+    @Test
+    void listarParaUsuarioCalculaASituacaoDaPromocaoPeloRelogio() {
+        // RELOGIO: 08/03/2020 em Sao Paulo.
+        usuarioAtivoDaEmpresa(9L);
+        Produto vigente = ProdutoTesteBuilder.produto(empresa, un).nome("Vigente")
+                .promocao("8.90", INICIO_PROMOCAO, FIM_PROMOCAO).build();
+        Produto agendada = ProdutoTesteBuilder.produto(empresa, un).nome("Agendada")
+                .promocao("8.90", LocalDate.of(2020, 3, 9), FIM_PROMOCAO).build();
+        Produto semPromocao = ProdutoTesteBuilder.produto(empresa, un).nome("Sem promoção").build();
+        when(produtoRepository.buscarPorEmpresa(EMPRESA_ID, null)).thenReturn(List.of(vigente, agendada, semPromocao));
+        arvoreDaEmpresa();
+
+        List<ProdutoResponse> produtos = produtoService.listarParaUsuario(9L, null, null);
+
+        assertThat(produtos).extracting(ProdutoResponse::emPromocao).containsExactly(true, false, false);
+        assertThat(produtos.get(0).promocao().situacao()).isEqualTo(SituacaoPromocao.VIGENTE);
+        assertThat(produtos.get(1).promocao().situacao()).isEqualTo(SituacaoPromocao.AGENDADA);
+        assertThat(produtos.get(2).promocao()).isNull();
+    }
+
     // ---------- Normalizacao de campos opcionais (vazio/branco -> null; trim) ----------
 
     @Test
@@ -1339,6 +1408,42 @@ class ProdutoServiceTest {
     }
 
     @Test
+    void promocaoDeUmDiaEPermitida() {
+        cadastroPermitido();
+
+        Produto produto = cadastrar(requestComUN().promocao("8.90", INICIO_PROMOCAO, INICIO_PROMOCAO).build());
+
+        assertThat(produto.getPromocaoInicio()).isEqualTo(produto.getPromocaoFim()).isEqualTo(INICIO_PROMOCAO);
+    }
+
+    @Test
+    void cadastroComPromocaoJaEncerradaEPermitido() {
+        // Nao se valida "fim >= hoje" (spec 4.3): datas antes do RELOGIO sao aceitas no cadastro.
+        cadastroPermitido();
+
+        Produto produto = cadastrar(requestComUN().promocao("8.90", LocalDate.of(2020, 2, 1),
+                LocalDate.of(2020, 2, 15)).build());
+
+        assertThat(produto.getPromocaoFim()).isEqualTo(LocalDate.of(2020, 2, 15));
+    }
+
+    @Test
+    void atacadoMaiorQueOPrecoDeVenda() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().precoVenda("10.00").atacado("11.00", "12").build()))
+                .satisfies(regraNoCampo("atacado.preco", "Preço de atacado deve ser menor que o preço de venda."));
+    }
+
+    @Test
+    void promocaoEAtacadoInvalidosReportaAPromocaoPrimeiro() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(comPromocao("0").atacado("0", "1").build()))
+                .satisfies(regraNoCampo("promocao.preco", "Preço promocional deve ser maior que zero."));
+    }
+
+    @Test
     void quantidadeMinimaUm() {
         unidadeDaEmpresa(un);
 
@@ -1403,14 +1508,14 @@ class ProdutoServiceTest {
 
     @Test
     void promocaoEncerradaPodeSerSalva() {
-        produtoExistente(existente().promocao("8.90", LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 15)));
+        produtoExistente(existente().promocao("8.90", LocalDate.of(2020, 2, 1), LocalDate.of(2020, 2, 15)));
         edicaoPermitida();
 
         Produto atualizado = atualizar(requestComUN().nome("Outro nome")
-                .promocao("8.90", LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 15)).build());
+                .promocao("8.90", LocalDate.of(2020, 2, 1), LocalDate.of(2020, 2, 15)).build());
 
         assertThat(atualizado.getNome()).isEqualTo("Outro nome");
-        assertThat(atualizado.getPromocaoFim()).isEqualTo(LocalDate.of(2026, 10, 15));
+        assertThat(atualizado.getPromocaoFim()).isEqualTo(LocalDate.of(2020, 2, 15));
     }
 
     @Test
@@ -1444,20 +1549,17 @@ class ProdutoServiceTest {
     /** Linhas de historico gravadas, na ordem em que o service as salvou. */
     private List<HistoricoPreco> historicoGravado() {
         ArgumentCaptor<HistoricoPreco> linhas = ArgumentCaptor.forClass(HistoricoPreco.class);
-        verify(historicoPrecoRepository, org.mockito.Mockito.atLeast(0)).save(linhas.capture());
+        verify(historicoPrecoRepository, atLeast(0)).save(linhas.capture());
         return linhas.getAllValues();
     }
 
-    private static org.assertj.core.groups.Tuple linha(CampoHistoricoPreco campo, String anterior, String novo) {
-        return org.assertj.core.groups.Tuple.tuple(campo, anterior == null ? null : new java.math.BigDecimal(anterior),
-                novo == null ? null : new java.math.BigDecimal(novo));
+    private static Tuple linha(CampoHistoricoPreco campo, String anterior, String novo) {
+        return tuple(campo, anterior == null ? null : new BigDecimal(anterior), novo == null ? null : new BigDecimal(novo));
     }
 
-    private static org.assertj.core.api.ListAssert<org.assertj.core.groups.Tuple> assertLinhas(
-            List<HistoricoPreco> linhas) {
+    private static ListAssert<Tuple> assertLinhas(List<HistoricoPreco> linhas) {
         return assertThat(linhas.stream()
-                .map(linha -> org.assertj.core.groups.Tuple.tuple(linha.getCampo(), linha.getValorAnterior(),
-                        linha.getValorNovo()))
+                .map(linha -> tuple(linha.getCampo(), linha.getValorAnterior(), linha.getValorNovo()))
                 .toList());
     }
 
@@ -1611,12 +1713,11 @@ class ProdutoServiceTest {
         usuarioAtivoDaEmpresa(9L);
         produtoExistente();
         HistoricoPrecoResponse item = new HistoricoPrecoResponse(CampoHistoricoPreco.PRECO_VENDA,
-                new java.math.BigDecimal("10.00"), new java.math.BigDecimal("11.50"), "Ana Souza",
-                java.time.LocalDateTime.of(2026, 10, 21, 14, 3, 12));
+                new BigDecimal("10.00"), new BigDecimal("11.50"), "Ana Souza",
+                LocalDateTime.of(2026, 10, 21, 14, 3, 12));
         when(historicoPrecoRepository.historicoDoProduto(EMPRESA_ID, PRODUTO_ID,
-                org.springframework.data.domain.PageRequest.of(1, 2)))
-                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(item),
-                        org.springframework.data.domain.PageRequest.of(1, 2), 3));
+                PageRequest.of(1, 2)))
+                .thenReturn(new PageImpl<>(List.of(item), PageRequest.of(1, 2), 3));
 
         PaginaResponse<HistoricoPrecoResponse> pagina = produtoService.historicoDePrecosParaUsuario(9L, produtoUuid,
                 1, 2);
@@ -1636,7 +1737,29 @@ class ProdutoServiceTest {
                 .isInstanceOf(RegraDeNegocioException.class)
                 .hasMessage("O tamanho da página deve ser entre 1 e 100.");
 
-        org.mockito.Mockito.verifyNoInteractions(historicoPrecoRepository);
+        verifyNoInteractions(historicoPrecoRepository);
+    }
+
+    @Test
+    void historicoComPaginaGrandeDemais_400() {
+        // pagina * tamanho estoura o int do deslocamento (offset) da consulta: 400, nao 500.
+        assertThatThrownBy(() -> produtoService.historicoDePrecosParaUsuario(9L, UUID.randomUUID(), 21474837, 100))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("A página informada é grande demais.");
+
+        verifyNoInteractions(historicoPrecoRepository);
+    }
+
+    @Test
+    void historicoNoLimiteDoDeslocamentoEAceito() {
+        usuarioAtivoDaEmpresa(9L);
+        produtoExistente();
+        PageRequest ultimaPagina = PageRequest.of(Integer.MAX_VALUE, 1);
+        when(historicoPrecoRepository.historicoDoProduto(EMPRESA_ID, PRODUTO_ID, ultimaPagina))
+                .thenReturn(new PageImpl<>(List.of(), ultimaPagina, 0));
+
+        assertThat(produtoService.historicoDePrecosParaUsuario(9L, produtoUuid, Integer.MAX_VALUE, 1).itens())
+                .isEmpty();
     }
 
     @Test
@@ -1648,14 +1771,14 @@ class ProdutoServiceTest {
         assertThatThrownBy(() -> produtoService.historicoDePrecosParaUsuario(9L, deOutraEmpresa, 0, 20))
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
 
-        org.mockito.Mockito.verifyNoInteractions(historicoPrecoRepository);
+        verifyNoInteractions(historicoPrecoRepository);
     }
 
     // ---------- Resolucao da empresa a partir do usuario autenticado ----------
 
     @Test
     void cadastrarParaUsuarioInativoDeveFalharComCredenciaisInvalidas() {
-        Usuario usuarioInativo = org.mockito.Mockito.mock(Usuario.class);
+        Usuario usuarioInativo = mock(Usuario.class);
         when(usuarioInativo.isAtivo()).thenReturn(false);
         when(usuarioRepository.findById(9L)).thenReturn(Optional.of(usuarioInativo));
 
@@ -1666,7 +1789,7 @@ class ProdutoServiceTest {
     }
 
     private void usuarioAtivoDaEmpresa(Long idUsuario) {
-        Usuario usuario = org.mockito.Mockito.mock(Usuario.class);
+        Usuario usuario = mock(Usuario.class);
         when(usuario.isAtivo()).thenReturn(true);
         when(usuario.getEmpresaId()).thenReturn(EMPRESA_ID);
         when(usuarioRepository.findById(idUsuario)).thenReturn(Optional.of(usuario));
