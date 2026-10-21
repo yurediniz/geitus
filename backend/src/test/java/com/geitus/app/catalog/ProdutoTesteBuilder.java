@@ -1,6 +1,7 @@
 package com.geitus.app.catalog;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,6 +35,11 @@ final class ProdutoTesteBuilder {
     private BigDecimal estoqueMaximo;
     private BigDecimal pontoReposicao;
     private String sku;
+    private BigDecimal precoPromocional;
+    private LocalDate promocaoInicio;
+    private LocalDate promocaoFim;
+    private BigDecimal precoAtacado;
+    private BigDecimal quantidadeMinimaAtacado;
     private Long id;
     private boolean ativo = true;
     private final List<CodigoBarrasValidado> codigos = new ArrayList<>();
@@ -123,6 +129,19 @@ final class ProdutoTesteBuilder {
         return this;
     }
 
+    ProdutoTesteBuilder promocao(String preco, LocalDate inicio, LocalDate fim) {
+        this.precoPromocional = new BigDecimal(preco);
+        this.promocaoInicio = inicio;
+        this.promocaoFim = fim;
+        return this;
+    }
+
+    ProdutoTesteBuilder atacado(String preco, String quantidadeMinima) {
+        this.precoAtacado = new BigDecimal(preco);
+        this.quantidadeMinimaAtacado = new BigDecimal(quantidadeMinima);
+        return this;
+    }
+
     ProdutoTesteBuilder inativo() {
         this.ativo = false;
         return this;
@@ -144,6 +163,11 @@ final class ProdutoTesteBuilder {
                 unidade, categoria, unidadeCompra, fatorConversao, precoVenda, custo, precoMinimo, estoqueMinimo,
                 estoqueMaximo, pontoReposicao, sku));
         produto.substituirCodigos(codigos);
+        ReflectionTestUtils.setField(produto, "precoPromocional", precoPromocional);
+        ReflectionTestUtils.setField(produto, "promocaoInicio", promocaoInicio);
+        ReflectionTestUtils.setField(produto, "promocaoFim", promocaoFim);
+        ReflectionTestUtils.setField(produto, "precoAtacado", precoAtacado);
+        ReflectionTestUtils.setField(produto, "quantidadeMinimaAtacado", quantidadeMinimaAtacado);
         if (!ativo) {
             produto.inativar();
         }
