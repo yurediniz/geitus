@@ -231,7 +231,9 @@ function NavItemLink({
   return (
     <NavLink
       to={item.to}
-      end
+      // So "Início" exige rota exata; os demais ficam ativos nas sub-rotas
+      // (ex.: Produtos em /produtos/categorias e /produtos/unidades).
+      end={item.to === '/'}
       onClick={() => onNavigate?.()}
       className={({ isActive }) =>
         cn(

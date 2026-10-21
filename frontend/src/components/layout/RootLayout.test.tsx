@@ -37,6 +37,7 @@ function renderLayout(entrada = '/') {
             <Route path="/" element={<RootLayout />}>
               <Route index element={<div>Conteudo</div>} />
               <Route path="produtos" element={<div>Produtos</div>} />
+              <Route path="produtos/categorias" element={<div>Categorias</div>} />
               <Route path="clientes" element={<div>Clientes</div>} />
             </Route>
             <Route path="/login" element={<div>Tela de login</div>} />
@@ -76,6 +77,17 @@ describe('RootLayout - logout', () => {
     expect(produtos).toHaveAttribute('href', '/produtos')
     expect(produtos).toHaveAttribute('aria-current', 'page')
     expect(screen.getAllByText(/^em breve$/i).length).toBeGreaterThan(0)
+  })
+
+  it('mantem Produtos ativo nas sub-rotas do catalogo e Inicio inativo', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    renderLayout('/produtos/categorias')
+
+    await screen.findByText('Ana Souza')
+    expect(screen.getByRole('link', { name: /produtos/i })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: /início/i })).not.toHaveAttribute('aria-current')
   })
 
   it('exibe Clientes como item de navegacao ativo, nao como item em breve', async () => {

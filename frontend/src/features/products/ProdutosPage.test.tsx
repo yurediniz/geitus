@@ -2,6 +2,7 @@ import type { ReactElement } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 
 import { ProdutosPage } from '@/features/products/ProdutosPage'
 import { HttpError } from '@/services/httpClient'
@@ -110,7 +111,12 @@ function renderComProviders(ui: ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+  // A pagina renderiza a sub-navegacao do catalogo (NavLink), que exige um router.
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={['/produtos']}>{ui}</MemoryRouter>
+    </QueryClientProvider>,
+  )
 }
 
 async function abrirFormularioNovo() {
@@ -122,6 +128,17 @@ describe('ProdutosPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     definirPerfil('ADMIN')
+  })
+
+  it('exibe a sub-navegacao do catalogo com Produtos como aba atual', async () => {
+    listarProdutosMock.mockResolvedValue([])
+
+    renderComProviders(<ProdutosPage />)
+
+    const nav = await screen.findByRole('navigation', { name: /catálogo/i })
+    expect(within(nav).getByRole('link', { name: 'Produtos' })).toHaveAttribute('aria-current', 'page')
+    expect(within(nav).getByRole('link', { name: 'Categorias' })).toHaveAttribute('href', '/produtos/categorias')
+    expect(within(nav).getByRole('link', { name: 'Unidades' })).toHaveAttribute('href', '/produtos/unidades')
   })
 
   it('renderiza o titulo e o estado de carregamento', () => {

@@ -2,6 +2,8 @@ import { createBrowserRouter, type RouteObject } from 'react-router-dom'
 
 import { RootLayout } from '@/components/layout/RootLayout'
 import { LoginPage } from '@/features/auth/LoginPage'
+import { CategoriasPage } from '@/features/catalog/CategoriasPage'
+import { UnidadesPage } from '@/features/catalog/UnidadesPage'
 import { EmpresaPage } from '@/features/company/EmpresaPage'
 import { ClientesPage } from '@/features/customers/ClientesPage'
 import { ProdutosPage } from '@/features/products/ProdutosPage'
@@ -43,6 +45,9 @@ const privateRoutes: RouteObject[] = [
         children: [
           { index: true, element: <HomePage /> },
           { path: 'produtos', element: <ProdutosPage /> },
+          // Catalogo: leitura a qualquer autenticado; escrita so ADMIN (pagina e backend, DEC-031).
+          { path: 'produtos/categorias', element: <CategoriasPage /> },
+          { path: 'produtos/unidades', element: <UnidadesPage /> },
           // Clientes: qualquer autenticado (inativar/reativar so ADMIN, controlado na pagina e no backend).
           { path: 'clientes', element: <ClientesPage /> },
           { path: 'empresa', element: <EmpresaPage /> },
