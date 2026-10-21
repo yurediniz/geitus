@@ -37,8 +37,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class MigracaoV6IT {
 
     private static final String VERSAO_ANTERIOR_A_V6 = "5";
+    private static final String VERSAO_V6 = "6";
     private static final String VIOLACAO_DE_UNICIDADE = "23505";
     private static final String VIOLACAO_DE_CHECK = "23514";
+    private static final String VIOLACAO_DE_FK = "23503";
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
@@ -74,8 +76,10 @@ class MigracaoV6IT {
     @Test
     void textosDeUnidadeMapeadosParaPadroes() throws SQLException {
         long empresa = inserirEmpresa("Empresa A");
-        List<String> textos = List.of("un", " Un ", "UND", "unidade", "pç", "kg", "Kilo", "LT", "Caixa");
-        List<String> siglasEsperadas = List.of("UN", "UN", "UN", "UN", "UN", "KG", "KG", "L", "CX");
+        List<String> textos = List.of("un", " Un ", "UND", "unidade", "pç", "kg", "Kilo", "LT", "Caixa",
+                " kg ", "KILO", "PEÇA", "Dúzia", "litros", "FD");
+        List<String> siglasEsperadas = List.of("UN", "UN", "UN", "UN", "UN", "KG", "KG", "L", "CX",
+                "KG", "KG", "UN", "DZ", "L", "FD");
         List<Long> produtos = new ArrayList<>();
         for (String texto : textos) {
             produtos.add(inserirProduto(empresa, "Produto " + texto, texto, null));
@@ -142,10 +146,14 @@ class MigracaoV6IT {
         long refrigerante = inserirProduto(empresa, "Refrigerante", "UN", "Bebidas");
         long semCategoria = inserirProduto(empresa, "Sem categoria", "UN", null);
         long categoriaVazia = inserirProduto(empresa, "Categoria vazia", "UN", "");
+        long categoriaEmBranco = inserirProduto(empresa, "Categoria em branco", "UN", "   ");
+        long racao = inserirProduto(empresa, "Racao seca", "UN", "Ração");
+        long racaoMaiuscula = inserirProduto(empresa, "Racao umida", "UN", "RAÇÃO");
+        long racaoComEspacos = inserirProduto(empresa, "Petisco", "UN", " ração ");
 
         aplicarV6();
 
-        assertThat(nomesDasCategorias(empresa)).containsExactlyInAnyOrder("Mercearia", "Bebidas");
+        assertThat(nomesDasCategorias(empresa)).containsExactlyInAnyOrder("Mercearia", "Bebidas", "Ração");
         assertThat(contar("SELECT count(*) FROM categorias WHERE parent_id IS NOT NULL")).isZero();
         assertThat(contar("SELECT count(*) FROM categorias WHERE uuid IS NULL OR ativo IS NOT TRUE")).isZero();
         assertThat(nomeDaCategoriaDoProduto(arroz)).isEqualTo("Mercearia");
@@ -154,6 +162,10 @@ class MigracaoV6IT {
         assertThat(nomeDaCategoriaDoProduto(refrigerante)).isEqualTo("Bebidas");
         assertThat(nomeDaCategoriaDoProduto(semCategoria)).isNull();
         assertThat(nomeDaCategoriaDoProduto(categoriaVazia)).isNull();
+        assertThat(nomeDaCategoriaDoProduto(categoriaEmBranco)).isNull();
+        assertThat(nomeDaCategoriaDoProduto(racao)).isEqualTo("Ração");
+        assertThat(nomeDaCategoriaDoProduto(racaoMaiuscula)).isEqualTo("Ração");
+        assertThat(nomeDaCategoriaDoProduto(racaoComEspacos)).isEqualTo("Ração");
     }
 
     @Test
@@ -198,21 +210,84 @@ class MigracaoV6IT {
 
         aplicarV6();
 
-        assertThatThrownBy(() -> executar(
-                "INSERT INTO categorias (empresa_id, nome) VALUES (" + empresa + ", 'mercearia')"))
+        assertViolacao("INSERT INTO categorias (empresa_id, nome) VALUES (" + empresa + ", 'mercearia')",
+                "uq_categoria_irmaos", VIOLACAO_DE_UNICIDADE);
+        assertViolacao("UPDATE produtos SET fator_conversao = 12 WHERE id = " + produto,
+                "ck_produto_compra_coerente", VIOLACAO_DE_CHECK);
+        assertViolacao("UPDATE produtos SET fator_conversao = 0, unidade_compra_id = unidade_id WHERE id = "
+                + produto, "ck_produto_fator_positivo", VIOLACAO_DE_CHECK);
+        assertViolacao("UPDATE produtos SET fator_conversao = -1, unidade_compra_id = unidade_id WHERE id = "
+                + produto, "ck_produto_fator_positivo", VIOLACAO_DE_CHECK);
+        assertViolacao(inserirUnidadeSql(empresa, "sc", "Saco"), "ck_unidade_sigla_maiuscula", VIOLACAO_DE_CHECK);
+        assertViolacao(inserirUnidadeSql(empresa, " SC", "Saco"), "ck_unidade_sigla_maiuscula", VIOLACAO_DE_CHECK);
+        assertViolacao(inserirUnidadeSql(empresa, "", "Saco"), "ck_unidade_sigla_maiuscula", VIOLACAO_DE_CHECK);
+        assertViolacao(inserirUnidadeSql(empresa, "SC", "  "), "ck_unidade_descricao_valida", VIOLACAO_DE_CHECK);
+        assertViolacao(inserirUnidadeSql(empresa, "KG", "Quilo"), "uq_unidade_empresa_sigla", VIOLACAO_DE_UNICIDADE);
+        assertViolacao("INSERT INTO categorias (empresa_id, nome) VALUES (" + empresa + ", ' Bebidas')",
+                "ck_categoria_nome_valido", VIOLACAO_DE_CHECK);
+        assertViolacao("INSERT INTO categorias (empresa_id, nome) VALUES (" + empresa + ", '')",
+                "ck_categoria_nome_valido", VIOLACAO_DE_CHECK);
+        assertViolacao("UPDATE categorias SET parent_id = id WHERE id = " + idDaCategoria(empresa, "Mercearia"),
+                "ck_categoria_pai_diferente", VIOLACAO_DE_CHECK);
+    }
+
+    @Test
+    void exclusaoBloqueadaPorVinculos() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        inserirProduto(empresa, "Arroz", "UN", "Mercearia");
+
+        aplicarV6();
+
+        long mercearia = idDaCategoria(empresa, "Mercearia");
+        executar("INSERT INTO categorias (empresa_id, parent_id, nome) VALUES (" + empresa + ", " + mercearia
+                + ", 'Graos')");
+        long graos = idDaCategoria(empresa, "Graos");
+        executar("UPDATE produtos SET categoria_id = NULL");
+        assertViolacao("DELETE FROM categorias WHERE id = " + mercearia, "fk_categoria_pai", VIOLACAO_DE_FK);
+        executar("UPDATE produtos SET categoria_id = " + graos);
+        assertViolacao("DELETE FROM categorias WHERE id = " + graos, "fk_produto_categoria", VIOLACAO_DE_FK);
+        assertViolacao("DELETE FROM unidades_medida WHERE id = " + idDaUnidade(empresa, "UN"),
+                "fk_produto_unidade", VIOLACAO_DE_FK);
+        long caixa = idDaUnidade(empresa, "CX");
+        executar("UPDATE produtos SET unidade_compra_id = " + caixa + ", fator_conversao = 12");
+        assertViolacao("DELETE FROM unidades_medida WHERE id = " + caixa,
+                "fk_produto_unidade_compra", VIOLACAO_DE_FK);
+    }
+
+    @Test
+    void vinculosComOutraEmpresaRejeitadosPeloBanco() throws SQLException {
+        long empresaA = inserirEmpresa("Empresa A");
+        long empresaB = inserirEmpresa("Empresa B");
+        long produtoA = inserirProduto(empresaA, "Arroz A", "UN", "Mercearia");
+        inserirProduto(empresaB, "Arroz B", "UN", "Bebidas");
+
+        aplicarV6();
+
+        long unidadeDaB = idDaUnidade(empresaB, "KG");
+        long categoriaDaB = idDaCategoria(empresaB, "Bebidas");
+        assertViolacao("UPDATE produtos SET unidade_id = " + unidadeDaB + " WHERE id = " + produtoA,
+                "fk_produto_unidade", VIOLACAO_DE_FK);
+        assertViolacao("UPDATE produtos SET categoria_id = " + categoriaDaB + " WHERE id = " + produtoA,
+                "fk_produto_categoria", VIOLACAO_DE_FK);
+        assertViolacao("UPDATE produtos SET unidade_compra_id = " + unidadeDaB
+                + ", fator_conversao = 12 WHERE id = " + produtoA, "fk_produto_unidade_compra", VIOLACAO_DE_FK);
+        assertViolacao("INSERT INTO categorias (empresa_id, parent_id, nome) VALUES (" + empresaA + ", "
+                + categoriaDaB + ", 'Refrigerantes')", "fk_categoria_pai", VIOLACAO_DE_FK);
+        assertViolacao("UPDATE categorias SET parent_id = " + categoriaDaB + " WHERE id = "
+                + idDaCategoria(empresaA, "Mercearia"), "fk_categoria_pai", VIOLACAO_DE_FK);
+    }
+
+    private static String inserirUnidadeSql(long empresaId, String sigla, String descricao) {
+        return "INSERT INTO unidades_medida (empresa_id, sigla, descricao) VALUES (" + empresaId + ", '" + sigla
+                + "', '" + descricao + "')";
+    }
+
+    private static void assertViolacao(String sql, String constraint, String sqlState) {
+        assertThatThrownBy(() -> executar(sql))
+                .as("violacao de %s em: %s", constraint, sql)
                 .isInstanceOf(SQLException.class)
-                .hasMessageContaining("uq_categoria_irmaos")
-                .extracting(erro -> ((SQLException) erro).getSQLState()).isEqualTo(VIOLACAO_DE_UNICIDADE);
-        assertThatThrownBy(() -> executar(
-                "UPDATE produtos SET fator_conversao = 12 WHERE id = " + produto))
-                .isInstanceOf(SQLException.class)
-                .hasMessageContaining("ck_produto_compra_coerente")
-                .extracting(erro -> ((SQLException) erro).getSQLState()).isEqualTo(VIOLACAO_DE_CHECK);
-        assertThatThrownBy(() -> executar(
-                "INSERT INTO unidades_medida (empresa_id, sigla, descricao) VALUES (" + empresa + ", 'sc', 'Saco')"))
-                .isInstanceOf(SQLException.class)
-                .hasMessageContaining("ck_unidade_sigla_maiuscula")
-                .extracting(erro -> ((SQLException) erro).getSQLState()).isEqualTo(VIOLACAO_DE_CHECK);
+                .hasMessageContaining(constraint)
+                .extracting(erro -> ((SQLException) erro).getSQLState()).isEqualTo(sqlState);
     }
 
     // ------------------------------------------------------------------
@@ -228,8 +303,9 @@ class MigracaoV6IT {
                 .load();
     }
 
+    /** Aplica exatamente ate a V6 (migrations futuras nao interferem no teste). */
     private static void aplicarV6() {
-        flyway("latest").migrate();
+        flyway(VERSAO_V6).migrate();
     }
 
     private static Connection conectar() throws SQLException {
@@ -335,6 +411,26 @@ class MigracaoV6IT {
             try (ResultSet resultado = consulta.executeQuery()) {
                 assertThat(resultado.next()).as("produto %d encontrado", produtoId).isTrue();
                 return resultado.getString(1);
+            }
+        }
+    }
+
+    private static long idDaCategoria(long empresaId, String nome) throws SQLException {
+        return idPorEmpresaETexto("SELECT id FROM categorias WHERE empresa_id = ? AND nome = ?", empresaId, nome);
+    }
+
+    private static long idDaUnidade(long empresaId, String sigla) throws SQLException {
+        return idPorEmpresaETexto("SELECT id FROM unidades_medida WHERE empresa_id = ? AND sigla = ?",
+                empresaId, sigla);
+    }
+
+    private static long idPorEmpresaETexto(String sql, long empresaId, String texto) throws SQLException {
+        try (Connection conexao = conectar(); PreparedStatement consulta = conexao.prepareStatement(sql)) {
+            consulta.setLong(1, empresaId);
+            consulta.setString(2, texto);
+            try (ResultSet resultado = consulta.executeQuery()) {
+                assertThat(resultado.next()).as("registro '%s' da empresa %d", texto, empresaId).isTrue();
+                return resultado.getLong(1);
             }
         }
     }
