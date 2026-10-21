@@ -123,7 +123,7 @@ describe('UnidadesPage', () => {
     expect(await linhaDa('UN')).toBeInTheDocument()
   })
 
-  it('cadastra com a sigla como digitada e exibe a sigla devolvida pelo backend', async () => {
+  it('converte a sigla para maiusculas ao digitar e exibe a sigla devolvida pelo backend', async () => {
     listarUnidadesMock.mockResolvedValue([UN])
     const criada = unidade({ id: 'u-lt', sigla: 'LT', descricao: 'Litro', fracionada: true })
     cadastrarUnidadeMock.mockResolvedValue(criada)
@@ -132,13 +132,14 @@ describe('UnidadesPage', () => {
     await linhaDa('UN')
     fireEvent.click(screen.getByRole('button', { name: /nova unidade/i }))
     fireEvent.change(screen.getByLabelText(/^sigla$/i), { target: { value: 'lt' } })
+    expect(screen.getByLabelText(/^sigla$/i)).toHaveValue('LT')
     fireEvent.change(screen.getByLabelText(/^descrição$/i), { target: { value: 'Litro' } })
     fireEvent.click(screen.getByLabelText(/aceita quantidade fracionada/i))
     listarUnidadesMock.mockResolvedValue([criada, UN])
     fireEvent.click(screen.getByRole('button', { name: /salvar unidade/i }))
 
     await waitFor(() =>
-      expect(cadastrarUnidadeMock).toHaveBeenCalledWith({ sigla: 'lt', descricao: 'Litro', fracionada: true }),
+      expect(cadastrarUnidadeMock).toHaveBeenCalledWith({ sigla: 'LT', descricao: 'Litro', fracionada: true }),
     )
     expect(await screen.findByRole('status')).toHaveTextContent('Unidade LT cadastrada com sucesso.')
     expect(await linhaDa('LT')).toBeInTheDocument()
@@ -217,6 +218,21 @@ describe('UnidadesPage', () => {
     await waitFor(() => expect(excluirUnidadeMock).toHaveBeenCalledWith('u-kg'))
     expect(await screen.findByRole('status')).toHaveTextContent('Unidade KG excluída.')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    // A linha sumiu: o foco vai para o titulo da lista, nao se perde no body.
+    await waitFor(() => expect(screen.getByText('Unidades cadastradas')).toHaveFocus())
+  })
+
+  it('cancelar a exclusao devolve o foco ao botao de origem', async () => {
+    listarUnidadesMock.mockResolvedValue([KG])
+
+    renderPagina()
+    const excluir = within(await linhaDa('KG')).getByRole('button', { name: 'Excluir KG' })
+    excluir.focus()
+    fireEvent.click(excluir)
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancelar' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(excluir).toHaveFocus())
   })
 
   it('exibe a mensagem do backend quando a exclusao responde 409', async () => {

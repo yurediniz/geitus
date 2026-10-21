@@ -1,19 +1,19 @@
-import { useRef, useState, type FocusEvent, type KeyboardEvent } from 'react'
 import {
-  ChevronRight,
-  FolderInput,
-  FolderPlus,
-  Loader2,
-  Pencil,
-  RotateCcw,
-  Trash2,
-  XCircle,
-  type LucideIcon,
-} from 'lucide-react'
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent,
+  type Ref,
+} from 'react'
+import { ChevronRight, Eye, EyeOff, FolderInput, FolderPlus, Pencil, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { FormularioNomeCategoria } from '@/features/catalog/FormularioNomeCategoria'
-import type { NoCategoria } from '@/lib/arvoreCategorias'
+import { MenuAcoes, type ItemMenuAcoes } from '@/features/catalog/MenuAcoes'
+import { pluralizar } from '@/features/catalog/textosCatalogo'
+import { produtosPorSubarvore, type NoCategoria } from '@/lib/arvoreCategorias'
 import { cn } from '@/lib/utils'
 import type { Categoria } from '@/types/catalogo'
 
@@ -31,7 +31,18 @@ export interface AcoesCategoria {
   onExcluir: (categoria: Categoria) => void
 }
 
+/** Acesso aos elementos da arvore para a tela devolver o foco apos uma acao. */
+export interface ArvoreCategoriasHandle {
+  /** O no (treeitem) da categoria, se estiver visivel. */
+  no: (id: string) => HTMLElement | null
+  /** O botao "Mais acoes" do no, se estiver visivel. */
+  botaoMaisAcoes: (id: string) => HTMLElement | null
+  /** Id do no visivel seguinte fora da subarvore (ou o anterior), para quando este sumir. */
+  vizinhoVisivel: (id: string) => string | null
+}
+
 interface ArvoreCategoriasProps {
+  ref?: Ref<ArvoreCategoriasHandle>
   arvore: NoCategoria[]
   expandidos: ReadonlySet<string>
   onAlterarExpansao: (id: string, expandir: boolean) => void
@@ -39,8 +50,12 @@ interface ArvoreCategoriasProps {
   edicao: EdicaoInline | null
   salvandoEdicao: boolean
   erroEdicao: string | null
+  /** Muda a cada criacao em sequencia: remonta o campo vazio e com foco. */
+  chaveEdicao: number
   onSalvarEdicao: (nome: string) => void
   onCancelarEdicao: () => void
+  /** Primeira digitacao apos um erro do backend: a tela limpa a mensagem. */
+  onAlterarEdicao: () => void
   acaoStatusId: string | null
   acoes: AcoesCategoria
 }
@@ -49,14 +64,20 @@ interface ArvoreCategoriasProps {
 interface ItemVisivel {
   no: NoCategoria
   paiId: string | null
+  nivel: number
 }
 
-function listarVisiveis(nos: NoCategoria[], expandidos: ReadonlySet<string>, paiId: string | null = null): ItemVisivel[] {
+function listarVisiveis(
+  nos: NoCategoria[],
+  expandidos: ReadonlySet<string>,
+  paiId: string | null = null,
+  nivel = 0,
+): ItemVisivel[] {
   const resultado: ItemVisivel[] = []
   for (const no of nos) {
-    resultado.push({ no, paiId })
+    resultado.push({ no, paiId, nivel })
     if (no.filhos.length > 0 && expandidos.has(no.categoria.id)) {
-      resultado.push(...listarVisiveis(no.filhos, expandidos, no.categoria.id))
+      resultado.push(...listarVisiveis(no.filhos, expandidos, no.categoria.id, nivel + 1))
     }
   }
   return resultado
@@ -69,8 +90,12 @@ function listarVisiveis(nos: NoCategoria[], expandidos: ReadonlySet<string>, pai
  * ao primeiro filho, ← recolhe ou vai ao pai, Espaco expande/recolhe e Enter
  * leva o foco as acoes do no (Esc volta ao no). Sem acoes (OPERADOR), Enter
  * tambem expande/recolhe.
+ *
+ * Por no, so "Adicionar subcategoria" fica visivel; as demais acoes ficam no
+ * menu "Mais" para a linha nao ficar carregada.
  */
 export function ArvoreCategorias({
+  ref,
   arvore,
   expandidos,
   onAlterarExpansao,
@@ -78,16 +103,34 @@ export function ArvoreCategorias({
   edicao,
   salvandoEdicao,
   erroEdicao,
+  chaveEdicao,
   onSalvarEdicao,
   onCancelarEdicao,
+  onAlterarEdicao,
   acaoStatusId,
   acoes,
 }: ArvoreCategoriasProps) {
   const [focoId, setFocoId] = useState<string | null>(null)
   const itensRef = useRef(new Map<string, HTMLLIElement>())
   const acoesRef = useRef(new Map<string, HTMLDivElement>())
+  const maisAcoesRef = useRef(new Map<string, HTMLButtonElement>())
 
+  const totaisProdutos = useMemo(() => produtosPorSubarvore(arvore), [arvore])
   const visiveis = listarVisiveis(arvore, expandidos)
+
+  useImperativeHandle(ref, () => ({
+    no: (id) => itensRef.current.get(id) ?? null,
+    botaoMaisAcoes: (id) => maisAcoesRef.current.get(id) ?? null,
+    vizinhoVisivel: (id) => {
+      const indice = visiveis.findIndex((item) => item.no.categoria.id === id)
+      if (indice < 0) {
+        return null
+      }
+      const nivel = visiveis[indice]?.nivel ?? 0
+      const seguinte = visiveis.slice(indice + 1).find((item) => item.nivel <= nivel)
+      return (seguinte ?? visiveis[indice - 1])?.no.categoria.id ?? null
+    },
+  }))
   // Se o item com foco sumiu (recolhido, excluido), o primeiro visivel assume.
   const idFocavel = visiveis.some((item) => item.no.categoria.id === focoId)
     ? focoId
@@ -167,6 +210,9 @@ export function ArvoreCategorias({
       const focavel = id === idFocavel
       const nomeId = `categoria-${id}-nome`
       const metaId = `categoria-${id}-meta`
+      const produtosNaSubarvore = totaisProdutos.get(id) ?? 0
+      const descricao = descricaoAcessivel(categoria, produtosNaSubarvore)
+      const atenuada = !categoria.ativo || !categoria.selecionavel
       const recuo = { paddingInlineStart: `${nivel * 1.5}rem` }
 
       return (
@@ -185,9 +231,9 @@ export function ArvoreCategorias({
           aria-posinset={posicao + 1}
           aria-expanded={temFilhos ? expandido : undefined}
           aria-labelledby={nomeId}
-          aria-describedby={metaId}
+          aria-describedby={descricao ? metaId : undefined}
           tabIndex={focavel ? 0 : -1}
-          onKeyDown={(event) => aoTeclarNoItem(event, { no, paiId })}
+          onKeyDown={(event) => aoTeclarNoItem(event, { no, paiId, nivel })}
           onFocus={(event: FocusEvent<HTMLLIElement>) => {
             // So o treeitem mais proximo do elemento focado vira o item atual.
             const alvo = event.target instanceof HTMLElement ? event.target : null
@@ -208,7 +254,7 @@ export function ArvoreCategorias({
                 variant="ghost"
                 size="icon"
                 tabIndex={-1}
-                className="size-11 shrink-0 md:size-8"
+                className="size-9 shrink-0 pointer-coarse:size-11"
                 aria-label={`${expandido ? 'Recolher' : 'Expandir'} ${categoria.nome}`}
                 onClick={() => {
                   setFocoId(id)
@@ -218,7 +264,7 @@ export function ArvoreCategorias({
                 <ChevronRight className={cn('h-4 w-4 transition-transform', expandido && 'rotate-90')} />
               </Button>
             ) : (
-              <span className="size-11 shrink-0 md:size-8" aria-hidden="true" />
+              <span className="size-9 shrink-0 pointer-coarse:size-11" aria-hidden="true" />
             )}
 
             {renomeando ? (
@@ -237,32 +283,31 @@ export function ArvoreCategorias({
                   erro={erroEdicao}
                   onSalvar={onSalvarEdicao}
                   onCancelar={onCancelarEdicao}
+                  onAlterar={onAlterarEdicao}
                 />
               </div>
             ) : (
               <>
                 <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <span
-                    id={nomeId}
-                    className={cn('truncate font-medium', !categoria.ativo && 'text-muted-foreground')}
-                  >
+                  <span id={nomeId} className={cn('truncate font-medium', atenuada && 'text-muted-foreground')}>
                     {categoria.nome}
                   </span>
                   {/* Descricao acessivel em texto corrido; a versao visual usa selos. */}
-                  <span id={metaId} className="sr-only">
-                    {descricaoAcessivel(categoria)}
-                  </span>
-                  <span aria-hidden="true" className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="tabular-nums">{categoria.quantidadeProdutos} produto(s)</span>
+                  {descricao && (
+                    <span id={metaId} className="sr-only">
+                      {descricao}
+                    </span>
+                  )}
+                  <span aria-hidden="true" className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    {produtosNaSubarvore > 0 && (
+                      <span className="tabular-nums">{pluralizar(produtosNaSubarvore, 'produto', 'produtos')}</span>
+                    )}
                     {!categoria.ativo && (
                       <span className="rounded-full bg-muted px-2 py-0.5 font-medium">Inativa</span>
                     )}
                     {categoria.ativo && !categoria.selecionavel && (
-                      <span
-                        className="rounded-full bg-muted px-2 py-0.5 font-medium"
-                        title="Uma categoria acima está inativa: este ramo não aparece no cadastro de produtos."
-                      >
-                        Ramo inativo
+                      <span className="rounded-full bg-muted px-2 py-0.5 font-medium">
+                        Oculta — categoria acima inativa
                       </span>
                     )}
                   </span>
@@ -277,51 +322,38 @@ export function ArvoreCategorias({
                         acoesRef.current.delete(id)
                       }
                     }}
-                    className="flex shrink-0 items-center gap-0.5"
+                    className="flex shrink-0 items-center gap-1"
                     onKeyDown={(event) => {
-                      if (event.key === 'Escape') {
+                      if (event.key === 'Escape' && !event.defaultPrevented) {
                         event.preventDefault()
                         focar(id)
                       }
                     }}
                   >
-                    <BotaoAcao
-                      icone={FolderPlus}
-                      rotulo={`Adicionar subcategoria em ${categoria.nome}`}
-                      dica="Adicionar subcategoria"
-                      focavel={focavel}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      tabIndex={focavel ? 0 : -1}
+                      className="size-9 pointer-coarse:size-11"
+                      aria-label={`Adicionar subcategoria em ${categoria.nome}`}
+                      title="Adicionar subcategoria"
                       onClick={() => acoes.onAdicionarSubcategoria(categoria)}
-                    />
-                    <BotaoAcao
-                      icone={Pencil}
-                      rotulo={`Renomear ${categoria.nome}`}
-                      dica="Renomear"
+                    >
+                      <FolderPlus className="h-4 w-4" />
+                    </Button>
+                    <MenuAcoes
+                      ref={(elemento) => {
+                        if (elemento) {
+                          maisAcoesRef.current.set(id, elemento)
+                        } else {
+                          maisAcoesRef.current.delete(id)
+                        }
+                      }}
+                      rotulo={`Mais ações para ${categoria.nome}`}
                       focavel={focavel}
-                      onClick={() => acoes.onRenomear(categoria)}
-                    />
-                    <BotaoAcao
-                      icone={FolderInput}
-                      rotulo={`Mover ${categoria.nome}`}
-                      dica="Mover"
-                      focavel={focavel}
-                      onClick={() => acoes.onMover(categoria)}
-                    />
-                    <BotaoAcao
-                      icone={acaoStatusId === id ? Loader2 : categoria.ativo ? XCircle : RotateCcw}
-                      girando={acaoStatusId === id}
-                      rotulo={`${categoria.ativo ? 'Inativar' : 'Reativar'} ${categoria.nome}`}
-                      dica={categoria.ativo ? 'Inativar' : 'Reativar'}
-                      focavel={focavel}
-                      desabilitado={acaoStatusId === id}
-                      onClick={() => acoes.onAlterarStatus(categoria)}
-                    />
-                    <BotaoAcao
-                      icone={Trash2}
-                      rotulo={`Excluir ${categoria.nome}`}
-                      dica="Excluir"
-                      focavel={focavel}
-                      destrutivo
-                      onClick={() => acoes.onExcluir(categoria)}
+                      ocupado={acaoStatusId === id}
+                      itens={itensDoMenu(categoria, acoes)}
                     />
                   </div>
                 )}
@@ -332,6 +364,7 @@ export function ArvoreCategorias({
           {adicionandoSub && (
             <div className="py-1 pr-1" style={{ paddingInlineStart: `${(nivel + 1) * 1.5 + 3}rem` }}>
               <FormularioNomeCategoria
+                key={chaveEdicao}
                 rotulo={`Nome da subcategoria de ${categoria.nome}`}
                 placeholder="Nome da subcategoria"
                 textoSalvar="Adicionar"
@@ -339,6 +372,7 @@ export function ArvoreCategorias({
                 erro={erroEdicao}
                 onSalvar={onSalvarEdicao}
                 onCancelar={onCancelarEdicao}
+                onAlterar={onAlterarEdicao}
               />
             </div>
           )}
@@ -359,42 +393,33 @@ export function ArvoreCategorias({
   )
 }
 
-function descricaoAcessivel(categoria: Categoria): string {
-  const partes = [`${categoria.quantidadeProdutos} produto(s)`]
+function descricaoAcessivel(categoria: Categoria, produtosNaSubarvore: number): string {
+  const partes: string[] = []
+  if (produtosNaSubarvore > 0) {
+    partes.push(pluralizar(produtosNaSubarvore, 'produto', 'produtos'))
+  }
   if (!categoria.ativo) {
     partes.push('inativa')
   } else if (!categoria.selecionavel) {
-    partes.push('ramo inativo')
+    partes.push('oculta — categoria acima inativa')
   }
   return partes.join(', ')
 }
 
-interface BotaoAcaoProps {
-  icone: LucideIcon
-  rotulo: string
-  dica: string
-  /** So as acoes do item atual entram na ordem de Tab (foco roving). */
-  focavel: boolean
-  onClick: () => void
-  desabilitado?: boolean
-  destrutivo?: boolean
-  girando?: boolean
-}
-
-function BotaoAcao({ icone: Icone, rotulo, dica, focavel, onClick, desabilitado, destrutivo, girando }: BotaoAcaoProps) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      tabIndex={focavel ? 0 : -1}
-      className={cn('size-11 md:size-8', destrutivo && 'text-destructive hover:text-destructive')}
-      aria-label={rotulo}
-      title={dica}
-      disabled={desabilitado}
-      onClick={onClick}
-    >
-      <Icone className={cn('h-4 w-4', girando && 'animate-spin')} />
-    </Button>
-  )
+function itensDoMenu(categoria: Categoria, acoes: AcoesCategoria): ItemMenuAcoes[] {
+  return [
+    { id: 'renomear', rotulo: 'Renomear', icone: Pencil, levaFoco: true, onSelecionar: () => acoes.onRenomear(categoria) },
+    { id: 'mover', rotulo: 'Mover', icone: FolderInput, levaFoco: true, onSelecionar: () => acoes.onMover(categoria) },
+    categoria.ativo
+      ? { id: 'status', rotulo: 'Inativar', icone: EyeOff, onSelecionar: () => acoes.onAlterarStatus(categoria) }
+      : { id: 'status', rotulo: 'Reativar', icone: Eye, onSelecionar: () => acoes.onAlterarStatus(categoria) },
+    {
+      id: 'excluir',
+      rotulo: 'Excluir',
+      icone: Trash2,
+      destrutivo: true,
+      levaFoco: true,
+      onSelecionar: () => acoes.onExcluir(categoria),
+    },
+  ]
 }

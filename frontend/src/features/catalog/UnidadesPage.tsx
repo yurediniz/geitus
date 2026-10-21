@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, Loader2, Pencil, Plus, Ruler, RotateCcw, Trash2, XCircle } from 'lucide-react'
+import { AlertCircle, Eye, EyeOff, Loader2, Pencil, Plus, Ruler, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -57,6 +57,7 @@ export function UnidadesPage() {
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [acaoStatusId, setAcaoStatusId] = useState<string | null>(null)
   const [unidadeParaExcluir, setUnidadeParaExcluir] = useState<UnidadeMedida | null>(null)
+  const tituloListaRef = useRef<HTMLDivElement>(null)
 
   const { data: unidades = [], isPending, isError, refetch } = useQuery<UnidadeMedida[]>({
     queryKey: LISTA_QUERY_KEY,
@@ -244,7 +245,9 @@ export function UnidadesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Unidades cadastradas</CardTitle>
+          <CardTitle ref={tituloListaRef} tabIndex={-1} className="outline-none">
+            Unidades cadastradas
+          </CardTitle>
           <CardDescription>
             Unidades inativas continuam válidas nos produtos que já as usam, mas não aparecem em novos cadastros.
           </CardDescription>
@@ -335,6 +338,8 @@ export function UnidadesPage() {
         excluindo={excluirMutation.isPending}
         onConfirmar={() => unidadeParaExcluir && excluirMutation.mutate(unidadeParaExcluir)}
         onCancelar={() => setUnidadeParaExcluir(null)}
+        // A linha some apos excluir: o foco vai para o titulo da lista.
+        destinoFoco={(origem) => (origem?.isConnected ? origem : tituloListaRef.current)}
       />
     </div>
   )
@@ -384,7 +389,7 @@ function UnidadeLinha({
               type="button"
               variant="ghost"
               size="icon"
-              className="size-11 md:size-9"
+              className="size-9 pointer-coarse:size-11"
               onClick={onEditar}
               aria-label={`Editar ${unidade.sigla}`}
               title="Editar"
@@ -395,7 +400,7 @@ function UnidadeLinha({
               type="button"
               variant="ghost"
               size="icon"
-              className="size-11 md:size-9"
+              className="size-9 pointer-coarse:size-11"
               onClick={onAlterarStatus}
               disabled={alterandoStatus}
               aria-label={`${unidade.ativo ? 'Inativar' : 'Reativar'} ${unidade.sigla}`}
@@ -404,9 +409,9 @@ function UnidadeLinha({
               {alterandoStatus ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : unidade.ativo ? (
-                <XCircle className="h-4 w-4" />
+                <EyeOff className="h-4 w-4" />
               ) : (
-                <RotateCcw className="h-4 w-4" />
+                <Eye className="h-4 w-4" />
               )}
             </Button>
             {/* Botao desabilitado nao recebe hover: a dica fica no wrapper e no aria-describedby. */}
@@ -415,7 +420,7 @@ function UnidadeLinha({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-11 text-destructive hover:text-destructive md:size-9"
+                className="size-9 text-destructive hover:text-destructive pointer-coarse:size-11"
                 onClick={onExcluir}
                 disabled={emUso}
                 aria-label={`Excluir ${unidade.sigla}`}

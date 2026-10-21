@@ -103,7 +103,8 @@ describe('SeletorCategoria', () => {
     renderSeletor()
 
     expect(gatilho()).toHaveAccessibleName('Categoria Sem categoria')
-    expect(gatilho()).toHaveAttribute('aria-haspopup', 'listbox')
+    // O painel tem busca + lista + atalho de criar: e um dialogo, nao so uma listbox.
+    expect(gatilho()).toHaveAttribute('aria-haspopup', 'dialog')
     expect(gatilho()).toHaveAttribute('aria-expanded', 'false')
   })
 
@@ -126,6 +127,49 @@ describe('SeletorCategoria', () => {
     const opcoes = screen.getAllByRole('option')
     expect(opcoes).toHaveLength(1)
     expect(opcoes[0]).toHaveTextContent('Ração › Úmida › Sachê')
+  })
+
+  it('busca por palavras soltas do caminho, em qualquer ordem', async () => {
+    renderSeletor()
+
+    const lista = await abrir()
+    expect(screen.getByRole('dialog', { name: 'Escolher categoria' })).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Buscar categoria' }), { target: { value: 'racao sache' } })
+
+    expect(within(lista).getAllByRole('option').map((opcao) => opcao.textContent)).toEqual(['Ração › Úmida › Sachê'])
+  })
+
+  it('Tab para fora do painel fecha e devolve o foco ao gatilho', async () => {
+    renderSeletor()
+
+    await abrir()
+    const botaoNova = screen.getByRole('button', { name: /nova categoria/i })
+    botaoNova.focus()
+    fireEvent.keyDown(botaoNova, { key: 'Tab' })
+
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
+    await waitFor(() => expect(gatilho()).toHaveFocus())
+  })
+
+  it('Tab entre campos dentro do painel nao fecha', async () => {
+    renderSeletor()
+
+    await abrir()
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Buscar categoria' }), { key: 'Tab' })
+
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+  })
+
+  it('oculta "+ Nova categoria" quando o termo e o nome de uma categoria principal existente', async () => {
+    renderSeletor()
+
+    await abrir()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Buscar categoria' }), { target: { value: ' mercearia ' } })
+    expect(screen.queryByRole('button', { name: /nova categoria/i })).not.toBeInTheDocument()
+
+    // Nome de subcategoria pode ser repetido como principal.
+    fireEvent.change(screen.getByRole('combobox', { name: 'Buscar categoria' }), { target: { value: 'umida' } })
+    expect(screen.getByRole('button', { name: /nova categoria/i })).toBeInTheDocument()
   })
 
   it('busca "umida" encontra a subcategoria pelo caminho completo', async () => {
@@ -263,8 +307,9 @@ describe('SeletorCategoria', () => {
     renderSeletor()
 
     await abrir()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Buscar categoria' }), { target: { value: 'Mercearia' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Buscar categoria' }), { target: { value: 'Sachê' } })
     fireEvent.click(screen.getByRole('button', { name: /nova categoria/i }))
+    fireEvent.change(screen.getByLabelText(/dentro de/i), { target: { value: 'umida' } })
     fireEvent.click(screen.getByRole('button', { name: /criar e selecionar/i }))
 
     expect(await screen.findByText('Já existe uma categoria com este nome neste nível.')).toBeInTheDocument()

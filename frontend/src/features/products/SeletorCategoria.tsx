@@ -1,21 +1,16 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { z } from 'zod'
 import { Check, ChevronsUpDown, Loader2, Plus, Search } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { CATEGORIAS_QUERY_KEY, mensagemErroCatalogo } from '@/features/catalog/catalogoQuery'
-import { filtrarPorTermo, normalizarTexto } from '@/lib/arvoreCategorias'
+import { nomeCategoriaSchema } from '@/features/catalog/catalogoSchemas'
+import { casaTermo, filtrarPorTermo, normalizarTexto } from '@/lib/arvoreCategorias'
 import { cn } from '@/lib/utils'
 import { cadastrarCategoria } from '@/services/categoriaService'
 import type { Categoria, CategoriaRequest, CategoriaResumo } from '@/types/catalogo'
-
-// Espelha a regra do backend (nome obrigatorio, 1-100); o backend continua validando.
-const nomeCategoriaSchema = z.string().trim()
-  .min(1, 'Informe o nome da categoria.')
-  .max(100, 'Nome deve ter no máximo 100 caracteres.')
 
 const TEXTOS_ERRO_CRIAR = {
   padrao: 'Não foi possível criar a categoria. Tente novamente.',
@@ -23,7 +18,7 @@ const TEXTOS_ERRO_CRIAR = {
   semPermissao: 'Somente administradores podem criar categorias.',
 }
 
-/** Valor do select de pai que representa "categoria principal" (parentId null). */
+/** Valor do select de pai que cria a categoria como principal (parentId null). */
 const SEM_PAI = ''
 
 export interface SeletorCategoriaProps {
@@ -61,7 +56,8 @@ function rotuloOpcao(opcao: Opcao): string {
  * so as categorias selecionaveis e oferece "Sem categoria". Para ADMIN, o
  * atalho "+ Nova categoria" cria a categoria ali mesmo e ja a seleciona.
  *
- * Teclado: setas abrem e percorrem a lista, Enter escolhe, Esc fecha.
+ * Teclado: setas abrem e percorrem a lista, Enter escolhe, Esc fecha e Tab
+ * para fora do painel fecha e devolve o foco ao gatilho.
  */
 export function SeletorCategoria({
   categorias,
@@ -86,6 +82,7 @@ export function SeletorCategoria({
   // A categoria recem-criada so chega na lista apos o refetch; ate la, e lembrada aqui.
   const [criadaAgora, setCriadaAgora] = useState<Categoria | null>(null)
   const listaRef = useRef<HTMLUListElement>(null)
+  const conteudoRef = useRef<HTMLDivElement>(null)
 
   const porId = useMemo(() => {
     const mapa = new Map(categorias.map((categoria) => [categoria.id, categoria]))
@@ -120,7 +117,7 @@ export function SeletorCategoria({
       inativa: false,
     }))
     const atual =
-      opcaoAtualInativa && contemTermo(opcaoAtualInativa.rotulo, termo) ? [opcaoAtualInativa] : []
+      opcaoAtualInativa && casaTermo(opcaoAtualInativa.rotulo, termo) ? [opcaoAtualInativa] : []
     const semCategoria: Opcao[] = termo.trim() === '' ? [{ id: null, rotulo: 'Sem categoria', inativa: false }] : []
     return [...semCategoria, ...atual, ...filtradas]
   }, [selecionaveis, termo, opcaoAtualInativa])
@@ -138,6 +135,15 @@ export function SeletorCategoria({
     }
     return 'Categoria selecionada'
   }, [valor, porId, valorAtual])
+
+  // Nome igual (sem acento/maiusculas) a uma categoria principal: criar daria nome repetido.
+  const termoEhPrincipalExistente = useMemo(() => {
+    const alvo = normalizarTexto(termo)
+    return (
+      alvo !== '' &&
+      [...porId.values()].some((categoria) => categoria.parentId === null && normalizarTexto(categoria.nome) === alvo)
+    )
+  }, [termo, porId])
 
   const indiceSeguro = opcoes.length === 0 ? -1 : Math.min(indiceAtivo, opcoes.length - 1)
   const idOpcao = (indice: number) => `${idBase}-opcao-${indice}`
@@ -198,6 +204,23 @@ export function SeletorCategoria({
     }
   }
 
+  // Tab saindo do primeiro/ultimo campo do painel: fecha e o Radix devolve o foco ao gatilho.
+  const aoTeclarNoPainel = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab' || !conteudoRef.current) {
+      return
+    }
+    const focaveis = Array.from(
+      conteudoRef.current.querySelectorAll<HTMLElement>(
+        'input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled), [tabindex]:not([tabindex="-1"])',
+      ),
+    )
+    const limite = event.shiftKey ? focaveis[0] : focaveis[focaveis.length - 1]
+    if (limite && document.activeElement === limite) {
+      event.preventDefault()
+      setAberto(false)
+    }
+  }
+
   const aoTeclarNoGatilho = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (!aberto && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
       event.preventDefault()
@@ -219,7 +242,6 @@ export function SeletorCategoria({
         <button
           type="button"
           id={idGatilho}
-          aria-haspopup="listbox"
           aria-labelledby={idRotulo ? `${idRotulo} ${idValor}` : undefined}
           aria-invalid={invalido ? true : undefined}
           onKeyDown={aoTeclarNoGatilho}
@@ -238,8 +260,11 @@ export function SeletorCategoria({
       </PopoverTrigger>
 
       <PopoverContent
+        ref={conteudoRef}
+        aria-label="Escolher categoria"
         align="start"
         className="w-(--radix-popover-trigger-width) min-w-72 p-0"
+        onKeyDown={aoTeclarNoPainel}
         onEscapeKeyDown={(event) => {
           // Com o mini-formulario aberto, o primeiro Esc volta para a lista.
           if (criando) {
@@ -321,7 +346,7 @@ export function SeletorCategoria({
               </p>
             )}
 
-            {podeCriar && (
+            {podeCriar && !termoEhPrincipalExistente && (
               <div className="border-t p-1">
                 <Button
                   type="button"
@@ -339,11 +364,6 @@ export function SeletorCategoria({
       </PopoverContent>
     </Popover>
   )
-}
-
-/** Mesmo criterio de `filtrarPorTermo` (sem acentos/maiusculas), para um texto avulso. */
-function contemTermo(texto: string, termo: string): boolean {
-  return normalizarTexto(texto).includes(normalizarTexto(termo))
 }
 
 interface FormularioNovaCategoriaProps {
@@ -424,7 +444,7 @@ function FormularioNovaCategoria({ nomeInicial, categorias, onCriada, onCancelar
           onChange={(event) => setParentId(event.target.value)}
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <option value={SEM_PAI}>Nenhuma (categoria principal)</option>
+          <option value={SEM_PAI}>Nenhuma — criar como categoria principal</option>
           {categorias.map((categoria) => (
             <option key={categoria.id} value={categoria.id}>
               {categoria.caminho}

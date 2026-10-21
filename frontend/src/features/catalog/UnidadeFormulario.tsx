@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, type ChangeEvent } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -56,6 +56,16 @@ export function UnidadeFormulario({
     },
   })
 
+  // Sigla em maiusculas enquanto digita (o backend tambem normaliza), sem pular o cursor.
+  const registroSigla = register('sigla')
+  const aoDigitarSigla = (event: ChangeEvent<HTMLInputElement>) => {
+    const campo = event.target
+    const { selectionStart, selectionEnd } = campo
+    campo.value = campo.value.toLocaleUpperCase('pt-BR')
+    campo.setSelectionRange(selectionStart, selectionEnd)
+    return registroSigla.onChange(event)
+  }
+
   useEffect(() => {
     for (const [campo, mensagem] of Object.entries(erroCampos ?? {})) {
       if (mensagem) {
@@ -79,17 +89,15 @@ export function UnidadeFormulario({
             maxLength={20}
             placeholder="Ex.: KG"
             disabled={salvando}
+            autoCapitalize="characters"
             aria-invalid={errors.sigla ? true : undefined}
-            aria-describedby={errors.sigla ? 'unidade-sigla-erro' : 'unidade-sigla-ajuda'}
-            {...register('sigla')}
+            aria-describedby={errors.sigla ? 'unidade-sigla-erro' : undefined}
+            {...registroSigla}
+            onChange={aoDigitarSigla}
           />
-          {errors.sigla ? (
+          {errors.sigla && (
             <p id="unidade-sigla-erro" className="text-sm text-destructive">
               {errors.sigla.message}
-            </p>
-          ) : (
-            <p id="unidade-sigla-ajuda" className="text-xs text-muted-foreground">
-              Gravada em maiúsculas.
             </p>
           )}
         </div>

@@ -1,14 +1,9 @@
 import { useId, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { z } from 'zod'
 import { Check, Loader2, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-
-// Espelha a regra do backend (nome obrigatorio, 1-100); o backend continua validando.
-const nomeCategoriaSchema = z.string().trim()
-  .min(1, 'Informe o nome da categoria.')
-  .max(100, 'Nome deve ter no máximo 100 caracteres.')
+import { nomeCategoriaSchema } from '@/features/catalog/catalogoSchemas'
 
 interface FormularioNomeCategoriaProps {
   /** Rotulo acessivel do campo (ex.: "Nome da subcategoria de Ração"). */
@@ -21,11 +16,13 @@ interface FormularioNomeCategoriaProps {
   erro: string | null
   onSalvar: (nome: string) => void
   onCancelar: () => void
+  /** Chamado a cada digitacao, para a tela limpar o erro do backend ja exibido. */
+  onAlterar?: () => void
 }
 
 /**
- * Campo unico de nome usado para criar raiz, adicionar subcategoria e renomear,
- * sempre inline. Enter salva e Esc cancela.
+ * Campo unico de nome usado para criar categoria principal, adicionar
+ * subcategoria e renomear, sempre inline. Enter salva e Esc cancela.
  */
 export function FormularioNomeCategoria({
   rotulo,
@@ -36,6 +33,7 @@ export function FormularioNomeCategoria({
   erro,
   onSalvar,
   onCancelar,
+  onAlterar,
 }: FormularioNomeCategoriaProps) {
   const id = useId()
   const erroId = `${id}-erro`
@@ -77,6 +75,9 @@ export function FormularioNomeCategoria({
           onChange={(event) => {
             setNome(event.target.value)
             setErroLocal(null)
+            if (erro) {
+              onAlterar?.()
+            }
           }}
           onKeyDown={aoTeclar}
           className="h-9 min-w-48 flex-1 bg-card"

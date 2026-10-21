@@ -12,11 +12,12 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
+import { useFocoDeOrigem, type DestinoFoco } from '@/features/catalog/useFocoDeOrigem'
 import { filtrarPorTermo, idsDescendentes } from '@/lib/arvoreCategorias'
 import type { Categoria } from '@/types/catalogo'
 
-/** Valor do radio que representa "Mover para a raiz" (parentId null). */
-const DESTINO_RAIZ = ''
+/** Valor do radio que representa "Tornar categoria principal" (parentId null). */
+const DESTINO_PRINCIPAL = ''
 
 interface MoverCategoriaDialogProps {
   /** Categoria a mover; `null` mantem o dialogo fechado. */
@@ -26,6 +27,8 @@ interface MoverCategoriaDialogProps {
   erro: string | null
   onConfirmar: (parentId: string | null) => void
   onCancelar: () => void
+  /** Quem recebe o foco ao fechar; padrao: o elemento que o tinha ao abrir. */
+  destinoFoco?: DestinoFoco
 }
 
 /**
@@ -40,7 +43,9 @@ export function MoverCategoriaDialog({
   erro,
   onConfirmar,
   onCancelar,
+  destinoFoco,
 }: MoverCategoriaDialogProps) {
+  const devolverFoco = useFocoDeOrigem(categoria !== null, destinoFoco)
   return (
     <Dialog
       open={categoria !== null}
@@ -50,7 +55,7 @@ export function MoverCategoriaDialog({
         }
       }}
     >
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={devolverFoco}>
         {categoria && (
           <ConteudoMover
             key={categoria.id}
@@ -67,12 +72,12 @@ export function MoverCategoriaDialog({
   )
 }
 
-interface ConteudoMoverProps extends Omit<MoverCategoriaDialogProps, 'categoria'> {
+interface ConteudoMoverProps extends Omit<MoverCategoriaDialogProps, 'categoria' | 'destinoFoco'> {
   categoria: Categoria
 }
 
 function ConteudoMover({ categoria, categorias, salvando, erro, onConfirmar, onCancelar }: ConteudoMoverProps) {
-  const paiAtual = categoria.parentId ?? DESTINO_RAIZ
+  const paiAtual = categoria.parentId ?? DESTINO_PRINCIPAL
   const [destino, setDestino] = useState<string>(paiAtual)
   const [busca, setBusca] = useState('')
 
@@ -88,7 +93,7 @@ function ConteudoMover({ categoria, categorias, salvando, erro, onConfirmar, onC
   const aoSubmeter = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (destino !== paiAtual) {
-      onConfirmar(destino === DESTINO_RAIZ ? null : destino)
+      onConfirmar(destino === DESTINO_PRINCIPAL ? null : destino)
     }
   }
 
@@ -118,10 +123,10 @@ function ConteudoMover({ categoria, categorias, salvando, erro, onConfirmar, onC
       <fieldset className="max-h-72 space-y-0.5 overflow-y-auto rounded-md border p-1" disabled={salvando}>
         <legend className="sr-only">Novo local da categoria</legend>
         <OpcaoDestino
-          valor={DESTINO_RAIZ}
-          rotulo="Mover para a raiz"
-          atual={paiAtual === DESTINO_RAIZ}
-          selecionado={destino === DESTINO_RAIZ}
+          valor={DESTINO_PRINCIPAL}
+          rotulo="Tornar categoria principal"
+          atual={paiAtual === DESTINO_PRINCIPAL}
+          selecionado={destino === DESTINO_PRINCIPAL}
           onSelecionar={setDestino}
           destaque
         />

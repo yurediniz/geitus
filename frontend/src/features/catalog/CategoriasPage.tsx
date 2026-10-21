@@ -1,10 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, ChevronsDownUp, ChevronsUpDown, FolderTree, Loader2, Plus } from 'lucide-react'
+import { AlertCircle, ChevronsDownUp, ChevronsUpDown, EyeOff, FolderTree, Loader2, Plus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArvoreCategorias, type EdicaoInline } from '@/features/catalog/ArvoreCategorias'
+import {
+  ArvoreCategorias,
+  type ArvoreCategoriasHandle,
+  type EdicaoInline,
+} from '@/features/catalog/ArvoreCategorias'
 import {
   CATEGORIAS_QUERY_KEY,
   PRODUTOS_QUERY_KEY,
@@ -15,6 +19,8 @@ import { ConfirmarExclusaoDialog } from '@/features/catalog/ConfirmarExclusaoDia
 import { AvisoSomenteLeitura, FeedbackCatalogo } from '@/features/catalog/FeedbackCatalogo'
 import { FormularioNomeCategoria } from '@/features/catalog/FormularioNomeCategoria'
 import { MoverCategoriaDialog } from '@/features/catalog/MoverCategoriaDialog'
+import { descreverVinculos } from '@/features/catalog/textosCatalogo'
+import type { DestinoFoco } from '@/features/catalog/useFocoDeOrigem'
 import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { useAuth } from '@/hooks/useAuth'
 import { montarArvore, type NoCategoria } from '@/lib/arvoreCategorias'
@@ -38,7 +44,7 @@ const TEXTOS_ERRO = {
 
 /** O que o formulario de nome aberto vai fazer ao salvar. */
 type AcaoNome =
-  | { tipo: 'raiz' }
+  | { tipo: 'principal' }
   | { tipo: 'subcategoria'; pai: Categoria }
   | { tipo: 'renomear'; categoria: Categoria }
 
@@ -64,6 +70,15 @@ function idsDoRamo(categorias: Categoria[], id: string | null): string[] {
   return ramo
 }
 
+/** Para onde vai o foco quando um dialogo aberto a partir de um no fechar. */
+interface FocoAposDialogo {
+  categoriaId: string
+  /** No visivel vizinho no momento em que o dialogo abriu (se o proprio sumir). */
+  vizinhoId: string | null
+  /** `true` apos mover: foca o proprio no na nova posicao, em vez do botao "Mais". */
+  focarNo: boolean
+}
+
 /** Tela de Categorias em arvore (/produtos/categorias). */
 export function CategoriasPage() {
   const queryClient = useQueryClient()
@@ -78,6 +93,12 @@ export function CategoriasPage() {
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null)
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [acaoStatusId, setAcaoStatusId] = useState<string | null>(null)
+  // Muda a cada categoria criada: remonta o campo vazio e com foco para criar a proxima.
+  const [chaveCriacao, setChaveCriacao] = useState(0)
+  const arvoreRef = useRef<ArvoreCategoriasHandle>(null)
+  const tituloArvoreRef = useRef<HTMLDivElement>(null)
+  const botaoNovaRef = useRef<HTMLButtonElement>(null)
+  const focoAposDialogoRef = useRef<FocoAposDialogo | null>(null)
 
   const { data: categorias = [], isPending, isError, refetch } = useQuery<Categoria[]>({
     queryKey: LISTA_QUERY_KEY,
@@ -112,10 +133,33 @@ export function CategoriasPage() {
   }
 
   const mensagemDeErro = async (erro: unknown, padrao: string) => {
-    if (erro instanceof HttpError && erro.status === 404) {
+    // 404 (removida) e 409 (vinculos mudaram): a lista na tela esta desatualizada.
+    if (erro instanceof HttpError && (erro.status === 404 || erro.status === 409)) {
       await queryClient.invalidateQueries({ queryKey: CATEGORIAS_QUERY_KEY })
     }
     return mensagemErroCatalogo(erro, { ...TEXTOS_ERRO, padrao })
+  }
+
+  /** Lembra o no de origem antes de abrir um dialogo, para devolver o foco ao fechar. */
+  const lembrarOrigem = (categoria: Categoria) => {
+    focoAposDialogoRef.current = {
+      categoriaId: categoria.id,
+      vizinhoId: arvoreRef.current?.vizinhoVisivel(categoria.id) ?? null,
+      focarNo: false,
+    }
+  }
+
+  /** Origem (botao "Mais" do no) se ainda existir; senao o vizinho visivel; senao o titulo da arvore. */
+  const destinoFocoDialogo: DestinoFoco = () => {
+    const foco = focoAposDialogoRef.current
+    focoAposDialogoRef.current = null
+    const arvoreAtual = arvoreRef.current
+    if (!foco || !arvoreAtual) {
+      return tituloArvoreRef.current
+    }
+    const proprio = foco.focarNo ? arvoreAtual.no(foco.categoriaId) : arvoreAtual.botaoMaisAcoes(foco.categoriaId)
+    const vizinho = foco.vizinhoId ? arvoreAtual.no(foco.vizinhoId) : null
+    return proprio ?? vizinho ?? tituloArvoreRef.current
   }
 
   const salvarNomeMutation = useMutation<Categoria, unknown, { acao: AcaoNome; nome: string }>({
@@ -127,16 +171,21 @@ export function CategoriasPage() {
     },
     onSuccess: async (categoria, { acao }) => {
       await atualizarCaches(acao.tipo === 'renomear')
+      setErroNome(null)
+      if (acao.tipo === 'renomear') {
+        setMensagemSucesso(`Categoria renomeada para "${categoria.nome}".`)
+        setAcaoNome(null)
+        arvoreRef.current?.no(categoria.id)?.focus()
+        return
+      }
+      // Criacao em sequencia: o campo continua aberto, vazio e com foco (Esc fecha).
       if (acao.tipo === 'subcategoria') {
         expandir([acao.pai.id])
         setMensagemSucesso(`Subcategoria "${categoria.nome}" criada em "${acao.pai.caminho}".`)
-      } else if (acao.tipo === 'renomear') {
-        setMensagemSucesso(`Categoria renomeada para "${categoria.nome}".`)
       } else {
         setMensagemSucesso(`Categoria "${categoria.nome}" criada.`)
       }
-      setAcaoNome(null)
-      setErroNome(null)
+      setChaveCriacao((chave) => chave + 1)
     },
     onError: async (erro) => {
       setErroNome(await mensagemDeErro(erro, 'Não foi possível salvar a categoria. Tente novamente.'))
@@ -153,8 +202,12 @@ export function CategoriasPage() {
       setMensagemSucesso(
         destino
           ? `"${movida.nome}" agora está em "${destino.caminho}".`
-          : `"${movida.nome}" agora é uma categoria raiz.`,
+          : `"${movida.nome}" agora é uma categoria principal.`,
       )
+      // A lista ja voltou do refetch: ao fechar, o foco vai ao no na nova posicao.
+      if (focoAposDialogoRef.current) {
+        focoAposDialogoRef.current.focarNo = true
+      }
       setCategoriaMovendo(null)
       setErroMover(null)
     },
@@ -179,7 +232,11 @@ export function CategoriasPage() {
     onError: async (erro) => {
       setErroGeral(await mensagemDeErro(erro, 'Não foi possível alterar o status da categoria. Tente novamente.'))
     },
-    onSettled: () => setAcaoStatusId(null),
+    onSettled: () => {
+      setAcaoStatusId(null)
+      // Inativar tambem e oferecido no dialogo de exclusao bloqueada.
+      setCategoriaExcluindo(null)
+    },
   })
 
   const excluirMutation = useMutation<void, unknown, Categoria>({
@@ -189,7 +246,8 @@ export function CategoriasPage() {
       setMensagemSucesso(`Categoria "${categoria.nome}" excluída.`)
     },
     onError: async (erro) => {
-      // 409: o backend diz quantas subcategorias/produtos impedem e sugere inativar.
+      // 409 (vinculos criados enquanto o dialogo estava aberto): o backend diz
+      // quantas subcategorias/produtos impedem e sugere inativar.
       setErroGeral(await mensagemDeErro(erro, 'Não foi possível excluir a categoria. Tente novamente.'))
     },
     onSettled: () => setCategoriaExcluindo(null),
@@ -210,6 +268,14 @@ export function CategoriasPage() {
   }
 
   const cancelarAcaoNome = () => {
+    // Devolve o foco ao no de onde o formulario saiu (ou ao botao de criar).
+    if (acaoNome?.tipo === 'renomear') {
+      arvoreRef.current?.no(acaoNome.categoria.id)?.focus()
+    } else if (acaoNome?.tipo === 'subcategoria') {
+      arvoreRef.current?.no(acaoNome.pai.id)?.focus()
+    } else {
+      botaoNovaRef.current?.focus()
+    }
     setAcaoNome(null)
     setErroNome(null)
   }
@@ -243,9 +309,9 @@ export function CategoriasPage() {
         </div>
 
         {podeGerenciar && (
-          <Button type="button" onClick={() => abrirAcaoNome({ tipo: 'raiz' })}>
+          <Button ref={botaoNovaRef} type="button" onClick={() => abrirAcaoNome({ tipo: 'principal' })}>
             <Plus className="h-4 w-4" />
-            Nova categoria
+            Nova categoria principal
           </Button>
         )}
       </div>
@@ -256,21 +322,25 @@ export function CategoriasPage() {
 
       <FeedbackCatalogo sucesso={mensagemSucesso} erro={erroGeral} />
 
-      {podeGerenciar && acaoNome?.tipo === 'raiz' && (
+      {podeGerenciar && acaoNome?.tipo === 'principal' && (
         <Card className="max-w-2xl">
           <CardHeader>
-            <CardTitle>Nova categoria</CardTitle>
-            <CardDescription>Ela fica no primeiro nível; depois você pode adicionar subcategorias.</CardDescription>
+            <CardTitle>Nova categoria principal</CardTitle>
+            <CardDescription>
+              Ela fica no topo da árvore; depois você pode adicionar subcategorias dentro dela.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <FormularioNomeCategoria
-              rotulo="Nome da nova categoria"
+              key={chaveCriacao}
+              rotulo="Nome da nova categoria principal"
               placeholder="Ex.: Mercearia"
               textoSalvar="Criar categoria"
               salvando={salvarNomeMutation.isPending}
               erro={erroNome}
               onSalvar={salvarNome}
               onCancelar={cancelarAcaoNome}
+              onAlterar={() => setErroNome(null)}
             />
           </CardContent>
         </Card>
@@ -278,7 +348,9 @@ export function CategoriasPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Árvore de categorias</CardTitle>
+          <CardTitle ref={tituloArvoreRef} tabIndex={-1} className="outline-none">
+            Árvore de categorias
+          </CardTitle>
           <CardDescription>
             Categorias inativas e seus ramos continuam nos produtos que já os usam, mas não aparecem em novos cadastros.
           </CardDescription>
@@ -328,8 +400,8 @@ export function CategoriasPage() {
                     ? 'Crie a primeira categoria, como Mercearia ou Ração, e organize os produtos por ela.'
                     : 'Peça a um administrador para criar as categorias dos produtos.'}
                 </p>
-                {podeGerenciar && acaoNome?.tipo !== 'raiz' && (
-                  <Button type="button" size="sm" className="mt-3" onClick={() => abrirAcaoNome({ tipo: 'raiz' })}>
+                {podeGerenciar && acaoNome?.tipo !== 'principal' && (
+                  <Button type="button" size="sm" className="mt-3" onClick={() => abrirAcaoNome({ tipo: 'principal' })}>
                     <Plus className="h-4 w-4" />
                     Criar categoria
                   </Button>
@@ -340,6 +412,7 @@ export function CategoriasPage() {
 
           {!isPending && !isError && categorias.length > 0 && (
             <ArvoreCategorias
+              ref={arvoreRef}
               arvore={arvore}
               expandidos={expandidos}
               onAlterarExpansao={alterarExpansao}
@@ -347,8 +420,10 @@ export function CategoriasPage() {
               edicao={edicaoInline}
               salvandoEdicao={salvarNomeMutation.isPending}
               erroEdicao={erroNome}
+              chaveEdicao={chaveCriacao}
               onSalvarEdicao={salvarNome}
               onCancelarEdicao={cancelarAcaoNome}
+              onAlterarEdicao={() => setErroNome(null)}
               acaoStatusId={acaoStatusId}
               acoes={{
                 onAdicionarSubcategoria: (pai) => abrirAcaoNome({ tipo: 'subcategoria', pai }),
@@ -356,6 +431,7 @@ export function CategoriasPage() {
                 onMover: (categoria) => {
                   limparFeedback()
                   setErroMover(null)
+                  lembrarOrigem(categoria)
                   setCategoriaMovendo(categoria)
                 },
                 onAlterarStatus: (categoria) => {
@@ -364,6 +440,7 @@ export function CategoriasPage() {
                 },
                 onExcluir: (categoria) => {
                   limparFeedback()
+                  lembrarOrigem(categoria)
                   setCategoriaExcluindo(categoria)
                 },
               }}
@@ -384,16 +461,83 @@ export function CategoriasPage() {
           setCategoriaMovendo(null)
           setErroMover(null)
         }}
+        destinoFoco={destinoFocoDialogo}
       />
 
-      <ConfirmarExclusaoDialog
-        aberto={categoriaExcluindo !== null}
-        titulo={`Excluir a categoria "${categoriaExcluindo?.nome ?? ''}"?`}
-        descricao="Só é possível excluir categorias sem subcategorias e sem produtos. Esta ação não pode ser desfeita."
+      <DialogExcluirCategoria
+        categoria={categoriaExcluindo}
         excluindo={excluirMutation.isPending}
-        onConfirmar={() => categoriaExcluindo && excluirMutation.mutate(categoriaExcluindo)}
+        inativando={statusMutation.isPending}
+        onExcluir={(categoria) => excluirMutation.mutate(categoria)}
+        onInativar={(categoria) => statusMutation.mutate(categoria)}
         onCancelar={() => setCategoriaExcluindo(null)}
+        destinoFoco={destinoFocoDialogo}
       />
     </div>
+  )
+}
+
+interface DialogExcluirCategoriaProps {
+  categoria: Categoria | null
+  excluindo: boolean
+  inativando: boolean
+  onExcluir: (categoria: Categoria) => void
+  onInativar: (categoria: Categoria) => void
+  onCancelar: () => void
+  destinoFoco: DestinoFoco
+}
+
+/**
+ * Exclusao de categoria. Com subcategorias ou produtos vinculados, ja explica
+ * por que nao da para excluir e oferece inativar no lugar (sem beco sem saida).
+ * O 409 do backend continua tratado para o caso de corrida.
+ */
+function DialogExcluirCategoria({
+  categoria,
+  excluindo,
+  inativando,
+  onExcluir,
+  onInativar,
+  onCancelar,
+  destinoFoco,
+}: DialogExcluirCategoriaProps) {
+  const nome = categoria?.nome ?? ''
+  const vinculos = categoria ? descreverVinculos(categoria.quantidadeSubcategorias, categoria.quantidadeProdutos) : ''
+  const bloqueada = vinculos !== ''
+
+  return (
+    <ConfirmarExclusaoDialog
+      aberto={categoria !== null}
+      titulo={bloqueada ? `Não é possível excluir "${nome}"` : `Excluir a categoria "${nome}"?`}
+      descricao={
+        bloqueada ? (
+          <>
+            <p>Esta categoria tem {vinculos}, por isso não pode ser excluída.</p>
+            <p>
+              {categoria?.ativo
+                ? 'Ela deixa de aparecer no cadastro de produtos; os produtos continuam com ela.'
+                : 'Ela já está inativa: não aparece no cadastro de produtos e os produtos continuam com ela.'}
+            </p>
+          </>
+        ) : (
+          'Esta ação não pode ser desfeita.'
+        )
+      }
+      excluindo={excluindo}
+      podeExcluir={!bloqueada}
+      alternativa={
+        bloqueada && categoria?.ativo
+          ? {
+              rotulo: 'Inativar categoria',
+              icone: EyeOff,
+              executando: inativando,
+              onExecutar: () => onInativar(categoria),
+            }
+          : undefined
+      }
+      onConfirmar={() => categoria && onExcluir(categoria)}
+      onCancelar={onCancelar}
+      destinoFoco={destinoFoco}
+    />
   )
 }

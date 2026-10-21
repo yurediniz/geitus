@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { filtrarPorTermo, idsDescendentes, montarArvore } from '@/lib/arvoreCategorias'
+import { casaTermo, filtrarPorTermo, idsDescendentes, montarArvore, produtosPorSubarvore } from '@/lib/arvoreCategorias'
 import type { Categoria } from '@/types/catalogo'
 
 function categoria(
@@ -95,5 +95,37 @@ describe('filtrarPorTermo', () => {
 
   it('sem correspondencia devolve lista vazia', () => {
     expect(filtrarPorTermo(categorias, 'brinquedo')).toEqual([])
+  })
+
+  it('exige todas as palavras do termo no caminho, em qualquer ordem', () => {
+    expect(filtrarPorTermo(categorias, 'racao umida').map((c) => c.id)).toEqual(['umida', 'sache'])
+    expect(filtrarPorTermo(categorias, '  umida   SACHE ').map((c) => c.id)).toEqual(['sache'])
+    expect(filtrarPorTermo(categorias, 'sache racao').map((c) => c.id)).toEqual(['sache'])
+    expect(filtrarPorTermo(categorias, 'racao bebidas')).toEqual([])
+  })
+})
+
+describe('casaTermo', () => {
+  it('casa palavras soltas sem acentos e termo vazio casa sempre', () => {
+    expect(casaTermo('Ração › Úmida › Sachê', 'umida sache')).toBe(true)
+    expect(casaTermo('Ração › Úmida', 'umida sache')).toBe(false)
+    expect(casaTermo('Qualquer', '   ')).toBe(true)
+  })
+})
+
+describe('produtosPorSubarvore', () => {
+  it('soma os produtos do no com os de todos os descendentes', () => {
+    const comProdutos = categorias.map((c) => ({
+      ...c,
+      quantidadeProdutos: ({ racao: 4, sache: 7, seca: 1 } as Record<string, number>)[c.id] ?? 0,
+    }))
+
+    const totais = produtosPorSubarvore(montarArvore(comProdutos))
+
+    expect(totais.get('racao')).toBe(12)
+    expect(totais.get('umida')).toBe(7)
+    expect(totais.get('sache')).toBe(7)
+    expect(totais.get('seca')).toBe(1)
+    expect(totais.get('bebidas')).toBe(0)
   })
 })

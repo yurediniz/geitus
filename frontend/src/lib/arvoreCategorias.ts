@@ -81,14 +81,45 @@ export function normalizarTexto(texto: string): string {
     .trim()
 }
 
+/** Palavras do termo, ja normalizadas (sem acentos/maiusculas). */
+function palavrasDoTermo(termo: string): string[] {
+  return normalizarTexto(termo).split(/\s+/).filter(Boolean)
+}
+
 /**
- * Filtra as categorias cujo caminho contem o termo, sem diferenciar
- * maiusculas nem acentos. Termo vazio devolve a lista inteira.
+ * Verdadeiro se todas as palavras do termo aparecem no texto, em qualquer
+ * ordem e sem diferenciar maiusculas nem acentos: "racao umida" e
+ * "umida sache" casam com "Ração › Úmida › Sachê". Termo vazio casa sempre.
+ */
+export function casaTermo(texto: string, termo: string): boolean {
+  const alvo = normalizarTexto(texto)
+  return palavrasDoTermo(termo).every((palavra) => alvo.includes(palavra))
+}
+
+/**
+ * Filtra as categorias cujo caminho contem todas as palavras do termo (ver
+ * `casaTermo`). Termo vazio devolve a lista inteira.
  */
 export function filtrarPorTermo(categorias: Categoria[], termo: string): Categoria[] {
-  const alvo = normalizarTexto(termo)
-  if (!alvo) {
+  if (palavrasDoTermo(termo).length === 0) {
     return categorias
   }
-  return categorias.filter((categoria) => normalizarTexto(categoria.caminho).includes(alvo))
+  return categorias.filter((categoria) => casaTermo(categoria.caminho, termo))
+}
+
+/**
+ * Total de produtos de cada no somado ao de todos os seus descendentes
+ * (`quantidadeProdutos` da API conta so os vinculados diretamente).
+ */
+export function produtosPorSubarvore(arvore: NoCategoria[]): Map<string, number> {
+  const totais = new Map<string, number>()
+  const somar = (no: NoCategoria): number => {
+    const total = no.filhos.reduce((soma, filho) => soma + somar(filho), no.categoria.quantidadeProdutos)
+    totais.set(no.categoria.id, total)
+    return total
+  }
+  for (const raiz of arvore) {
+    somar(raiz)
+  }
+  return totais
 }

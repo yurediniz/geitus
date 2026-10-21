@@ -21,8 +21,12 @@ interface TextosErroCatalogo {
   semPermissao: string
 }
 
-/** O httpClient usa este prefixo quando o backend nao manda mensagem propria. */
-function ehMensagemGenerica(mensagem: string): boolean {
+/**
+ * Mensagem sem conteudo util para o usuario: vazia, a generica do httpClient
+ * ("Requisicao falhou (HTTP 409).", usada quando o backend nao manda mensagem
+ * propria) ou o "Dados invalidos." padrao do 400.
+ */
+export function ehMensagemGenerica(mensagem: string): boolean {
   return mensagem.trim() === '' || mensagem.startsWith('Requisicao falhou') || mensagem === 'Dados invalidos.'
 }
 
