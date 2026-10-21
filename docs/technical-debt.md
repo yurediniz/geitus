@@ -322,6 +322,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
   - `podeExcluir` real em lote (sem N+1).
   - Converter a violacao de FK no DELETE em 409 com a mensagem de exclusao bloqueada.
   - Registrar a exclusao numa tabela de auditoria sem FK para `produtos`.
+  - **Atualizacao Fase C (DEC-033):** o historico de precos (`produto_historico_precos`) sai em cascata (`ON DELETE CASCADE`) quando o produto e excluido. Hoje o unico rastro que sobra e o log INFO com ids. A auditoria de exclusao deve guardar um retrato do ultimo preco e custo, ou registrar a decisao de nao guardar.
 
 ## DT-029 — Endurecimentos menores da Fase B
 
@@ -334,7 +335,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
   - validar o formato de todos os codigos antes da unicidade, com uma consulta `IN` unica;
   - `@Size` por codigo aplicado antes da normalizacao;
   - `substring(0, 30)` do nome curto pode partir emoji (surrogate), nos dois lados;
-  - `@Version` no produto (ultima gravacao vence);
+  - `@Version` no produto (ultima gravacao vence). **Parcialmente resolvido na Fase C:** a edicao usa lock pessimista (`SELECT ... FOR UPDATE`), o que mantem coerente a cadeia do historico de precos. Ainda falta o conflito otimista para quem edita uma versao desatualizada no formulario (antes do PDV);
   - unicidade de codigo `OUTRO` sensivel a maiusculas;
   - UPC-A `036000291452` e EAN-13 `0036000291452` (mesmo GTIN) nao colidem;
   - sugestao de SKU carrega a lista de SKUs no padrao (poderia ser `LIMIT 1`);
@@ -350,6 +351,45 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
     - o fallback pelo texto (resposta sem `campos`) no frontend reconhece `"O código de barras "`, mas a mensagem de digito invalido comeca com `"Código de barras "` — hoje sem impacto (o backend sempre manda `campos`), alinhar o fallback.
 - **Impacto:** Robustez, desempenho e clareza; nenhum risco imediato.
 - **Quando revisar:** Na Fase E (listagem) ou na proxima manutencao do catalogo.
+
+## DT-030 — Fuso dos carimbos de data/hora (`criado_em`, `atualizado_em`, `alterado_em`)
+
+- **ID:** DT-030
+- **Modulo:** Backend (transversal)
+- **Origem:** Revisoes (data-reviewer, back-end-reviewer, qa-reviewer) da Fase C
+- **Prioridade:** media (obrigatoria antes do primeiro deploy)
+- **Status:** aberto
+- **Descricao:** Os carimbos sao `TIMESTAMP` sem fuso, preenchidos com `LocalDateTime.now()` no fuso da JVM, e alguns `DEFAULT now()` seguem o fuso da sessao do Postgres. As datas de negocio (vigencia de promocao, DEC-033) ja usam o `Clock` `America/Sao_Paulo`. Em dev (Windows em Sao Paulo) nao ha diferenca. Num container em UTC, a aba Historico mostraria a hora 3h adiantada.
+- **Impacto:** Hora errada exibida e gravada em historico, auditoria, caixa e vendas.
+- **Quando revisar:** Antes do primeiro deploy e antes de Caixa/PDV.
+- **Observacoes:** Decisao unica para o projeto inteiro, uma destas: fixar `user.timezone`/`hibernate.jdbc.time_zone`, ou gerar os carimbos com `LocalDateTime.now(clock)`, ou migrar para `TIMESTAMPTZ`. Tambem: `updatable = false` em `Usuario.empresa`, porque a FK composta do historico (V8) faz a troca de empresa falhar no banco.
+
+## DT-031 — Endurecimentos menores da Fase C
+
+- **ID:** DT-031
+- **Modulo:** Backend/Frontend (Catalogo — Produtos)
+- **Origem:** Revisoes da Fase C
+- **Prioridade:** baixa
+- **Status:** aberto
+- **Descricao:**
+  - **Backend:**
+    - centralizar as mensagens repetidas entre DTOs e `ProdutoService`;
+    - mover `PaginaResponse` e o "hoje do negocio" (`SituacaoPromocao.hoje`) para `shared` quando outro modulo precisar;
+    - extrair do `ProdutoService` (cerca de 850 linhas) a validacao de precos especiais e o historico;
+    - validar a escala dos precos especiais tambem no service (hoje so o `@Digits` barra mais de 2 casas);
+    - validar a paginacao depois de resolver a empresa.
+  - **Frontend:**
+    - fabrica unica de chaves de cache;
+    - manter os valores ao desligar o interruptor por engano (exige revisar a spec §6.2);
+    - unificar campos numericos `type="number"` como texto com `inputMode="decimal"`;
+    - avisar quando uma colagem invalida for ignorada;
+    - `aria-live` no aviso de preco abaixo do custo e "em reais" no rotulo acessivel do `CampoMoeda`;
+    - rotulos "Preco promocional"/"Preco de atacado" em vez de "Ativar ...";
+    - placeholder da margem desejada com a margem atual;
+    - validacao de 9 digitos inteiros na quantidade do atacado.
+  - **Validacao manual:** `CampoMoeda` em Android (Gboard e teclado Samsung) e iOS.
+- **Impacto:** Organizacao, acessibilidade e robustez; nenhum risco imediato.
+- **Quando revisar:** Na Fase E ou antes de reaproveitar o `CampoMoeda` no Caixa/PDV.
 
 ## DT-026 — Teto de profundidade e de quantidade na arvore de categorias
 
