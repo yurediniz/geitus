@@ -2,6 +2,7 @@ package com.geitus.app.catalog;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 import java.util.UUID;
@@ -123,6 +124,52 @@ class CatalogoServiceIT {
         assertThat(produto.unidadeCompra().sigla()).isEqualTo("CX");
         assertThat(produto.categoria().caminho()).isEqualTo("Ração › Úmida › Sachê");
         assertThat(produto.conversaoTexto()).isEqualTo("1 CX = 12 KG");
+    }
+
+    // ---------- Edicao com vinculos inativados depois do cadastro ----------
+
+    /**
+     * Regra "manter o vinculo atual mesmo inativo" (spec 5.1) com proxies LAZY
+     * reais: o produto carregado na transacao do service compara o id da
+     * unidade/categoria escolhida com o do proxy atual. Trocar para OUTRA
+     * unidade inativa continua bloqueado.
+     */
+    @Test
+    void editarProdutoComUnidadeECategoriaInativadasMantemVinculos() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        unidadeService.criarPadroes(empresa);
+        List<UnidadeMedidaResponse> unidades = unidadeService.listarParaUsuario(idUsuario, null);
+        UUID kg = siglaParaUuid(unidades, "KG");
+        UUID cx = siglaParaUuid(unidades, "CX");
+        UUID g = siglaParaUuid(unidades, "G");
+        UUID racao = cadastrarCategoria(idUsuario, "Ração", null);
+        UUID umida = cadastrarCategoria(idUsuario, "Úmida", racao);
+        ProdutoResponse cadastrado = produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(kg).nome("Patê de carne").categoriaId(umida).compra(cx, "12")
+                        .build());
+
+        unidadeService.inativarParaUsuario(idUsuario, kg);
+        unidadeService.inativarParaUsuario(idUsuario, cx);
+        unidadeService.inativarParaUsuario(idUsuario, g);
+        categoriaService.inativarParaUsuario(idUsuario, racao);
+
+        ProdutoResponse editado = produtoService.atualizarDadosBasicosParaUsuario(idUsuario, cadastrado.id(),
+                ProdutoRequestBuilder.comUnidade(kg).nome("Patê de carne 400g").categoriaId(umida)
+                        .compra(cx, "12").build());
+
+        assertThat(editado.nome()).isEqualTo("Patê de carne 400g");
+        assertThat(editado.unidade().sigla()).isEqualTo("KG");
+        assertThat(editado.unidadeCompra().sigla()).isEqualTo("CX");
+        assertThat(editado.categoria().caminho()).isEqualTo("Ração › Úmida");
+
+        assertThatThrownBy(() -> produtoService.atualizarDadosBasicosParaUsuario(idUsuario, cadastrado.id(),
+                ProdutoRequestBuilder.comUnidade(g).nome("Patê de carne 400g").categoriaId(umida)
+                        .compra(cx, "12").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Esta unidade está inativa. Escolha uma unidade ativa.");
+        assertThat(produtoService.buscarPorIdParaUsuario(idUsuario, cadastrado.id()).unidade().sigla())
+                .isEqualTo("KG");
     }
 
     // ---------- Concorrencia: trava por empresa ao mover ----------

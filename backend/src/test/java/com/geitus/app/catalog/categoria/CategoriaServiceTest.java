@@ -236,6 +236,21 @@ class CategoriaServiceTest {
     }
 
     @Test
+    void moverParaOPaiAtualNaoConflitaComOProprioNome() {
+        // PATCH sem mudanca real: a propria categoria nao conta como irma repetida.
+        Categoria racao = existente(null, "Ração");
+        Categoria umida = existente(racao, "Úmida");
+        existente(racao, "Seca");
+
+        CategoriaResponse resposta = categoriaService.atualizarParaUsuario(ID_USUARIO, umida.getUuid(),
+                new CategoriaRequest("Úmida", racao.getUuid()));
+
+        assertThat(resposta.caminho()).isEqualTo("Ração › Úmida");
+        assertThat(resposta.parentId()).isEqualTo(racao.getUuid());
+        verify(categoriaRepository).save(umida);
+    }
+
+    @Test
     void moverTravaAEmpresaAntesDeCarregarAArvore() {
         // Serializa mover/renomear por empresa (corrida de ciclo cruzado).
         Categoria racao = existente(null, "Ração");

@@ -81,6 +81,13 @@ class CategoriaArvoreTest {
     }
 
     @Test
+    void subarvoreDoMeioIncluiSoOsDescendentes() {
+        // Nem o pai (Ração) nem o irmao (Seca) entram.
+        assertThat(arvore().idsDaSubarvore(umida.getId()))
+                .containsExactlyInAnyOrder(umida.getId(), sache.getId());
+    }
+
+    @Test
     void subarvoreDaFolhaESoElaMesma() {
         assertThat(arvore().idsDaSubarvore(sache.getId())).containsExactly(3L);
     }
@@ -126,6 +133,15 @@ class CategoriaArvoreTest {
         umida.inativar();
         umida.ativar();
 
+        assertThat(arvore().selecionavel(sache.getId())).isTrue();
+    }
+
+    @Test
+    void avoInativadoEReativadoAlternaSelecionavelDoNeto() {
+        racao.inativar();
+        assertThat(arvore().selecionavel(sache.getId())).isFalse();
+
+        racao.ativar();
         assertThat(arvore().selecionavel(sache.getId())).isTrue();
     }
 
