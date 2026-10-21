@@ -212,6 +212,68 @@ class MigracaoV9IT {
                 .isEqualTo(2);
     }
 
+    /** O estoque inicial so nasce no cadastro. */
+    @Test
+    void rejeitaEstoqueInicialForaDoCadastro() throws SQLException {
+        Cenario cenario = cenarioComUmProduto();
+
+        assertViolacao(cenario.movimento("ENTRADA", "ESTOQUE_INICIAL", "AJUSTE_MANUAL", "5", "0", "5"),
+                "ck_movimento_estoque_inicial", VIOLACAO_DE_CHECK);
+    }
+
+    /** O cadastro e sempre o primeiro movimento: parte do saldo zero. */
+    @Test
+    void rejeitaCadastroQueNaoParteDoZero() throws SQLException {
+        Cenario cenario = cenarioComUmProduto();
+
+        assertViolacao(cenario.movimento("ENTRADA", "ESTOQUE_INICIAL", "CADASTRO", "5", "3", "8"),
+                "ck_movimento_estoque_cadastro_do_zero", VIOLACAO_DE_CHECK);
+    }
+
+    @Test
+    void umEstoqueInicialPorProduto() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        long usuario = inserirUsuario(empresa, "a");
+        Cenario arroz = new Cenario(empresa, inserirProduto(empresa, "Arroz"), usuario);
+        Cenario feijao = new Cenario(empresa, inserirProduto(empresa, "Feijao"), usuario);
+        aplicarV9();
+        executar(arroz.movimento("ENTRADA", "ESTOQUE_INICIAL", "CADASTRO", "5", "0", "5"));
+
+        assertViolacao(arroz.movimento("ENTRADA", "ESTOQUE_INICIAL", "CADASTRO", "5", "0", "5"),
+                "uq_movimento_estoque_inicial", VIOLACAO_DE_UNICIDADE);
+
+        executar(feijao.movimento("ENTRADA", "ESTOQUE_INICIAL", "CADASTRO", "5", "0", "5"));
+        executar(arroz.movimento("ENTRADA", "COMPRA", "AJUSTE_MANUAL", "1", "5", "6"));
+    }
+
+    /** Matriz tipo x motivo da spec 4.3, tambem no banco. */
+    @Test
+    void rejeitaMotivoDeOutroTipo() throws SQLException {
+        Cenario cenario = cenarioComUmProduto();
+        String violacao = "ck_movimento_estoque_motivo_do_tipo";
+
+        assertViolacao(cenario.movimento("ENTRADA", "PERDA_AVARIA", "AJUSTE_MANUAL", "5", "0", "5"), violacao,
+                VIOLACAO_DE_CHECK);
+        assertViolacao(cenario.movimento("ENTRADA", "VENDA", "AJUSTE_MANUAL", "5", "0", "5"), violacao,
+                VIOLACAO_DE_CHECK);
+        assertViolacao(cenario.movimento("SAIDA", "COMPRA", "AJUSTE_MANUAL", "-1", "5", "4"), violacao,
+                VIOLACAO_DE_CHECK);
+        assertViolacao(cenario.movimento("SAIDA", "CONTAGEM", "AJUSTE_MANUAL", "-1", "5", "4"), violacao,
+                VIOLACAO_DE_CHECK);
+        assertViolacao(cenario.movimento("AJUSTE", "COMPRA", "AJUSTE_MANUAL", "1", "5", "6"), violacao,
+                VIOLACAO_DE_CHECK);
+        assertViolacao(cenario.movimento("AJUSTE", "VENDA", "AJUSTE_MANUAL", "-1", "5", "4"), violacao,
+                VIOLACAO_DE_CHECK);
+
+        executar(cenario.movimento("ENTRADA", "DEVOLUCAO_CLIENTE", "AJUSTE_MANUAL", "5", "0", "5"));
+        executar(cenario.movimento("ENTRADA", "OUTRO", "AJUSTE_MANUAL", "1", "5", "6"));
+        executar(cenario.movimento("SAIDA", "VENDA", "VENDA", "-1", "6", "5"));
+        executar(cenario.movimento("SAIDA", "DEVOLUCAO_FORNECEDOR", "AJUSTE_MANUAL", "-1", "5", "4"));
+        executar(cenario.movimento("SAIDA", "OUTRO", "AJUSTE_MANUAL", "-1", "4", "3"));
+        executar(cenario.movimento("AJUSTE", "CONTAGEM", "AJUSTE_MANUAL", "2", "3", "5"));
+        executar(cenario.movimento("AJUSTE", "OUTRO", "AJUSTE_MANUAL", "-1", "5", "4"));
+    }
+
     @Test
     void umSaldoPorProduto() throws SQLException {
         long empresa = inserirEmpresa("Empresa A");

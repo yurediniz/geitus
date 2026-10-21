@@ -86,9 +86,20 @@ CREATE TABLE movimentos_estoque (
     CONSTRAINT ck_movimento_estoque_coerencia CHECK (saldo_novo = saldo_anterior + quantidade),
     CONSTRAINT ck_movimento_estoque_sinal CHECK (
         (tipo <> 'ENTRADA' OR quantidade > 0) AND (tipo <> 'SAIDA' OR quantidade < 0)),
-    -- O cadastro so produz o estoque inicial.
+    -- Matriz tipo x motivo (spec 4.3). Escrita como implicacoes: um tipo fora da
+    -- lista cai no ck_movimento_estoque_tipo, nao aqui.
+    CONSTRAINT ck_movimento_estoque_motivo_do_tipo CHECK (
+        (tipo <> 'ENTRADA' OR motivo IN ('COMPRA', 'DEVOLUCAO_CLIENTE', 'ESTOQUE_INICIAL', 'OUTRO'))
+        AND (tipo <> 'SAIDA' OR motivo IN ('PERDA_AVARIA', 'VENCIDO', 'USO_INTERNO', 'DEVOLUCAO_FORNECEDOR',
+                                           'VENDA', 'OUTRO'))
+        AND (tipo <> 'AJUSTE' OR motivo IN ('CONTAGEM', 'OUTRO'))),
+    -- O cadastro so produz o estoque inicial...
     CONSTRAINT ck_movimento_estoque_cadastro CHECK (
         origem <> 'CADASTRO' OR (tipo = 'ENTRADA' AND motivo = 'ESTOQUE_INICIAL')),
+    -- ... o estoque inicial so nasce no cadastro...
+    CONSTRAINT ck_movimento_estoque_inicial CHECK (motivo <> 'ESTOQUE_INICIAL' OR origem = 'CADASTRO'),
+    -- ... e e sempre o primeiro movimento do produto, partindo do saldo zero.
+    CONSTRAINT ck_movimento_estoque_cadastro_do_zero CHECK (origem <> 'CADASTRO' OR saldo_anterior = 0),
     CONSTRAINT ck_movimento_estoque_saldos CHECK (saldo_anterior >= 0 AND saldo_novo >= 0)
 );
 
@@ -96,3 +107,9 @@ CREATE TABLE movimentos_estoque (
 -- RESTRICT na exclusao do produto.
 CREATE INDEX ix_movimento_estoque_produto
     ON movimentos_estoque (empresa_id, produto_id, criado_em DESC, id DESC);
+
+-- No maximo um estoque inicial por produto: a exclusao "so com o estoque
+-- inicial" (spec 4.7) apaga exatamente esse movimento.
+CREATE UNIQUE INDEX uq_movimento_estoque_inicial
+    ON movimentos_estoque (empresa_id, produto_id)
+    WHERE origem = 'CADASTRO';
