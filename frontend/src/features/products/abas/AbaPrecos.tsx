@@ -1,6 +1,6 @@
 import { useFormContext } from 'react-hook-form'
 
-import { CampoTexto } from '@/features/products/CamposFormulario'
+import { CampoMoedaFormulario } from '@/features/products/CamposFormulario'
 import { formatarMoeda, formatarPercentual } from '@/features/products/formatacaoProduto'
 import { calcularMargemMarkup, type ProdutoFormValues } from '@/features/products/produtoFormulario'
 
@@ -16,7 +16,6 @@ export interface AbaPrecosProps {
  */
 export function AbaPrecos({ desabilitado, aoAlterarCampo }: AbaPrecosProps) {
   const {
-    register,
     watch,
     formState: { errors },
   } = useFormContext<ProdutoFormValues>()
@@ -29,26 +28,20 @@ export function AbaPrecos({ desabilitado, aoAlterarCampo }: AbaPrecosProps) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
-        <CampoTexto
+        <CampoMoedaFormulario
           id="custo"
           label="Custo (opcional)"
           erro={errors.custo?.message}
-          inputProps={register('custo', { onChange: aoAlterarCampo })}
+          aoAlterar={aoAlterarCampo}
           disabled={desabilitado}
-          type="number"
-          step="0.01"
-          min="0"
         />
-        <CampoTexto
+        <CampoMoedaFormulario
           id="precoMinimo"
           label="Preço mínimo (opcional)"
           erro={errors.precoMinimo?.message}
           ajuda="Menor preço permitido na venda."
-          inputProps={register('precoMinimo', { onChange: aoAlterarCampo })}
+          aoAlterar={aoAlterarCampo}
           disabled={desabilitado}
-          type="number"
-          step="0.01"
-          min="0"
         />
       </div>
 

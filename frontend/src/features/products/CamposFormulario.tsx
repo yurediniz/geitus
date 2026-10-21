@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
-import type { UseFormRegisterReturn } from 'react-hook-form'
+import { Controller, useFormContext, type UseFormRegisterReturn } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { AlertCircle } from 'lucide-react'
 
+import { CampoMoeda } from '@/components/ui/campo-moeda'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import type { OpcaoUnidade, ProdutoFormValues } from '@/features/products/produtoFormulario'
@@ -70,6 +71,38 @@ export function CampoTexto({
   maxLength,
   inputProps,
 }: CampoTextoProps) {
+  return (
+    <EstruturaCampo id={id} label={label} obrigatorio={obrigatorio} erro={erro} ajuda={ajuda}>
+      {(ariaDescribedby) => (
+        <Input
+          id={id}
+          type={type}
+          step={step}
+          min={min}
+          maxLength={maxLength}
+          placeholder={placeholder}
+          disabled={disabled}
+          aria-invalid={erro ? true : undefined}
+          aria-describedby={ariaDescribedby}
+          {...inputProps}
+        />
+      )}
+    </EstruturaCampo>
+  )
+}
+
+interface EstruturaCampoProps {
+  id: string
+  label: string
+  obrigatorio: boolean
+  erro?: string
+  ajuda?: ReactNode
+  /** Recebe o `aria-describedby` (ajuda e erro presentes) para o controle. */
+  children: (ariaDescribedby: string | undefined) => ReactNode
+}
+
+/** Label, ajuda e erro em volta de um controle: o mesmo visual para texto e dinheiro. */
+function EstruturaCampo({ id, label, obrigatorio, erro, ajuda, children }: EstruturaCampoProps) {
   const erroId = `${id}-erro`
   const ajudaId = `${id}-ajuda`
   const temAjuda = ajuda !== undefined && ajuda !== null && ajuda !== ''
@@ -79,18 +112,7 @@ export function CampoTexto({
         {label}
         {obrigatorio && <MarcaObrigatorio />}
       </label>
-      <Input
-        id={id}
-        type={type}
-        step={step}
-        min={min}
-        maxLength={maxLength}
-        placeholder={placeholder}
-        disabled={disabled}
-        aria-invalid={erro ? true : undefined}
-        aria-describedby={idsDescricao(temAjuda && ajudaId, erro && erroId)}
-        {...inputProps}
-      />
+      {children(idsDescricao(temAjuda && ajudaId, erro && erroId))}
       {temAjuda && (
         <p id={ajudaId} className="text-xs text-muted-foreground">
           {ajuda}
@@ -98,6 +120,59 @@ export function CampoTexto({
       )}
       <ErroDoCampo id={erroId} mensagem={erro} />
     </div>
+  )
+}
+
+/** Campos de dinheiro do formulario (string decimal com ponto, exibidos com a mascara R$). */
+export type CampoDinheiro = 'precoVenda' | 'custo' | 'precoMinimo'
+
+interface CampoMoedaFormularioProps {
+  id: CampoDinheiro
+  label: string
+  obrigatorio?: boolean
+  erro?: string
+  ajuda?: ReactNode
+  disabled?: boolean
+  /** Chamado a cada mudanca do valor (limpa feedbacks da pagina). */
+  aoAlterar?: () => void
+}
+
+/** Campo de dinheiro ligado ao formulario (RHF), com label, ajuda e erro iguais aos do `CampoTexto`. */
+export function CampoMoedaFormulario({
+  id,
+  label,
+  obrigatorio = false,
+  erro,
+  ajuda,
+  disabled,
+  aoAlterar,
+}: CampoMoedaFormularioProps) {
+  const { control } = useFormContext<ProdutoFormValues>()
+  return (
+    <EstruturaCampo id={id} label={label} obrigatorio={obrigatorio} erro={erro} ajuda={ajuda}>
+      {(ariaDescribedby) => (
+        <Controller
+          control={control}
+          name={id}
+          render={({ field }) => (
+            <CampoMoeda
+              id={id}
+              name={field.name}
+              ref={field.ref}
+              value={field.value}
+              onChange={(valor) => {
+                field.onChange(valor)
+                aoAlterar?.()
+              }}
+              onBlur={field.onBlur}
+              disabled={disabled}
+              aria-invalid={erro ? true : undefined}
+              aria-describedby={ariaDescribedby}
+            />
+          )}
+        />
+      )}
+    </EstruturaCampo>
   )
 }
 

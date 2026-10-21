@@ -160,8 +160,11 @@ async function selecionarUnidadeVenda(id = 'un') {
   fireEvent.change(select, { target: { value: id } })
 }
 
-/** Preenche o minimo valido (nome, unidade UN ja escolhida e preco), tudo na aba Geral. */
-async function preencherMinimo(nome = 'Café 500g', preco = '12.5') {
+/**
+ * Preenche o minimo valido (nome, unidade UN ja escolhida e preco), tudo na aba
+ * Geral. O preco vai como o texto da mascara (o `change` segue os digitos).
+ */
+async function preencherMinimo(nome = 'Café 500g', preco = '12,50') {
   fireEvent.change(campoNome(), { target: { value: nome } })
   await waitFor(() => expect(screen.getByLabelText(/unidade de venda/i)).toHaveValue('un'))
   fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: preco } })
@@ -293,9 +296,9 @@ describe('ProdutoPage', () => {
       expect(screen.getByText(/informe o preço de venda \(aba geral\) e o custo/i)).toBeInTheDocument()
 
       abrirAba(/geral/i)
-      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '25.9' } })
+      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '25,90' } })
       abrirAba(/preços/i)
-      fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '18' } })
+      fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '18,00' } })
 
       expect(screen.getByText('30,50%')).toBeInTheDocument()
       expect(screen.getByText('43,89%')).toBeInTheDocument()
@@ -323,8 +326,9 @@ describe('ProdutoPage', () => {
     it('com erros em várias abas, vai para a primeira e marca todas', async () => {
       renderNovo()
       await esperarFormulario()
+      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10,00' } })
       abrirAba(/preços/i)
-      fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '-1' } })
+      fireEvent.change(screen.getByLabelText(/preço mínimo/i), { target: { value: '15,00' } })
       abrirAba(/estoque/i)
       fireEvent.change(screen.getByLabelText(/estoque mínimo/i), { target: { value: '-2' } })
       abrirAba(/códigos/i)
@@ -333,8 +337,8 @@ describe('ProdutoPage', () => {
       fireEvent.click(botaoSalvar())
 
       await waitFor(() => expect(aba(/geral/i)).toHaveAttribute('aria-selected', 'true'))
-      // Nome e preco de venda vazios, os dois na Geral.
-      expect(aba(/geral/i)).toHaveAccessibleName('Geral (2 erros)')
+      // So o nome vazio na Geral; o preco minimo acima do de venda, em Precos.
+      expect(aba(/geral/i)).toHaveAccessibleName('Geral (1 erro)')
       expect(aba(/preços/i)).toHaveAccessibleName('Preços (1 erro)')
       expect(aba(/estoque/i)).toHaveAccessibleName('Estoque (1 erro)')
       expect(aba(/códigos/i)).toHaveAccessibleName('Códigos (1 erro)')
@@ -348,30 +352,31 @@ describe('ProdutoPage', () => {
       expect(cadastrarProdutoMock).not.toHaveBeenCalled()
     })
 
-    it('valida preço não negativo e custo negativo', async () => {
+    it('a máscara não aceita sinal: preço e custo nunca ficam negativos', async () => {
+      cadastrarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Produto' })
       renderNovo()
       await esperarFormulario()
-      fireEvent.change(campoNome(), { target: { value: 'Produto' } })
-      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '-1' } })
+      await preencherMinimo('Produto', '-1')
+      expect(screen.getByLabelText(/preço de venda/i)).toHaveValue('0,01')
       abrirAba(/preços/i)
-      fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '-1' } })
+      fireEvent.keyDown(screen.getByLabelText(/^custo/i), { key: '-' })
+      fireEvent.keyDown(screen.getByLabelText(/^custo/i), { key: '5' })
+      expect(screen.getByLabelText(/^custo/i)).toHaveValue('0,05')
 
       fireEvent.click(botaoSalvar())
 
-      expect(await screen.findByText(/preço de venda não pode ser negativo/i)).toBeInTheDocument()
-      expect(aba(/geral/i)).toHaveAccessibleName('Geral (1 erro)')
-      expect(aba(/preços/i)).toHaveAccessibleName('Preços (1 erro)')
-      abrirAba(/preços/i)
-      expect(screen.getByText(/custo não pode ser negativo/i)).toBeInTheDocument()
+      await waitFor(() =>
+        expect(cadastrarProdutoMock).toHaveBeenCalledWith(expect.objectContaining({ precoVenda: 0.01, custo: 0.05 })),
+      )
     })
 
     it('barra o submit quando o preço mínimo é maior que o preço de venda', async () => {
       renderNovo()
       await esperarFormulario()
       fireEvent.change(campoNome(), { target: { value: 'Produto' } })
-      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10' } })
+      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10,00' } })
       abrirAba(/preços/i)
-      fireEvent.change(screen.getByLabelText(/preço mínimo/i), { target: { value: '15' } })
+      fireEvent.change(screen.getByLabelText(/preço mínimo/i), { target: { value: '15,00' } })
 
       fireEvent.click(botaoSalvar())
 
@@ -416,7 +421,7 @@ describe('ProdutoPage', () => {
       fireEvent.change(screen.getByLabelText(/^marca/i), { target: { value: 'Pilão' } })
       fireEvent.change(screen.getByLabelText(/^fornecedor principal/i), { target: { value: 'Atacadão' } })
       await waitFor(() => expect(screen.getByLabelText(/unidade de venda/i)).toHaveValue('un'))
-      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '12.5' } })
+      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '12,50' } })
       abrirAba(/estoque/i)
       fireEvent.change(screen.getByLabelText(/ponto de reposição/i), { target: { value: '8' } })
       abrirAba(/códigos/i)
@@ -459,9 +464,9 @@ describe('ProdutoPage', () => {
       fireEvent.change(campoCodigoGeral(), { target: { value: '7891000315507' } })
       fireEvent.keyDown(campoCodigoGeral(), { key: 'Enter' })
       abrirAba(/preços/i)
-      fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '2' } })
+      fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '2,00' } })
       abrirAba(/geral/i)
-      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '3.5' } })
+      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '3,50' } })
 
       fireEvent.click(screen.getByRole('button', { name: /salvar e cadastrar outro/i }))
 
@@ -481,9 +486,9 @@ describe('ProdutoPage', () => {
       expect(screen.getByRole('button', { name: /^categoria/i })).toHaveTextContent('Ração › Sachê')
       expect(screen.getByLabelText(/^marca/i)).toHaveValue('Golden')
       expect(screen.getByLabelText(/^fornecedor principal/i)).toHaveValue('PremieRpet')
-      expect(screen.getByLabelText(/preço de venda/i)).toHaveValue(null)
+      expect(screen.getByLabelText(/preço de venda/i)).toHaveValue('')
       abrirAba(/preços/i)
-      expect(screen.getByLabelText(/^custo/i)).toHaveValue(null)
+      expect(screen.getByLabelText(/^custo/i)).toHaveValue('')
       expect(router.state.location.pathname).toBe('/produtos/novo')
 
       // O formulario reaberto nao esta "alterado": sair nao pede confirmacao.
@@ -513,7 +518,7 @@ describe('ProdutoPage', () => {
       abrirAba(/geral/i)
       expect(campoNome()).toHaveValue('Café 500g')
       expect(screen.getByLabelText(/^marca/i)).toHaveValue('Pilão')
-      expect(screen.getByLabelText(/preço de venda/i)).toHaveValue(12.5)
+      expect(screen.getByLabelText(/preço de venda/i)).toHaveValue('12,50')
     })
 
     it('"Salvar e cadastrar outro" com 400 também mantém o que foi digitado', async () => {
@@ -701,7 +706,7 @@ describe('ProdutoPage', () => {
       expect(campoNome()).toHaveValue('Arroz 5kg')
       expect(screen.getByLabelText(/^nome curto/i)).toHaveValue('Arroz TJ')
       expect(screen.getByLabelText(/^fornecedor principal/i)).toHaveValue('Distribuidora Sul')
-      expect(screen.getByLabelText(/preço de venda/i)).toHaveValue(25.9)
+      expect(screen.getByLabelText(/preço de venda/i)).toHaveValue('25,90')
       // A mesma lista de codigos aparece em etiquetas na Geral.
       expect(
         within(screen.getByRole('list', { name: /códigos de barras do produto/i })).getByText('7891000315507'),

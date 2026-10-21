@@ -4,6 +4,7 @@ import type { UseQueryResult } from '@tanstack/react-query'
 
 import {
   AvisoCatalogo,
+  CampoMoedaFormulario,
   CampoSelect,
   CampoTexto,
   ErroDoCampo,
@@ -169,16 +170,13 @@ export function AbaGeral({
             linkSemOpcoes={somenteLeitura ? undefined : { to: '/produtos/unidades', rotulo: 'Cadastrar em Unidades' }}
           />
         </div>
-        <CampoTexto
+        <CampoMoedaFormulario
           id="precoVenda"
           label={siglaVenda ? `Preço de venda (por ${siglaVenda})` : 'Preço de venda'}
           obrigatorio
           erro={errors.precoVenda?.message}
-          inputProps={register('precoVenda', { onChange: aoAlterarCampo })}
+          aoAlterar={aoAlterarCampo}
           disabled={desabilitado}
-          type="number"
-          step="0.01"
-          min="0"
         />
         <div className="md:col-span-2">
           <CodigosBarrasDoProduto
