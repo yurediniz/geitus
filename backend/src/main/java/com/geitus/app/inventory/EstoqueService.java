@@ -60,7 +60,7 @@ public class EstoqueService {
     static final String MENSAGEM_CHAVE_COM_OUTROS_DADOS = "Esta operação já foi registrada com outros dados.";
 
     /** Maior valor de {@code NUMERIC(12,3)}: acima disso o banco recusaria com erro generico. */
-    static final BigDecimal SALDO_MAXIMO = new BigDecimal("999999999.999");
+    static final BigDecimal SALDO_MAXIMO = QuantidadeDeEstoque.MAXIMO;
 
     private static final String CONSTRAINT_DA_CHAVE = "uq_movimento_estoque_chave";
 
@@ -215,11 +215,13 @@ public class EstoqueService {
                 });
     }
 
+    /** Mesmo produto, tipo, motivo, quantidade informada e observacao (aparada; vazia = sem). */
     private static boolean mesmoPedido(MovimentoEstoque gravado, UUID produtoId, AjusteEstoqueRequest request) {
         return gravado.getProduto().getUuid().equals(produtoId)
                 && gravado.getTipo() == request.tipo()
                 && gravado.getMotivo() == request.motivo()
-                && gravado.quantidadeInformada().compareTo(request.quantidade()) == 0;
+                && gravado.quantidadeInformada().compareTo(request.quantidade()) == 0
+                && Objects.equals(gravado.getObservacao(), normalizarOuNulo(request.observacao()));
     }
 
     /** Se a violacao de integridade foi a da chave de idempotencia (e nao outra constraint). */
@@ -236,8 +238,9 @@ public class EstoqueService {
 
     /**
      * {@code INSERT ... ON CONFLICT DO NOTHING} e depois {@code SELECT ... FOR
-     * UPDATE}: o primeiro movimento do produto cria a linha sem erro mesmo com
-     * outro pedido simultaneo (Review Focus 1).
+     * UPDATE}. Quem chama ja travou o produto, o que poe em fila os movimentos
+     * dele; este passo e a segunda defesa: o primeiro movimento cria a linha sem
+     * erro mesmo num caminho que nao trave o produto (Review Focus 1).
      */
     private EstoqueSaldo travarSaldo(Produto produto) {
         saldoRepository.garantirLinha(produto.getEmpresaId(), produto.getId());

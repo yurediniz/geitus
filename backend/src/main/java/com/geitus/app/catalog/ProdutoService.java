@@ -245,14 +245,18 @@ public class ProdutoService {
         return gravado;
     }
 
+    /**
+     * Inativar e reativar travam a linha (como a edicao): uma edicao
+     * concorrente nao e sobrescrita pelo estado lido antes dela (lost update).
+     */
     Produto inativar(Long empresaId, UUID produtoId) {
-        Produto produto = buscarPorId(empresaId, produtoId);
+        Produto produto = buscarParaAtualizar(empresaId, produtoId);
         produto.inativar();
         return produtoRepository.save(produto);
     }
 
     Produto reativar(Long empresaId, UUID produtoId) {
-        Produto produto = buscarPorId(empresaId, produtoId);
+        Produto produto = buscarParaAtualizar(empresaId, produtoId);
         produto.ativar();
         return produtoRepository.save(produto);
     }
@@ -315,6 +319,12 @@ public class ProdutoService {
     private ResumoDeEstoque resumoDeEstoque(Produto produto) {
         return usoNoEstoque.resumos(produto.getEmpresaId(), Collections.singletonList(produto.getId()))
                 .getOrDefault(produto.getId(), ResumoDeEstoque.VAZIO);
+    }
+
+    /** Produto da empresa com trava de escrita (ver {@link ProdutoRepository#buscarPorUuidParaAtualizar}). */
+    private Produto buscarParaAtualizar(Long empresaId, UUID produtoId) {
+        return produtoRepository.buscarPorUuidParaAtualizar(produtoId, empresaId)
+                .orElseThrow(ProdutoNaoEncontradoException::new);
     }
 
     Produto buscarPorId(Long empresaId, UUID produtoId) {

@@ -360,14 +360,17 @@ class ProdutoServiceTest {
         verify(produtoRepository, never()).findByUuidAndEmpresa_Id(any(), anyLong());
     }
 
+    /** Inativar e reativar travam a linha: nao sobrescrevem uma edicao concorrente (lost update). */
     @Test
-    void inativarNaoTravaOProduto() {
+    void inativarEReativarTravamOProduto() {
         produtoExistente();
         salvamentoDevolveOProduto();
 
         produtoService.inativar(EMPRESA_ID, produtoUuid);
+        produtoService.reativar(EMPRESA_ID, produtoUuid);
 
-        verify(produtoRepository, never()).buscarPorUuidParaAtualizar(any(), anyLong());
+        verify(produtoRepository, times(2)).buscarPorUuidParaAtualizar(produtoUuid, EMPRESA_ID);
+        verify(produtoRepository, never()).findByUuidAndEmpresa_Id(any(), anyLong());
     }
 
     @Test
@@ -840,17 +843,6 @@ class ProdutoServiceTest {
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
 
         verify(produtoRepository, never()).delete(any());
-    }
-
-    @Test
-    void podeExcluirNestaFaseSempreVerdadeiroERespostaInforma() {
-        usuarioAtivoDaEmpresa(9L);
-        produtoExistente();
-
-        ProdutoResponse resposta = produtoService.buscarPorIdParaUsuario(9L, produtoUuid);
-
-        assertThat(resposta.podeExcluir()).isTrue();
-        assertThat(resposta.id()).isEqualTo(produtoUuid);
     }
 
     // ---------- Listagem ----------
@@ -1882,7 +1874,7 @@ class ProdutoServiceTest {
 
         assertThatThrownBy(() -> cadastrar(comUnidade(kg.getUuid()).estoqueInicial("1.0005").build()))
                 .isInstanceOf(RegraDeNegocioException.class)
-                .hasMessage("A quantidade deve ter no máximo 3 casas decimais.")
+                .hasMessage("A quantidade deve ter no máximo 9 dígitos inteiros e 3 casas decimais.")
                 .satisfies(noCampo("estoqueInicial"));
     }
 

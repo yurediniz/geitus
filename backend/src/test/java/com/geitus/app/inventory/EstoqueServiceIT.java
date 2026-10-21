@@ -25,6 +25,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -33,6 +34,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.geitus.app.catalog.ProdutoConflitoException;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
+import com.geitus.app.catalog.RegraDeNegocioException;
 import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.inventory.EstoqueService.ResultadoAjuste;
 import com.geitus.app.inventory.dto.AjusteEstoqueRequest;
@@ -100,8 +102,11 @@ class EstoqueServiceIT {
     /**
      * Dois primeiros movimentos do produto ao mesmo tempo, sem linha de saldo:
      * nenhum erro, saldo final = soma e a cadeia fechada (o saldo anterior de um
-     * e o saldo novo do outro). Repetido em varias rodadas, cada uma com um
-     * produto novo, para dar chance real a corrida.
+     * e o saldo novo do outro). A trava do produto ja poe os dois pedidos em
+     * fila; o {@code INSERT ... ON CONFLICT DO NOTHING} seguido de
+     * {@code FOR UPDATE} no saldo e a segunda defesa, para caminhos que nao
+     * travem o produto. Repetido em varias rodadas, cada uma com um produto
+     * novo, para dar chance real a corrida.
      */
     @Test
     void ajustesConcorrentesMantemACadeia() throws Exception {
@@ -140,6 +145,49 @@ class EstoqueServiceIT {
         return () -> {
             largada.await(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS);
             return estoqueService.ajustarParaUsuario(idUsuario, produto, request);
+        };
+    }
+
+    /**
+     * Saldo 5 e duas saidas de 3 ao mesmo tempo: uma grava e a outra recebe 400
+     * com o saldo que sobrou. Nunca negativo, nunca 500.
+     */
+    @Test
+    void saidasConcorrentesNuncaNegativam() throws Exception {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            for (int rodada = 1; rodada <= RODADAS_CONCORRENTES; rodada++) {
+                UUID produto = cenario.novoProduto(empresa, "UN", "Sabão " + rodada);
+                estoqueService.ajustarParaUsuario(empresa.admin(), produto, entrada("5"));
+                CyclicBarrier largada = new CyclicBarrier(2);
+
+                Future<String> uma = executor.submit(saidaAoMesmoTempo(largada, empresa.admin(), produto));
+                Future<String> outra = executor.submit(saidaAoMesmoTempo(largada, empresa.admin(), produto));
+
+                assertThat(List.of(uma.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS),
+                        outra.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS)))
+                        .as("rodada %d", rodada)
+                        .containsExactlyInAnyOrder("criado", "Saldo insuficiente: há 2 UN.");
+                assertThat(cenario.saldo(produto)).isEqualByComparingTo("2");
+                assertThat(cenario.contarMovimentos(produto)).isEqualTo(2);
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    /** Saida de 3; {@code "criado"} ou a mensagem do 400. Qualquer outro erro sobe e falha o teste. */
+    private Callable<String> saidaAoMesmoTempo(CyclicBarrier largada, Long idUsuario, UUID produto) {
+        return () -> {
+            largada.await(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS);
+            try {
+                estoqueService.ajustarParaUsuario(idUsuario, produto, new AjusteEstoqueRequest(TipoMovimento.SAIDA,
+                        new BigDecimal("3"), MotivoMovimento.PERDA_AVARIA, null, UUID.randomUUID()));
+                return "criado";
+            } catch (RegraDeNegocioException regra) {
+                return regra.getMessage();
+            }
         };
     }
 
@@ -206,10 +254,17 @@ class EstoqueServiceIT {
                 Future<String> noArroz = executor.submit(desfecho(largada, empresa.admin(), arroz, chave));
                 Future<String> noFeijao = executor.submit(desfecho(largada, empresa.admin(), feijao, chave));
 
-                assertThat(List.of(noArroz.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS),
-                        noFeijao.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS)))
+                String desfechoNoArroz = noArroz.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS);
+                String desfechoNoFeijao = noFeijao.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS);
+                assertThat(List.of(desfechoNoArroz, desfechoNoFeijao))
                         .as("rodada %d", rodada).containsExactlyInAnyOrder("criado", "409");
-                assertThat(cenario.contarMovimentos(arroz) + cenario.contarMovimentos(feijao)).isEqualTo(1);
+                UUID perdedor = desfechoNoArroz.equals("409") ? arroz : feijao;
+                UUID vencedor = perdedor.equals(arroz) ? feijao : arroz;
+                assertThat(cenario.contarMovimentos(perdedor)).isZero();
+                assertThat(cenario.saldo(perdedor)).as("rodada %d: saldo do perdedor", rodada)
+                        .isEqualByComparingTo("0");
+                assertThat(cenario.contarMovimentos(vencedor)).isEqualTo(1);
+                assertThat(cenario.saldo(vencedor)).isEqualByComparingTo("1");
             }
         } finally {
             executor.shutdownNow();
@@ -308,16 +363,25 @@ class EstoqueServiceIT {
 
     // ---------- Documentacao da API (Task 4) ----------
 
-    /** O OpenAPI gerado traz os endpoints de estoque e os campos novos do produto. */
+    /** O OpenAPI gerado traz os endpoints de estoque, os codigos de resposta e os campos novos do produto. */
     @Test
     void openApiDocumentaOsEndpointsDeEstoque() throws Exception {
-        mockMvc.perform(get("/v3/api-docs"))
+        String ajustes = "$.paths['/api/produtos/{id}/estoque/ajustes'].post";
+        String movimentos = "$.paths['/api/produtos/{id}/estoque/movimentos'].get";
+        ResultActions documento = mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.paths['/api/produtos/{id}/estoque/ajustes'].post.summary").exists())
-                .andExpect(jsonPath("$.paths['/api/produtos/{id}/estoque/movimentos'].get.summary").exists())
+                .andExpect(jsonPath(ajustes + ".summary").exists())
+                .andExpect(jsonPath(ajustes + ".responses['201'].content").exists())
+                .andExpect(jsonPath(movimentos + ".summary").exists())
                 .andExpect(jsonPath("$.components.schemas.AjusteEstoqueRequest.properties.chave").exists())
                 .andExpect(jsonPath("$.components.schemas.MovimentoEstoqueResponse.properties.usuarioNome").exists())
                 .andExpect(jsonPath("$.components.schemas.ProdutoRequest.properties.estoqueInicial").exists())
                 .andExpect(jsonPath("$.components.schemas.ProdutoResponse.properties.situacaoEstoque").exists());
+        for (String codigo : List.of("200", "201", "400", "401", "403", "404", "409")) {
+            documento.andExpect(jsonPath(ajustes + ".responses['" + codigo + "']").exists());
+        }
+        for (String codigo : List.of("200", "400", "401", "404")) {
+            documento.andExpect(jsonPath(movimentos + ".responses['" + codigo + "']").exists());
+        }
     }
 }

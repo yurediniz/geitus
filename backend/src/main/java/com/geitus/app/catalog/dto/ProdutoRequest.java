@@ -148,6 +148,6 @@ public record ProdutoRequest(
 
         @Schema(description = "Estoque inicial (opcional, maior que zero), so no cadastro; registrado como a "
                 + "primeira entrada. Fracao so em unidade fracionada.", example = "12")
-        @Digits(integer = 9, fraction = 3, message = "O estoque inicial deve ter no máximo 3 casas decimais.")
+        @Digits(integer = 9, fraction = 3, message = "O estoque inicial deve ter no máximo 9 dígitos inteiros e 3 casas decimais.")
         BigDecimal estoqueInicial) {
 }

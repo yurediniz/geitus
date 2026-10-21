@@ -34,7 +34,7 @@ public record AjusteEstoqueRequest(
                 + "(zero ou mais). Ate 3 casas decimais; fracao so em unidade fracionada.", example = "2")
         @NotNull(message = "Informe a quantidade.")
         @DecimalMin(value = "0", message = "A quantidade não pode ser negativa.")
-        @Digits(integer = 9, fraction = 3, message = "A quantidade deve ter no máximo 3 casas decimais.")
+        @Digits(integer = 9, fraction = 3, message = "A quantidade deve ter no máximo 9 dígitos inteiros e 3 casas decimais.")
         BigDecimal quantidade,
 
         @Schema(description = "Motivo do tipo escolhido (ESTOQUE_INICIAL e VENDA sao do sistema)",

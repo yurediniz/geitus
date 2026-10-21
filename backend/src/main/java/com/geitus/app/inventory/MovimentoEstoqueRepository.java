@@ -51,19 +51,27 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
     /**
      * Contagem de movimentos por produto, em uma consulta: o total e os que nao
      * sao da origem informada (o estoque inicial, {@code CADASTRO}). Produto sem
-     * movimentos fica fora da lista.
+     * movimentos fica fora da lista. Os ids vao num unico parametro de array
+     * ({@code = ANY}), sem depender do numero de produtos.
      */
-    @Query("""
-            SELECT new com.geitus.app.inventory.ContagemDeMovimentos(
-                       m.produto.id, count(m), sum(CASE WHEN m.origem <> :origemInicial THEN 1 ELSE 0 END))
-              FROM MovimentoEstoque m
-             WHERE m.empresaId = :empresaId
-               AND m.produto.id IN :produtoIds
-             GROUP BY m.produto.id
-            """)
-    List<ContagemDeMovimentos> contagens(@Param("empresaId") Long empresaId,
-            @Param("produtoIds") Collection<Long> produtoIds,
-            @Param("origemInicial") OrigemMovimento origemInicial);
+    default List<ContagemDeMovimentos> contagens(Long empresaId, Collection<Long> produtoIds,
+            OrigemMovimento origemInicial) {
+        return linhasDeContagem(empresaId, produtoIds.toArray(Long[]::new), origemInicial.name()).stream()
+                .map(linha -> new ContagemDeMovimentos(((Number) linha[0]).longValue(),
+                        ((Number) linha[1]).longValue(), ((Number) linha[2]).longValue()))
+                .toList();
+    }
+
+    /** Linhas {@code [produto_id, total, nao_iniciais]}; use {@link #contagens}. */
+    @Query(value = """
+            SELECT m.produto_id, count(*), count(*) FILTER (WHERE m.origem <> :origemInicial)
+              FROM movimentos_estoque m
+             WHERE m.empresa_id = :empresaId
+               AND m.produto_id = ANY(:produtoIds)
+             GROUP BY m.produto_id
+            """, nativeQuery = true)
+    List<Object[]> linhasDeContagem(@Param("empresaId") Long empresaId, @Param("produtoIds") Long[] produtoIds,
+            @Param("origemInicial") String origemInicial);
 
     /** Se algum produto da empresa com esta unidade de venda tem movimento de estoque. */
     @Query("""

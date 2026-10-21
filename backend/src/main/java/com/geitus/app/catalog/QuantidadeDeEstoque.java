@@ -8,7 +8,7 @@ import com.geitus.app.catalog.unidade.UnidadeMedida;
  * Regras de uma quantidade de estoque informada pelo usuario
  * (docs/modules/produtos-estoque.md, 4.2 e 4.4), comuns ao estoque inicial do
  * cadastro e ao ajuste manual: nao negativa, maior que zero quando o zero nao
- * vale, ate 3 casas ({@code NUMERIC(12,3)}, V9) e fracao so em unidade
+ * vale, ate 9 digitos inteiros e 3 casas ({@code NUMERIC(12,3)}, V9) e fracao so em unidade
  * fracionada. O erro aponta o campo do request ({@code campos}).
  */
 public final class QuantidadeDeEstoque {
@@ -18,7 +18,9 @@ public final class QuantidadeDeEstoque {
 
     static final String MENSAGEM_NEGATIVA = "A quantidade não pode ser negativa.";
     static final String MENSAGEM_NAO_POSITIVA = "Informe uma quantidade maior que zero.";
-    static final String MENSAGEM_CASAS_DECIMAIS = "A quantidade deve ter no máximo 3 casas decimais.";
+    static final String MENSAGEM_LIMITE = "A quantidade deve ter no máximo 9 dígitos inteiros e 3 casas decimais.";
+    /** Maior valor de {@code NUMERIC(12,3)} (9 digitos inteiros e 3 casas). */
+    public static final BigDecimal MAXIMO = new BigDecimal("999999999.999");
 
     private QuantidadeDeEstoque() {
         // Apenas metodos estaticos.
@@ -41,8 +43,8 @@ public final class QuantidadeDeEstoque {
         if (quantidade.signum() == 0 && !zeroValido) {
             throw new RegraDeNegocioException(MENSAGEM_NAO_POSITIVA, campo);
         }
-        if (quantidade.stripTrailingZeros().scale() > CASAS_DECIMAIS) {
-            throw new RegraDeNegocioException(MENSAGEM_CASAS_DECIMAIS, campo);
+        if (quantidade.stripTrailingZeros().scale() > CASAS_DECIMAIS || quantidade.compareTo(MAXIMO) > 0) {
+            throw new RegraDeNegocioException(MENSAGEM_LIMITE, campo);
         }
         if (quantidade.signum() > 0 && !UnidadeMedida.quantidadeValida(unidade.isFracionada(), quantidade)) {
             throw new RegraDeNegocioException(UnidadeMedida.mensagemSemFracao(unidade.getSigla()), campo);

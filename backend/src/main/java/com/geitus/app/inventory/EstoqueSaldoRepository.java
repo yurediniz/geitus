@@ -1,5 +1,6 @@
 package com.geitus.app.inventory;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -20,10 +21,10 @@ public interface EstoqueSaldoRepository extends JpaRepository<EstoqueSaldo, Long
 
     /**
      * Cria a linha de saldo do produto com saldo 0, se ainda nao existir.
-     * Concorrencia (spec 4.5): dois primeiros movimentos simultaneos tentam
-     * inserir; um insere e o outro espera e nao faz nada (sem erro de
-     * unicidade). Em seguida os dois travam a mesma linha com
-     * {@link #buscarParaAtualizar}.
+     * Concorrencia (spec 4.5): os movimentos de um produto ja chegam em fila
+     * pela trava do produto; se dois primeiros movimentos chegarem juntos por
+     * outro caminho, um insere e o outro espera e nao faz nada (sem erro de
+     * unicidade). Em seguida a linha e travada com {@link #buscarParaAtualizar}.
      */
     @Modifying
     @Query(value = """
@@ -47,15 +48,26 @@ public interface EstoqueSaldoRepository extends JpaRepository<EstoqueSaldo, Long
     Optional<EstoqueSaldo> buscarParaAtualizar(@Param("empresaId") Long empresaId,
             @Param("produtoId") Long produtoId);
 
-    /** Saldos dos produtos da empresa, em uma consulta; produto sem linha fica fora da lista (saldo 0). */
-    @Query("""
-            SELECT new com.geitus.app.inventory.SaldoPorProduto(s.produtoId, s.saldo)
-              FROM EstoqueSaldo s
-             WHERE s.empresaId = :empresaId
-               AND s.produtoId IN :produtoIds
-            """)
-    List<SaldoPorProduto> saldos(@Param("empresaId") Long empresaId,
-            @Param("produtoIds") Collection<Long> produtoIds);
+    /**
+     * Saldos dos produtos da empresa, em uma consulta; produto sem linha fica
+     * fora da lista (saldo 0). Os ids vao num unico parametro de array
+     * ({@code = ANY}), e nao um parametro por id como no {@code IN}: a listagem
+     * nao esbarra no limite de parametros do PostgreSQL.
+     */
+    default List<SaldoPorProduto> saldos(Long empresaId, Collection<Long> produtoIds) {
+        return linhasDeSaldo(empresaId, produtoIds.toArray(Long[]::new)).stream()
+                .map(linha -> new SaldoPorProduto(((Number) linha[0]).longValue(), (BigDecimal) linha[1]))
+                .toList();
+    }
+
+    /** Linhas {@code [produto_id, saldo]}; use {@link #saldos}. */
+    @Query(value = """
+            SELECT s.produto_id, s.saldo
+              FROM estoque_saldos s
+             WHERE s.empresa_id = :empresaId
+               AND s.produto_id = ANY(:produtoIds)
+            """, nativeQuery = true)
+    List<Object[]> linhasDeSaldo(@Param("empresaId") Long empresaId, @Param("produtoIds") Long[] produtoIds);
 
     /** Apaga a linha de saldo do produto (so na exclusao de produto com apenas o estoque inicial). */
     @Modifying

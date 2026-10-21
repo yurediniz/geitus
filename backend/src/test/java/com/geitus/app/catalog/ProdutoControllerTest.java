@@ -959,7 +959,35 @@ class ProdutoControllerTest {
                         .content(corpo("Produto", "10.00", "\"estoqueInicial\": 1.2345")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.campos[?(@.campo=='estoqueInicial')].mensagem")
-                        .value("O estoque inicial deve ter no máximo 3 casas decimais."));
+                        .value("O estoque inicial deve ter no máximo 9 dígitos inteiros e 3 casas decimais."));
+
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void estoqueInicialComDezDigitosInteiros_400() throws Exception {
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corpo("Produto", "10.00", "\"estoqueInicial\": 1000000000")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[?(@.campo=='estoqueInicial')].mensagem")
+                        .value("O estoque inicial deve ter no máximo 9 dígitos inteiros e 3 casas decimais."));
+
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void patchSemControlaEstoque_400() throws Exception {
+        String semControle = "{ \"nome\": \"Produto\", \"precoVenda\": 10.00, " + UNIDADE_JSON + " }";
+
+        mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID)
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(semControle))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[?(@.campo=='controlaEstoque')].mensagem")
+                        .value("Informe se o produto controla estoque."));
 
         verifyNoInteractions(produtoService);
     }

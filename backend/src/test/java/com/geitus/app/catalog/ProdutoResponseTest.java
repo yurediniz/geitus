@@ -257,6 +257,14 @@ class ProdutoResponseTest {
         assertThat(response.situacaoEstoque()).isEqualTo(SituacaoEstoque.BAIXO);
     }
 
+    /** O saldo sai sempre com 3 casas, como a coluna NUMERIC(12,3). */
+    @Test
+    void saldoDoResumoSempreComTresCasas() {
+        assertThat(new ResumoDeEstoque(new BigDecimal("5"), 1, 0).saldo()).isEqualTo(new BigDecimal("5.000"));
+        assertThat(new ResumoDeEstoque(new BigDecimal("2.5"), 1, 0).saldo()).isEqualTo(new BigDecimal("2.500"));
+        assertThat(ResumoDeEstoque.VAZIO.saldo()).isEqualTo(new BigDecimal("0.000"));
+    }
+
     @Test
     void semControleMantemOSaldoESituacaoNula() {
         Produto produto = ProdutoTesteBuilder.produto(empresa, un).semControleDeEstoque().build();
@@ -273,7 +281,7 @@ class ProdutoResponseTest {
     void resumoVazioTemSaldoZeroESemEstoque() {
         ProdutoResponse response = responder(ProdutoTesteBuilder.produto(empresa, un).build());
 
-        assertThat(response.estoqueAtual()).isEqualByComparingTo("0");
+        assertThat(response.estoqueAtual()).isEqualTo(new BigDecimal("0.000"));
         assertThat(response.situacaoEstoque()).isEqualTo(SituacaoEstoque.SEM_ESTOQUE);
         assertThat(ResumoDeEstoque.VAZIO.temMovimentos()).isFalse();
         assertThat(ResumoDeEstoque.VAZIO.permiteExcluir()).isTrue();

@@ -6,7 +6,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
@@ -14,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.LongStream;
 
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -33,7 +36,9 @@ import com.geitus.app.catalog.ProdutoConflitoException;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
 import com.geitus.app.catalog.ProdutoService;
 import com.geitus.app.catalog.RegraDeNegocioException;
+import com.geitus.app.catalog.ResumoDeEstoque;
 import com.geitus.app.catalog.SituacaoEstoque;
+import com.geitus.app.catalog.UsoDoProdutoNoEstoque;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaRequest;
@@ -92,6 +97,9 @@ class EstoqueCatalogoIT {
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
+
+    @Autowired
+    private UsoDoProdutoNoEstoque usoNoEstoque;
 
     /** Spy (chama o real por padrao) para simular falha ao gravar o movimento; resetado apos cada teste. */
     @MockitoSpyBean
@@ -292,6 +300,31 @@ class EstoqueCatalogoIT {
                 new UnidadeMedidaRequest("L", "Litro", false)).fracionada()).isFalse();
     }
 
+    @Test
+    void desligarFracionadaDeUnidadeUsadaPorProdutoSemMovimento_ok() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        cenario.novoProduto(empresa, "KG", "Ração a granel");
+        UUID kg = cenario.unidade(empresa, "KG");
+
+        assertThat(unidadeService.atualizarParaUsuario(empresa.admin(), kg,
+                new UnidadeMedidaRequest("KG", "Quilograma", false)).fracionada()).isFalse();
+    }
+
+    /** Produto KG movimentado na empresa A nao bloqueia o KG da empresa B (DEC-016). */
+    @Test
+    void produtoMovimentadoDeOutraEmpresaNaoBloqueiaAUnidade() {
+        CenarioDeEstoque.EmpresaDeTeste empresaA = cenario.novaEmpresa();
+        CenarioDeEstoque.EmpresaDeTeste empresaB = cenario.novaEmpresa();
+        cadastrarComEstoqueInicial(empresaA, "KG", "Ração da A", "2.5");
+        cenario.novoProduto(empresaB, "KG", "Ração da B");
+
+        assertThat(unidadeService.atualizarParaUsuario(empresaB.admin(), cenario.unidade(empresaB, "KG"),
+                new UnidadeMedidaRequest("KG", "Quilograma", false)).fracionada()).isFalse();
+        assertThatThrownBy(() -> unidadeService.atualizarParaUsuario(empresaA.admin(), cenario.unidade(empresaA, "KG"),
+                new UnidadeMedidaRequest("KG", "Quilograma", false)))
+                .isInstanceOf(RegraDeNegocioException.class);
+    }
+
     // ---------- Controle desligado (Review Focus 4) ----------
 
     @Test
@@ -328,21 +361,53 @@ class EstoqueCatalogoIT {
     @Test
     void listagemCarregaEstoqueEmLote() {
         CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
-        cadastrarComEstoqueInicial(empresa, "UN", "Produto 1", "1");
-        cadastrarComEstoqueInicial(empresa, "UN", "Produto 2", "2");
-        long comandosComDois = comandosAoListar(empresa, 2);
+        tresProdutosComEstoquesDiferentes(empresa, "A");
+        long comandosComTres = comandosAoListar(empresa, 3);
 
-        for (int indice = 3; indice <= 6; indice++) {
-            cadastrarComEstoqueInicial(empresa, "UN", "Produto " + indice, String.valueOf(indice));
-        }
+        tresProdutosComEstoquesDiferentes(empresa, "B");
         long comandosComSeis = comandosAoListar(empresa, 6);
 
-        assertThat(comandosComSeis).isEqualTo(comandosComDois);
-        assertThat(produtoService.listarParaUsuario(empresa.admin(), null, null))
-                .extracting(ProdutoResponse::estoqueAtual)
-                .usingElementComparator(BigDecimal::compareTo)
-                .containsExactly(BigDecimal.ONE, new BigDecimal("2"), new BigDecimal("3"), new BigDecimal("4"),
-                        new BigDecimal("5"), new BigDecimal("6"));
+        assertThat(comandosComSeis).isEqualTo(comandosComTres);
+        List<ProdutoResponse> listados = produtoService.listarParaUsuario(empresa.admin(), null, null);
+        assertThat(listados).extracting(ProdutoResponse::podeExcluir)
+                .containsExactly(true, true, false, true, true, false);
+        assertThat(listados).extracting(ProdutoResponse::estoqueAtual)
+                .containsExactly(new BigDecimal("0.000"), new BigDecimal("2.000"), new BigDecimal("3.000"),
+                        new BigDecimal("0.000"), new BigDecimal("2.000"), new BigDecimal("3.000"));
+    }
+
+    /** Sem movimento, so com o estoque inicial e com ajuste, nessa ordem alfabetica. */
+    private void tresProdutosComEstoquesDiferentes(CenarioDeEstoque.EmpresaDeTeste empresa, String serie) {
+        cenario.novoProduto(empresa, "UN", serie + "1 sem movimento");
+        cadastrarComEstoqueInicial(empresa, "UN", serie + "2 so inicial", "2");
+        UUID comAjuste = cadastrarComEstoqueInicial(empresa, "UN", serie + "3 com ajuste", "2").id();
+        estoqueService.ajustarParaUsuario(empresa.admin(), comAjuste, entrada("1"));
+    }
+
+    /**
+     * O resumo nao depende do numero de ids (sem {@code IN} com um parametro
+     * por id): mais ids que o limite de parametros do PostgreSQL (32767) passam.
+     */
+    @Test
+    void resumosAceitaMaisIdsQueOLimiteDeParametros() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ProdutoResponse cadastrado = cadastrarComEstoqueInicial(empresa, "UN", "Arroz", "4");
+        Long idInterno = cenario.idInterno(cadastrado.id());
+        List<Long> ids = new ArrayList<>(LongStream.rangeClosed(1, 40_000).boxed().toList());
+        ids.add(idInterno);
+
+        Map<Long, ResumoDeEstoque> resumos = usoNoEstoque.resumos(empresa.empresa().getId(), ids);
+
+        assertThat(resumos.get(idInterno)).isEqualTo(new ResumoDeEstoque(new BigDecimal("4.000"), 1, 0));
+    }
+
+    @Test
+    void produtoSemLinhaDeSaldoTemSaldoZeroComTresCasas() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        UUID produto = cenario.novoProduto(empresa, "UN", "Sem estoque");
+
+        assertThat(produtoService.buscarPorIdParaUsuario(empresa.admin(), produto).estoqueAtual())
+                .isEqualTo(new BigDecimal("0.000"));
     }
 
     private long comandosAoListar(CenarioDeEstoque.EmpresaDeTeste empresa, int esperados) {

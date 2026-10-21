@@ -8,6 +8,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -22,7 +23,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.geitus.app.catalog.Produto;
@@ -64,14 +67,17 @@ class EstoqueServiceTest {
 
     private EstoqueService estoqueService;
 
+    private PlatformTransactionManager transacoes;
+
     private Empresa empresa;
     private UnidadeMedida un;
     private UnidadeMedida kg;
 
     @BeforeEach
     void setUp() {
+        transacoes = mock(PlatformTransactionManager.class);
         estoqueService = new EstoqueService(produtoRepository, usuarioRepository, saldoRepository,
-                movimentoRepository, mock(PlatformTransactionManager.class));
+                movimentoRepository, transacoes);
         empresa = ProdutosDeTeste.empresa(EMPRESA_ID);
         un = ProdutosDeTeste.unidade(empresa, "UN", false);
         kg = ProdutosDeTeste.unidade(empresa, "KG", true);
@@ -248,6 +254,15 @@ class EstoqueServiceTest {
                 "O saldo não pode passar de 999.999.999,999.", "quantidade");
     }
 
+    @Test
+    void entradaAteOLimiteExatoEAceita() {
+        Produto produto = produtoComSaldo(kg, "999999999.998");
+
+        ResultadoAjuste resultado = ajustar(produto, ajuste(TipoMovimento.ENTRADA, "0.001", MotivoMovimento.COMPRA));
+
+        assertThat(resultado.movimento().saldoNovo()).isEqualByComparingTo("999999999.999");
+    }
+
     // ---------- Quantidade e unidade ----------
 
     @Test
@@ -291,7 +306,15 @@ class EstoqueServiceTest {
         Produto produto = produtoComSaldo(kg, "10");
 
         assertRegra(() -> ajustar(produto, ajuste(TipoMovimento.ENTRADA, "1.0001", MotivoMovimento.COMPRA)),
-                "A quantidade deve ter no máximo 3 casas decimais.", "quantidade");
+                "A quantidade deve ter no máximo 9 dígitos inteiros e 3 casas decimais.", "quantidade");
+    }
+
+    @Test
+    void quantidadeComDezDigitosInteiros_400() {
+        Produto produto = produtoComSaldo(un, "0");
+
+        assertRegra(() -> ajustar(produto, ajuste(TipoMovimento.AJUSTE, "1000000000", MotivoMovimento.CONTAGEM)),
+                "A quantidade deve ter no máximo 9 dígitos inteiros e 3 casas decimais.", "quantidade");
     }
 
     // ---------- Motivo e observacao ----------
@@ -431,6 +454,64 @@ class EstoqueServiceTest {
                 null, chave)))
                 .isInstanceOf(ProdutoConflitoException.class)
                 .hasMessage("Esta operação já foi registrada com outros dados.");
+    }
+
+    @Test
+    void chaveRepetidaComOutraObservacao_409() {
+        Produto produto = produtoComSaldo(un, "10");
+        UUID chave = UUID.randomUUID();
+        movimentoJaGravado(produto, chave);
+
+        assertThatThrownBy(() -> ajustar(produto, ajuste(TipoMovimento.SAIDA, "2", MotivoMovimento.PERDA_AVARIA,
+                "Caixa molhada", chave)))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("Esta operação já foi registrada com outros dados.");
+    }
+
+    @Test
+    void chaveRepetidaComAMesmaObservacaoComEspacosEOMesmoPedido() {
+        Produto produto = produtoComSaldo(un, "10");
+        UUID chave = UUID.randomUUID();
+        movimentoJaGravado(produto, chave);
+
+        ResultadoAjuste resultado = ajustar(produto, ajuste(TipoMovimento.SAIDA, "2", MotivoMovimento.PERDA_AVARIA,
+                "  Caixa amassada ", chave));
+
+        assertThat(resultado.criado()).isFalse();
+    }
+
+    /** Violacao de outra constraint nao e tratada como repeticao: sobe como veio, sem segunda transacao. */
+    @Test
+    void violacaoQueNaoEDaChaveERelancadaSemSegundaTransacao() {
+        Produto produto = produtoComSaldo(un, "10");
+        DataIntegrityViolationException violacao = new DataIntegrityViolationException(
+                "new row for relation estoque_saldos violates check constraint ck_estoque_saldo_nao_negativo");
+        when(movimentoRepository.save(any(MovimentoEstoque.class))).thenThrow(violacao);
+
+        assertThatThrownBy(() -> ajustar(produto, ajuste(TipoMovimento.ENTRADA, "1", MotivoMovimento.COMPRA)))
+                .isSameAs(violacao);
+        verify(transacoes, times(1)).getTransaction(any(TransactionDefinition.class));
+    }
+
+    /** Violacao da chave (corrida em outro produto): uma nova transacao le o movimento que ganhou. */
+    @Test
+    void violacaoDaChaveReleOMovimentoNumaNovaTransacao() {
+        Produto produto = produtoComSaldo(un, "10");
+        UUID chave = UUID.randomUUID();
+        MovimentoEstoque vencedor = new MovimentoEstoque(produto, TipoMovimento.ENTRADA, MotivoMovimento.COMPRA,
+                OrigemMovimento.AJUSTE_MANUAL, new BigDecimal("1.000"), new BigDecimal("10.000"),
+                new BigDecimal("11.000"), null, ID_USUARIO, chave);
+        when(movimentoRepository.findByEmpresaIdAndChaveIdempotencia(EMPRESA_ID, chave))
+                .thenReturn(Optional.empty(), Optional.empty(), Optional.of(vencedor));
+        when(movimentoRepository.save(any(MovimentoEstoque.class))).thenThrow(new DataIntegrityViolationException(
+                "duplicate key value violates unique constraint uq_movimento_estoque_chave"));
+
+        ResultadoAjuste resultado = ajustar(produto, ajuste(TipoMovimento.ENTRADA, "1", MotivoMovimento.COMPRA,
+                null, chave));
+
+        assertThat(resultado.criado()).isFalse();
+        assertThat(resultado.movimento().saldoNovo()).isEqualByComparingTo("11");
+        verify(transacoes, times(2)).getTransaction(any(TransactionDefinition.class));
     }
 
     // ---------- Consulta de movimentos ----------

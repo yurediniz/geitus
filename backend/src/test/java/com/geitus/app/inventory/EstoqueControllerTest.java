@@ -190,9 +190,21 @@ class EstoqueControllerTest {
         mockMvc.perform(postarAjuste(corpo).header("Authorization", token(1L, "ADMIN")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.campos[?(@.campo == 'quantidade')].mensagem")
-                        .value("A quantidade deve ter no máximo 3 casas decimais."))
+                        .value("A quantidade deve ter no máximo 9 dígitos inteiros e 3 casas decimais."))
                 .andExpect(jsonPath("$.campos[?(@.campo == 'observacao')].mensagem")
                         .value("A observação deve ter no máximo 200 caracteres."));
+    }
+
+    @Test
+    void quantidadeComDezDigitosInteiros_400() throws Exception {
+        String corpo = AJUSTE_VALIDO.replace("\"quantidade\": 2", "\"quantidade\": 1000000000");
+
+        mockMvc.perform(postarAjuste(corpo).header("Authorization", token(1L, "ADMIN")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[?(@.campo == 'quantidade')].mensagem")
+                        .value("A quantidade deve ter no máximo 9 dígitos inteiros e 3 casas decimais."));
+
+        verifyNoInteractions(estoqueService);
     }
 
     @Test

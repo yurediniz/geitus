@@ -17,9 +17,14 @@ import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.inventory.EstoqueService.ResultadoAjuste;
 import com.geitus.app.inventory.dto.AjusteEstoqueRequest;
 import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
+import com.geitus.app.shared.error.ApiError;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -54,6 +59,23 @@ public class EstoqueController {
                     + "quando a chave ja foi usada com outros dados; 400 para saldo insuficiente, fracao em "
                     + "unidade nao fracionada, motivo fora do tipo ou produto sem controle de estoque.",
             security = @SecurityRequirement(name = "bearer-jwt"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Movimento gravado",
+                    content = @Content(schema = @Schema(implementation = MovimentoEstoqueResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Chave repetida com os mesmos dados: o movimento ja "
+                    + "gravado, sem gravar outro",
+                    content = @Content(schema = @Schema(implementation = MovimentoEstoqueResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Dados invalidos ou regra de estoque (com campos)",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "401", description = "Sem token ou token invalido",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "403", description = "Perfil sem permissao (so ADMIN ajusta)",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "Produto nao encontrado na empresa",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "409", description = "Chave ja usada com outros dados",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
     @PostMapping("/ajustes")
     public ResponseEntity<MovimentoEstoqueResponse> ajustar(
             @AuthenticationPrincipal Long idUsuario,
@@ -68,6 +90,15 @@ public class EstoqueController {
             description = "Paginado: pagina a partir de 0; tamanho de 1 a 100 (padrao 20). Produto de outra "
                     + "empresa responde 404.",
             security = @SecurityRequirement(name = "bearer-jwt"))
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Pagina de movimentos"),
+            @ApiResponse(responseCode = "400", description = "Pagina, tamanho ou identificador invalido",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "401", description = "Sem token ou token invalido",
+                    content = @Content(schema = @Schema(implementation = ApiError.class))),
+            @ApiResponse(responseCode = "404", description = "Produto nao encontrado na empresa",
+                    content = @Content(schema = @Schema(implementation = ApiError.class)))
+    })
     @GetMapping("/movimentos")
     public ResponseEntity<PaginaResponse<MovimentoEstoqueResponse>> movimentos(
             @AuthenticationPrincipal Long idUsuario,
