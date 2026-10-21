@@ -25,7 +25,13 @@ ALTER TABLE produtos
     ADD COLUMN nome_curto VARCHAR(30),
     ADD COLUMN fornecedor VARCHAR(100),
     ADD CONSTRAINT uq_produto_uuid UNIQUE (uuid),
-    ADD CONSTRAINT uq_produto_empresa_id UNIQUE (empresa_id, id);
+    ADD CONSTRAINT uq_produto_empresa_id UNIQUE (empresa_id, id),
+    -- Defesa no banco alem da normalizacao do service (texto aparado; vazio
+    -- vira NULL): nem vazio nem com espacos nas pontas.
+    ADD CONSTRAINT ck_produto_nome_curto_valido
+        CHECK (nome_curto IS NULL OR (nome_curto = btrim(nome_curto) AND nome_curto <> '')),
+    ADD CONSTRAINT ck_produto_fornecedor_valido
+        CHECK (fornecedor IS NULL OR (fornecedor = btrim(fornecedor) AND fornecedor <> ''));
 
 -- =====================================================================
 -- Passo 2: codigos de barras do produto (0..N; o limite de 20 e da aplicacao).
@@ -43,9 +49,10 @@ CREATE TABLE produto_codigos_barras (
     -- O mesmo codigo nao pode estar em dois produtos da empresa nem duas vezes
     -- no mesmo produto. Empresas diferentes podem repetir o codigo.
     CONSTRAINT uq_codigo_barras_empresa UNIQUE (empresa_id, codigo),
-    -- Defesa no banco alem da normalizacao do service: sem espacos nas pontas
-    -- nem internos, e nao vazio.
-    CONSTRAINT ck_codigo_barras_codigo CHECK (codigo = btrim(codigo) AND codigo <> '' AND position(' ' in codigo) = 0),
+    -- Defesa no banco alem da normalizacao do service: nao vazio e sem nenhum
+    -- espaco em branco (\s: espaco, tab, quebra de linha), nas pontas ou interno
+    -- (a mesma classe removida na normalizacao do Passo 3).
+    CONSTRAINT ck_codigo_barras_codigo CHECK (codigo <> '' AND codigo !~ '\s'),
     CONSTRAINT ck_codigo_barras_formato CHECK (formato IN ('EAN8', 'UPCA', 'EAN13', 'OUTRO')),
     CONSTRAINT ck_codigo_barras_ordem CHECK (ordem >= 0)
 );

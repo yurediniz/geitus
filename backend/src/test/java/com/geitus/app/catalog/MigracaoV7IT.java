@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.FlywayException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -27,8 +28,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * produtos com {@code codigo_barras} em coluna unica (como existem hoje), aplica
  * a V7 e confere via JDBC: codigos copiados para {@code produto_codigos_barras}
  * com formato calculado (digito GS1 invalido vira {@code OUTRO}, sem perder
- * dado), uuid preenchido, colunas antigas removidas, isolamento por empresa
- * (DEC-016) e as constraints novas.
+ * dado; tamanho fora de 8/12/13 tambem vira {@code OUTRO}), uuid preenchido,
+ * colunas antigas removidas, isolamento por empresa (DEC-016), as constraints
+ * novas e o aborto da migration quando a normalizacao gera colisao.
  *
  * <p>Requer Docker disponivel no ambiente.
  */
@@ -73,6 +75,60 @@ class MigracaoV7IT {
     }
 
     @Test
+    void tamanhoForaDoGs1ViraOutroMesmoComDigitoValido() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        long gtin14 = inserirProduto(empresa, "Caixa de leite", "17891000315504");
+        long noveDigitos = inserirProduto(empresa, "Interno", "123456789");
+
+        aplicarV7();
+
+        assertThat(codigosDoProduto(gtin14))
+                .as("GTIN-14 com digito valido nao e EAN-8/UPC-A/EAN-13")
+                .containsExactly(new CodigoMigrado("17891000315504", "OUTRO", 0));
+        assertThat(codigosDoProduto(noveDigitos)).containsExactly(new CodigoMigrado("123456789", "OUTRO", 0));
+    }
+
+    @Test
+    void ean8EUpcaComDigitoErradoViramOutro() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        long ean8 = inserirProduto(empresa, "Bala", "96385075");
+        long upca = inserirProduto(empresa, "Refrigerante importado", "036000291453");
+
+        aplicarV7();
+
+        assertThat(codigosDoProduto(ean8)).containsExactly(new CodigoMigrado("96385075", "OUTRO", 0));
+        assertThat(codigosDoProduto(upca)).containsExactly(new CodigoMigrado("036000291453", "OUTRO", 0));
+    }
+
+    /**
+     * '789 1' e '7891' sao distintos na V6, mas iguais depois da normalizacao:
+     * a V7 aborta de proposito (nenhum codigo e descartado em silencio) e, com
+     * DDL transacional, o banco continua inteiro na V6.
+     */
+    @Test
+    void colisaoAposNormalizacaoAbortaEBancoContinuaNaV6() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        inserirProduto(empresa, "Com espaco", "789 1");
+        inserirProduto(empresa, "Sem espaco", "7891");
+
+        assertThatThrownBy(MigracaoV7IT::aplicarV7)
+                .isInstanceOf(FlywayException.class)
+                .hasMessageContaining("uq_codigo_barras_empresa");
+
+        assertThat(contar("""
+                SELECT count(*) FROM information_schema.columns
+                 WHERE table_name = 'produtos' AND column_name = 'codigo_barras'
+                """)).as("coluna antiga continua").isEqualTo(1);
+        assertThat(contar("""
+                SELECT count(*) FROM information_schema.tables WHERE table_name = 'produto_codigos_barras'
+                """)).as("tabela nova nao foi criada").isZero();
+        assertThat(contar("SELECT count(*) FROM produtos WHERE codigo_barras IN ('789 1', '7891')"))
+                .as("dados intactos").isEqualTo(2);
+        assertThat(contar("SELECT max(CAST(version AS INTEGER)) FROM flyway_schema_history WHERE success"))
+                .isEqualTo(6);
+    }
+
+    @Test
     void codigoComEspacosInternosENormalizado() throws SQLException {
         long empresa = inserirEmpresa("Empresa A");
         long produto = inserirProduto(empresa, "Arroz", " 789 1000 315507 ");
@@ -87,11 +143,15 @@ class MigracaoV7IT {
         long empresa = inserirEmpresa("Empresa A");
         long semCodigo = inserirProduto(empresa, "Sem codigo", null);
         long codigoVazio = inserirProduto(empresa, "Codigo vazio", "");
+        long soEspacos = inserirProduto(empresa, "So espacos", "   ");
+        long tabEQuebraDeLinha = inserirProduto(empresa, "Tab e quebra de linha", "\t\n");
 
         aplicarV7();
 
         assertThat(codigosDoProduto(semCodigo)).isEmpty();
         assertThat(codigosDoProduto(codigoVazio)).isEmpty();
+        assertThat(codigosDoProduto(soEspacos)).isEmpty();
+        assertThat(codigosDoProduto(tabEQuebraDeLinha)).isEmpty();
         assertThat(contar("SELECT count(*) FROM produto_codigos_barras")).isZero();
     }
 
@@ -178,6 +238,17 @@ class MigracaoV7IT {
                 "ck_codigo_barras_codigo", VIOLACAO_DE_CHECK);
         assertViolacao(inserirCodigoSql(empresaA, outroProdutoA, "", "OUTRO", 0),
                 "ck_codigo_barras_codigo", VIOLACAO_DE_CHECK);
+        assertViolacao(inserirCodigoSql(empresaA, outroProdutoA, "123' || chr(9) || '45", "OUTRO", 0),
+                "ck_codigo_barras_codigo", VIOLACAO_DE_CHECK);
+        assertViolacao("UPDATE produtos SET nome_curto = '' WHERE id = " + produtoA,
+                "ck_produto_nome_curto_valido", VIOLACAO_DE_CHECK);
+        assertViolacao("UPDATE produtos SET nome_curto = ' Golden' WHERE id = " + produtoA,
+                "ck_produto_nome_curto_valido", VIOLACAO_DE_CHECK);
+        assertViolacao("UPDATE produtos SET fornecedor = '' WHERE id = " + produtoA,
+                "ck_produto_fornecedor_valido", VIOLACAO_DE_CHECK);
+        assertViolacao("UPDATE produtos SET fornecedor = 'Distribuidora ' WHERE id = " + produtoA,
+                "ck_produto_fornecedor_valido", VIOLACAO_DE_CHECK);
+        executar("UPDATE produtos SET nome_curto = 'Golden', fornecedor = 'Distribuidora X' WHERE id = " + produtoA);
         assertViolacao(inserirCodigoSql(empresaA, outroProdutoA, "12345", "OUTRO", -1),
                 "ck_codigo_barras_ordem", VIOLACAO_DE_CHECK);
         assertViolacao(inserirCodigoSql(empresaB, produtoA, "99999", "OUTRO", 0),
