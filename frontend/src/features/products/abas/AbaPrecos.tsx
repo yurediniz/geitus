@@ -1,18 +1,20 @@
 import { useFormContext } from 'react-hook-form'
 
 import { CampoTexto } from '@/features/products/CamposFormulario'
-import { formatarPercentual } from '@/features/products/formatacaoProduto'
+import { formatarMoeda, formatarPercentual } from '@/features/products/formatacaoProduto'
 import { calcularMargemMarkup, type ProdutoFormValues } from '@/features/products/produtoFormulario'
 
 export interface AbaPrecosProps {
-  /** Sigla da unidade de venda escolhida (rotulo "Preço de venda (por UN)"). */
-  siglaVenda: string | undefined
   desabilitado: boolean
   aoAlterarCampo: () => void
 }
 
-/** Aba Precos: preco de venda, custo e preco minimo, com margem/markup derivados. */
-export function AbaPrecos({ siglaVenda, desabilitado, aoAlterarCampo }: AbaPrecosProps) {
+/**
+ * Aba Precos: custo e preco minimo, com margem/markup derivados. O preco de
+ * venda e essencial e fica na aba Geral (cadastro rapido); aqui so aparece
+ * como referencia do calculo.
+ */
+export function AbaPrecos({ desabilitado, aoAlterarCampo }: AbaPrecosProps) {
   const {
     register,
     watch,
@@ -22,21 +24,11 @@ export function AbaPrecos({ siglaVenda, desabilitado, aoAlterarCampo }: AbaPreco
   const { margem, markup } = calcularMargemMarkup(precoVenda, custo)
   const margemTexto = formatarPercentual(margem)
   const markupTexto = formatarPercentual(markup)
+  const precoInformado = precoVenda.trim() !== '' && Number.isFinite(Number(precoVenda))
 
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2">
-        <CampoTexto
-          id="precoVenda"
-          label={siglaVenda ? `Preço de venda (por ${siglaVenda})` : 'Preço de venda'}
-          obrigatorio
-          erro={errors.precoVenda?.message}
-          inputProps={register('precoVenda', { onChange: aoAlterarCampo })}
-          disabled={desabilitado}
-          type="number"
-          step="0.01"
-          min="0"
-        />
         <CampoTexto
           id="custo"
           label="Custo (opcional)"
@@ -66,7 +58,13 @@ export function AbaPrecos({ siglaVenda, desabilitado, aoAlterarCampo }: AbaPreco
           Margem e markup
         </h3>
         {margemTexto || markupTexto ? (
-          <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+          <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
+            {precoInformado && (
+              <div>
+                <dt className="text-muted-foreground">Preço de venda</dt>
+                <dd className="font-semibold tabular-nums">{formatarMoeda(Number(precoVenda))}</dd>
+              </div>
+            )}
             <div>
               <dt className="text-muted-foreground">Margem</dt>
               <dd className="font-semibold tabular-nums">{margemTexto ?? '—'}</dd>
@@ -77,7 +75,7 @@ export function AbaPrecos({ siglaVenda, desabilitado, aoAlterarCampo }: AbaPreco
             </div>
           </dl>
         ) : (
-          <p className="mt-1 text-sm text-muted-foreground">Informe o preço de venda e o custo para ver a margem.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Informe o preço de venda (aba Geral) e o custo para ver a margem.</p>
         )}
       </section>
     </div>

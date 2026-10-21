@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { FormProvider, useForm, type FieldErrors } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Loader2, Trash2, XCircle } from 'lucide-react'
+import { ArrowLeft, Loader2, RotateCcw, Trash2, XCircle } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -26,6 +26,9 @@ import {
   ABAS_PRODUTO,
   CAMPOS_POR_ABA,
   ROTULO_ABA,
+  avaliarNovoCodigo,
+  formatosDoProduto,
+  idDoCampo,
   idUnidadePadrao,
   montarRequest,
   primeiroCampoComErro,
@@ -95,10 +98,21 @@ function mensagemErroSalvar(erro: unknown): string {
 /** Orientacao somada ao 409 de SKU: a sugestao nao reserva o SKU (spec 4.2). */
 const ORIENTACAO_SKU_DUPLICADO = 'Gere outro SKU ou informe um diferente.'
 
-/** Resumo no topo quando o erro do backend foi levado ao campo (aba Codigos). */
-const MENSAGEM_ERRO_NA_ABA_CODIGOS = 'O produto não foi salvo. Confira o erro na aba Códigos.'
+/** Resumo no topo quando o erro foi levado ao campo (que pode estar numa aba fechada). */
+function mensagemErroNaAba(aba: AbaProduto): string {
+  return `O produto não foi salvo. Confira o erro na aba ${ROTULO_ABA[aba]}.`
+}
 
-/** Erro do backend que pertence a um campo da aba Codigos (SKU ou codigos de barras). */
+/** Falha ao salvar mostrada no topo; mudar um dos `campos` a retira (o erro ja esta sendo corrigido). */
+interface ErroAoSalvar {
+  mensagem: string
+  campos: readonly (keyof ProdutoFormValues)[]
+}
+
+/** Tecla do atalho de salvar mostrada na barra de acoes (Cmd no Mac, Ctrl nos demais). */
+const TECLA_ATALHO = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.userAgent) ? '⌘' : 'Ctrl'
+
+/** Erro do backend que pertence a um campo (SKU ou codigos de barras). */
 interface ErroDeCampoDoServidor {
   campo: 'sku' | 'codigosBarras'
   mensagem: string
@@ -190,13 +204,15 @@ interface EstruturaPaginaProps {
   titulo: string
   voltarPara: string
   ativo?: boolean
+  /** Acao junto do selo de status (Inativar/Reativar, so ADMIN). */
+  acaoStatus?: ReactNode
   /** Acoes do cabecalho (ex.: "Excluir"), alinhadas a direita. */
   acoes?: ReactNode
   children: ReactNode
 }
 
 /** Sub-navegacao do catalogo, "Voltar para produtos", titulo e selo de status. */
-function EstruturaPagina({ titulo, voltarPara, ativo, acoes, children }: EstruturaPaginaProps) {
+function EstruturaPagina({ titulo, voltarPara, ativo, acaoStatus, acoes, children }: EstruturaPaginaProps) {
   return (
     <div className="space-y-6">
       <CatalogoNav />
@@ -211,8 +227,12 @@ function EstruturaPagina({ titulo, voltarPara, ativo, acoes, children }: Estrutu
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">{titulo}</h1>
           {ativo !== undefined && <SeloStatus ativo={ativo} />}
+          {acaoStatus}
           {acoes && <div className="ml-auto flex items-center gap-2">{acoes}</div>}
         </div>
+        {ativo === false && (
+          <p className="text-xs text-muted-foreground">Produto inativo não aparece para venda no PDV.</p>
+        )}
       </header>
       {children}
     </div>
@@ -283,10 +303,11 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   const modoNovo = produto === null
 
   const [aba, setAba] = useState<AbaProduto>('geral')
-  const [campoParaFocar, setCampoParaFocar] = useState<keyof ProdutoFormValues | null>(null)
+  // O cadastro novo comeca pelo Nome.
+  const [campoParaFocar, setCampoParaFocar] = useState<keyof ProdutoFormValues | null>(modoNovo ? 'nome' : null)
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null)
   const [erroGeral, setErroGeral] = useState<string | null>(null)
-  const [erroSalvar, setErroSalvar] = useState<string | null>(null)
+  const [erroSalvar, setErroSalvar] = useState<ErroAoSalvar | null>(null)
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false)
   const [erroExcluir, setErroExcluir] = useState<string | null>(null)
   /** Saida apos salvar/excluir: navega no render seguinte, com o aviso de alteracoes ja desligado. */
@@ -312,6 +333,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     reset,
     resetField,
     setError,
+    setValue,
     getValues,
     getFieldState,
     watch,
@@ -325,6 +347,20 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
       navigate(saida.para, { state: saida.estado })
     }
   }, [saida, navigate])
+
+  // O resumo de erro do topo sai quando o campo a que ele se refere e alterado.
+  const camposDoErroSalvar = erroSalvar?.campos
+  useEffect(() => {
+    if (!camposDoErroSalvar || camposDoErroSalvar.length === 0) {
+      return
+    }
+    const assinatura = watch((_, { name }) => {
+      if (name && camposDoErroSalvar.some((campo) => name === campo || name.startsWith(`${campo}.`))) {
+        setErroSalvar(null)
+      }
+    })
+    return () => assinatura.unsubscribe()
+  }, [camposDoErroSalvar, watch])
 
   // Produto novo ja vem com UN (a unidade mais comum), se existir e estiver ativa.
   // Vira o valor padrao do campo: escolher a UN sozinha nao conta como alteracao.
@@ -344,16 +380,16 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     }
   }, [modoNovo, unidades, getValues, getFieldState, resetField])
 
-  // Foco pedido ao salvar com erro ou ao cadastrar outro. O conteudo da aba
-  // recem-ativada monta num render seguinte (Presence do Radix): por isso o
-  // foco vai para a fila, depois desse render. Sem o campo, foca a aba.
+  // Foco pedido ao abrir o cadastro, ao salvar com erro ou ao cadastrar outro.
+  // O conteudo da aba recem-ativada monta num render seguinte (Presence do
+  // Radix): por isso o foco vai para a fila, depois desse render. Sem o campo, foca a aba.
   useEffect(() => {
     if (!campoParaFocar) {
       return
     }
     const timer = window.setTimeout(() => {
       const alvo =
-        document.getElementById(campoParaFocar) ??
+        document.getElementById(idDoCampo(campoParaFocar)) ??
         document.querySelector<HTMLElement>(`[role="tab"][data-aba="${aba}"]`)
       alvo?.focus()
       setCampoParaFocar(null)
@@ -371,7 +407,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     }
     return mapa
   }, [unidades, produto])
-  const siglaVenda = siglaPorId.get(watch('unidadeId'))
+  const formatosGravados = useMemo(() => formatosDoProduto(produto), [produto])
 
   const aoAlterarCampo = () => {
     setMensagemSucesso(null)
@@ -392,26 +428,28 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
         reset(valoresParaCadastrarOutro(valores))
         setMensagemSucesso(`Produto "${salvo.nome}" cadastrado com sucesso.`)
         setAba('geral')
-        setCampoParaFocar('nome')
+        // No cadastro em sequencia com leitor, o proximo produto comeca pelo codigo.
+        setCampoParaFocar('codigosBarras')
         return
       }
       setSaida({
         para: voltarPara,
-        estado: { sucesso: produto ? 'Produto atualizado com sucesso.' : 'Produto cadastrado com sucesso.' },
+        estado: { sucesso: `Produto "${salvo.nome}" ${produto ? 'atualizado' : 'cadastrado'} com sucesso.` },
       })
     },
     onError: async (erro) => {
       setMensagemSucesso(null)
       const erroDeCampo = erroDeCampoDoServidor(erro)
       if (erroDeCampo) {
-        // Mostra o erro junto do campo, na aba Codigos (com o indicador da aba).
+        // Mostra o erro junto do campo (com o indicador da aba).
         setError(erroDeCampo.campo, { type: 'server', message: erroDeCampo.mensagem })
-        setErroSalvar(MENSAGEM_ERRO_NA_ABA_CODIGOS)
-        setAba('codigos')
+        const abaDestino = primeiroCampoComErro((campo) => campo === erroDeCampo.campo, aba)?.aba ?? aba
+        setErroSalvar({ mensagem: mensagemErroNaAba(abaDestino), campos: [erroDeCampo.campo] })
+        setAba(abaDestino)
         setCampoParaFocar(erroDeCampo.campo)
         return
       }
-      setErroSalvar(mensagemErroSalvar(erro))
+      setErroSalvar({ mensagem: mensagemErroSalvar(erro), campos: [] })
       // 400/404: a unidade ou a categoria escolhida pode ter sido inativada ou
       // removida; recarrega as listas para o select e o seletor sairem dela.
       if (erro instanceof HttpError && (erro.status === 400 || erro.status === 404)) {
@@ -467,23 +505,78 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     setErroExcluir(null)
   }
 
-  /** Erro de validacao: vai para a primeira aba com erro e foca o campo. */
+  /** Erro de validacao: vai para a primeira aba com erro (ou fica, se a atual mostra o campo) e foca o campo. */
   const aoInvalidar = (erros: FieldErrors<ProdutoFormValues>) => {
-    const destino = primeiroCampoComErro((campo) => erros[campo] !== undefined)
+    const destino = primeiroCampoComErro((campo) => erros[campo] !== undefined, aba)
     if (destino) {
       setAba(destino.aba)
       setCampoParaFocar(destino.campo)
     }
   }
 
-  const enviar = (acao: AcaoAposSalvar, event?: FormEvent<HTMLFormElement>) =>
-    handleSubmit((valores) => {
+  /**
+   * Codigo digitado e nao adicionado: ao salvar, entra na lista com as mesmas
+   * regras do "Adicionar". Se for barrado, nada e salvo e o erro aparece no
+   * campo (na aba atual, se ela o mostra; senao na Geral).
+   */
+  const incorporarCodigoPendente = (): boolean => {
+    const pendente = getValues('codigoPendente')
+    const resultado = avaliarNovoCodigo(pendente, getValues('codigosBarras'), formatosGravados)
+    if (resultado.tipo === 'vazio') {
+      if (pendente !== '') {
+        setValue('codigoPendente', '')
+      }
+      return true
+    }
+    if (resultado.tipo === 'bloqueado') {
+      setError('codigoPendente', { type: 'manual', message: resultado.motivo })
+      const abaDestino: AbaProduto = aba === 'codigos' ? 'codigos' : 'geral'
+      setMensagemSucesso(null)
+      setErroSalvar({ mensagem: mensagemErroNaAba(abaDestino), campos: ['codigoPendente', 'codigosBarras'] })
+      setAba(abaDestino)
+      setCampoParaFocar('codigoPendente')
+      return false
+    }
+    setValue('codigosBarras', resultado.lista, { shouldDirty: true })
+    setValue('codigoPendente', '')
+    return true
+  }
+
+  const salvando = salvarMutation.isPending || saida !== null
+
+  const enviar = (acao: AcaoAposSalvar) => {
+    if (salvando || somenteLeitura || !incorporarCodigoPendente()) {
+      return
+    }
+    void handleSubmit((valores) => {
       setErroSalvar(null)
       setMensagemSucesso(null)
       salvarMutation.mutate({ valores, acao })
-    }, aoInvalidar)(event)
+    }, aoInvalidar)()
+  }
 
-  const salvando = salvarMutation.isPending || saida !== null
+  /**
+   * Ctrl+Enter (Cmd+Enter no Mac) salva de qualquer campo. No cadastro novo,
+   * Enter sozinho num campo de texto nao envia (so o botao): o leitor de
+   * codigo de barras termina com Enter e o cadastro em sequencia nao pode
+   * sair antes da hora. Na edicao, Enter segue o padrao do navegador.
+   */
+  const aoTeclarNoFormulario = (event: KeyboardEvent<HTMLFormElement>) => {
+    const alvo = event.target
+    // So o que esta no DOM do formulario: paineis em portal (ex.: o de categoria) ficam de fora.
+    if (event.key !== 'Enter' || !(alvo instanceof Node) || !event.currentTarget.contains(alvo)) {
+      return
+    }
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault()
+      enviar('voltar')
+      return
+    }
+    if (modoNovo && alvo instanceof HTMLInputElement) {
+      event.preventDefault()
+    }
+  }
+
   const acaoEmAndamento = salvarMutation.isPending ? salvarMutation.variables?.acao : undefined
   const desabilitado = salvando || somenteLeitura
 
@@ -499,6 +592,28 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
       titulo={produto ? produto.nome : 'Novo produto'}
       voltarPara={voltarPara}
       ativo={produto?.ativo}
+      acaoStatus={
+        produto &&
+        !somenteLeitura && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-11"
+            onClick={() => statusMutation.mutate({ produto, proximoAtivo: !produto.ativo })}
+            disabled={statusMutation.isPending || salvando}
+          >
+            {statusMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : produto.ativo ? (
+              <XCircle className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            )}
+            {produto.ativo ? 'Inativar' : 'Reativar'}
+          </Button>
+        )
+      }
       acoes={
         podeExcluir && (
           <Button
@@ -522,17 +637,15 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
       <FormProvider {...form}>
         <form
           onSubmit={(event) => {
-            if (somenteLeitura) {
-              event.preventDefault()
-              return
-            }
-            void enviar('voltar', event)
+            event.preventDefault()
+            enviar('voltar')
           }}
+          onKeyDown={aoTeclarNoFormulario}
           noValidate
           aria-label={produto ? `Editar ${produto.nome}` : 'Novo produto'}
           className="max-w-4xl space-y-4"
         >
-          {erroSalvar && <ErroInline mensagem={erroSalvar} />}
+          {erroSalvar && <ErroInline mensagem={erroSalvar.mensagem} />}
           {!somenteLeitura && (
             <p className="text-sm text-muted-foreground">
               Campos com <span aria-hidden="true">*</span>
@@ -571,12 +684,10 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
                     desabilitado={desabilitado}
                     somenteLeitura={somenteLeitura}
                     aoAlterarCampo={aoAlterarCampo}
-                    onAlterarStatus={() => produto && statusMutation.mutate({ produto, proximoAtivo: !produto.ativo })}
-                    alterandoStatus={statusMutation.isPending}
                   />
                 </TabsContent>
                 <TabsContent value="precos">
-                  <AbaPrecos siglaVenda={siglaVenda} desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
+                  <AbaPrecos desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
                 </TabsContent>
                 <TabsContent value="estoque">
                   <AbaEstoque desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
@@ -594,17 +705,22 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
           </Tabs>
 
           {!somenteLeitura && (
-            <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t bg-background py-3 sm:flex-row sm:justify-end">
+            <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t bg-background py-3 sm:flex-row sm:items-center sm:justify-end">
+              <p className="hidden text-xs text-muted-foreground sm:mr-auto sm:block">
+                <kbd className="rounded border bg-muted px-1 font-sans">{TECLA_ATALHO}</kbd>
+                {' + '}
+                <kbd className="rounded border bg-muted px-1 font-sans">Enter</kbd> salva
+              </p>
               <Button asChild variant="outline">
                 <Link to={voltarPara}>Cancelar</Link>
               </Button>
               {modoNovo && (
-                <Button type="button" variant="outline" onClick={() => void enviar('cadastrarOutro')} disabled={salvando}>
+                <Button type="button" variant="outline" onClick={() => enviar('cadastrarOutro')} disabled={salvando}>
                   {acaoEmAndamento === 'cadastrarOutro' && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                   Salvar e cadastrar outro
                 </Button>
               )}
-              <Button type="submit" disabled={salvando}>
+              <Button type="submit" disabled={salvando} aria-keyshortcuts="Control+Enter Meta+Enter">
                 {acaoEmAndamento === 'voltar' && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 {acaoEmAndamento === 'voltar' ? 'Salvando...' : 'Salvar'}
               </Button>
@@ -620,6 +736,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
           descricao={
             <>
               <p>Esta ação não pode ser desfeita. Os códigos de barras do produto também serão excluídos.</p>
+              {produto.ativo && <p>Se quiser apenas tirar o produto da venda, inative-o; dá para reativar depois.</p>}
               {erroExcluir && <ErroInline mensagem={erroExcluir} />}
             </>
           }
@@ -627,8 +744,9 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
           onConfirmar={() => excluirMutation.mutate(produto)}
           onCancelar={fecharExclusao}
           podeExcluir={!exclusaoBloqueada}
+          // Inativar e oferecido desde a abertura; vira a acao principal se o 409 barrar a exclusao.
           alternativa={
-            exclusaoBloqueada && produto.ativo
+            produto.ativo
               ? {
                   rotulo: 'Inativar',
                   icone: XCircle,

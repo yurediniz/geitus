@@ -4,8 +4,9 @@
  */
 import { z } from 'zod'
 
+import { digitoVerificadorValido, ehCandidatoGs1, normalizarCodigo } from '@/lib/codigoBarras'
 import type { UnidadeMedida, UnidadeResumo } from '@/types/catalogo'
-import type { Produto, ProdutoRequest } from '@/types/produto'
+import type { FormatoCodigoBarras, Produto, ProdutoRequest } from '@/types/produto'
 
 const textoOpcional = (max: number, mensagem: string) =>
   z.string().trim().max(max, mensagem)
@@ -67,6 +68,12 @@ export const produtoSchema = z.object({
   pontoReposicao: numeroOpcional('Ponto de reposição não pode ser negativo.'),
   sku: textoOpcional(50, 'SKU deve ter no máximo 50 caracteres.'),
   codigosBarras: z.array(z.string()).max(MAXIMO_CODIGOS_BARRAS, 'Informe no máximo 20 códigos de barras.'),
+  /**
+   * Texto digitado em "Adicionar código" e ainda nao adicionado. Fica no
+   * formulario (sobrevive a troca de aba e conta como alteracao), mas nao vai
+   * no request: ao salvar, a pagina tenta adiciona-lo a lista antes de enviar.
+   */
+  codigoPendente: z.string(),
 }).superRefine((valores, ctx) => {
   const preenchido = (valor: string) => valor.trim() !== ''
   const temUnidadeCompra = valores.unidadeCompraId !== ''
@@ -130,26 +137,51 @@ export const ROTULO_ABA: Readonly<Record<AbaProduto, string>> = {
 /**
  * Campos de cada aba, na ordem da tela: alimenta o indicador de erro da aba e
  * diz qual campo focar ao salvar com erro. Todo campo do formulario aparece em
- * exatamente uma aba (garantido por teste).
+ * alguma aba; so os codigos de barras aparecem em duas (cadastro rapido na
+ * Geral e a lista completa em Codigos), garantido por teste.
  */
 export const CAMPOS_POR_ABA: Readonly<Record<AbaProduto, readonly (keyof ProdutoFormValues)[]>> = {
-  geral: ['nome', 'nomeCurto', 'unidadeId', 'categoriaId', 'marca', 'fornecedor', 'unidadeCompraId', 'fatorConversao', 'descricao'],
-  precos: ['precoVenda', 'custo', 'precoMinimo'],
+  geral: [
+    'nome',
+    'nomeCurto',
+    'unidadeId',
+    'precoVenda',
+    'codigoPendente',
+    'codigosBarras',
+    'categoriaId',
+    'marca',
+    'fornecedor',
+    'unidadeCompraId',
+    'fatorConversao',
+    'descricao',
+  ],
+  precos: ['custo', 'precoMinimo'],
   estoque: ['estoqueMinimo', 'pontoReposicao', 'estoqueMaximo'],
-  codigos: ['sku', 'codigosBarras'],
+  codigos: ['sku', 'codigoPendente', 'codigosBarras'],
 }
 
-/** Primeira aba (na ordem da tela) com algum campo em erro, e o primeiro desses campos. */
+/**
+ * Para onde ir ao salvar com erro: o primeiro campo em erro (na ordem das
+ * abas) e a primeira aba que o mostra. Se a aba atual tambem mostra esse campo
+ * (ex.: codigos de barras, em Geral e em Codigos), fica nela.
+ */
 export function primeiroCampoComErro(
   comErro: (campo: keyof ProdutoFormValues) => boolean,
+  abaAtual?: AbaProduto,
 ): { aba: AbaProduto; campo: keyof ProdutoFormValues } | null {
   for (const aba of ABAS_PRODUTO) {
     const campo = CAMPOS_POR_ABA[aba].find(comErro)
     if (campo) {
-      return { aba, campo }
+      const ficaNaAtual = abaAtual !== undefined && CAMPOS_POR_ABA[abaAtual].includes(campo)
+      return { aba: ficaNaAtual ? abaAtual : aba, campo }
     }
   }
   return null
+}
+
+/** Id do elemento que recebe o foco de cada campo (o texto pendente e o campo "Adicionar código"). */
+export function idDoCampo(campo: keyof ProdutoFormValues): string {
+  return campo === 'codigoPendente' ? 'codigosBarras' : campo
 }
 
 /** Valores de um produto novo; `unidadePadraoId` ja escolhe a unidade de venda. */
@@ -172,6 +204,7 @@ export function valoresIniciais(unidadePadraoId = ''): ProdutoFormValues {
     pontoReposicao: '',
     sku: '',
     codigosBarras: [],
+    codigoPendente: '',
   }
 }
 
@@ -213,6 +246,7 @@ export function valoresDoProduto(produto: Produto): ProdutoFormValues {
     pontoReposicao: numeroParaTexto(produto.pontoReposicao),
     sku: produto.sku ?? '',
     codigosBarras: produto.codigosBarras.map((codigo) => codigo.codigo),
+    codigoPendente: '',
   }
 }
 
@@ -247,6 +281,62 @@ export function montarRequest(valores: ProdutoFormValues): ProdutoRequest {
     codigosBarras: valores.codigosBarras,
     sku: textoOuNulo(valores.sku),
   }
+}
+
+// --- Codigos de barras -------------------------------------------------------
+
+/** Tamanho maximo de um codigo (coluna `VARCHAR(50)` do backend). */
+export const TAMANHO_MAXIMO_CODIGO = 50
+
+export const MENSAGEM_CODIGO_REPETIDO = 'Este código já está na lista.'
+export const MENSAGEM_DIGITO_INVALIDO =
+  'Este código não confere (o último dígito não bate). Leia de novo ou confira os números.'
+export const MENSAGEM_LIMITE_CODIGOS = `Limite de ${MAXIMO_CODIGOS_BARRAS} códigos de barras atingido.`
+export const MENSAGEM_CODIGO_LONGO = `O código deve ter no máximo ${TAMANHO_MAXIMO_CODIGO} caracteres.`
+
+/** Formatos dos codigos ja gravados no produto, por codigo. */
+export type FormatosGravados = Record<string, FormatoCodigoBarras>
+
+/** Formatos gravados do produto em edicao (vazio no cadastro). */
+export function formatosDoProduto(produto: Produto | null): FormatosGravados {
+  return Object.fromEntries((produto?.codigosBarras ?? []).map(({ codigo, formato }) => [codigo, formato]))
+}
+
+/** Resultado de tentar colocar o texto digitado na lista de codigos. */
+export type ResultadoNovoCodigo =
+  | { tipo: 'vazio' }
+  | { tipo: 'bloqueado'; motivo: string }
+  | { tipo: 'aceito'; codigo: string; lista: string[] }
+
+/**
+ * Regras para adicionar um codigo (as mesmas do backend): normaliza o texto,
+ * barra repetido, mais de 20, mais de 50 caracteres e codigo novo com digito
+ * verificador invalido. Um codigo ja gravado (ex.: `OUTRO` migrado com digito
+ * invalido) volta sem bloqueio.
+ */
+export function avaliarNovoCodigo(
+  entrada: string,
+  lista: readonly string[],
+  formatosGravados: FormatosGravados,
+): ResultadoNovoCodigo {
+  const codigo = normalizarCodigo(entrada)
+  if (codigo === '') {
+    return { tipo: 'vazio' }
+  }
+  if (lista.includes(codigo)) {
+    return { tipo: 'bloqueado', motivo: MENSAGEM_CODIGO_REPETIDO }
+  }
+  if (lista.length >= MAXIMO_CODIGOS_BARRAS) {
+    return { tipo: 'bloqueado', motivo: MENSAGEM_LIMITE_CODIGOS }
+  }
+  if (codigo.length > TAMANHO_MAXIMO_CODIGO) {
+    return { tipo: 'bloqueado', motivo: MENSAGEM_CODIGO_LONGO }
+  }
+  const jaGravado = formatosGravados[codigo] !== undefined
+  if (!jaGravado && ehCandidatoGs1(codigo) && !digitoVerificadorValido(codigo)) {
+    return { tipo: 'bloqueado', motivo: MENSAGEM_DIGITO_INVALIDO }
+  }
+  return { tipo: 'aceito', codigo, lista: [...lista, codigo] }
 }
 
 // --- Unidades ----------------------------------------------------------------

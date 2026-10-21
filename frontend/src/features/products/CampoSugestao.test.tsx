@@ -99,6 +99,23 @@ describe('CampoSugestao', () => {
     expect(onEnviar).not.toHaveBeenCalled()
   })
 
+  it('com a lista aberta e nada destacado, Enter só fecha a lista (não envia)', async () => {
+    renderCampo()
+
+    fireEvent.focus(campo())
+    fireEvent.change(campo(), { target: { value: 'Pre' } })
+    await screen.findByRole('option', { name: 'Premier' })
+
+    // fireEvent devolve false quando o handler chamou preventDefault (sem envio implicito).
+    expect(fireEvent.keyDown(campo(), { key: 'Enter' })).toBe(false)
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(campo()).toHaveValue('Pre')
+
+    // Lista fechada: Enter segue o padrao do navegador.
+    expect(fireEvent.keyDown(campo(), { key: 'Enter' })).toBe(true)
+  })
+
   it('Esc fecha a lista e mantém o texto', async () => {
     renderCampo()
 

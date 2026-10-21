@@ -1,14 +1,14 @@
-import { useMemo, useState } from 'react'
-import { Controller, useFormContext } from 'react-hook-form'
+import { useState } from 'react'
+import { useFormContext } from 'react-hook-form'
 import { useMutation } from '@tanstack/react-query'
 import { Loader2, Sparkles } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { CampoCodigosBarras } from '@/features/products/CampoCodigosBarras'
 import { CampoTexto, ErroDoCampo } from '@/features/products/CamposFormulario'
+import { CodigosBarrasDoProduto } from '@/features/products/CodigosBarrasDoProduto'
 import type { ProdutoFormValues } from '@/features/products/produtoFormulario'
 import { sugerirSku } from '@/services/produtoService'
-import type { FormatoCodigoBarras, Produto } from '@/types/produto'
+import type { Produto } from '@/types/produto'
 
 export interface AbaCodigosProps {
   /** Produto em edicao (null no cadastro): seus codigos gravados nao sao rebloqueados. */
@@ -19,21 +19,15 @@ export interface AbaCodigosProps {
   aoAlterarCampo: () => void
 }
 
-/** Aba Codigos: SKU (com sugestao automatica) e a lista de codigos de barras. */
+/** Aba Codigos: SKU (com sugestao automatica) e a lista completa de codigos de barras (com reordenar). */
 export function AbaCodigos({ produto, desabilitado, somenteLeitura, aoAlterarCampo }: AbaCodigosProps) {
   const {
-    control,
     register,
     setValue,
     clearErrors,
     formState: { errors },
   } = useFormContext<ProdutoFormValues>()
   const [anuncioSku, setAnuncioSku] = useState('')
-
-  const formatosGravados = useMemo<Record<string, FormatoCodigoBarras>>(
-    () => Object.fromEntries((produto?.codigosBarras ?? []).map(({ codigo, formato }) => [codigo, formato])),
-    [produto],
-  )
 
   const gerarSkuMutation = useMutation<string>({
     mutationFn: () => sugerirSku(),
@@ -90,21 +84,11 @@ export function AbaCodigos({ produto, desabilitado, somenteLeitura, aoAlterarCam
         <h3 id="codigosBarras-titulo" className="text-sm font-medium">
           Códigos de barras
         </h3>
-        <Controller
-          control={control}
-          name="codigosBarras"
-          render={({ field }) => (
-            <CampoCodigosBarras
-              valor={field.value}
-              formatosGravados={formatosGravados}
-              onChange={(codigos) => {
-                field.onChange(codigos)
-                aoAlterarCampo()
-              }}
-              desabilitado={desabilitado}
-              erro={errors.codigosBarras?.message}
-            />
-          )}
+        <CodigosBarrasDoProduto
+          variante="completa"
+          produto={produto}
+          desabilitado={desabilitado}
+          aoAlterarCampo={aoAlterarCampo}
         />
       </section>
     </div>

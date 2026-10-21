@@ -105,10 +105,17 @@ export function CampoSugestao({
       return
     }
     if (event.key === 'Enter') {
-      // Com uma sugestao destacada, Enter a escolhe (sem enviar o formulario).
-      if (listaVisivel && ativo >= 0 && ativo < opcoes.length) {
-        event.preventDefault()
+      // Ctrl/Cmd+Enter e o atalho de salvar do formulario: segue adiante.
+      if (!listaVisivel || event.ctrlKey || event.metaKey) {
+        return
+      }
+      // Com a lista aberta, Enter nunca envia o formulario: escolhe a
+      // sugestao destacada ou, sem nenhuma destacada, so fecha a lista.
+      event.preventDefault()
+      if (ativo >= 0 && ativo < opcoes.length) {
         escolher(opcoes[ativo])
+      } else {
+        fechar()
       }
       return
     }

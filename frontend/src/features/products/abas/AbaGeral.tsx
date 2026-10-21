@@ -1,9 +1,7 @@
 import { useMemo } from 'react'
 import { Controller, useFormContext } from 'react-hook-form'
 import type { UseQueryResult } from '@tanstack/react-query'
-import { Loader2, RotateCcw, XCircle } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
 import {
   AvisoCatalogo,
   CampoSelect,
@@ -12,6 +10,7 @@ import {
   GrupoCampos,
 } from '@/features/products/CamposFormulario'
 import { CampoSugestao } from '@/features/products/CampoSugestao'
+import { CodigosBarrasDoProduto } from '@/features/products/CodigosBarrasDoProduto'
 import {
   TAMANHO_MAXIMO_NOME_CURTO,
   nomeCurtoEfetivo,
@@ -19,7 +18,6 @@ import {
   textoConversao,
   type ProdutoFormValues,
 } from '@/features/products/produtoFormulario'
-import { SeloStatus } from '@/features/products/SeloStatus'
 import { SeletorCategoria } from '@/features/products/SeletorCategoria'
 import type { Categoria, UnidadeMedida } from '@/types/catalogo'
 import type { Produto } from '@/types/produto'
@@ -34,8 +32,6 @@ export interface AbaGeralProps {
   desabilitado: boolean
   somenteLeitura: boolean
   aoAlterarCampo: () => void
-  onAlterarStatus: () => void
-  alterandoStatus: boolean
 }
 
 /**
@@ -67,7 +63,11 @@ function AjudaNomeCurto({ nome, nomeCurto }: { nome: string; nomeCurto: string }
   )
 }
 
-/** Aba Geral: identificacao, unidade e embalagem, descricao e status. */
+/**
+ * Aba Geral: o cadastro rapido (nome, unidade, preco de venda e codigo de
+ * barras, os essenciais para vender) primeiro; depois identificacao, unidade e
+ * embalagem e descricao. O status fica no cabecalho da pagina.
+ */
 export function AbaGeral({
   produto,
   unidadesQuery,
@@ -76,8 +76,6 @@ export function AbaGeral({
   desabilitado,
   somenteLeitura,
   aoAlterarCampo,
-  onAlterarStatus,
-  alterandoStatus,
 }: AbaGeralProps) {
   const {
     control,
@@ -169,6 +167,25 @@ export function AbaGeral({
             semOpcoes={unidadesQuery.isSuccess && opcoesUnidadeVenda.length === 0}
             mensagemSemOpcoes="Nenhuma unidade ativa."
             linkSemOpcoes={somenteLeitura ? undefined : { to: '/produtos/unidades', rotulo: 'Cadastrar em Unidades' }}
+          />
+        </div>
+        <CampoTexto
+          id="precoVenda"
+          label={siglaVenda ? `Preço de venda (por ${siglaVenda})` : 'Preço de venda'}
+          obrigatorio
+          erro={errors.precoVenda?.message}
+          inputProps={register('precoVenda', { onChange: aoAlterarCampo })}
+          disabled={desabilitado}
+          type="number"
+          step="0.01"
+          min="0"
+        />
+        <div className="md:col-span-2">
+          <CodigosBarrasDoProduto
+            variante="compacta"
+            produto={produto}
+            desabilitado={desabilitado}
+            aoAlterarCampo={aoAlterarCampo}
           />
         </div>
         <div className="space-y-1.5">
@@ -291,30 +308,6 @@ export function AbaGeral({
         />
         <ErroDoCampo id="descricao-erro" mensagem={errors.descricao?.message} />
       </div>
-
-      {produto && (
-        <section aria-labelledby="status-produto-titulo" className="flex flex-wrap items-center gap-3 border-t pt-4">
-          <h3 id="status-produto-titulo" className="text-sm font-medium">
-            Status
-          </h3>
-          <SeloStatus ativo={produto.ativo} />
-          {!somenteLeitura && (
-            <Button type="button" variant="outline" size="sm" onClick={onAlterarStatus} disabled={alterandoStatus}>
-              {alterandoStatus ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : produto.ativo ? (
-                <XCircle className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <RotateCcw className="h-4 w-4" aria-hidden="true" />
-              )}
-              {produto.ativo ? 'Inativar' : 'Reativar'}
-            </Button>
-          )}
-          {!produto.ativo && (
-            <p className="basis-full text-xs text-muted-foreground">Produto inativo não aparece para venda no PDV.</p>
-          )}
-        </section>
-      )}
     </div>
   )
 }

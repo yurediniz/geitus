@@ -4,14 +4,17 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 
 import { CampoCodigosBarras, type CampoCodigosBarrasProps } from '@/features/products/CampoCodigosBarras'
 
-/** Campo com estado proprio, dentro de um form (para provar que Enter nao o envia). */
-function CampoComEstado({
-  inicial = [],
-  formatosGravados = {},
-  onEnviar,
-  ...resto
-}: Partial<CampoCodigosBarrasProps> & { inicial?: string[]; onEnviar?: () => void }) {
+type PropsDeTeste = Pick<CampoCodigosBarrasProps, 'desabilitado' | 'erro' | 'variante'> & {
+  inicial?: string[]
+  formatosGravados?: CampoCodigosBarrasProps['formatosGravados']
+  onEnviar?: () => void
+}
+
+/** Campo com estado proprio (lista, texto e erro), dentro de um form (para provar que Enter nao o envia). */
+function CampoComEstado({ inicial = [], formatosGravados = {}, onEnviar, ...resto }: PropsDeTeste) {
   const [valor, setValor] = useState(inicial)
+  const [entrada, setEntrada] = useState('')
+  const [erroEntrada, setErroEntrada] = useState<string | null>(null)
   return (
     <form
       onSubmit={(event) => {
@@ -19,14 +22,23 @@ function CampoComEstado({
         onEnviar?.()
       }}
     >
-      <CampoCodigosBarras valor={valor} formatosGravados={formatosGravados} onChange={setValor} {...resto} />
+      <CampoCodigosBarras
+        valor={valor}
+        onChange={setValor}
+        entrada={entrada}
+        onEntradaChange={setEntrada}
+        erroEntrada={erroEntrada ?? undefined}
+        onErroEntradaChange={setErroEntrada}
+        formatosGravados={formatosGravados}
+        {...resto}
+      />
       <span hidden data-testid="valor">{valor.join(',')}</span>
     </form>
   )
 }
 
 function campoAdicionar(): HTMLElement {
-  return screen.getByLabelText('Adicionar código')
+  return screen.getByLabelText(/^Adicionar código/)
 }
 
 /** Como o leitor de codigo de barras: digita o codigo e tecla Enter. */
@@ -118,7 +130,7 @@ describe('CampoCodigosBarras', () => {
     expect(screen.queryByText(/formato não reconhecido/i)).not.toBeInTheDocument()
   })
 
-  it('formato desconhecido é aceito com selo "Outro formato" e o aviso fixo', () => {
+  it('formato desconhecido adicionado agora tem selo "Outro formato" e o aviso', () => {
     render(<CampoComEstado />)
 
     lerCodigo('ABC-123')
@@ -136,7 +148,9 @@ describe('CampoCodigosBarras', () => {
 
     lerCodigo('7891000315508')
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Dígito verificador inválido. Confira a leitura.')
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Este código não confere (o último dígito não bate). Leia de novo ou confira os números.',
+    )
     expect(valorAtual()).toEqual([])
   })
 
@@ -145,6 +159,8 @@ describe('CampoCodigosBarras', () => {
       <CampoComEstado inicial={['7891000315508']} formatosGravados={{ '7891000315508': 'OUTRO' }} />,
     )
     expect(within(itens()[0]).getByText('Outro formato')).toBeInTheDocument()
+    // Ja gravado (e conferido): so o selo, sem o aviso amarelo.
+    expect(screen.queryByText(/formato não reconhecido/i)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Remover código 7891000315508' }))
     expect(valorAtual()).toEqual([])
@@ -190,5 +206,48 @@ describe('CampoCodigosBarras', () => {
     render(<CampoComEstado />)
 
     expect(screen.getByText('Nenhum código de barras cadastrado.')).toBeInTheDocument()
+  })
+
+  it('com um único código não há setas de reordenar', () => {
+    render(<CampoComEstado inicial={['7891000315507']} />)
+
+    expect(screen.queryByRole('button', { name: /^mover código/i })).not.toBeInTheDocument()
+    expect(screen.queryByText('Principal')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remover código 7891000315507' })).toBeInTheDocument()
+  })
+
+  it('Ctrl+Enter não adiciona: fica para o atalho de salvar do formulário', () => {
+    render(<CampoComEstado />)
+
+    fireEvent.change(campoAdicionar(), { target: { value: '7891000315507' } })
+    fireEvent.keyDown(campoAdicionar(), { key: 'Enter', ctrlKey: true })
+
+    expect(valorAtual()).toEqual([])
+    expect(campoAdicionar()).toHaveValue('7891000315507')
+  })
+
+  describe('variante compacta (aba Geral)', () => {
+    it('rótulo próprio, etiquetas com remover e sem reordenar', () => {
+      render(<CampoComEstado variante="compacta" inicial={['7891000315507', '96385074']} />)
+
+      expect(screen.getByLabelText('Adicionar código de barras')).toBeInTheDocument()
+      const etiquetas = within(screen.getByRole('list', { name: /códigos de barras do produto/i })).getAllByRole('listitem')
+      expect(etiquetas.map((item) => item.textContent)).toEqual(['7891000315507', '96385074'])
+      expect(screen.queryByRole('button', { name: /^mover código/i })).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remover código 7891000315507' }))
+      expect(valorAtual()).toEqual(['96385074'])
+      expect(campoAdicionar()).toHaveFocus()
+    })
+
+    it('lê pelo leitor e avisa formato desconhecido novo', () => {
+      render(<CampoComEstado variante="compacta" />)
+
+      lerCodigo('ABC-9')
+
+      expect(valorAtual()).toEqual(['ABC-9'])
+      expect(screen.getByText(/formato não reconhecido \(não é EAN-8/i)).toBeInTheDocument()
+      expect(screen.queryByText('Nenhum código de barras cadastrado.')).not.toBeInTheDocument()
+    })
   })
 })

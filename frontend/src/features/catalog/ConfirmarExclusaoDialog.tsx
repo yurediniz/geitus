@@ -12,7 +12,10 @@ import {
 } from '@/components/ui/dialog'
 import { useFocoDeOrigem, type DestinoFoco } from '@/features/catalog/useFocoDeOrigem'
 
-/** Acao oferecida no lugar de "Excluir" quando a exclusao nao e possivel. */
+/**
+ * Acao mais branda oferecida junto de "Excluir" (ex.: inativar); quando a
+ * exclusao nao e possivel, vira a acao principal.
+ */
 export interface AcaoAlternativa {
   rotulo: string
   icone: LucideIcon
@@ -30,6 +33,7 @@ interface ConfirmarExclusaoDialogProps {
   /**
    * `false` quando ja se sabe que a exclusao sera recusada (ex.: ha vinculos):
    * o botao "Excluir" some e, se houver, a `alternativa` vira a acao principal.
+   * Com a exclusao possivel, a `alternativa` aparece como acao secundaria.
    */
   podeExcluir?: boolean
   alternativa?: AcaoAlternativa
@@ -73,20 +77,25 @@ export function ConfirmarExclusaoDialog({
           <Button type="button" variant="outline" onClick={onCancelar} disabled={ocupado}>
             {podeExcluir || alternativa ? 'Cancelar' : 'Fechar'}
           </Button>
-          {podeExcluir && (
-            <Button type="button" variant="destructive" onClick={onConfirmar} disabled={ocupado}>
-              {excluindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              Excluir
-            </Button>
-          )}
-          {!podeExcluir && alternativa && IconeAlternativa && (
-            <Button type="button" onClick={alternativa.onExecutar} disabled={ocupado}>
+          {alternativa && IconeAlternativa && (
+            <Button
+              type="button"
+              variant={podeExcluir ? 'outline' : 'default'}
+              onClick={alternativa.onExecutar}
+              disabled={ocupado}
+            >
               {alternativa.executando ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <IconeAlternativa className="h-4 w-4" />
               )}
               {alternativa.rotulo}
+            </Button>
+          )}
+          {podeExcluir && (
+            <Button type="button" variant="destructive" onClick={onConfirmar} disabled={ocupado}>
+              {excluindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Excluir
             </Button>
           )}
         </DialogFooter>
