@@ -14,7 +14,7 @@ Conforme o escopo definido no [CLAUDE.md](../../CLAUDE.md):
 - Layout principal
 - [Empresa](empresa.md) ✔
 - [Usuários](usuarios.md) ✔
-- [Produtos](produtos.md) ✔ — em evolução (DEC-030): [Categorias e Unidades](categorias-e-unidades.md) (Fase A ✔)
+- [Produtos](produtos.md) ✔ — em evolução (DEC-030): [Categorias e Unidades](categorias-e-unidades.md) (Fase A ✔), [Identificação e formulário](produtos-identificacao-e-formulario.md) (Fase B, especificada)
 - [Clientes](clientes.md) ✔
 - PDV
 - Caixa

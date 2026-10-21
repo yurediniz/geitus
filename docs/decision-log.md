@@ -717,3 +717,29 @@ Migration V6, entidades e telas novas em `catalog`, mudança no contrato da API 
 
 **Observações futuras:**
 Remover `produtos.categoria`/`produtos.unidade` na Fase B; revalidar a troca de `fracionada` quando houver estoque (Fase D).
+
+## DEC-032 — Identificação do produto e formulário em abas (Fase B)
+
+**Data:** 2026-10-21
+**Status:** Aceita
+**Contexto:**
+Segunda fase da DEC-030. O produto tinha um único código de barras, sem nome curto, sem geração de SKU, sem exclusão e com o id numérico exposto na API (o retrofit de UUID previsto na DEC-019 ainda não tinha sido feito). O formulário inline na lista ficou grande demais para receber as abas pedidas.
+
+**Decisão:**
+- **Múltiplos códigos de barras** em `produto_codigos_barras` (0–20 por produto), únicos **por empresa**; formato detectado pelo conteúdo — EAN-8/UPC-A/EAN-13 (só dígitos, 8/12/13) exigem dígito verificador válido (400 se inválido); outros formatos são aceitos como `OUTRO`, com aviso na tela.
+- **Nome curto** opcional (até 30); `nomeCurtoEfetivo` = nome curto ou os 30 primeiros caracteres do nome.
+- **SKU sugerido** no padrão `P` + 6 dígitos por empresa (maior existente + 1), sem reserva; unicidade garantida no salvar (409).
+- **Marca e fornecedor principal** em texto, com autocomplete dos valores já usados na empresa.
+- **Exclusão física** de produto (ADMIN) só quando nunca houve venda/movimentação — verificação centralizada em `podeExcluir`, estendida nas Fases C/D; códigos saem em cascata.
+- **UUID público do produto** (retrofit da DEC-019): rotas por UUID; id numérico deixa de ser exposto.
+- **Formulário em página própria** (`/produtos/novo`, `/produtos/:id`) com abas Geral, Preços, Estoque, Códigos (Histórico nas Fases C/D), "Salvar e cadastrar outro" e aviso de alterações não salvas.
+- **Migration V7** cria a tabela de códigos, migra o código atual, preenche os UUIDs e remove as colunas de texto antigas (`categoria`, `unidade`) e `codigo_barras`.
+
+**Motivo:**
+Atende o pedido de identificação completa sem fiscal; códigos por empresa preservam o isolamento (DEC-016); UUID antes de Preços/Estoque/PDV evita retrabalho; a página própria dá espaço às abas e permite proteger alterações não salvas.
+
+**Impacto:**
+Contrato da API de produtos muda (UUID, `codigosBarras`, `nomeCurto`, `fornecedor`, `podeExcluir`); frontend reorganizado em rotas novas. Spec: `docs/modules/produtos-identificacao-e-formulario.md`. Revisores obrigatórios: `data-reviewer` (V7) e `security-reviewer` (DELETE, UUID, rotas novas).
+
+**Observações futuras:**
+GTIN-14 com validação própria, código "principal" explícito e fornecedor como cadastro ficam para quando houver necessidade.
