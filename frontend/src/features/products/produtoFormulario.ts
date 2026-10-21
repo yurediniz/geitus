@@ -8,6 +8,7 @@ import { digitoVerificadorValido, ehCandidatoGs1, normalizarCodigo } from '@/lib
 import type { UnidadeMedida, UnidadeResumo } from '@/types/catalogo'
 import { formatarMoeda } from '@/features/products/formatacaoProduto'
 import { MAXIMO_DIGITOS_MOEDA, digitosParaValor, valorParaDigitos } from '@/lib/moeda'
+import { MENSAGEM_QUANTIDADE, interpretarQuantidade, quantidadeParaTexto, validarQuantidade } from '@/lib/quantidade'
 import type { FormatoCodigoBarras, Produto, ProdutoRequest, SituacaoPromocao } from '@/types/produto'
 
 const textoOpcional = (max: number, mensagem: string) =>
@@ -22,6 +23,16 @@ const numeroOpcional = (mensagemNegativo: string) =>
   z.string().trim()
     .refine((valor) => valor === '' || Number.isFinite(Number(valor)), 'Informe um número válido.')
     .refine((valor) => valor === '' || Number(valor) >= 0, mensagemNegativo)
+
+/** Nivel de estoque opcional: texto com virgula ou ponto, >= 0 e com ate 3 casas. */
+const quantidadeOpcional = (mensagemNegativo: string) =>
+  z.string().trim().superRefine((valor, ctx) => {
+    const resultado = validarQuantidade(valor)
+    if ('erro' in resultado && resultado.erro !== 'vazio') {
+      const message = resultado.erro === 'negativo' ? mensagemNegativo : MENSAGEM_QUANTIDADE[resultado.erro]
+      ctx.addIssue({ code: 'custom', message })
+    }
+  })
 
 // Espelha o backend: fator > 0 com ate 8 digitos inteiros e 4 casas decimais.
 const fatorConversaoSchema = z.string().trim()
@@ -112,6 +123,42 @@ function validarPromocao(valores: ValoresPrecoEspecial, ctx: z.RefinementCtx) {
   }
 }
 
+interface ValoresEstoque {
+  controlaEstoque: boolean
+  estoqueInicial: string
+  estoqueMinimo: string
+  pontoReposicao: string
+  estoqueMaximo: string
+}
+
+/**
+ * Regras do estoque (spec 4.4 e 4.6): estoque inicial > 0 com ate 3 casas (so
+ * com o controle ligado) e minimo <= ponto de reposicao <= maximo quando os
+ * dois lados estao informados. Os niveis valem mesmo com o controle desligado:
+ * eles sao enviados do mesmo jeito.
+ */
+function validarEstoque(valores: ValoresEstoque, ctx: z.RefinementCtx) {
+  const erro = (campo: keyof ValoresEstoque, message: string) => ctx.addIssue({ path: [campo], code: 'custom', message })
+  const inicial = valores.controlaEstoque ? validarQuantidade(valores.estoqueInicial) : null
+  if (inicial !== null && ('valor' in inicial ? inicial.valor <= 0 : inicial.erro === 'negativo')) {
+    erro('estoqueInicial', 'O estoque inicial deve ser maior que zero.')
+  } else if (inicial !== null && 'erro' in inicial && inicial.erro !== 'vazio' && inicial.erro !== 'negativo') {
+    erro('estoqueInicial', MENSAGEM_QUANTIDADE[inicial.erro])
+  }
+
+  const minimo = interpretarQuantidade(valores.estoqueMinimo)
+  const ponto = interpretarQuantidade(valores.pontoReposicao)
+  const maximo = interpretarQuantidade(valores.estoqueMaximo)
+  if (minimo !== null && ponto !== null && ponto < minimo) {
+    erro('pontoReposicao', 'O ponto de reposição não pode ser menor que o estoque mínimo.')
+  }
+  if (maximo !== null && ponto !== null && maximo < ponto) {
+    erro('estoqueMaximo', 'O estoque máximo não pode ser menor que o ponto de reposição.')
+  } else if (maximo !== null && minimo !== null && maximo < minimo) {
+    erro('estoqueMaximo', 'Estoque máximo não pode ser menor que o estoque mínimo.')
+  }
+}
+
 function validarAtacado(valores: ValoresPrecoEspecial, ctx: z.RefinementCtx) {
   if (!valores.atacadoAtivo) {
     return
@@ -147,9 +194,13 @@ export const produtoSchema = z.object({
   precoVenda: numeroObrigatorio,
   custo: numeroOpcional('Custo não pode ser negativo.'),
   precoMinimo: numeroOpcional('Preço mínimo não pode ser negativo.'),
-  estoqueMinimo: numeroOpcional('Estoque mínimo não pode ser negativo.'),
-  estoqueMaximo: numeroOpcional('Estoque máximo não pode ser negativo.'),
-  pontoReposicao: numeroOpcional('Ponto de reposição não pode ser negativo.'),
+  /** Interruptor "Controlar estoque" (ligado por padrao). Desligado, o saldo fica guardado. */
+  controlaEstoque: z.boolean(),
+  /** So no cadastro novo: vira a primeira entrada de estoque (validado no superRefine). */
+  estoqueInicial: z.string().trim(),
+  estoqueMinimo: quantidadeOpcional('Estoque mínimo não pode ser negativo.'),
+  estoqueMaximo: quantidadeOpcional('Estoque máximo não pode ser negativo.'),
+  pontoReposicao: quantidadeOpcional('Ponto de reposição não pode ser negativo.'),
   sku: textoOpcional(50, 'SKU deve ter no máximo 50 caracteres.'),
   codigosBarras: z.array(z.string()).max(MAXIMO_CODIGOS_BARRAS, 'Informe no máximo 20 códigos de barras.'),
   /**
@@ -171,6 +222,7 @@ export const produtoSchema = z.object({
 }).superRefine((valores, ctx) => {
   validarPromocao(valores, ctx)
   validarAtacado(valores, ctx)
+  validarEstoque(valores, ctx)
   const preenchido = (valor: string) => valor.trim() !== ''
   const temUnidadeCompra = valores.unidadeCompraId !== ''
   const temFator = preenchido(valores.fatorConversao)
@@ -202,17 +254,6 @@ export const produtoSchema = z.object({
       path: ['precoMinimo'],
       code: 'custom',
       message: 'Preço mínimo não pode ser maior que o preço de venda.',
-    })
-  }
-  if (
-    preenchido(valores.estoqueMaximo) &&
-    preenchido(valores.estoqueMinimo) &&
-    Number(valores.estoqueMaximo) < Number(valores.estoqueMinimo)
-  ) {
-    ctx.addIssue({
-      path: ['estoqueMaximo'],
-      code: 'custom',
-      message: 'Estoque máximo não pode ser menor que o estoque mínimo.',
     })
   }
 })
@@ -264,7 +305,7 @@ export const CAMPOS_POR_ABA: Readonly<Record<AbaProduto, readonly (keyof Produto
     'precoAtacado',
     'quantidadeMinimaAtacado',
   ],
-  estoque: ['estoqueMinimo', 'pontoReposicao', 'estoqueMaximo'],
+  estoque: ['controlaEstoque', 'estoqueInicial', 'estoqueMinimo', 'pontoReposicao', 'estoqueMaximo'],
   codigos: ['sku', 'codigoPendente', 'codigosBarras'],
   historico: [],
 }
@@ -308,6 +349,8 @@ export function valoresIniciais(unidadePadraoId = ''): ProdutoFormValues {
     precoVenda: '',
     custo: '',
     precoMinimo: '',
+    controlaEstoque: true,
+    estoqueInicial: '',
     estoqueMinimo: '',
     estoqueMaximo: '',
     pontoReposicao: '',
@@ -357,9 +400,11 @@ export function valoresDoProduto(produto: Produto): ProdutoFormValues {
     precoVenda: String(produto.precoVenda),
     custo: numeroParaTexto(produto.custo),
     precoMinimo: numeroParaTexto(produto.precoMinimo),
-    estoqueMinimo: numeroParaTexto(produto.estoqueMinimo),
-    estoqueMaximo: numeroParaTexto(produto.estoqueMaximo),
-    pontoReposicao: numeroParaTexto(produto.pontoReposicao),
+    controlaEstoque: produto.controlaEstoque,
+    estoqueInicial: '',
+    estoqueMinimo: quantidadeParaTexto(produto.estoqueMinimo),
+    estoqueMaximo: quantidadeParaTexto(produto.estoqueMaximo),
+    pontoReposicao: quantidadeParaTexto(produto.pontoReposicao),
     sku: produto.sku ?? '',
     codigosBarras: produto.codigosBarras.map((codigo) => codigo.codigo),
     codigoPendente: '',
@@ -386,9 +431,15 @@ function numeroOuNulo(valor: string): number | null {
 /**
  * Corpo do POST/PATCH. A lista de codigos vai sempre inteira (o PATCH a
  * substitui); promocao e atacado vao sempre, `null` com o interruptor desligado.
+ * O estoque inicial so existe no cadastro (`novo`) e com o controle ligado; o
+ * PATCH nem leva a chave.
  */
-export function montarRequest(valores: ProdutoFormValues): ProdutoRequest {
+export function montarRequest(valores: ProdutoFormValues, { novo = false }: { novo?: boolean } = {}): ProdutoRequest {
+  const estoqueInicial = novo
+    ? { estoqueInicial: valores.controlaEstoque ? interpretarQuantidade(valores.estoqueInicial) : null }
+    : {}
   return {
+    ...estoqueInicial,
     nome: valores.nome.trim(),
     nomeCurto: textoOuNulo(valores.nomeCurto),
     unidadeId: valores.unidadeId,
@@ -401,9 +452,11 @@ export function montarRequest(valores: ProdutoFormValues): ProdutoRequest {
     precoVenda: Number(valores.precoVenda),
     custo: numeroOuNulo(valores.custo),
     precoMinimo: numeroOuNulo(valores.precoMinimo),
-    estoqueMinimo: numeroOuNulo(valores.estoqueMinimo),
-    estoqueMaximo: numeroOuNulo(valores.estoqueMaximo),
-    pontoReposicao: numeroOuNulo(valores.pontoReposicao),
+    controlaEstoque: valores.controlaEstoque,
+    // Niveis aceitam virgula; vazio vira null.
+    estoqueMinimo: interpretarQuantidade(valores.estoqueMinimo),
+    estoqueMaximo: interpretarQuantidade(valores.estoqueMaximo),
+    pontoReposicao: interpretarQuantidade(valores.pontoReposicao),
     codigosBarras: valores.codigosBarras,
     sku: textoOuNulo(valores.sku),
     promocao: valores.promocaoAtiva
@@ -723,13 +776,38 @@ export function textoAjudaAtacado(quantidade: string, preco: string, sigla: stri
  */
 export function erroFracaoAtacado(
   valores: Pick<ProdutoFormValues, 'atacadoAtivo' | 'quantidadeMinimaAtacado' | 'unidadeId'>,
-  unidades: readonly Pick<UnidadeResumo, 'id' | 'sigla' | 'fracionada'>[],
+  unidades: readonly UnidadeComFracao[],
 ): string | null {
-  const quantidade = numeroValido(valores.quantidadeMinimaAtacado)
-  if (!valores.atacadoAtivo || quantidade === null || Number.isInteger(quantidade)) {
+  const quantidade = valores.atacadoAtivo ? numeroValido(valores.quantidadeMinimaAtacado) : null
+  return erroDeFracao(quantidade, valores.unidadeId, unidades)
+}
+
+/** Estoque inicial com fracao numa unidade de venda que nao e fracionada (spec 4.4), checado no envio. */
+export function erroFracaoEstoqueInicial(
+  valores: Pick<ProdutoFormValues, 'controlaEstoque' | 'estoqueInicial' | 'unidadeId'>,
+  unidades: readonly UnidadeComFracao[],
+): string | null {
+  const quantidade = valores.controlaEstoque ? interpretarQuantidade(valores.estoqueInicial) : null
+  return erroDeFracao(quantidade, valores.unidadeId, unidades)
+}
+
+/** O que as regras de fracao leem da unidade. */
+export type UnidadeComFracao = Pick<UnidadeResumo, 'id' | 'sigla' | 'fracionada'>
+
+/**
+ * "A unidade UN não aceita quantidade fracionada." para uma quantidade com
+ * fracao numa unidade nao fracionada; null sem quantidade, com quantidade
+ * inteira ou com a unidade desconhecida (lista carregando: o backend decide).
+ */
+export function erroDeFracao(
+  quantidade: number | null,
+  unidadeId: string,
+  unidades: readonly UnidadeComFracao[],
+): string | null {
+  if (quantidade === null || Number.isInteger(quantidade)) {
     return null
   }
-  const unidade = unidades.find((candidata) => candidata.id === valores.unidadeId)
+  const unidade = unidades.find((candidata) => candidata.id === unidadeId)
   if (!unidade || unidade.fracionada) {
     return null
   }

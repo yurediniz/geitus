@@ -30,6 +30,7 @@ import {
   avaliarNovoCodigo,
   campoDaChaveDoServidor,
   erroFracaoAtacado,
+  erroFracaoEstoqueInicial,
   formatosDoProduto,
   idDoCampo,
   interruptorDoCampo,
@@ -138,6 +139,9 @@ const CAMPOS_COM_ERRO_DO_SERVIDOR: ReadonlySet<string> = new Set(
 function ehCampoComErroDoServidor(campo: string): campo is keyof ProdutoFormValues {
   return CAMPOS_COM_ERRO_DO_SERVIDOR.has(campo)
 }
+
+/** Campos com a regra de fracao pela unidade de venda (checada no envio). */
+const CAMPOS_COM_ERRO_DE_FRACAO = ['quantidadeMinimaAtacado', 'estoqueInicial'] as const
 
 /** Inicio fixo das mensagens do backend sobre um codigo de barras (409 de outro produto, 400 de digito). */
 const INICIO_MENSAGEM_CODIGO_DE_BARRAS = 'O código de barras '
@@ -429,7 +433,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   // Depois do primeiro envio, os erros que comparam campos acompanham o campo
   // de que dependem (o RHF so revalida o campo alterado): preco de venda ou
   // minimo mudou -> revalida minimo, promocional e atacado. Trocar a unidade
-  // apaga o erro de fracao do atacado, checado de novo no proximo envio.
+  // apaga o erro de fracao (atacado e estoque inicial), checado de novo no proximo envio.
   useEffect(() => {
     if (!isSubmitted) {
       return
@@ -437,8 +441,12 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     const assinatura = watch((_, { name }) => {
       if (name === 'precoVenda' || name === 'precoMinimo') {
         void trigger(['precoMinimo', 'precoPromocional', 'precoAtacado'])
-      } else if (name === 'unidadeId' && getFieldState('quantidadeMinimaAtacado').error?.type === 'manual') {
-        clearErrors('quantidadeMinimaAtacado')
+      } else if (name === 'unidadeId') {
+        for (const campo of CAMPOS_COM_ERRO_DE_FRACAO) {
+          if (getFieldState(campo).error?.type === 'manual') {
+            clearErrors(campo)
+          }
+        }
       }
     })
     return () => assinatura.unsubscribe()
@@ -526,7 +534,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
 
   const salvarMutation = useMutation<Produto, unknown, { valores: ProdutoFormValues; acao: AcaoAposSalvar }>({
     mutationFn: ({ valores }) => {
-      const request = montarRequest(valores)
+      const request = montarRequest(valores, { novo: !produto })
       return produto ? atualizarProduto(produto.id, request) : cadastrarProduto(request)
     },
     onSuccess: (salvo, { valores, acao }) => {
@@ -677,12 +685,25 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     enviandoRef.current = true
     void handleSubmit(
       (valores) => {
-        // Fracao no atacado depende da unidade escolhida: checada aqui, com a lista carregada.
-        const erroFracao = erroFracaoAtacado(valores, unidadesConhecidas)
-        if (erroFracao) {
+        // Fracao no atacado e no estoque inicial depende da unidade escolhida: checada aqui, com a lista carregada.
+        const errosFracao: FieldErrors<ProdutoFormValues> = {}
+        const fracaoAtacado = erroFracaoAtacado(valores, unidadesConhecidas)
+        const fracaoInicial = erroFracaoEstoqueInicial(valores, unidadesConhecidas)
+        if (fracaoAtacado) {
+          errosFracao.quantidadeMinimaAtacado = { type: 'manual', message: fracaoAtacado }
+        }
+        if (fracaoInicial) {
+          errosFracao.estoqueInicial = { type: 'manual', message: fracaoInicial }
+        }
+        if (fracaoAtacado || fracaoInicial) {
           enviandoRef.current = false
-          setError('quantidadeMinimaAtacado', { type: 'manual', message: erroFracao })
-          aoInvalidar({ quantidadeMinimaAtacado: { type: 'manual', message: erroFracao } })
+          for (const campo of CAMPOS_COM_ERRO_DE_FRACAO) {
+            const erro = errosFracao[campo]
+            if (erro?.message) {
+              setError(campo, { type: 'manual', message: erro.message })
+            }
+          }
+          aoInvalidar(errosFracao)
           return
         }
         setErroSalvar(null)
@@ -833,7 +854,12 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
                   <AbaPrecos siglaPorId={siglaPorId} desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
                 </TabsContent>
                 <TabsContent value="estoque">
-                  <AbaEstoque desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
+                  <AbaEstoque
+                    produto={produto}
+                    siglaPorId={siglaPorId}
+                    desabilitado={desabilitado}
+                    aoAlterarCampo={aoAlterarCampo}
+                  />
                 </TabsContent>
                 <TabsContent value="codigos">
                   <AbaCodigos

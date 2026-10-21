@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { HTMLAttributes, ReactNode } from 'react'
 import { Controller, useFormContext, useWatch, type UseFormRegisterReturn } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { AlertCircle, TriangleAlert } from 'lucide-react'
@@ -58,6 +58,8 @@ interface CampoTextoProps {
   step?: string
   min?: string
   maxLength?: number
+  /** Teclado do celular (ex.: "decimal" nas quantidades, que aceitam virgula). */
+  inputMode?: HTMLAttributes<HTMLInputElement>['inputMode']
   inputProps: UseFormRegisterReturn
 }
 
@@ -73,6 +75,7 @@ export function CampoTexto({
   step,
   min,
   maxLength,
+  inputMode,
   inputProps,
 }: CampoTextoProps) {
   return (
@@ -84,6 +87,7 @@ export function CampoTexto({
           step={step}
           min={min}
           maxLength={maxLength}
+          inputMode={inputMode}
           placeholder={placeholder}
           disabled={disabled}
           aria-invalid={erro ? true : undefined}

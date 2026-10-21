@@ -12,6 +12,7 @@ import {
   campoDaChaveDoServidor,
   dataHojeSaoPaulo,
   erroFracaoAtacado,
+  erroFracaoEstoqueInicial,
   interruptorDoCampo,
   margemDesejadaValida,
   situacaoPromocaoLocal,
@@ -29,7 +30,7 @@ import {
   valoresParaCadastrarOutro,
   type ProdutoFormValues,
 } from '@/features/products/produtoFormulario'
-import { CX, KG, UN, produtoAtivo, resumo } from '@/test/fixturesProduto'
+import { CX, KG, UN, produtoAtivo, produtoSimples, resumo } from '@/test/fixturesProduto'
 import type { FormatoCodigoBarras } from '@/types/produto'
 
 describe('produtoFormulario', () => {
@@ -138,6 +139,7 @@ describe('produtoFormulario', () => {
       precoVenda: 25.9,
       custo: 18,
       precoMinimo: 20,
+      controlaEstoque: true,
       estoqueMinimo: 2,
       estoqueMaximo: 50,
       pontoReposicao: 10,
@@ -470,6 +472,115 @@ describe('produtoFormulario', () => {
         quantidadeMinimaAtacado: 'A quantidade mínima do atacado deve ter no máximo 3 casas decimais.',
       })
       expect(erros({ ...base, ...atacado, quantidadeMinimaAtacado: '1.001' })).toEqual({})
+    })
+  })
+  describe('estoque (Fase D)', () => {
+    const base: ProdutoFormValues = { ...valoresIniciais('un'), nome: 'Arroz', precoVenda: '10' }
+
+    function erros(valores: ProdutoFormValues): Record<string, string> {
+      const resultado = produtoSchema.safeParse(valores)
+      return Object.fromEntries((resultado.error?.issues ?? []).map((issue) => [issue.path.join('.'), issue.message]))
+    }
+
+    it('produto novo controla estoque por padrão, sem estoque inicial', () => {
+      expect(valoresIniciais()).toMatchObject({ controlaEstoque: true, estoqueInicial: '' })
+    })
+
+    it('a aba Estoque tem o interruptor, o estoque inicial e os níveis, nessa ordem', () => {
+      expect(CAMPOS_POR_ABA.estoque).toEqual([
+        'controlaEstoque',
+        'estoqueInicial',
+        'estoqueMinimo',
+        'pontoReposicao',
+        'estoqueMaximo',
+      ])
+    })
+
+    it('valoresDoProduto traz o controle gravado e os níveis com vírgula', () => {
+      const valores = valoresDoProduto({
+        ...produtoAtivo,
+        controlaEstoque: false,
+        estoqueMinimo: 2.5,
+        pontoReposicao: 4.125,
+        estoqueMaximo: 1500,
+      })
+      expect(valores).toMatchObject({
+        controlaEstoque: false,
+        estoqueInicial: '',
+        estoqueMinimo: '2,5',
+        pontoReposicao: '4,125',
+        estoqueMaximo: '1500',
+      })
+    })
+
+    it('níveis aceitam vírgula e vão como número no request', () => {
+      const request = montarRequest({ ...base, estoqueMinimo: '2,5', pontoReposicao: '4.5', estoqueMaximo: '10' })
+      expect(request).toMatchObject({ estoqueMinimo: 2.5, pontoReposicao: 4.5, estoqueMaximo: 10 })
+      expect(erros({ ...base, estoqueMinimo: '2,5', pontoReposicao: '4.5', estoqueMaximo: '10' })).toEqual({})
+    })
+
+    it('mínimo ≤ ponto de reposição ≤ máximo, com o erro no campo', () => {
+      expect(erros({ ...base, estoqueMinimo: '5', pontoReposicao: '3' })).toEqual({
+        pontoReposicao: 'O ponto de reposição não pode ser menor que o estoque mínimo.',
+      })
+      expect(erros({ ...base, pontoReposicao: '8', estoqueMaximo: '6' })).toEqual({
+        estoqueMaximo: 'O estoque máximo não pode ser menor que o ponto de reposição.',
+      })
+      expect(erros({ ...base, estoqueMinimo: '8', estoqueMaximo: '6' })).toEqual({
+        estoqueMaximo: 'Estoque máximo não pode ser menor que o estoque mínimo.',
+      })
+      expect(erros({ ...base, estoqueMinimo: '5', pontoReposicao: '5', estoqueMaximo: '5' })).toEqual({})
+    })
+
+    it('níveis: negativo, inválido e mais de 3 casas', () => {
+      expect(erros({ ...base, estoqueMinimo: '-2' })).toEqual({
+        estoqueMinimo: 'Estoque mínimo não pode ser negativo.',
+      })
+      expect(erros({ ...base, pontoReposicao: 'abc' })).toEqual({ pontoReposicao: 'Informe um número válido.' })
+      expect(erros({ ...base, estoqueMaximo: '1,2345' })).toEqual({
+        estoqueMaximo: 'Use no máximo 3 casas decimais.',
+      })
+    })
+
+    it('estoque inicial: opcional, maior que zero e com até 3 casas', () => {
+      expect(erros({ ...base, estoqueInicial: '' })).toEqual({})
+      expect(erros({ ...base, estoqueInicial: '2,5' })).toEqual({})
+      expect(erros({ ...base, estoqueInicial: '0' })).toEqual({
+        estoqueInicial: 'O estoque inicial deve ser maior que zero.',
+      })
+      expect(erros({ ...base, estoqueInicial: '1,2345' })).toEqual({
+        estoqueInicial: 'Use no máximo 3 casas decimais.',
+      })
+      expect(erros({ ...base, estoqueInicial: 'abc' })).toEqual({ estoqueInicial: 'Informe um número válido.' })
+    })
+
+    it('com o controle desligado, o estoque inicial é ignorado', () => {
+      expect(erros({ ...base, controlaEstoque: false, estoqueInicial: '0' })).toEqual({})
+      expect(montarRequest({ ...base, controlaEstoque: false, estoqueInicial: '5' }, { novo: true })).toMatchObject({
+        controlaEstoque: false,
+        estoqueInicial: null,
+      })
+    })
+
+    it('o estoque inicial só vai no cadastro (o PATCH nem leva a chave)', () => {
+      expect(montarRequest({ ...base, estoqueInicial: '2,5' }, { novo: true })).toMatchObject({
+        controlaEstoque: true,
+        estoqueInicial: 2.5,
+      })
+      expect(montarRequest({ ...base, estoqueInicial: '' }, { novo: true })).toMatchObject({ estoqueInicial: null })
+      const edicao = montarRequest({ ...valoresDoProduto(produtoSimples), estoqueInicial: '3' })
+      expect(edicao).not.toHaveProperty('estoqueInicial')
+      expect(edicao.controlaEstoque).toBe(true)
+    })
+
+    it('estoque inicial fracionado só em unidade fracionada', () => {
+      const fracionada = { ...KG, fracionada: true }
+      const valores = { ...base, estoqueInicial: '2,5' }
+      expect(erroFracaoEstoqueInicial(valores, [UN, fracionada])).toBe('A unidade UN não aceita quantidade fracionada.')
+      expect(erroFracaoEstoqueInicial({ ...valores, unidadeId: 'kg' }, [UN, fracionada])).toBeNull()
+      expect(erroFracaoEstoqueInicial({ ...valores, estoqueInicial: '3' }, [UN])).toBeNull()
+      expect(erroFracaoEstoqueInicial({ ...valores, controlaEstoque: false }, [UN])).toBeNull()
+      expect(erroFracaoEstoqueInicial(valores, [])).toBeNull()
     })
   })
 })

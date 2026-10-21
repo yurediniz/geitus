@@ -7,6 +7,7 @@
  */
 
 import type { CategoriaResumo, UnidadeResumo } from '@/types/catalogo'
+import type { SituacaoEstoque } from '@/types/estoque'
 
 /**
  * Formato reconhecido de um codigo de barras: EAN-8, UPC-A e EAN-13 (so digitos,
@@ -79,6 +80,15 @@ export interface Produto {
   emPromocao: boolean
   /** Preco de atacado; null sem atacado. */
   atacado: AtacadoProduto | null
+  /** Se o produto controla estoque (padrao ligado). Desligado, o saldo fica guardado. */
+  controlaEstoque: boolean
+  /**
+   * Saldo atual, derivado das movimentacoes. Vem mesmo com o controle
+   * desligado (fica guardado e volta ao religar). So-leitura.
+   */
+  estoqueAtual: number
+  /** Situacao do saldo; null com o controle desligado. So-leitura. */
+  situacaoEstoque: SituacaoEstoque | null
   estoqueMinimo: number | null
   estoqueMaximo: number | null
   pontoReposicao: number | null
@@ -121,6 +131,12 @@ export interface ProdutoRequest {
   promocao: PromocaoRequest | null
   /** null = sem atacado (remove o gravado). */
   atacado: AtacadoProduto | null
+  controlaEstoque: boolean
+  /**
+   * So no cadastro (POST), > 0 e com o controle ligado: vira a primeira
+   * entrada (motivo Estoque inicial). O PATCH nao envia a chave.
+   */
+  estoqueInicial?: number | null
   estoqueMinimo: number | null
   estoqueMaximo: number | null
   pontoReposicao: number | null

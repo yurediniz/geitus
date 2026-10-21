@@ -207,6 +207,8 @@ const REQUEST_VAZIO: ProdutoRequest = {
   precoMinimo: null,
   promocao: null,
   atacado: null,
+  controlaEstoque: true,
+  estoqueInicial: null,
   estoqueMinimo: null,
   estoqueMaximo: null,
   pontoReposicao: null,
@@ -292,7 +294,7 @@ describe('ProdutoPage', () => {
       abrirAba(/geral/i)
       expect(campoNome()).toHaveValue('Café 500g')
       abrirAba(/estoque/i)
-      expect(screen.getByLabelText(/estoque mínimo/i)).toHaveValue(4)
+      expect(screen.getByLabelText(/estoque mínimo/i)).toHaveValue('4')
     })
 
     it('mostra margem e markup derivados do preço (aba Geral) e do custo', async () => {
@@ -2536,6 +2538,215 @@ describe('ProdutoPage', () => {
       expect(screen.getByText('Ana Souza')).toBeInTheDocument()
       expect(screen.queryByText(/falha interna/i)).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Carregar mais' })).toBeEnabled()
+    })
+  })
+
+  describe('aba Estoque (Fase D)', () => {
+    const KG_FRACIONADA = { ...KG, fracionada: true }
+
+    function interruptorControle(): HTMLElement {
+      return screen.getByRole('switch', { name: 'Controlar estoque' })
+    }
+
+    it('cadastro novo: controle ligado e "Estoque inicial (opcional)" com a sigla, sem saldo', async () => {
+      renderNovo()
+      await esperarFormulario()
+      await waitFor(() => expect(screen.getByLabelText(/unidade de venda/i)).toHaveValue('un'))
+      abrirAba(/estoque/i)
+
+      expect(interruptorControle()).toHaveAttribute('aria-checked', 'true')
+      const campo = screen.getByLabelText('Estoque inicial (opcional)')
+      expect(campo).toHaveAttribute('inputmode', 'decimal')
+      expect(campo).toHaveAccessibleDescription(/UN/)
+      expect(screen.queryByRole('group', { name: 'Saldo atual' })).not.toBeInTheDocument()
+      // Niveis tambem aceitam virgula: texto com teclado decimal, nao type="number".
+      expect(screen.getByLabelText(/estoque mínimo/i)).toHaveAttribute('inputmode', 'decimal')
+      expect(screen.getByLabelText(/estoque mínimo/i)).toHaveAttribute('type', 'text')
+    })
+
+    it('edição: mostra o saldo só leitura com o selo da situação, sem o estoque inicial', async () => {
+      renderEdicao({ ...produtoAtivo, estoqueAtual: 8, situacaoEstoque: 'BAIXO' })
+      await esperarFormulario()
+      abrirAba(/estoque/i)
+
+      const saldo = screen.getByRole('group', { name: 'Saldo atual' })
+      expect(within(saldo).getByText('8 UN')).toBeInTheDocument()
+      expect(within(saldo).getByText('Estoque baixo')).toBeInTheDocument()
+      expect(screen.queryByLabelText('Estoque inicial (opcional)')).not.toBeInTheDocument()
+    })
+
+    it('situação normal não tem selo', async () => {
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/estoque/i)
+
+      const saldo = screen.getByRole('group', { name: 'Saldo atual' })
+      expect(within(saldo).getByText('12 UN')).toBeInTheDocument()
+      expect(within(saldo).queryByText(/estoque baixo|sem estoque/i)).not.toBeInTheDocument()
+    })
+
+    it('desligar o controle esconde o estoque inicial e os níveis; religar mostra de novo', async () => {
+      renderNovo()
+      await esperarFormulario()
+      abrirAba(/estoque/i)
+
+      fireEvent.click(interruptorControle())
+
+      expect(interruptorControle()).toHaveAttribute('aria-checked', 'false')
+      expect(screen.queryByLabelText('Estoque inicial (opcional)')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/estoque mínimo/i)).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/ponto de reposição/i)).not.toBeInTheDocument()
+      expect(screen.queryByLabelText(/estoque máximo/i)).not.toBeInTheDocument()
+
+      fireEvent.click(interruptorControle())
+      expect(screen.getByLabelText('Estoque inicial (opcional)')).toBeInTheDocument()
+      expect(screen.getByLabelText(/estoque mínimo/i)).toBeInTheDocument()
+    })
+
+    it('desligar um produto salvo com saldo avisa que o saldo fica guardado (Review Focus 4)', async () => {
+      atualizarProdutoMock.mockResolvedValue({ ...produtoAtivo, controlaEstoque: false, situacaoEstoque: null })
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/estoque/i)
+
+      fireEvent.click(interruptorControle())
+
+      expect(screen.queryByRole('group', { name: 'Saldo atual' })).not.toBeInTheDocument()
+      expect(
+        screen.getByText('O saldo atual de 12 UN fica guardado e volta se você religar o controle.'),
+      ).toBeInTheDocument()
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(ID_ARROZ, expect.objectContaining({ controlaEstoque: false })),
+      )
+      expect(atualizarProdutoMock.mock.calls[0][1]).not.toHaveProperty('estoqueInicial')
+    })
+
+    it('desligar um produto com saldo zero não mostra o aviso', async () => {
+      renderEdicao({ ...produtoAtivo, estoqueAtual: 0, situacaoEstoque: 'SEM_ESTOQUE' })
+      await esperarFormulario()
+      abrirAba(/estoque/i)
+
+      fireEvent.click(interruptorControle())
+
+      expect(screen.queryByText(/fica guardado/)).not.toBeInTheDocument()
+    })
+
+    it('produto salvo sem controle abre com o interruptor desligado e sem aviso', async () => {
+      renderEdicao({ ...produtoAtivo, controlaEstoque: false, situacaoEstoque: null })
+      await esperarFormulario()
+      abrirAba(/estoque/i)
+
+      expect(interruptorControle()).toHaveAttribute('aria-checked', 'false')
+      expect(screen.queryByRole('group', { name: 'Saldo atual' })).not.toBeInTheDocument()
+      expect(screen.queryByText(/fica guardado/)).not.toBeInTheDocument()
+    })
+
+    it('"2,5" em KG vai no POST como estoqueInicial: 2.5 (Review Focus 5)', async () => {
+      listarUnidadesMock.mockResolvedValue([CX, KG_FRACIONADA, PCT_INATIVA, UN])
+      cadastrarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Café 500g' })
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      await selecionarUnidadeVenda('kg')
+      abrirAba(/estoque/i)
+      expect(screen.getByLabelText('Estoque inicial (opcional)')).toHaveAccessibleDescription(/KG/)
+      fireEvent.change(screen.getByLabelText('Estoque inicial (opcional)'), { target: { value: '2,5' } })
+      fireEvent.change(screen.getByLabelText(/estoque mínimo/i), { target: { value: '1,5' } })
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(cadastrarProdutoMock).toHaveBeenCalledWith(
+          expect.objectContaining({ unidadeId: 'kg', controlaEstoque: true, estoqueInicial: 2.5, estoqueMinimo: 1.5 }),
+        ),
+      )
+    })
+
+    it('"2,5" em UN mostra o erro de fração no campo, sem enviar (Review Focus 5)', async () => {
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      abrirAba(/estoque/i)
+      fireEvent.change(screen.getByLabelText('Estoque inicial (opcional)'), { target: { value: '2,5' } })
+      abrirAba(/geral/i)
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('A unidade UN não aceita quantidade fracionada.')).toBeInTheDocument()
+      expect(aba(/estoque/i)).toHaveAttribute('aria-selected', 'true')
+      await waitFor(() => expect(screen.getByLabelText('Estoque inicial (opcional)')).toHaveFocus())
+      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('com o controle desligado, o POST vai com controlaEstoque: false e sem estoque inicial', async () => {
+      cadastrarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Café 500g' })
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      abrirAba(/estoque/i)
+      fireEvent.change(screen.getByLabelText('Estoque inicial (opcional)'), { target: { value: '3' } })
+      fireEvent.click(interruptorControle())
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(cadastrarProdutoMock).toHaveBeenCalledWith(
+          expect.objectContaining({ controlaEstoque: false, estoqueInicial: null }),
+        ),
+      )
+    })
+
+    it('barra o ponto de reposição abaixo do mínimo na aba Estoque', async () => {
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      abrirAba(/estoque/i)
+      fireEvent.change(screen.getByLabelText(/estoque mínimo/i), { target: { value: '5' } })
+      fireEvent.change(screen.getByLabelText(/ponto de reposição/i), { target: { value: '3' } })
+
+      fireEvent.click(botaoSalvar())
+
+      expect(
+        await screen.findByText('O ponto de reposição não pode ser menor que o estoque mínimo.'),
+      ).toBeInTheDocument()
+      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('400 do servidor em pontoReposicao salta para a aba Estoque com o erro no campo', async () => {
+      atualizarProdutoMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', {
+          pontoReposicao: 'O ponto de reposição não pode ser menor que o estoque mínimo.',
+        }),
+      )
+      renderEdicao()
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(aba(/estoque/i)).toHaveAttribute('aria-selected', 'true'))
+      expect(aba(/estoque/i)).toHaveAccessibleName('Estoque (1 erro)')
+      expect(screen.getByText('O ponto de reposição não pode ser menor que o estoque mínimo.')).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByLabelText(/ponto de reposição/i)).toHaveFocus())
+    })
+
+    it('erro num nível guardado aparece mesmo com o controle desligado', async () => {
+      atualizarProdutoMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', {
+          estoqueMaximo: 'O estoque máximo não pode ser menor que o ponto de reposição.',
+        }),
+      )
+      renderEdicao({ ...produtoAtivo, controlaEstoque: false, situacaoEstoque: null })
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(aba(/estoque/i)).toHaveAttribute('aria-selected', 'true'))
+      expect(screen.getByLabelText(/estoque máximo/i)).toBeInTheDocument()
+      expect(screen.getByText('O estoque máximo não pode ser menor que o ponto de reposição.')).toBeInTheDocument()
+      expect(interruptorControle()).toHaveAttribute('aria-checked', 'false')
     })
   })
 })
