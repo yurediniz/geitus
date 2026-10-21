@@ -152,6 +152,11 @@ public class Produto {
         this.criadoEm = LocalDateTime.now();
     }
 
+    /**
+     * Carimbo de toda alteracao gravada. O service faz {@code flush} antes de
+     * montar a resposta do PATCH/inativar/reativar, entao a resposta ja traz
+     * este valor (o mesmo que fica no banco).
+     */
     @PreUpdate
     void aoAtualizar() {
         this.atualizadoEm = LocalDateTime.now();
@@ -192,14 +197,33 @@ public class Produto {
      * {@code uq_codigo_barras_empresa}, porque no flush o Hibernate insere antes
      * de apagar os orfaos. Os codigos chegam validados pelo service
      * (normalizados, sem repeticao, no maximo 20, unicos na empresa).
+     *
+     * <p>Os codigos ficam em outra tabela, entao mudar so eles nao deixaria o
+     * produto "sujo" e o {@code @PreUpdate} nao rodaria. Por isso, num produto
+     * ja gravado cuja sequencia de codigos (texto e ordem) mudou, o
+     * {@code atualizadoEm} e carimbado aqui — o que tambem dispara o UPDATE do
+     * produto. Produto ainda nao gravado nao carimba: {@code atualizado_em}
+     * continua nulo ate a primeira alteracao depois do cadastro.
      */
     public void substituirCodigos(List<CodigoBarrasValidado> informados) {
+        List<String> codigosAnteriores = textosDosCodigos();
         List<ProdutoCodigoBarras> reconciliados = new ArrayList<>(informados.size());
         for (int ordem = 0; ordem < informados.size(); ordem++) {
             reconciliados.add(codigoReposicionadoOuNovo(informados.get(ordem), ordem));
         }
         codigosBarras.clear();
         codigosBarras.addAll(reconciliados);
+        if (jaGravado() && !codigosAnteriores.equals(textosDosCodigos())) {
+            this.atualizadoEm = LocalDateTime.now();
+        }
+    }
+
+    private List<String> textosDosCodigos() {
+        return codigosBarras.stream().map(ProdutoCodigoBarras::getCodigo).toList();
+    }
+
+    private boolean jaGravado() {
+        return id != null;
     }
 
     private ProdutoCodigoBarras codigoReposicionadoOuNovo(CodigoBarrasValidado informado, int ordem) {

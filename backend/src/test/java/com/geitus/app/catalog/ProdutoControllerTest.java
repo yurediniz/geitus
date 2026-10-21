@@ -337,7 +337,7 @@ class ProdutoControllerTest {
     @Test
     void cadastrarComSkuDuplicadoDeveRetornar409() throws Exception {
         when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
-                .thenThrow(new ProdutoConflitoException("Já existe um produto com este SKU nesta empresa."));
+                .thenThrow(new ProdutoConflitoException("Já existe um produto com este SKU nesta empresa.", "sku"));
 
         String token = tokenParaUsuario(1L);
 
@@ -346,14 +346,17 @@ class ProdutoControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(corpo("Produto", "10.00", "\"sku\": \"SKU-1\"")))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.mensagem").value("Já existe um produto com este SKU nesta empresa."));
+                .andExpect(jsonPath("$.mensagem").value("Já existe um produto com este SKU nesta empresa."))
+                .andExpect(jsonPath("$.campos[?(@.campo=='sku')].mensagem")
+                        .value("Já existe um produto com este SKU nesta empresa."));
     }
 
     @Test
     void cadastrarComCodigoBarrasDuplicadoDeveRetornar409() throws Exception {
         when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
                 .thenThrow(new ProdutoConflitoException(
-                        "O código de barras 7891000315507 já está cadastrado no produto \"Arroz 5kg\"."));
+                        "O código de barras 7891000315507 já está cadastrado no produto \"Arroz 5kg\".",
+                        "codigosBarras"));
 
         String token = tokenParaUsuario(1L);
 
@@ -363,6 +366,8 @@ class ProdutoControllerTest {
                         .content(corpo("Produto", "10.00", "\"codigosBarras\": [\"7891000315507\"]")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.mensagem")
+                        .value("O código de barras 7891000315507 já está cadastrado no produto \"Arroz 5kg\"."))
+                .andExpect(jsonPath("$.campos[?(@.campo=='codigosBarras')].mensagem")
                         .value("O código de barras 7891000315507 já está cadastrado no produto \"Arroz 5kg\"."));
     }
 
@@ -450,7 +455,8 @@ class ProdutoControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(corpo("Produto", "10.00", "\"fatorConversao\": 12")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.mensagem").value("Informe a unidade de compra e o fator de conversão juntos."));
+                .andExpect(jsonPath("$.mensagem").value("Informe a unidade de compra e o fator de conversão juntos."))
+                .andExpect(jsonPath("$.campos").doesNotExist());
     }
 
     @Test
@@ -522,7 +528,7 @@ class ProdutoControllerTest {
     @Test
     void atualizarComSkuDuplicadoDeOutroProdutoDeveRetornar409() throws Exception {
         when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(PRODUTO_ID), any(ProdutoRequest.class)))
-                .thenThrow(new ProdutoConflitoException("Já existe um produto com este SKU nesta empresa."));
+                .thenThrow(new ProdutoConflitoException("Já existe um produto com este SKU nesta empresa.", "sku"));
 
         String token = tokenParaUsuario(1L);
 
@@ -530,7 +536,8 @@ class ProdutoControllerTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(corpo("Produto", "10.00", "\"sku\": \"SKU-DE-OUTRO\"")))
-                .andExpect(status().isConflict());
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.campos[?(@.campo=='sku')]").exists());
     }
 
     @Test
@@ -693,7 +700,7 @@ class ProdutoControllerTest {
     void codigoComDigitoInvalidoRetorna400ComMensagemDoService() throws Exception {
         String mensagem = "Código de barras 7891000315508 com dígito verificador inválido. Confira a leitura.";
         when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
-                .thenThrow(new RegraDeNegocioException(mensagem));
+                .thenThrow(new RegraDeNegocioException(mensagem, "codigosBarras"));
 
         String token = tokenParaUsuario(1L);
 
@@ -702,7 +709,8 @@ class ProdutoControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(corpo("Produto", "10.00", "\"codigosBarras\": [\"7891000315508\"]")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.mensagem").value(mensagem));
+                .andExpect(jsonPath("$.mensagem").value(mensagem))
+                .andExpect(jsonPath("$.campos[?(@.campo=='codigosBarras')].mensagem").value(mensagem));
 
         ArgumentCaptor<ProdutoRequest> request = ArgumentCaptor.forClass(ProdutoRequest.class);
         org.mockito.Mockito.verify(produtoService).cadastrarParaUsuario(eq(1L), request.capture());
@@ -760,7 +768,8 @@ class ProdutoControllerTest {
 
         mockMvc.perform(delete("/api/produtos/" + PRODUTO_ID).header("Authorization", "Bearer " + token))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.mensagem").value(mensagem));
+                .andExpect(jsonPath("$.mensagem").value(mensagem))
+                .andExpect(jsonPath("$.campos").doesNotExist());
     }
 
     // ---------- Fase B: SKU sugerido e sugestoes ----------

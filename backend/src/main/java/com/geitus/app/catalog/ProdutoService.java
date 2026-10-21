@@ -14,6 +14,8 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -82,6 +84,10 @@ public class ProdutoService {
             + "Inative-o para que não apareça na venda.";
     static final String MENSAGEM_CAMPO_DE_SUGESTAO_INVALIDO = "Campo de sugestão inválido.";
 
+    /** Campos do {@code ProdutoRequest} devolvidos em {@code campos} nos erros de regra (contrato aditivo). */
+    static final String CAMPO_SKU = "sku";
+    static final String CAMPO_CODIGOS_BARRAS = "codigosBarras";
+
     static final int MAXIMO_CODIGOS_POR_PRODUTO = 20;
     static final int TAMANHO_MAXIMO_CODIGO = 50;
     static final int LIMITE_DE_SUGESTOES = 10;
@@ -91,6 +97,8 @@ public class ProdutoService {
     private static final Pattern SKU_NO_PADRAO = Pattern.compile("P([0-9]{6,})");
     private static final String PREFIXO_SKU_SUGERIDO = "P";
     private static final String FORMATO_NUMERO_SKU_SUGERIDO = "%06d";
+
+    private static final Logger LOG = LoggerFactory.getLogger(ProdutoService.class);
 
     private final ProdutoRepository produtoRepository;
     private final EmpresaRepository empresaRepository;
@@ -123,17 +131,23 @@ public class ProdutoService {
         return produtoRepository.save(produto);
     }
 
+    /**
+     * Atualiza o cadastro. {@code codigosBarras} {@code null} (campo ausente no
+     * PATCH) mantem os codigos atuais, sem validar nem tocar na lista; uma
+     * lista — inclusive {@code []}, que remove todos — substitui a lista inteira.
+     */
     Produto atualizarDadosBasicos(Long empresaId, UUID produtoId, ProdutoRequest request) {
         Produto produto = buscarPorId(empresaId, produtoId);
 
         validarCampos(request);
-        List<CodigoBarrasValidado> codigos = validarCodigos(empresaId, request.codigosBarras(), produto);
+        Optional<List<CodigoBarrasValidado>> codigos = Optional.ofNullable(request.codigosBarras())
+                .map(informados -> validarCodigos(empresaId, informados, produto));
         String sku = normalizarOuNulo(request.sku());
         garantirSkuDisponivelParaProdutoExistente(empresaId, produto.getId(), sku);
         Vinculos vinculos = resolverVinculos(empresaId, request, produto);
 
         produto.atualizarDadosBasicos(dadosDoProduto(request, vinculos, sku));
-        produto.substituirCodigos(codigos);
+        codigos.ifPresent(produto::substituirCodigos);
         return produtoRepository.save(produto);
     }
 
@@ -152,13 +166,21 @@ public class ProdutoService {
     /**
      * Exclusao fisica (spec 4.5, DEC-030): so se {@link #podeExcluir}; senao 409.
      * Os codigos de barras saem junto (cascade na entidade e no banco).
+     *
+     * <p><b>Rastro provisorio</b> ate existir a auditoria (divida tecnica): log
+     * {@code INFO} so com identificadores — usuario, empresa e UUID publico do
+     * produto —, nunca nome, SKU ou outro dado do cadastro. O {@code flush}
+     * executa o {@code DELETE} antes do log, para o rastro so ser registrado
+     * depois de o banco aceitar a exclusao.
      */
-    void excluir(Long empresaId, UUID produtoId) {
+    void excluir(Long idUsuario, Long empresaId, UUID produtoId) {
         Produto produto = buscarPorId(empresaId, produtoId);
         if (!podeExcluir(produto)) {
             throw new ProdutoConflitoException(MENSAGEM_EXCLUSAO_BLOQUEADA);
         }
         produtoRepository.delete(produto);
+        produtoRepository.flush();
+        LOG.info("Produto excluido: usuario={} empresa={} produto={}", idUsuario, empresaId, produtoId);
     }
 
     /**
@@ -185,13 +207,20 @@ public class ProdutoService {
      * os codigos de barras pelo termo sem espacos; {@code %} e {@code _} do
      * termo sao literais (DT-017). Sem termo, usa a query sem padroes (ver nota
      * no {@link ProdutoRepository}).
+     *
+     * <p>"Sem termo" e decidido pelo termo de codigo, que remove TODO espaco
+     * Unicode — inclusive os nao separaveis (U+00A0, U+2007, U+202F), que
+     * {@code StringUtils.hasText} e {@code trim} nao tratam como espaco. Se
+     * nao sobra nada, e listagem sem busca; se sobra, o termo de texto tambem
+     * tem conteudo.
      */
     List<Produto> listarPorEmpresaComFiltros(Long empresaId, String busca, Boolean ativo) {
-        if (!StringUtils.hasText(busca)) {
+        String termoDeCodigo = CodigoBarras.normalizar(busca);
+        if (termoDeCodigo == null) {
             return produtoRepository.buscarPorEmpresa(empresaId, ativo);
         }
         String padraoTexto = PadraoLike.contem(emMinusculas(busca.trim()));
-        String padraoCodigo = PadraoLike.contem(emMinusculas(CodigoBarras.normalizar(busca)));
+        String padraoCodigo = PadraoLike.contem(emMinusculas(termoDeCodigo));
         return produtoRepository.buscarPorEmpresaComBusca(empresaId, padraoTexto, padraoCodigo, ativo);
     }
 
@@ -208,7 +237,8 @@ public class ProdutoService {
                 .map(numero -> new BigInteger(numero.group(1)))
                 .max(Comparator.naturalOrder())
                 .orElse(BigInteger.ZERO);
-        return PREFIXO_SKU_SUGERIDO + String.format(FORMATO_NUMERO_SKU_SUGERIDO, maiorNumero.add(BigInteger.ONE));
+        return PREFIXO_SKU_SUGERIDO
+                + String.format(Locale.ROOT, FORMATO_NUMERO_SKU_SUGERIDO, maiorNumero.add(BigInteger.ONE));
     }
 
     /**
@@ -236,22 +266,22 @@ public class ProdutoService {
 
     @Transactional
     public ProdutoResponse atualizarDadosBasicosParaUsuario(Long idUsuario, UUID produtoId, ProdutoRequest request) {
-        return responder(atualizarDadosBasicos(resolverEmpresaId(idUsuario), produtoId, request));
+        return responderAposGravar(atualizarDadosBasicos(resolverEmpresaId(idUsuario), produtoId, request));
     }
 
     @Transactional
     public ProdutoResponse inativarParaUsuario(Long idUsuario, UUID produtoId) {
-        return responder(inativar(resolverEmpresaId(idUsuario), produtoId));
+        return responderAposGravar(inativar(resolverEmpresaId(idUsuario), produtoId));
     }
 
     @Transactional
     public ProdutoResponse reativarParaUsuario(Long idUsuario, UUID produtoId) {
-        return responder(reativar(resolverEmpresaId(idUsuario), produtoId));
+        return responderAposGravar(reativar(resolverEmpresaId(idUsuario), produtoId));
     }
 
     @Transactional
     public void excluirParaUsuario(Long idUsuario, UUID produtoId) {
-        excluir(resolverEmpresaId(idUsuario), produtoId);
+        excluir(idUsuario, resolverEmpresaId(idUsuario), produtoId);
     }
 
     @Transactional(readOnly = true)
@@ -296,7 +326,7 @@ public class ProdutoService {
         List<String> codigos = normalizarCodigos(informados);
         exigirSemRepetidos(codigos);
         if (codigos.size() > MAXIMO_CODIGOS_POR_PRODUTO) {
-            throw new RegraDeNegocioException(MENSAGEM_LIMITE_DE_CODIGOS);
+            throw new RegraDeNegocioException(MENSAGEM_LIMITE_DE_CODIGOS, CAMPO_CODIGOS_BARRAS);
         }
         List<CodigoBarrasValidado> validados = new ArrayList<>(codigos.size());
         for (String codigo : codigos) {
@@ -320,7 +350,7 @@ public class ProdutoService {
         Set<String> vistos = new HashSet<>();
         for (String codigo : codigos) {
             if (!vistos.add(codigo)) {
-                throw new RegraDeNegocioException(MENSAGEM_CODIGO_REPETIDO);
+                throw new RegraDeNegocioException(MENSAGEM_CODIGO_REPETIDO, CAMPO_CODIGOS_BARRAS);
             }
         }
     }
@@ -337,13 +367,14 @@ public class ProdutoService {
 
     private CodigoBarrasValidado codigoNovoValidado(Long empresaId, String codigo, Long produtoAtualId) {
         if (codigo.length() > TAMANHO_MAXIMO_CODIGO) {
-            throw new RegraDeNegocioException(MENSAGEM_CODIGO_LONGO);
+            throw new RegraDeNegocioException(MENSAGEM_CODIGO_LONGO, CAMPO_CODIGOS_BARRAS);
         }
         if (CodigoBarras.ehCandidatoGs1(codigo) && !CodigoBarras.digitoVerificadorValido(codigo)) {
-            throw new RegraDeNegocioException(MENSAGEM_DIGITO_INVALIDO.formatted(codigo));
+            throw new RegraDeNegocioException(MENSAGEM_DIGITO_INVALIDO.formatted(codigo), CAMPO_CODIGOS_BARRAS);
         }
         produtoRepository.produtoComCodigo(empresaId, codigo, produtoAtualId).ifPresent(nomeDoProduto -> {
-            throw new ProdutoConflitoException(MENSAGEM_CODIGO_EM_OUTRO_PRODUTO.formatted(codigo, nomeDoProduto));
+            throw new ProdutoConflitoException(MENSAGEM_CODIGO_EM_OUTRO_PRODUTO.formatted(codigo, nomeDoProduto),
+                    CAMPO_CODIGOS_BARRAS);
         });
         return new CodigoBarrasValidado(codigo, CodigoBarras.detectarFormato(codigo));
     }
@@ -493,6 +524,16 @@ public class ProdutoService {
         return ProdutoResponse.de(produto, arvore, podeExcluir(produto));
     }
 
+    /**
+     * Resposta depois de aplicar a alteracao no banco: o {@code flush} dispara o
+     * {@code @PreUpdate} do produto, entao o {@code atualizadoEm} da resposta e
+     * o mesmo que ficou gravado.
+     */
+    private ProdutoResponse responderAposGravar(Produto produto) {
+        produtoRepository.flush();
+        return responder(produto);
+    }
+
     private Long resolverEmpresaId(Long idUsuario) {
         Usuario usuario = usuarioRepository.findById(idUsuario)
                 .filter(Usuario::isAtivo)
@@ -563,13 +604,13 @@ public class ProdutoService {
 
     private void garantirSkuDisponivelParaNovoProduto(Long empresaId, String sku) {
         if (sku != null && produtoRepository.existsBySkuAndEmpresa_Id(sku, empresaId)) {
-            throw new ProdutoConflitoException(MENSAGEM_SKU_DUPLICADO);
+            throw new ProdutoConflitoException(MENSAGEM_SKU_DUPLICADO, CAMPO_SKU);
         }
     }
 
     private void garantirSkuDisponivelParaProdutoExistente(Long empresaId, Long produtoId, String sku) {
         if (sku != null && produtoRepository.existsBySkuAndEmpresa_IdAndIdNot(sku, empresaId, produtoId)) {
-            throw new ProdutoConflitoException(MENSAGEM_SKU_DUPLICADO);
+            throw new ProdutoConflitoException(MENSAGEM_SKU_DUPLICADO, CAMPO_SKU);
         }
     }
 }

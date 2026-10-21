@@ -19,6 +19,11 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        # Falha (em vez de so avisar) se uma consulta paginada fizer JOIN FETCH de
+        # colecao: impede o Hibernate de paginar em memoria quando a listagem de
+        # produtos ganhar paginacao com os codigos de barras (Fase E).
+        query:
+          fail_on_pagination_over_collection_fetch: true
 
   flyway:
     enabled: true

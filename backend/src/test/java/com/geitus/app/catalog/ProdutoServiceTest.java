@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -15,13 +16,16 @@ import static org.mockito.Mockito.when;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
+import org.assertj.core.api.ThrowingConsumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -53,6 +57,7 @@ class ProdutoServiceTest {
 
     private static final Long EMPRESA_ID = 1L;
     private static final Long PRODUTO_ID = 5L;
+    private static final Long ID_USUARIO = 9L;
     private static final String EAN13_VALIDO = "7891000315507";
     private static final String EAN13_DIGITO_INVALIDO = "7891000315508";
     private static final String EAN8_VALIDO = "96385074";
@@ -165,6 +170,13 @@ class ProdutoServiceTest {
         return produto.getCodigosBarras().stream().map(ProdutoCodigoBarras::getCodigo).toList();
     }
 
+    /** Campo que a excecao de regra/conflito informa (vai para {@code campos} na resposta). */
+    private static ThrowingConsumer<Throwable> noCampo(String campo) {
+        return erro -> assertThat(erro instanceof RegraDeNegocioException regra
+                ? regra.campo()
+                : ((ProdutoConflitoException) erro).campo()).contains(campo);
+    }
+
     private static List<FormatoCodigoBarras> formatosDe(Produto produto) {
         return produto.getCodigosBarras().stream().map(ProdutoCodigoBarras::getFormato).toList();
     }
@@ -237,7 +249,8 @@ class ProdutoServiceTest {
         when(produtoRepository.existsBySkuAndEmpresa_Id("SKU-1", EMPRESA_ID)).thenReturn(true);
 
         assertThatThrownBy(() -> cadastrar(requestComUN().sku("SKU-1").build()))
-                .isInstanceOf(ProdutoConflitoException.class);
+                .isInstanceOf(ProdutoConflitoException.class)
+                .satisfies(noCampo("sku"));
 
         verify(produtoRepository, never()).save(any());
     }
@@ -310,7 +323,8 @@ class ProdutoServiceTest {
                 .thenReturn(true);
 
         assertThatThrownBy(() -> atualizar(requestComUN().sku("SKU-DE-OUTRO").build()))
-                .isInstanceOf(ProdutoConflitoException.class);
+                .isInstanceOf(ProdutoConflitoException.class)
+                .satisfies(noCampo("sku"));
 
         verify(produtoRepository, never()).save(any());
     }
@@ -357,7 +371,8 @@ class ProdutoServiceTest {
     void codigoNovoComDigitoInvalidoLanca400ComMensagemFixa() {
         assertThatThrownBy(() -> cadastrar(requestComUN().codigosBarras(EAN13_DIGITO_INVALIDO).build()))
                 .isInstanceOf(RegraDeNegocioException.class)
-                .hasMessage("Código de barras 7891000315508 com dígito verificador inválido. Confira a leitura.");
+                .hasMessage("Código de barras 7891000315508 com dígito verificador inválido. Confira a leitura.")
+                .satisfies(noCampo("codigosBarras"));
 
         verify(produtoRepository, never()).save(any());
     }
@@ -405,7 +420,8 @@ class ProdutoServiceTest {
 
         assertThatThrownBy(() -> cadastrar(requestComUN().codigosBarras(EAN13_VALIDO).build()))
                 .isInstanceOf(ProdutoConflitoException.class)
-                .hasMessage("O código de barras 7891000315507 já está cadastrado no produto \"Arroz 5kg\".");
+                .hasMessage("O código de barras 7891000315507 já está cadastrado no produto \"Arroz 5kg\".")
+                .satisfies(noCampo("codigosBarras"));
 
         verify(produtoRepository, never()).save(any());
     }
@@ -430,7 +446,8 @@ class ProdutoServiceTest {
         // Repetido depois da normalizacao (espacos removidos).
         assertThatThrownBy(() -> cadastrar(requestComUN().codigosBarras(EAN13_VALIDO, " 7891 000315507 ").build()))
                 .isInstanceOf(RegraDeNegocioException.class)
-                .hasMessage("Código de barras repetido na lista.");
+                .hasMessage("Código de barras repetido na lista.")
+                .satisfies(noCampo("codigosBarras"));
 
         verify(produtoRepository, never()).save(any());
     }
@@ -441,7 +458,8 @@ class ProdutoServiceTest {
 
         assertThatThrownBy(() -> cadastrar(requestComUN().codigosBarras(vinteEUm).build()))
                 .isInstanceOf(RegraDeNegocioException.class)
-                .hasMessage("Informe no máximo 20 códigos de barras.");
+                .hasMessage("Informe no máximo 20 códigos de barras.")
+                .satisfies(noCampo("codigosBarras"));
 
         verify(produtoRepository, never()).save(any());
     }
@@ -471,7 +489,8 @@ class ProdutoServiceTest {
     void codigoAcimaDe50CaracteresLanca400() {
         assertThatThrownBy(() -> cadastrar(requestComUN().codigosBarras("X".repeat(51)).build()))
                 .isInstanceOf(RegraDeNegocioException.class)
-                .hasMessage("Código de barras deve ter no máximo 50 caracteres.");
+                .hasMessage("Código de barras deve ter no máximo 50 caracteres.")
+                .satisfies(noCampo("codigosBarras"));
     }
 
     @Test
@@ -501,6 +520,62 @@ class ProdutoServiceTest {
         assertThat(atualizado.getCodigosBarras()).containsExactly(originais.get(1), originais.get(0));
         assertThat(formatosDe(atualizado)).containsExactly(FormatoCodigoBarras.OUTRO, FormatoCodigoBarras.EAN13);
         assertThat(atualizado.getCodigosBarras()).extracting(ProdutoCodigoBarras::getOrdem).containsExactly(0, 1);
+    }
+
+    @Test
+    void patchComCodigosNuloMantemOsCodigosSemValidarNemSubstituir() {
+        // Decisao do CTO: campo ausente/null no PATCH mantem a lista atual.
+        Produto produto = produtoExistente(existente().codigo(EAN13_VALIDO).codigo("ABC-1"));
+        List<ProdutoCodigoBarras> originais = List.copyOf(produto.getCodigosBarras());
+        edicaoPermitida();
+
+        Produto atualizado = atualizar(requestComUN().nome("Arroz 1kg").codigosBarras((List<String>) null).build());
+
+        assertThat(atualizado.getNome()).isEqualTo("Arroz 1kg");
+        assertThat(atualizado.getCodigosBarras()).containsExactlyElementsOf(originais);
+        assertThat(atualizado.getAtualizadoEm()).isNull();
+        verify(produtoRepository, never()).produtoComCodigo(any(), any(), any());
+    }
+
+    @Test
+    void cadastroComCodigosNuloFicaSemCodigos() {
+        cadastroPermitido();
+
+        Produto produto = cadastrar(requestComUN().codigosBarras((List<String>) null).build());
+
+        assertThat(produto.getCodigosBarras()).isEmpty();
+    }
+
+    @Test
+    void patchQueMudaSoOsCodigosCarimbaAtualizadoEm() {
+        // Codigos ficam em outra tabela: sem o carimbo, o produto nao ficaria sujo.
+        produtoExistente(existente().codigo(EAN13_VALIDO).codigo("ABC-1"));
+        edicaoPermitida();
+
+        Produto atualizado = atualizar(requestComUN().nome("Produto Existente")
+                .codigosBarras("ABC-1", EAN13_VALIDO).build());
+
+        assertThat(atualizado.getAtualizadoEm()).isNotNull();
+    }
+
+    @Test
+    void patchComOsMesmosCodigosNaMesmaOrdemNaoCarimbaPelosCodigos() {
+        produtoExistente(existente().codigo(EAN13_VALIDO).codigo("ABC-1"));
+        edicaoPermitida();
+
+        Produto atualizado = atualizar(requestComUN().nome("Produto Existente")
+                .codigosBarras(" 7891 000315507 ", "ABC-1").build());
+
+        assertThat(atualizado.getAtualizadoEm()).isNull();
+    }
+
+    @Test
+    void produtoNovoNaoCarimbaAtualizadoEmAoReceberCodigos() {
+        cadastroPermitido();
+
+        Produto produto = cadastrar(requestComUN().codigosBarras(EAN13_VALIDO).build());
+
+        assertThat(produto.getAtualizadoEm()).isNull();
     }
 
     @Test
@@ -563,6 +638,20 @@ class ProdutoServiceTest {
     }
 
     @Test
+    void sugerirSkuUsaDigitosAsciiComQualquerLocalePadrao() {
+        // Locale com digitos tailandeses: sem Locale.ROOT, o %06d sairia "P๐๐๐๐๐๑".
+        when(produtoRepository.skusNoPadrao(EMPRESA_ID)).thenReturn(List.of());
+        Locale anterior = Locale.getDefault(Locale.Category.FORMAT);
+        try {
+            Locale.setDefault(Locale.Category.FORMAT, Locale.forLanguageTag("th-TH-u-nu-thai"));
+
+            assertThat(produtoService.sugerirSku(EMPRESA_ID)).isEqualTo("P000001");
+        } finally {
+            Locale.setDefault(Locale.Category.FORMAT, anterior);
+        }
+    }
+
+    @Test
     void sugerirSkuAcimaDe999999() {
         when(produtoRepository.skusNoPadrao(EMPRESA_ID)).thenReturn(List.of("P999999", "P12345", "PX000001"));
 
@@ -621,9 +710,11 @@ class ProdutoServiceTest {
     void excluirRemoveQuandoPodeExcluir() {
         Produto produto = produtoExistente();
 
-        produtoService.excluir(EMPRESA_ID, produtoUuid);
+        produtoService.excluir(ID_USUARIO, EMPRESA_ID, produtoUuid);
 
-        verify(produtoRepository).delete(produto);
+        InOrder ordem = inOrder(produtoRepository);
+        ordem.verify(produtoRepository).delete(produto);
+        ordem.verify(produtoRepository).flush();
     }
 
     @Test
@@ -637,7 +728,7 @@ class ProdutoServiceTest {
         };
         produtoExistente();
 
-        assertThatThrownBy(() -> comMovimentacao.excluir(EMPRESA_ID, produtoUuid))
+        assertThatThrownBy(() -> comMovimentacao.excluir(ID_USUARIO, EMPRESA_ID, produtoUuid))
                 .isInstanceOf(ProdutoConflitoException.class)
                 .hasMessage("Este produto já teve movimentação e não pode ser excluído. "
                         + "Inative-o para que não apareça na venda.");
@@ -650,7 +741,7 @@ class ProdutoServiceTest {
         UUID deOutraEmpresa = UUID.randomUUID();
         when(produtoRepository.findByUuidAndEmpresa_Id(deOutraEmpresa, EMPRESA_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> produtoService.excluir(EMPRESA_ID, deOutraEmpresa))
+        assertThatThrownBy(() -> produtoService.excluir(ID_USUARIO, EMPRESA_ID, deOutraEmpresa))
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
 
         verify(produtoRepository, never()).delete(any());
@@ -679,6 +770,19 @@ class ProdutoServiceTest {
         produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, "   ", true);
 
         verify(produtoRepository, times(2)).buscarPorEmpresa(EMPRESA_ID, true);
+        verify(produtoRepository, never()).buscarPorEmpresaComBusca(any(), any(), any(), any());
+    }
+
+    @Test
+    void listarComBuscaSoDeEspacosNaoSeparaveisUsaQuerySemBusca() {
+        // Regressao: "\u00A0" passava no hasText, a normalizacao do codigo virava null e dava NPE (500).
+        when(produtoRepository.buscarPorEmpresa(EMPRESA_ID, null)).thenReturn(List.of());
+
+        produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, "\u00A0", null);
+        produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, "\u2007", null);
+        produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, " \u202F ", null);
+
+        verify(produtoRepository, times(3)).buscarPorEmpresa(EMPRESA_ID, null);
         verify(produtoRepository, never()).buscarPorEmpresaComBusca(any(), any(), any(), any());
     }
 

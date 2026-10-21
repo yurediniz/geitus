@@ -32,9 +32,11 @@ import jakarta.validation.constraints.Size;
  * {@code fator_conversao NUMERIC(12,4)}). O {@code @Digits} garante um 400
  * amigavel em vez de um erro de banco quando o cliente envia casas a mais.
  *
- * <p>{@code codigosBarras} e a lista completa (0 a 20): o PATCH substitui a
- * lista inteira e {@code null} equivale a lista vazia. Normalizacao, formato,
- * repeticao e unicidade na empresa ficam no service (spec 4.3).
+ * <p>{@code codigosBarras} e a lista completa (0 a 20). No PATCH, uma lista
+ * substitui a lista inteira ({@code []} remove todos) e o campo ausente ou
+ * {@code null} MANTEM os codigos atuais; no cadastro, {@code null} e "sem
+ * codigos". Normalizacao, formato, repeticao e unicidade na empresa ficam no
+ * service (spec 4.3).
  */
 @Schema(description = "Dados para cadastro ou atualizacao de um produto")
 public record ProdutoRequest(
@@ -108,7 +110,9 @@ public record ProdutoRequest(
         @Digits(integer = 10, fraction = 2, message = "Preço mínimo deve ter no máximo 2 casas decimais.")
         BigDecimal precoMinimo,
 
-        @Schema(description = "Codigos de barras na ordem (o primeiro e o principal); substitui a lista inteira",
+        @Schema(description = "Codigos de barras na ordem (o primeiro e o principal). Lista informada substitui "
+                + "a lista inteira ([] remove todos); no PATCH, ausente ou null mantem os codigos atuais; "
+                + "no cadastro, ausente ou null = sem codigos",
                 example = "[\"7891000315507\"]")
         @Size(max = 20, message = "Informe no máximo 20 códigos de barras.")
         List<@Size(max = 50, message = "Código de barras deve ter no máximo 50 caracteres.") String> codigosBarras,

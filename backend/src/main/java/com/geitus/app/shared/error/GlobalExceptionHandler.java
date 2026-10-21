@@ -1,6 +1,7 @@
 package com.geitus.app.shared.error;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -156,33 +157,25 @@ public class GlobalExceptionHandler {
      * nome vazio, preco/custo/estoque negativo ou ciclo na arvore de
      * categorias) -> 400. Conflitos de
      * unicidade (SKU/codigo de barras duplicado) usam {@code ProdutoConflitoException}
-     * e retornam 409.
+     * e retornam 409. Quando a regra e de um campo, a resposta traz tambem
+     * {@code campos}.
      */
     @ExceptionHandler(RegraDeNegocioException.class)
     public ResponseEntity<ApiError> tratarRegraDeNegocio(RegraDeNegocioException ex, HttpServletRequest request) {
-        ApiError corpo = ApiError.de(
-                HttpStatus.BAD_REQUEST.value(),
-                HttpStatus.BAD_REQUEST.getReasonPhrase(),
-                ex.getMessage(),
-                request.getRequestURI());
-
+        ApiError corpo = erroComCampoOpcional(HttpStatus.BAD_REQUEST, ex.getMessage(), request, ex.campo());
         return ResponseEntity.badRequest().body(corpo);
     }
 
     /**
      * Conflito no modulo Produtos (SKU ou codigo de barras ja usado por outro
      * produto da mesma empresa, ou exclusao de produto com movimentacao).
-     * Mapeado para HTTP 409.
+     * Mapeado para HTTP 409; quando o conflito e de um campo ({@code sku},
+     * {@code codigosBarras}), a resposta traz tambem {@code campos}.
      */
     @ExceptionHandler(ProdutoConflitoException.class)
     public ResponseEntity<ApiError> tratarConflitoDeProduto(ProdutoConflitoException ex,
             HttpServletRequest request) {
-        ApiError corpo = ApiError.de(
-                HttpStatus.CONFLICT.value(),
-                HttpStatus.CONFLICT.getReasonPhrase(),
-                ex.getMessage(),
-                request.getRequestURI());
-
+        ApiError corpo = erroComCampoOpcional(HttpStatus.CONFLICT, ex.getMessage(), request, ex.campo());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(corpo);
     }
 
@@ -380,6 +373,20 @@ public class GlobalExceptionHandler {
                 request.getRequestURI());
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(corpo);
+    }
+
+    /**
+     * Erro com a mensagem da regra; se a regra for de um campo, inclui
+     * {@code campos: [{campo, mensagem}]} com a mesma mensagem (contrato
+     * aditivo: quem so le {@code mensagem} nao muda).
+     */
+    private static ApiError erroComCampoOpcional(HttpStatus status, String mensagem, HttpServletRequest request,
+            Optional<String> campo) {
+        if (campo.isEmpty()) {
+            return ApiError.de(status.value(), status.getReasonPhrase(), mensagem, request.getRequestURI());
+        }
+        return ApiError.deValidacao(status.value(), status.getReasonPhrase(), mensagem, request.getRequestURI(),
+                List.of(new ApiError.CampoInvalido(campo.get(), mensagem)));
     }
 
     private ApiError.CampoInvalido mapearCampo(FieldError erro) {

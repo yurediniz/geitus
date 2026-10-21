@@ -3,7 +3,10 @@ package com.geitus.app.catalog;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -64,6 +67,8 @@ class CatalogoServiceIT {
     /** Rodadas do teste concorrente: sem a trava, ao menos uma costuma gerar o ciclo. */
     private static final int RODADAS_CONCORRENTES = 10;
     private static final long ESPERA_MAXIMA_SEGUNDOS = 30;
+    /** Garante relogio distinto entre dois carimbos seguidos de {@code atualizado_em}. */
+    private static final long INTERVALO_ENTRE_CARIMBOS_MS = 5;
     private static final AtomicInteger SEQUENCIA = new AtomicInteger();
 
     @Container
@@ -297,6 +302,60 @@ class CatalogoServiceIT {
         assertThat(idDoCodigo(cadastrado.id(), "7891000315507")).isEqualTo(linhaEan);
     }
 
+    /**
+     * Mudar so a ordem dos codigos carimba {@code atualizado_em} (os codigos
+     * ficam em outra tabela; sem o carimbo o produto nao ficaria sujo) e a
+     * resposta do PATCH ja traz o valor gravado no banco.
+     */
+    @Test
+    void patchQueSoReordenaCodigosAtualizaOCarimboEARespostaTrazOGravado() throws InterruptedException {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        ProdutoResponse cadastrado = produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("Arroz").codigosBarras("7891000315507", "ABC-1").build());
+        ProdutoResponse primeiraEdicao = produtoService.atualizarDadosBasicosParaUsuario(idUsuario, cadastrado.id(),
+                ProdutoRequestBuilder.comUnidade(un).nome("Arroz 5kg").codigosBarras("7891000315507", "ABC-1")
+                        .build());
+        assertThat(primeiraEdicao.atualizadoEm()).isNotNull();
+        TimeUnit.MILLISECONDS.sleep(INTERVALO_ENTRE_CARIMBOS_MS);
+
+        ProdutoResponse reordenado = produtoService.atualizarDadosBasicosParaUsuario(idUsuario, cadastrado.id(),
+                ProdutoRequestBuilder.comUnidade(un).nome("Arroz 5kg").codigosBarras("ABC-1", "7891000315507")
+                        .build());
+
+        assertThat(reordenado.atualizadoEm()).isAfter(primeiraEdicao.atualizadoEm());
+        assertThat(reordenado.atualizadoEm()).isCloseTo(atualizadoEmGravado(cadastrado.id()),
+                within(1, ChronoUnit.MICROS));
+        assertThat(reordenado.codigosBarras()).extracting(CodigoBarrasResponse::codigo)
+                .containsExactly("ABC-1", "7891000315507");
+    }
+
+    /** Decisao do CTO: PATCH sem {@code codigosBarras} mantem os codigos; {@code []} remove todos. */
+    @Test
+    void patchSemCodigosMantemEComListaVaziaRemove() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        ProdutoResponse cadastrado = produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("Feijão").codigosBarras("96385074", "FEIJAO-1").build());
+        Long idInterno = idInternoDoProduto(cadastrado.id());
+
+        ProdutoResponse semCampo = produtoService.atualizarDadosBasicosParaUsuario(idUsuario, cadastrado.id(),
+                ProdutoRequestBuilder.comUnidade(un).nome("Feijão 1kg").codigosBarras((List<String>) null).build());
+
+        assertThat(semCampo.nome()).isEqualTo("Feijão 1kg");
+        assertThat(semCampo.codigosBarras()).extracting(CodigoBarrasResponse::codigo)
+                .containsExactly("96385074", "FEIJAO-1");
+        assertThat(codigosDoProduto(idInterno)).isEqualTo(2);
+
+        ProdutoResponse listaVazia = produtoService.atualizarDadosBasicosParaUsuario(idUsuario, cadastrado.id(),
+                ProdutoRequestBuilder.comUnidade(un).nome("Feijão 1kg").codigosBarras(List.of()).build());
+
+        assertThat(listaVazia.codigosBarras()).isEmpty();
+        assertThat(codigosDoProduto(idInterno)).isZero();
+    }
+
     /** Review Focus 3: o mesmo codigo em outra empresa e permitido; na mesma, 409 com o nome. */
     @Test
     void codigoDuplicadoSoConflitaNaMesmaEmpresa() {
@@ -379,6 +438,11 @@ class CatalogoServiceIT {
                   JOIN produtos p ON p.id = c.produto_id
                 WHERE p.uuid = ? AND c.codigo = ?
                 """, Long.class, produtoId, codigo);
+    }
+
+    private LocalDateTime atualizadoEmGravado(UUID produtoId) {
+        return jdbcTemplate.queryForObject("SELECT atualizado_em FROM produtos WHERE uuid = ?", LocalDateTime.class,
+                produtoId);
     }
 
     private Long idInternoDoProduto(UUID produtoId) {
