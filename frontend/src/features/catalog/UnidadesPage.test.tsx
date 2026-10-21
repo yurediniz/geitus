@@ -191,6 +191,23 @@ describe('UnidadesPage', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Unidade KG atualizada com sucesso.')
   })
 
+  it('400 em fracionada (produto movimentado) mostra o erro junto ao checkbox', async () => {
+    const mensagem = 'Esta unidade é usada por produtos com movimentação de estoque.'
+    listarUnidadesMock.mockResolvedValue([KG])
+    atualizarUnidadeMock.mockRejectedValue(new HttpError(400, 'Dados invalidos.', { fracionada: mensagem }))
+
+    renderPagina()
+    await linhaDa('KG')
+    fireEvent.click(screen.getByRole('button', { name: 'Editar KG' }))
+    const checkbox = screen.getByLabelText(/aceita quantidade fracionada/i)
+    fireEvent.click(checkbox)
+    fireEvent.click(screen.getByRole('button', { name: /salvar unidade/i }))
+
+    expect(await screen.findByText(mensagem)).toBeInTheDocument()
+    expect(checkbox).toHaveAttribute('aria-invalid', 'true')
+    expect(checkbox).toHaveAccessibleDescription(mensagem)
+  })
+
   it('desabilita excluir quando a unidade esta em uso, com a dica de uso', async () => {
     listarUnidadesMock.mockResolvedValue([UN])
 

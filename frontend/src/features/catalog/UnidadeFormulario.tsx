@@ -123,15 +123,25 @@ export function UnidadeFormulario({
         </div>
       </div>
 
-      <label className="flex min-h-11 items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          className="h-4 w-4 accent-primary"
-          disabled={salvando}
-          {...register('fracionada')}
-        />
-        Aceita quantidade fracionada (ex.: kg, litro)
-      </label>
+      <div className="space-y-1">
+        <label className="flex min-h-11 items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-primary"
+            disabled={salvando}
+            aria-invalid={errors.fracionada ? true : undefined}
+            aria-describedby={errors.fracionada ? 'unidade-fracionada-erro' : undefined}
+            {...register('fracionada')}
+          />
+          Aceita quantidade fracionada (ex.: kg, litro)
+        </label>
+        {/* Ex.: desligar a fracao de uma unidade usada por produtos com movimentacao de estoque (400). */}
+        {errors.fracionada && (
+          <p id="unidade-fracionada-erro" className="text-sm text-destructive">
+            {errors.fracionada.message}
+          </p>
+        )}
+      </div>
 
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={salvando}>
