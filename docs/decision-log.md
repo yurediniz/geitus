@@ -767,3 +767,29 @@ Contrato da API de produtos ganha `promocao`, `atacado` e `emPromocao`, mais o e
 
 **Observações futuras:**
 Várias promoções agendadas, mais faixas de atacado, fuso por empresa e restrição do custo por perfil ficam para quando houver necessidade.
+
+## DEC-034 — Estoque básico antecipado: saldo por movimentações (Fase D)
+
+**Data:** 2026-10-21
+**Status:** Aceita
+**Contexto:**
+Quarta fase da DEC-030, antecipando parte da etapa 12 (Estoque básico). O produto tinha só níveis de referência (mínimo, ponto de reposição, máximo), sem saldo. O `CLAUDE.md` exige estoque calculado por movimentações e a visão de domínio pede movimentos imutáveis, concorrência controlada e idempotência.
+
+**Decisão:**
+- Pacote novo `inventory` com `movimentos_estoque` (só inserção, quantidade com sinal, saldo anterior e novo, tipo, motivo, origem, usuário e chave de idempotência) e `estoque_saldos` (saldo ≥ 0 por produto), atualizados na mesma transação com lock `FOR UPDATE`.
+- Flag `controla_estoque` em `produtos` (padrão true). Desligar guarda saldo e histórico.
+- Tipos Entrada, Saída e "Contar e ajustar para", com motivos por tipo e observação obrigatória em "Outro". Ajuste manual nunca deixa saldo negativo. Só ADMIN ajusta.
+- Estoque inicial opcional no cadastro, gravado como a primeira entrada (origem `CADASTRO`).
+- Exclusão física só sem movimentos ou quando o único é o estoque inicial do cadastro. FKs RESTRICT de movimentos e saldos para produto (DT-028).
+- Produto movimentado não troca de unidade de venda, e unidade usada por produto movimentado não deixa de ser fracionada.
+- Situação calculada `SEM_ESTOQUE`/`BAIXO`/`NORMAL` para a listagem.
+- Migration V9.
+
+**Motivo:**
+Decisões do usuário (bloquear negativo, estoque inicial no cadastro, só ADMIN, lista de motivos, exclusão com só o estoque inicial). Saldo em tabela própria dá leitura barata e consistência garantida no banco, sem misturar catálogo e estoque.
+
+**Impacto:**
+Contrato de produtos ganha `controlaEstoque`, `estoqueInicial`, `estoqueAtual` e `situacaoEstoque`. Endpoints novos `POST /api/produtos/{id}/estoque/ajustes` e `GET /api/produtos/{id}/estoque/movimentos`. A aba Histórico ganha a seção Estoque. Spec: `docs/modules/produtos-estoque.md`. Revisores obrigatórios: `data-reviewer` (V9, consistência do saldo) e `security-reviewer` (ajuste só ADMIN, isolamento).
+
+**Observações futuras:**
+Baixa por venda, venda sem estoque e reserva entram com o PDV. Custo médio entra com Compras. Revisar a "Ordem recomendada de desenvolvimento" do `CLAUDE.md` ao concluir a fase (DEC-030).
