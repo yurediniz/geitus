@@ -1,12 +1,12 @@
-package com.geitus.app.company.validation;
+package com.geitus.app.shared.validation;
 
 /**
  * Utilitario de validacao e normalizacao de documentos brasileiros (CPF e CNPJ).
  *
  * <p>Funcoes puras (sem estado), reutilizadas tanto pelas anotacoes de Bean
- * Validation ({@code @Cpf}, {@code @Cnpj}) quanto pela revalidacao no
- * {@code EmpresaService} (defesa em profundidade). A validacao confere os
- * digitos verificadores, alem do formato.
+ * Validation ({@code @Cpf}, {@code @Cnpj}) quanto pela revalidacao nos
+ * services de Empresa e Clientes (defesa em profundidade). A validacao confere
+ * os digitos verificadores, alem do formato.
  */
 public final class Documentos {
 

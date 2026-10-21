@@ -1,12 +1,12 @@
-package com.geitus.app.company.validation;
+package com.geitus.app.shared.validation;
 
 /**
  * Utilitario de validacao e normalizacao de telefones brasileiros.
  *
  * <p>Funcao pura reutilizada pela anotacao {@code @Telefone} e pela revalidacao
- * no {@code EmpresaService}. Aceita numeros fixos (10 digitos) e celulares
- * (11 digitos), sempre com DDD valido (11 a 99). Numeros com mascara sao
- * aceitos: os separadores sao ignorados.
+ * nos services de Empresa e Clientes. Aceita numeros fixos (10 digitos) e
+ * celulares (11 digitos), sempre com DDD valido (11 a 99). Numeros com mascara
+ * sao aceitos: os separadores sao ignorados.
  */
 public final class Telefones {
 

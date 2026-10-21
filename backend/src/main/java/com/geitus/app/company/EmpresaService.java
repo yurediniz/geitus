@@ -9,11 +9,11 @@ import com.geitus.app.company.dto.EmpresaDetalheResponse;
 import com.geitus.app.company.dto.EnderecoRequest;
 import com.geitus.app.company.dto.PessoaCoerenteValidator;
 import com.geitus.app.company.dto.RepresentanteLegalRequest;
-import com.geitus.app.company.validation.Documentos;
-import com.geitus.app.company.validation.Telefones;
 import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
+import com.geitus.app.shared.validation.Documentos;
+import com.geitus.app.shared.validation.Telefones;
 
 /**
  * Regras de negocio do cadastro da empresa do usuario autenticado.

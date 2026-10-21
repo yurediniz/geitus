@@ -1,7 +1,7 @@
 package com.geitus.app.company.dto;
 
-import com.geitus.app.company.validation.Cnpj;
-import com.geitus.app.company.validation.Telefone;
+import com.geitus.app.shared.validation.Cnpj;
+import com.geitus.app.shared.validation.Telefone;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;

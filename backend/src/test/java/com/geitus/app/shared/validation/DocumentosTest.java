@@ -1,4 +1,4 @@
-package com.geitus.app.company.validation;
+package com.geitus.app.shared.validation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

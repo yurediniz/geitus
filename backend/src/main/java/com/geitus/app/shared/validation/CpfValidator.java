@@ -1,4 +1,4 @@
-package com.geitus.app.company.validation;
+package com.geitus.app.shared.validation;
 
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
