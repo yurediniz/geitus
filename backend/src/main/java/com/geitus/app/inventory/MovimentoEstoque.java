@@ -2,6 +2,7 @@ package com.geitus.app.inventory;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import com.geitus.app.catalog.Produto;
@@ -110,7 +111,9 @@ public class MovimentoEstoque {
     @PrePersist
     void aoCriar() {
         this.uuid = UUID.randomUUID();
-        this.criadoEm = LocalDateTime.now();
+        // Na precisao do TIMESTAMP do PostgreSQL: a resposta do ajuste e a da
+        // repeticao pela chave (lida do banco) trazem o mesmo instante.
+        this.criadoEm = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
     }
 
     public Long getId() {
@@ -145,6 +148,19 @@ public class MovimentoEstoque {
     /** Variacao com sinal: positiva na entrada, negativa na saida. */
     public BigDecimal getQuantidade() {
         return quantidade;
+    }
+
+    /**
+     * A quantidade como o usuario a informou: a da entrada ou da saida (sem
+     * sinal) ou, no ajuste, o saldo contado. Usada para reconhecer a repeticao
+     * do mesmo pedido pela chave de idempotencia.
+     */
+    public BigDecimal quantidadeInformada() {
+        return switch (tipo) {
+            case ENTRADA -> quantidade;
+            case SAIDA -> quantidade.negate();
+            case AJUSTE -> saldoNovo;
+        };
     }
 
     public BigDecimal getSaldoAnterior() {

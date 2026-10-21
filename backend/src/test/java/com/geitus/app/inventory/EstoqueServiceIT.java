@@ -1,0 +1,299 @@
+package com.geitus.app.inventory;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import com.geitus.app.catalog.ProdutoConflitoException;
+import com.geitus.app.catalog.ProdutoNaoEncontradoException;
+import com.geitus.app.catalog.dto.PaginaResponse;
+import com.geitus.app.inventory.EstoqueService.ResultadoAjuste;
+import com.geitus.app.inventory.dto.AjusteEstoqueRequest;
+import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
+
+/**
+ * Integracao do servico de estoque com o contexto Spring completo e um
+ * PostgreSQL real (Testcontainers, Flyway com as migrations de producao).
+ *
+ * <p>Cobre o que os testes com mock nao alcancam: o {@code INSERT ... ON
+ * CONFLICT DO NOTHING} seguido de {@code FOR UPDATE} no primeiro movimento
+ * concorrente (Review Focus 1), a idempotencia pela chave com dois pedidos
+ * simultaneos (Review Focus 3), a consulta paginada com o nome do usuario e o
+ * isolamento por empresa (DEC-016).
+ *
+ * <p>Sem {@code @Transactional} na classe: cada chamada de service abre e
+ * confirma a propria transacao, como em producao. Cada teste usa empresa nova.
+ * Requer Docker.
+ */
+@SpringBootTest
+@Testcontainers
+@Import(CenarioDeEstoque.class)
+class EstoqueServiceIT {
+
+    /** Rodadas do teste concorrente: sem a trava, ao menos uma costuma quebrar a cadeia. */
+    private static final int RODADAS_CONCORRENTES = 10;
+    private static final long ESPERA_MAXIMA_SEGUNDOS = 30;
+
+    @Container
+    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
+
+    @DynamicPropertySource
+    static void configurarDatasource(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.datasource.username", POSTGRES::getUsername);
+        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.flyway.enabled", () -> "true");
+        registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
+    }
+
+    @Autowired
+    private EstoqueService estoqueService;
+
+    @Autowired
+    private CenarioDeEstoque cenario;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    private static AjusteEstoqueRequest entrada(String quantidade) {
+        return entrada(quantidade, UUID.randomUUID());
+    }
+
+    private static AjusteEstoqueRequest entrada(String quantidade, UUID chave) {
+        return new AjusteEstoqueRequest(TipoMovimento.ENTRADA, new BigDecimal(quantidade), MotivoMovimento.COMPRA,
+                null, chave);
+    }
+
+    // ---------- Concorrencia (Review Focus 1) ----------
+
+    /**
+     * Dois primeiros movimentos do produto ao mesmo tempo, sem linha de saldo:
+     * nenhum erro, saldo final = soma e a cadeia fechada (o saldo anterior de um
+     * e o saldo novo do outro). Repetido em varias rodadas, cada uma com um
+     * produto novo, para dar chance real a corrida.
+     */
+    @Test
+    void ajustesConcorrentesMantemACadeia() throws Exception {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            for (int rodada = 1; rodada <= RODADAS_CONCORRENTES; rodada++) {
+                UUID produto = cenario.novoProduto(empresa, "UN", "Arroz " + rodada);
+                CyclicBarrier largada = new CyclicBarrier(2);
+
+                Future<ResultadoAjuste> cinco = executor.submit(ajustarAoMesmoTempo(largada, empresa.admin(),
+                        produto, entrada("5")));
+                Future<ResultadoAjuste> tres = executor.submit(ajustarAoMesmoTempo(largada, empresa.admin(),
+                        produto, entrada("3")));
+                MovimentoEstoqueResponse primeiro = cinco.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS).movimento();
+                MovimentoEstoqueResponse segundo = tres.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS).movimento();
+
+                assertThat(cenario.saldo(produto)).as("rodada %d: saldo final", rodada).isEqualByComparingTo("8");
+                assertThat(List.of(primeiro.saldoAnterior(), segundo.saldoAnterior()))
+                        .as("rodada %d: um dos dois parte do zero", rodada)
+                        .anySatisfy(anterior -> assertThat(anterior).isEqualByComparingTo("0"));
+                boolean primeiroAntes = primeiro.saldoAnterior().signum() == 0;
+                MovimentoEstoqueResponse antes = primeiroAntes ? primeiro : segundo;
+                MovimentoEstoqueResponse depois = primeiroAntes ? segundo : primeiro;
+                assertThat(depois.saldoAnterior()).as("rodada %d: cadeia", rodada)
+                        .isEqualByComparingTo(antes.saldoNovo());
+                assertThat(cenario.contarMovimentos(produto)).isEqualTo(2);
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private Callable<ResultadoAjuste> ajustarAoMesmoTempo(CyclicBarrier largada, Long idUsuario, UUID produto,
+            AjusteEstoqueRequest request) {
+        return () -> {
+            largada.await(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS);
+            return estoqueService.ajustarParaUsuario(idUsuario, produto, request);
+        };
+    }
+
+    // ---------- Idempotencia (Review Focus 3) ----------
+
+    @Test
+    void chaveRepetidaDepoisDoPrimeiroPedidoDevolveOMesmoMovimento() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        UUID produto = cenario.novoProduto(empresa, "UN", "Arroz");
+        UUID chave = UUID.randomUUID();
+
+        ResultadoAjuste primeiro = estoqueService.ajustarParaUsuario(empresa.admin(), produto, entrada("4", chave));
+        ResultadoAjuste repetido = estoqueService.ajustarParaUsuario(empresa.admin(), produto, entrada("4", chave));
+
+        assertThat(primeiro.criado()).isTrue();
+        assertThat(repetido.criado()).isFalse();
+        assertThat(repetido.movimento()).isEqualTo(primeiro.movimento());
+        assertThat(cenario.contarMovimentos(produto)).isEqualTo(1);
+        assertThat(cenario.saldo(produto)).isEqualByComparingTo("4");
+    }
+
+    @Test
+    void chaveConcorrenteGravaUmSo() throws Exception {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            for (int rodada = 1; rodada <= RODADAS_CONCORRENTES; rodada++) {
+                UUID produto = cenario.novoProduto(empresa, "UN", "Feijão " + rodada);
+                UUID chave = UUID.randomUUID();
+                CyclicBarrier largada = new CyclicBarrier(2);
+
+                Future<ResultadoAjuste> um = executor.submit(ajustarAoMesmoTempo(largada, empresa.admin(), produto,
+                        entrada("2", chave)));
+                Future<ResultadoAjuste> outro = executor.submit(ajustarAoMesmoTempo(largada, empresa.admin(),
+                        produto, entrada("2", chave)));
+
+                List<Boolean> criados = List.of(um.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS).criado(),
+                        outro.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS).criado());
+                assertThat(criados).as("rodada %d", rodada).containsExactlyInAnyOrder(true, false);
+                assertThat(cenario.contarMovimentos(produto)).isEqualTo(1);
+                assertThat(cenario.saldo(produto)).isEqualByComparingTo("2");
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    /**
+     * A mesma chave em dois produtos ao mesmo tempo (as travas de produto sao
+     * diferentes, entao a corrida chega a {@code uq_movimento_estoque_chave}):
+     * um grava e o outro recebe 409, nunca 500.
+     */
+    @Test
+    void chaveConcorrenteEmProdutosDiferentesDa409NoSegundo() throws Exception {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            for (int rodada = 1; rodada <= RODADAS_CONCORRENTES; rodada++) {
+                UUID arroz = cenario.novoProduto(empresa, "UN", "Arroz " + rodada);
+                UUID feijao = cenario.novoProduto(empresa, "UN", "Feijão " + rodada);
+                UUID chave = UUID.randomUUID();
+                CyclicBarrier largada = new CyclicBarrier(2);
+
+                Future<String> noArroz = executor.submit(desfecho(largada, empresa.admin(), arroz, chave));
+                Future<String> noFeijao = executor.submit(desfecho(largada, empresa.admin(), feijao, chave));
+
+                assertThat(List.of(noArroz.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS),
+                        noFeijao.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS)))
+                        .as("rodada %d", rodada).containsExactlyInAnyOrder("criado", "409");
+                assertThat(cenario.contarMovimentos(arroz) + cenario.contarMovimentos(feijao)).isEqualTo(1);
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private Callable<String> desfecho(CyclicBarrier largada, Long idUsuario, UUID produto, UUID chave) {
+        return () -> {
+            largada.await(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS);
+            try {
+                return estoqueService.ajustarParaUsuario(idUsuario, produto, entrada("1", chave)).criado()
+                        ? "criado" : "repetido";
+            } catch (ProdutoConflitoException conflito) {
+                return "409";
+            }
+        };
+    }
+
+    // ---------- Consulta ----------
+
+    @Test
+    void movimentosOrdenadosEPaginados() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        UUID produto = cenario.novoProduto(empresa, "KG", "Ração a granel");
+        estoqueService.ajustarParaUsuario(empresa.admin(), produto, entrada("10"));
+        estoqueService.ajustarParaUsuario(empresa.admin(), produto, new AjusteEstoqueRequest(TipoMovimento.SAIDA,
+                new BigDecimal("2.5"), MotivoMovimento.PERDA_AVARIA, "Saco rasgado", UUID.randomUUID()));
+        estoqueService.ajustarParaUsuario(empresa.admin(), produto, new AjusteEstoqueRequest(TipoMovimento.AJUSTE,
+                new BigDecimal("7"), MotivoMovimento.CONTAGEM, null, UUID.randomUUID()));
+
+        PaginaResponse<MovimentoEstoqueResponse> primeira = estoqueService.movimentosParaUsuario(empresa.admin(),
+                produto, 0, 2);
+        PaginaResponse<MovimentoEstoqueResponse> segunda = estoqueService.movimentosParaUsuario(empresa.admin(),
+                produto, 1, 2);
+
+        assertThat(primeira.totalItens()).isEqualTo(3);
+        assertThat(primeira.itens()).extracting(MovimentoEstoqueResponse::tipo)
+                .containsExactly(TipoMovimento.AJUSTE, TipoMovimento.SAIDA);
+        assertThat(primeira.itens().get(0).quantidade()).isEqualByComparingTo("-0.5");
+        assertThat(primeira.itens().get(1).observacao()).isEqualTo("Saco rasgado");
+        assertThat(segunda.itens()).extracting(MovimentoEstoqueResponse::tipo).containsExactly(TipoMovimento.ENTRADA);
+        assertThat(primeira.itens()).allSatisfy(item -> {
+            assertThat(item.usuarioNome()).isEqualTo("Admin");
+            assertThat(item.id()).isNotNull();
+            assertThat(item.criadoEm()).isNotNull();
+        });
+        assertThat(cenario.saldo(produto)).isEqualByComparingTo("7");
+    }
+
+    /** A ordem segue {@code criado_em} e o id so desempata. */
+    @Test
+    void ordemPorCriadoEmAntesDoId() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        UUID produto = cenario.novoProduto(empresa, "UN", "Arroz");
+        estoqueService.ajustarParaUsuario(empresa.admin(), produto, entrada("1"));
+        estoqueService.ajustarParaUsuario(empresa.admin(), produto, entrada("2"));
+        jdbcTemplate.update("UPDATE movimentos_estoque SET criado_em = ? WHERE quantidade = 2 AND produto_id = "
+                + "(SELECT id FROM produtos WHERE uuid = ?)", LocalDateTime.of(2020, 1, 1, 10, 0), produto);
+
+        List<BigDecimal> quantidades = new ArrayList<>();
+        estoqueService.movimentosParaUsuario(empresa.admin(), produto, 0, 20).itens()
+                .forEach(item -> quantidades.add(item.quantidade()));
+
+        assertThat(quantidades).usingElementComparator(BigDecimal::compareTo)
+                .containsExactly(BigDecimal.ONE, new BigDecimal("2"));
+    }
+
+    @Test
+    void produtoDeOutraEmpresa_404() {
+        CenarioDeEstoque.EmpresaDeTeste empresaA = cenario.novaEmpresa();
+        CenarioDeEstoque.EmpresaDeTeste empresaB = cenario.novaEmpresa();
+        UUID produtoDaA = cenario.novoProduto(empresaA, "UN", "Da A");
+
+        assertThatThrownBy(() -> estoqueService.ajustarParaUsuario(empresaB.admin(), produtoDaA, entrada("1")))
+                .isInstanceOf(ProdutoNaoEncontradoException.class);
+        assertThatThrownBy(() -> estoqueService.movimentosParaUsuario(empresaB.admin(), produtoDaA, 0, 20))
+                .isInstanceOf(ProdutoNaoEncontradoException.class);
+        assertThat(cenario.contarMovimentos(produtoDaA)).isZero();
+    }
+
+    /** A mesma chave em outra empresa e outro pedido: nao conflita nem devolve o movimento da outra. */
+    @Test
+    void chaveDeOutraEmpresaNaoInterfere() {
+        CenarioDeEstoque.EmpresaDeTeste empresaA = cenario.novaEmpresa();
+        CenarioDeEstoque.EmpresaDeTeste empresaB = cenario.novaEmpresa();
+        UUID produtoDaA = cenario.novoProduto(empresaA, "UN", "Da A");
+        UUID produtoDaB = cenario.novoProduto(empresaB, "UN", "Da B");
+        UUID chave = UUID.randomUUID();
+
+        estoqueService.ajustarParaUsuario(empresaA.admin(), produtoDaA, entrada("1", chave));
+        ResultadoAjuste daB = estoqueService.ajustarParaUsuario(empresaB.admin(), produtoDaB, entrada("1", chave));
+
+        assertThat(daB.criado()).isTrue();
+        assertThat(cenario.contarMovimentos(produtoDaB)).isEqualTo(1);
+    }
+}

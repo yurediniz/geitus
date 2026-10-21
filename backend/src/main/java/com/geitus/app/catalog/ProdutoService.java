@@ -107,10 +107,6 @@ public class ProdutoService {
     static final String MENSAGEM_QUANTIDADE_ATACADO_ATE_UM = "A quantidade mínima do atacado deve ser maior que 1.";
     static final String MENSAGEM_QUANTIDADE_ATACADO_CASAS =
             "A quantidade mínima do atacado deve ter no máximo 3 casas decimais.";
-    static final String MENSAGEM_UNIDADE_NAO_FRACIONADA = "A unidade %s não aceita quantidade fracionada.";
-    static final String MENSAGEM_PAGINA_NEGATIVA = "A página deve ser maior ou igual a zero.";
-    static final String MENSAGEM_TAMANHO_DE_PAGINA_INVALIDO = "O tamanho da página deve ser entre 1 e 100.";
-    static final String MENSAGEM_PAGINA_GRANDE_DEMAIS = "A página informada é grande demais.";
 
     /** Campos do {@code ProdutoRequest} devolvidos em {@code campos} nos erros de regra (contrato aditivo). */
     static final String CAMPO_SKU = "sku";
@@ -127,7 +123,6 @@ public class ProdutoService {
     static final int TAMANHO_MAXIMO_TERMO_DE_SUGESTAO = 50;
     /** Casas decimais da quantidade minima do atacado ({@code NUMERIC(12,3)}, V8). */
     static final int CASAS_QUANTIDADE_ATACADO = 3;
-    static final int TAMANHO_MAXIMO_PAGINA_HISTORICO = 100;
 
     /** SKU no padrao da sugestao automatica: {@code P} + 6 ou mais digitos (spec 4.2). */
     private static final Pattern SKU_NO_PADRAO = Pattern.compile("P([0-9]{6,})");
@@ -367,7 +362,7 @@ public class ProdutoService {
     @Transactional(readOnly = true)
     public PaginaResponse<HistoricoPrecoResponse> historicoDePrecosParaUsuario(Long idUsuario, UUID produtoId,
             int pagina, int tamanho) {
-        validarPaginacao(pagina, tamanho);
+        Paginacao.validar(pagina, tamanho);
         Long empresaId = resolverEmpresaId(idUsuario);
         Produto produto = buscarPorId(empresaId, produtoId);
         return PaginaResponse.de(historicoPrecoRepository.historicoDoProduto(empresaId, produto.getId(),
@@ -655,7 +650,7 @@ public class ProdutoService {
             throw new RegraDeNegocioException(MENSAGEM_QUANTIDADE_ATACADO_ATE_UM, CAMPO_ATACADO_QUANTIDADE_MINIMA);
         }
         if (!UnidadeMedida.quantidadeValida(unidade.isFracionada(), quantidadeMinima)) {
-            throw new RegraDeNegocioException(MENSAGEM_UNIDADE_NAO_FRACIONADA.formatted(unidade.getSigla()),
+            throw new RegraDeNegocioException(UnidadeMedida.mensagemSemFracao(unidade.getSigla()),
                     CAMPO_ATACADO_QUANTIDADE_MINIMA);
         }
         if (quantidadeMinima.stripTrailingZeros().scale() > CASAS_QUANTIDADE_ATACADO) {
@@ -696,20 +691,6 @@ public class ProdutoService {
             return anterior == novo;
         }
         return anterior.compareTo(novo) == 0;
-    }
-
-    private static void validarPaginacao(int pagina, int tamanho) {
-        if (pagina < 0) {
-            throw new RegraDeNegocioException(MENSAGEM_PAGINA_NEGATIVA);
-        }
-        if (tamanho < 1 || tamanho > TAMANHO_MAXIMO_PAGINA_HISTORICO) {
-            throw new RegraDeNegocioException(MENSAGEM_TAMANHO_DE_PAGINA_INVALIDO);
-        }
-        // O deslocamento (pagina * tamanho) vira o OFFSET int da consulta; acima
-        // disso o Spring Data falharia com 500.
-        if ((long) pagina * tamanho > Integer.MAX_VALUE) {
-            throw new RegraDeNegocioException(MENSAGEM_PAGINA_GRANDE_DEMAIS);
-        }
     }
 
     // ---------- Apoio ----------

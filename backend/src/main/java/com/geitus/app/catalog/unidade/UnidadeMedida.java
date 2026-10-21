@@ -35,6 +35,8 @@ import jakarta.persistence.Table;
 @Table(name = "unidades_medida")
 public class UnidadeMedida {
 
+    private static final String MENSAGEM_SEM_FRACAO = "A unidade %s não aceita quantidade fracionada.";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -86,6 +88,11 @@ public class UnidadeMedida {
             return false;
         }
         return fracionada || quantidade.stripTrailingZeros().scale() <= 0;
+    }
+
+    /** Mensagem de quantidade fracionada numa unidade que nao aceita fracao (ex.: "A unidade UN ..."). */
+    public static String mensagemSemFracao(String sigla) {
+        return MENSAGEM_SEM_FRACAO.formatted(sigla);
     }
 
     @PrePersist
