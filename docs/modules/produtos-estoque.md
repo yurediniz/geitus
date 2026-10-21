@@ -103,7 +103,7 @@ Aditiva sobre a V8, que **não** é editada. Preserva todos os dados.
 |---|---|---|---|
 | Entrada | `ENTRADA` | quantidade > 0 | `+quantidade` |
 | Saída | `SAIDA` | quantidade > 0 | `−quantidade` |
-| Contar e ajustar para | `AJUSTE` | **saldo novo** ≥ 0 | `saldo novo − saldo atual` |
+| Contagem | `AJUSTE` | **saldo novo** ≥ 0 | `saldo novo − saldo atual` |
 
 - **Casas decimais:** até 3. Quantidade com fração só se a unidade de venda for **fracionada** (400 "A unidade UN não aceita quantidade fracionada.").
 - **Limite:** a quantidade respeita o `NUMERIC(12,3)` (9 dígitos inteiros).
@@ -197,23 +197,34 @@ Aditiva sobre a V8, que **não** é editada. Preserva todos os dados.
 - **Interruptor "Controlar estoque"** no topo, ligado por padrão. Desligar um produto salvo com saldo mostra o aviso de §4.1.
 - **Com controle ligado:**
   - **saldo atual** em destaque ("12 UN"), só leitura, com o selo da situação;
-  - botão **"Ajustar estoque"**, só para ADMIN e só em produto já salvo, sem alterações pendentes. Se houver alterações, a dica é "Salve o produto antes de ajustar o estoque.";
+  - botão **"Ajustar estoque"**, só para ADMIN e só em produto já salvo. Ele só fica bloqueado quando a alteração pendente **afeta o estoque** (`controlaEstoque` ou unidade de venda), com a dica "Salve a mudança de controle ou de unidade antes de ajustar o estoque.". Outras alterações pendentes, como nome ou preço, não bloqueiam e continuam no formulário (decisão do usuário, 2026-10-21);
   - **no cadastro novo:** campo **"Estoque inicial (opcional)"**, com a sigla da unidade, no lugar do saldo;
   - **mínimo, ponto de reposição e máximo**, com a validação de §4.6 no Zod.
 - **OPERADOR:** vê o saldo e o histórico, sem o botão.
 
 ### 6.2 Modal "Ajustar estoque"
-1. **Tipo:** grupo de três opções (Entrada, Saída, Contar e ajustar para).
-2. **Quantidade:** com a sigla. No tipo ajuste, o rótulo vira "Saldo contado". Aceita vírgula e só aceita fração se a unidade for fracionada.
-3. **Motivo:** select filtrado pelo tipo. Contagem vem pré-selecionada em "Contar e ajustar para".
+1. **Tipo:** grupo de três opções (Entrada, Saída, **Contagem**). "Contagem" substitui o rótulo "Contar e ajustar para" (decisão do usuário); no histórico, o tipo continua aparecendo como "Ajuste".
+2. **Quantidade:** com a sigla. Na Contagem, o rótulo vira "Saldo contado", com a ajuda "Quanto você contou. O sistema calcula a diferença.". Aceita vírgula e só aceita fração se a unidade for fracionada.
+3. **Motivo:** select filtrado pelo tipo. **Entrada** abre com "Compra/recebimento" e **Contagem** com "Contagem/inventário", ambos pré-selecionados (decisão do usuário). **Saída** abre sem motivo, para a escolha ser consciente.
 4. **Observação:** obrigatória em "Outro".
-5. **Prévia:** "Saldo: 12 UN → 10 UN". Uma saída maior que o saldo mostra o erro antes do envio.
-6. **Confirmação:**
-   - "Confirmar" fica desabilitado durante o envio, e a `chave` é gerada ao abrir o modal;
+5. **Prévia:**
+   - entrada e saída: "Saldo: 12 UN → 10 UN";
+   - contagem: mostra também a diferença, "Saldo: 12 UN → 10 UN (−2 UN)";
+   - uma saída maior que o saldo mostra o erro antes do envio;
+   - contagem igual ao saldo aparece em tom neutro, "A contagem confere com o saldo (12 UN). Não há nada a ajustar.", e não pode ser confirmada.
+6. **"Zerar estoque"** (pedido do usuário):
+   - botão secundário no modal, visível só com saldo > 0;
+   - um clique preenche: tipo Contagem, saldo contado 0 e motivo "Contagem/inventário" (que pode ser trocado);
+   - a prévia mostra "Saldo: 12 UN → 0 UN (−12 UN)" e o botão de confirmar vira "Zerar estoque";
+   - no backend é um ajuste para 0, sem regra nova.
+7. **Confirmação:**
+   - o botão diz o que vai acontecer: "Registrar entrada", "Registrar saída", "Ajustar para 10 UN" ou "Zerar estoque";
+   - fica desabilitado durante o envio, e a `chave` é gerada ao abrir o modal;
    - em caso de sucesso, o modal fecha e aparece a mensagem "Estoque atualizado: 10 UN.";
    - o saldo da página, a listagem e o histórico são atualizados (invalidação do cache);
    - o ajuste não marca o formulário do produto como alterado.
-7. **Teclado:** Enter confirma e Esc fecha. O foco começa no tipo.
+8. **Teclado:** Enter confirma e Esc fecha. O foco começa no tipo.
+9. **Onde o modal abre:** na aba Estoque do produto e num atalho **"Ajustar estoque"** no card da lista de produtos, que abre o mesmo modal (só ADMIN, com o controle ligado), por decisão do usuário.
 
 ### 6.3 Aba Histórico
 - **Seções:** duas, **"Estoque"** (primeiro) e **"Preços"** (a da Fase C). Cada uma tem a própria paginação "Carregar mais".
@@ -227,7 +238,8 @@ Aditiva sobre a V8, que **não** é editada. Preserva todos os dados.
 ### 6.4 Listagem
 - **Coluna Estoque:**
   - "12 UN" com o selo **"Estoque baixo"** (tom de aviso) ou **"Sem estoque"** (tom destrutivo suave);
-  - "—" para produto sem controle de estoque.
+  - "—" para produto sem controle de estoque;
+  - botão **"Ajustar estoque"** no card (só ADMIN, com o controle ligado), que abre o modal de §6.2 sem sair da lista.
 
 ## 7. Organização do código
 - **Backend:** pacote novo **`com.geitus.app.inventory`**, que nasce agora conforme o mapa do `CLAUDE.md`, com:
