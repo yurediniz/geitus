@@ -44,7 +44,7 @@ function montarItensNavegacao(ehAdmin: boolean): NavItem[] {
   return [
     { rotulo: 'Início', to: '/', icone: LayoutDashboard },
     { rotulo: 'Produtos', to: '/produtos', icone: Package },
-    { rotulo: 'Clientes', icone: Users, emBreve: true },
+    { rotulo: 'Clientes', to: '/clientes', icone: Users },
     { rotulo: 'PDV', icone: ShoppingCart, emBreve: true },
     { rotulo: 'Caixa', icone: Wallet, emBreve: true },
     { rotulo: 'Financeiro', icone: LineChart, emBreve: true },

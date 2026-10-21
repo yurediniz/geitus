@@ -3,6 +3,7 @@ import { createBrowserRouter, type RouteObject } from 'react-router-dom'
 import { RootLayout } from '@/components/layout/RootLayout'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { EmpresaPage } from '@/features/company/EmpresaPage'
+import { ClientesPage } from '@/features/customers/ClientesPage'
 import { ProdutosPage } from '@/features/products/ProdutosPage'
 import { UsuariosPage } from '@/features/usuarios/UsuariosPage'
 import { AdminRoute } from '@/routes/AdminRoute'
@@ -42,6 +43,8 @@ const privateRoutes: RouteObject[] = [
         children: [
           { index: true, element: <HomePage /> },
           { path: 'produtos', element: <ProdutosPage /> },
+          // Clientes: qualquer autenticado (inativar/reativar so ADMIN, controlado na pagina e no backend).
+          { path: 'clientes', element: <ClientesPage /> },
           { path: 'empresa', element: <EmpresaPage /> },
           {
             // Area restrita a ADMIN (RBAC no frontend; o backend tambem exige ADMIN).

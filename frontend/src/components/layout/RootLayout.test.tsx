@@ -37,6 +37,7 @@ function renderLayout(entrada = '/') {
             <Route path="/" element={<RootLayout />}>
               <Route index element={<div>Conteudo</div>} />
               <Route path="produtos" element={<div>Produtos</div>} />
+              <Route path="clientes" element={<div>Clientes</div>} />
             </Route>
             <Route path="/login" element={<div>Tela de login</div>} />
           </Routes>
@@ -75,6 +76,20 @@ describe('RootLayout - logout', () => {
     expect(produtos).toHaveAttribute('href', '/produtos')
     expect(produtos).toHaveAttribute('aria-current', 'page')
     expect(screen.getAllByText(/^em breve$/i).length).toBeGreaterThan(0)
+  })
+
+  it('exibe Clientes como item de navegacao ativo, nao como item em breve', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue({ ...usuarioFake, perfil: 'OPERADOR' })
+
+    renderLayout('/clientes')
+
+    await screen.findByText('Ana Souza')
+    const clientes = screen.getByRole('link', { name: /clientes/i })
+
+    expect(clientes).toHaveAttribute('href', '/clientes')
+    expect(clientes).toHaveAttribute('aria-current', 'page')
+    expect(within(clientes).queryByText(/^em breve$/i)).not.toBeInTheDocument()
   })
 
   it('o botao Sair limpa a sessao e leva para /login', async () => {
