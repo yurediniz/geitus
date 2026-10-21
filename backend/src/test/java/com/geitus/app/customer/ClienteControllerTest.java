@@ -1,16 +1,20 @@
 package com.geitus.app.customer;
 
-import static org.hamcrest.Matchers.not;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -19,6 +23,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -41,8 +46,10 @@ import com.geitus.app.shared.error.GlobalExceptionHandler;
 /**
  * Testa o contrato HTTP de {@code /api/clientes}: autenticacao, RBAC da
  * DEC-029 (cadastrar/editar para qualquer autenticado; inativar/reativar so
- * ADMIN), UUID publico na rota e na resposta, mapeamento de erros (400/404/409)
- * e ausencia de dados internos ({@code empresaId}, id numerico) na resposta.
+ * ADMIN, independente do metodo HTTP), UUID publico na rota e na resposta,
+ * mapeamento de erros (400/404/409), campos internos do corpo ignorados
+ * ({@code ativo}, {@code empresaId}, {@code id}) e ausencia de dados internos
+ * na resposta.
  *
  * <p>Fatia web sem banco: o {@link JwtService} e real (gera os tokens de teste)
  * e o {@link ClienteService} e mockado. As queries sao exercidas contra
@@ -118,6 +125,22 @@ class ClienteControllerTest {
         verifyNoInteractions(clienteService);
     }
 
+    @Test
+    void cadastrarSemTokenRetorna401() throws Exception {
+        mockMvc.perform(comCorpo(post("/api/clientes"), CORPO_VALIDO))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(clienteService);
+    }
+
+    @Test
+    void inativarSemTokenRetorna401() throws Exception {
+        mockMvc.perform(patch("/api/clientes/" + UUID.randomUUID() + "/inativar"))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(clienteService);
+    }
+
     // ---------- Listagem ----------
 
     @Test
@@ -129,6 +152,25 @@ class ClienteControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(ana.getUuid().toString()))
                 .andExpect(jsonPath("$[0].nome").value("Ana"));
+    }
+
+    @Test
+    void buscaComMaisDe100CaracteresRetorna400() throws Exception {
+        mockMvc.perform(comoOperador(get("/api/clientes").param("busca", "a".repeat(101))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[*].mensagem")
+                        .value(hasItem("Busca deve ter no máximo 100 caracteres.")));
+
+        verifyNoInteractions(clienteService);
+    }
+
+    @Test
+    void buscaCom100CaracteresEAceita() throws Exception {
+        String busca = "a".repeat(100);
+        when(clienteService.listarParaUsuario(ID_OPERADOR, busca, null)).thenReturn(List.of());
+
+        mockMvc.perform(comoOperador(get("/api/clientes").param("busca", busca)))
+                .andExpect(status().isOk());
     }
 
     // ---------- Cadastro e edicao: qualquer autenticado (DEC-029) ----------
@@ -165,6 +207,36 @@ class ClienteControllerTest {
         verify(clienteService).atualizarParaUsuario(ID_OPERADOR, id, dados);
     }
 
+    @Test
+    void operadorAtualizaIgnorandoAtivoEmpresaIdEIdDoCorpo() throws Exception {
+        Cliente ana = cliente("Ana");
+        UUID id = ana.getUuid();
+        when(clienteService.atualizarParaUsuario(eq(ID_OPERADOR), eq(id), any(DadosCliente.class))).thenReturn(ana);
+
+        mockMvc.perform(comoOperador(comCorpo(patch("/api/clientes/" + id), """
+                        { "nome": "Ana", "cpf": "111.444.777-35", "telefone": "(11) 98765-4321",
+                          "ativo": false, "empresaId": 99, "id": 5 }
+                        """)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ativo").value(true));
+
+        ArgumentCaptor<DadosCliente> dadosRecebidos = ArgumentCaptor.forClass(DadosCliente.class);
+        verify(clienteService).atualizarParaUsuario(eq(ID_OPERADOR), eq(id), dadosRecebidos.capture());
+        assertThat(dadosRecebidos.getValue()).isEqualTo(DADOS_DO_CORPO_VALIDO);
+        verify(clienteService, never()).inativarParaUsuario(any(), any());
+    }
+
+    @Test
+    void atualizarClienteDeOutraEmpresaRetorna404() throws Exception {
+        UUID deOutraEmpresa = UUID.randomUUID();
+        when(clienteService.atualizarParaUsuario(ID_OPERADOR, deOutraEmpresa, DADOS_DO_CORPO_VALIDO))
+                .thenThrow(new ClienteNaoEncontradoException());
+
+        mockMvc.perform(comoOperador(comCorpo(patch("/api/clientes/" + deOutraEmpresa), CORPO_VALIDO)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensagem").value("Cliente não encontrado."));
+    }
+
     // ---------- Inativar/reativar: so ADMIN (DEC-029) ----------
 
     @Test
@@ -181,6 +253,29 @@ class ClienteControllerTest {
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(clienteService);
+    }
+
+    @Test
+    void operadorBarradoEmInativarComQualquerMetodoHttp() throws Exception {
+        String rota = "/api/clientes/" + UUID.randomUUID() + "/inativar";
+
+        mockMvc.perform(comoOperador(post(rota)))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(comoOperador(put(rota)))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(clienteService);
+    }
+
+    @Test
+    void adminInativarClienteDeOutraEmpresaRetorna404() throws Exception {
+        UUID deOutraEmpresa = UUID.randomUUID();
+        when(clienteService.inativarParaUsuario(ID_ADMIN, deOutraEmpresa))
+                .thenThrow(new ClienteNaoEncontradoException());
+
+        mockMvc.perform(comoAdmin(patch("/api/clientes/" + deOutraEmpresa + "/inativar")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensagem").value("Cliente não encontrado."));
     }
 
     @Test
@@ -210,7 +305,8 @@ class ClienteControllerTest {
     void cadastrarSemNomeRetorna400ComCampoNome() throws Exception {
         mockMvc.perform(comoOperador(comCorpo(post("/api/clientes"), "{ \"nome\": \"  \" }")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.campos[?(@.campo=='nome')]").exists());
+                .andExpect(jsonPath("$.campos[?(@.campo=='nome')].mensagem")
+                        .value(hasItem("Nome do cliente é obrigatório.")));
 
         verifyNoInteractions(clienteService);
     }
@@ -233,6 +329,44 @@ class ClienteControllerTest {
                         "{ \"nome\": \"Ana\", \"telefone\": \"(01) 2345-678\" }")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.campos[?(@.campo=='telefone')]").exists());
+
+        verifyNoInteractions(clienteService);
+    }
+
+    @Test
+    void cadastrarComTelefoneAcimaDe20CaracteresRetorna400() throws Exception {
+        // Telefone valido em digitos, mas com separadores alem do limite do campo.
+        mockMvc.perform(comoOperador(comCorpo(post("/api/clientes"), """
+                        { "nome": "Ana", "telefone": "(11)  9 8 7 6 5 - 4 3 2 1" }
+                        """)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[?(@.campo=='telefone')].mensagem")
+                        .value(hasItem("Telefone deve ter no máximo 20 caracteres.")));
+
+        verifyNoInteractions(clienteService);
+    }
+
+    @Test
+    void whatsappInvalidoEIgnoradoQuandoTelefoneEWhatsapp() throws Exception {
+        DadosCliente dados = new DadosCliente("Ana", null, "(11) 98765-4321", true, "123", null);
+        when(clienteService.cadastrarParaUsuario(ID_OPERADOR, dados)).thenReturn(cliente("Ana"));
+
+        mockMvc.perform(comoOperador(comCorpo(post("/api/clientes"), """
+                        { "nome": "Ana", "telefone": "(11) 98765-4321", "telefoneEWhatsapp": true, "whatsapp": "123" }
+                        """)))
+                .andExpect(status().isCreated());
+
+        verify(clienteService).cadastrarParaUsuario(ID_OPERADOR, dados);
+    }
+
+    @Test
+    void whatsappInvalidoComWhatsappProprioRetorna400() throws Exception {
+        mockMvc.perform(comoOperador(comCorpo(post("/api/clientes"), """
+                        { "nome": "Ana", "telefone": "(11) 98765-4321", "telefoneEWhatsapp": false, "whatsapp": "123" }
+                        """)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[?(@.campo=='whatsapp')].mensagem")
+                        .value(hasItem("WhatsApp inválido.")));
 
         verifyNoInteractions(clienteService);
     }

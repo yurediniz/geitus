@@ -262,5 +262,12 @@ class ClienteRepositoryIT {
                 .extracting(Cliente::getNome).containsExactly("100% Pet");
         assertThat(clienteRepository.buscarPorNome(empresa.getId(), "%\\_%", null)).isEmpty();
         assertThat(clienteRepository.buscarPorNomeOuDigitos(empresa.getId(), "%\\_%", "%\\_%", null)).isEmpty();
+
+        // Com um "_" literal no nome, o mesmo padrao passa a encontra-lo (e so ele).
+        novoCliente(empresa, "Pet_Shop Ana", null, null);
+        assertThat(clienteRepository.buscarPorNome(empresa.getId(), "%\\_%", null))
+                .extracting(Cliente::getNome).containsExactly("Pet_Shop Ana");
+        assertThat(clienteRepository.buscarPorNomeOuDigitos(empresa.getId(), "%\\_%", "%\\_%", null))
+                .extracting(Cliente::getNome).containsExactly("Pet_Shop Ana");
     }
 }

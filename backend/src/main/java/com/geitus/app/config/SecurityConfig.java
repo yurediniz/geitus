@@ -97,9 +97,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/produtos", "/api/produtos/**").authenticated()
                         // Clientes (DEC-029): inativar/reativar exige ADMIN; consultar,
                         // cadastrar e editar ficam com qualquer autenticado (o OPERADOR
-                        // cadastra no balcao/PDV). A regra de ADMIN precede a geral.
-                        .requestMatchers(HttpMethod.PATCH, "/api/clientes/*/inativar", "/api/clientes/*/reativar")
-                                .hasRole("ADMIN")
+                        // cadastra no balcao/PDV). A regra de ADMIN precede a geral e
+                        // vale para qualquer metodo HTTP nessas rotas.
+                        .requestMatchers("/api/clientes/*/inativar", "/api/clientes/*/reativar").hasRole("ADMIN")
                         .requestMatchers("/api/clientes", "/api/clientes/**").authenticated()
                         // Todo o restante exige autenticacao (JWT valido)
                         .anyRequest().authenticated())

@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,6 +24,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 
 /**
  * Endpoints do modulo Clientes (docs/modules/clientes.md, secao 6).
@@ -34,11 +36,18 @@ import jakarta.validation.Valid;
  *
  * <p>RBAC (DEC-029, aplicado no {@code SecurityConfig}): consultar, cadastrar e
  * editar sao liberados a qualquer autenticado; inativar e reativar exigem ADMIN.
+ *
+ * <p>{@code @Validated} ativa a validacao dos parametros simples (ex.: tamanho
+ * da {@code busca}); a violacao vira {@code ConstraintViolationException},
+ * tratada como 400 no {@code GlobalExceptionHandler}.
  */
 @RestController
+@Validated
 @RequestMapping("/api/clientes")
 @Tag(name = "Clientes", description = "Cadastro e consulta de clientes da empresa do usuario autenticado")
 public class ClienteController {
+
+    private static final int TAMANHO_MAXIMO_BUSCA = 100;
 
     private final ClienteService clienteService;
 
@@ -53,7 +62,8 @@ public class ClienteController {
     public ResponseEntity<List<ClienteResponse>> listar(
             @AuthenticationPrincipal Long idUsuario,
             @Parameter(description = "Nome contendo o termo, ou CPF/telefone/WhatsApp contendo seus digitos")
-            @RequestParam(required = false) String busca,
+            @RequestParam(required = false)
+            @Size(max = TAMANHO_MAXIMO_BUSCA, message = "Busca deve ter no máximo 100 caracteres.") String busca,
             @Parameter(description = "Filtra por status ativo/inativo")
             @RequestParam(required = false) Boolean ativo) {
         List<ClienteResponse> clientes = clienteService.listarParaUsuario(idUsuario, busca, ativo).stream()
