@@ -474,13 +474,16 @@ describe('ProdutosListaPage', () => {
       expect(within(card).getByText(/^R\$\s8,90$/)).toBeInTheDocument()
     })
 
-    it('promoção agendada ou encerrada não muda o preço da lista', async () => {
-      const agendada: Produto = {
+    it.each([
+      ['AGENDADA', '2026-12-01', '2026-12-15'],
+      ['ENCERRADA', '2026-10-01', '2026-10-15'],
+    ] as const)('promoção %s não muda o preço da lista', async (situacao, inicio, fim) => {
+      const semPromocaoVigente: Produto = {
         ...produtoAtivo,
-        promocao: { preco: 20.9, inicio: '2026-12-01', fim: '2026-12-15', situacao: 'AGENDADA' },
+        promocao: { preco: 20.9, inicio, fim, situacao },
         emPromocao: false,
       }
-      listarProdutosMock.mockResolvedValue([agendada])
+      listarProdutosMock.mockResolvedValue([semPromocaoVigente])
 
       renderLista()
 

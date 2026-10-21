@@ -2412,4 +2412,130 @@ describe('ProdutoPage', () => {
       await waitFor(() => expect(aba(/preços/i)).toHaveAccessibleName('Preços'))
     })
   })
+
+  describe('preços: cenários do QA (Fase C)', () => {
+    const produtoComPromocao: Produto = {
+      ...produtoAtivo,
+      promocao: { preco: 22.9, inicio: '2026-11-01', fim: '2026-11-15', situacao: 'VIGENTE' },
+      emPromocao: true,
+      atacado: null,
+    }
+
+    function interruptorPromocao(): HTMLElement {
+      return screen.getByRole('switch', { name: 'Ativar preço promocional' })
+    }
+
+    it('baixar o preço de venda até a promoção barra o envio no campo promocional (Review Focus 2)', async () => {
+      renderEdicao(produtoComPromocao)
+      await esperarFormulario()
+      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '22,90' } })
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(aba(/preços/i)).toHaveAttribute('aria-selected', 'true'))
+      expect(interruptorPromocao()).toHaveAttribute('aria-checked', 'true')
+      expect(screen.getByLabelText('Preço promocional')).toHaveAccessibleDescription(
+        'Preço promocional deve ser menor que o preço de venda.',
+      )
+      await waitFor(() => expect(screen.getByLabelText('Preço promocional')).toHaveFocus())
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('400 em promocao.inicio com o bloco desligado liga a promoção e marca o Início', async () => {
+      const mensagem = 'Informe o início da promoção.'
+      atualizarProdutoMock.mockRejectedValue(new HttpError(400, 'Dados invalidos.', { 'promocao.inicio': mensagem }))
+      renderEdicao()
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('O produto não foi salvo. Confira o erro na aba Preços.')).toBeInTheDocument()
+      expect(interruptorPromocao()).toHaveAttribute('aria-checked', 'true')
+      expect(screen.getByLabelText('Início')).toHaveAccessibleDescription(mensagem)
+      await waitFor(() => expect(screen.getByLabelText('Início')).toHaveFocus())
+    })
+
+    it('produto em KG com atacado a partir de 2,5 trocado para UN é barrado no campo (Review Focus 3)', async () => {
+      const kgFracionado = { ...KG, fracionada: true }
+      listarUnidadesMock.mockResolvedValue([CX, kgFracionado, PCT_INATIVA, UN])
+      renderEdicao({
+        ...produtoAtivo,
+        unidade: resumo(kgFracionado),
+        atacado: { preco: 21.5, quantidadeMinima: 2.5 },
+      })
+      await esperarFormulario()
+      await selecionarUnidadeVenda('un')
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(aba(/preços/i)).toHaveAttribute('aria-selected', 'true'))
+      expect(screen.getByLabelText(/^quantidade mínima/i)).toHaveAccessibleDescription(
+        'A unidade UN não aceita quantidade fracionada.',
+      )
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('o aviso de abaixo do custo some quando o preço chega ao custo', async () => {
+      renderNovo()
+      await esperarFormulario()
+      abrirAba(/preços/i)
+      fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '12,00' } })
+      abrirAba(/geral/i)
+      const preco = screen.getByLabelText(/preço de venda/i)
+      fireEvent.change(preco, { target: { value: '10,00' } })
+      expect(preco).toHaveAccessibleDescription(/abaixo do custo/i)
+
+      fireEvent.change(preco, { target: { value: '12,00' } })
+
+      expect(preco).not.toHaveAccessibleDescription(/abaixo do custo/i)
+      expect(screen.queryByText(/abaixo do custo/i)).not.toBeInTheDocument()
+    })
+
+    it('desligar o interruptor apaga o erro do servidor e o próximo save envia promocao: null', async () => {
+      atualizarProdutoMock
+        .mockRejectedValueOnce(
+          new HttpError(400, 'Dados invalidos.', {
+            'promocao.preco': 'Preço promocional deve ser menor que o preço de venda.',
+          }),
+        )
+        .mockResolvedValueOnce(produtoAtivo)
+      renderEdicao(produtoComPromocao)
+      await esperarFormulario()
+      fireEvent.click(botaoSalvar())
+      await waitFor(() => expect(aba(/preços/i)).toHaveAccessibleName('Preços (1 erro)'))
+
+      fireEvent.click(interruptorPromocao())
+
+      expect(aba(/preços/i)).toHaveAccessibleName('Preços')
+      fireEvent.click(botaoSalvar())
+      await waitFor(() => expect(atualizarProdutoMock).toHaveBeenCalledTimes(2))
+      expect(atualizarProdutoMock).toHaveBeenLastCalledWith(ID_ARROZ, expect.objectContaining({ promocao: null }))
+    })
+
+    it('falha no "Carregar mais" do histórico mostra a mensagem sem apagar a lista', async () => {
+      const linha: HistoricoPreco = {
+        campo: 'PRECO_VENDA',
+        valorAnterior: 10,
+        valorNovo: 11.5,
+        usuarioNome: 'Ana Souza',
+        alteradoEm: '2026-10-21T14:03:12',
+      }
+      listarHistoricoDePrecosMock
+        .mockResolvedValueOnce({ itens: [linha], pagina: 0, tamanho: 20, totalItens: 2 })
+        .mockRejectedValueOnce(new HttpError(500, 'Falha interna no banco'))
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/histórico/i)
+      expect(await screen.findByText('Ana Souza')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Carregar mais' }))
+
+      expect(
+        await screen.findByText('Não foi possível carregar mais alterações. Tente de novo.'),
+      ).toBeInTheDocument()
+      expect(screen.getByText('Ana Souza')).toBeInTheDocument()
+      expect(screen.queryByText(/falha interna/i)).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Carregar mais' })).toBeEnabled()
+    })
+  })
 })
