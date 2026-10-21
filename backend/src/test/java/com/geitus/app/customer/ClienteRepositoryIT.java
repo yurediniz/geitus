@@ -1,0 +1,226 @@
+package com.geitus.app.customer;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.util.UUID;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase.Replace;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import com.geitus.app.company.Empresa;
+import com.geitus.app.company.EmpresaRepository;
+import com.geitus.app.company.Endereco;
+import com.geitus.app.company.RepresentanteLegal;
+import com.geitus.app.company.TipoPessoa;
+
+/**
+ * Teste de integracao do {@link ClienteRepository} contra um PostgreSQL real
+ * (Testcontainers). Exercita a migration V5, as queries derivadas e as JPQL de
+ * busca de verdade — o {@code @WebMvcTest} com mock nao faz isso (licao do bug
+ * {@code lower(bytea)} no {@code ProdutoRepository}). Cobre isolamento por
+ * empresa (DEC-016), UUID publico (DEC-019/029), unicidade do CPF por empresa,
+ * o CHECK de coerencia do WhatsApp, filtro de status, busca por nome/digitos e
+ * o tratamento de {@code %}/{@code _} como literais.
+ *
+ * <p>Usa o banco do container via {@code @AutoConfigureTestDatabase(replace =
+ * NONE)} e deixa o Flyway aplicar as migrations reais.
+ *
+ * <p>Requer Docker disponivel no ambiente.
+ */
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = Replace.NONE)
+@Testcontainers
+class ClienteRepositoryIT {
+
+    private static final String CPF_VALIDO = "11144477735";
+
+    @Container
+    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
+
+    @DynamicPropertySource
+    static void configurarDatasource(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
+        registry.add("spring.datasource.username", POSTGRES::getUsername);
+        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        // Schema definido pelas migrations Flyway (mesmas de producao); o
+        // Hibernate apenas valida.
+        registry.add("spring.flyway.enabled", () -> "true");
+        registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
+    }
+
+    @Autowired
+    private TestEntityManager entityManager;
+
+    @Autowired
+    private ClienteRepository clienteRepository;
+
+    @Autowired
+    private EmpresaRepository empresaRepository;
+
+    private Empresa novaEmpresa(String nome) {
+        Empresa empresa = new Empresa(nome);
+        // Empresa FISICA (sem CNPJ): satisfaz as colunas NOT NULL e a coerencia
+        // PJ/PF da migration V3, e evita colisao de CNPJ ao criar varias empresas.
+        empresa.atualizarCadastro(
+                nome,
+                "1133224455",
+                "contato@" + nome.toLowerCase().replaceAll("[^a-z0-9]", "") + ".test",
+                TipoPessoa.FISICA,
+                null,
+                null,
+                null,
+                new RepresentanteLegal("Representante " + nome, "11144477735", "11987654321",
+                        "rep@" + nome.toLowerCase().replaceAll("[^a-z0-9]", "") + ".test"),
+                new Endereco("01001000", "Praça da Sé", "S/N", null, "Sé", "São Paulo", "SP"));
+        return empresaRepository.saveAndFlush(empresa);
+    }
+
+    private Cliente novoCliente(Empresa empresa, String nome, String cpf, String telefone) {
+        return clienteRepository.saveAndFlush(new Cliente(empresa, nome, cpf, telefone, true, null, null));
+    }
+
+    private Cliente novoClienteComWhatsappProprio(Empresa empresa, String nome, String telefone,
+            String whatsapp) {
+        return clienteRepository.saveAndFlush(new Cliente(empresa, nome, null, telefone, false, whatsapp, null));
+    }
+
+    // ---------- Isolamento por empresa (DEC-016) e UUID publico ----------
+
+    @Test
+    void buscarPorUuidNaoEncontraClienteDeOutraEmpresa() {
+        Empresa empresaA = novaEmpresa("Empresa A");
+        Empresa empresaB = novaEmpresa("Empresa B");
+        UUID uuidDaEmpresaA = novoCliente(empresaA, "Ana", null, null).getUuid();
+
+        assertThat(clienteRepository.findByUuidAndEmpresa_Id(uuidDaEmpresaA, empresaB.getId())).isEmpty();
+        assertThat(clienteRepository.findByUuidAndEmpresa_Id(uuidDaEmpresaA, empresaA.getId())).isPresent();
+    }
+
+    @Test
+    void uuidEGeradoNaCriacaoEUnico() {
+        Empresa empresa = novaEmpresa("Empresa UUID");
+        Cliente naoSalvo = new Cliente(empresa, "Ana", null, null, true, null, null);
+        // Gerado na aplicacao, antes de qualquer INSERT (o DEFAULT do banco e so rede de seguranca).
+        UUID uuidGeradoNaAplicacao = naoSalvo.getUuid();
+        assertThat(uuidGeradoNaAplicacao).isNotNull();
+
+        Cliente primeiro = clienteRepository.saveAndFlush(naoSalvo);
+        Cliente segundo = novoCliente(empresa, "Bruno", null, null);
+        entityManager.clear();
+
+        Cliente primeiroRelido = clienteRepository.findById(primeiro.getId()).orElseThrow();
+        assertThat(primeiroRelido.getUuid()).isEqualTo(uuidGeradoNaAplicacao);
+        assertThat(segundo.getUuid()).isNotNull().isNotEqualTo(primeiroRelido.getUuid());
+    }
+
+    // ---------- Unicidade do CPF por empresa ----------
+
+    @Test
+    void cpfDuplicadoNaMesmaEmpresaViolaConstraint() {
+        Empresa empresaA = novaEmpresa("Empresa CPF A");
+        Empresa empresaB = novaEmpresa("Empresa CPF B");
+        novoCliente(empresaA, "Ana", CPF_VALIDO, null);
+
+        // Mesmo CPF em outra empresa e permitido (unicidade e por empresa).
+        novoCliente(empresaB, "Ana em B", CPF_VALIDO, null);
+        assertThat(clienteRepository.existsByCpfAndEmpresa_Id(CPF_VALIDO, empresaB.getId())).isTrue();
+
+        // Fica por ultimo: apos a violacao a transacao do Postgres fica abortada.
+        assertThatThrownBy(() -> novoCliente(empresaA, "Outra Ana", CPF_VALIDO, null))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void variosClientesSemCpfNaoConflitam() {
+        Empresa empresa = novaEmpresa("Empresa Sem CPF");
+        novoCliente(empresa, "Sem CPF 1", null, null);
+        novoCliente(empresa, "Sem CPF 2", null, null);
+        novoCliente(empresa, "Sem CPF 3", null, null);
+
+        // UNIQUE (empresa_id, cpf) trata multiplos NULL como nao-conflitantes.
+        assertThat(clienteRepository.buscarPorEmpresa(empresa.getId(), null)).hasSize(3);
+    }
+
+    // ---------- CHECK de coerencia do WhatsApp ----------
+
+    @Test
+    void whatsappComTelefoneEWhatsappVerdadeiroViolaCheck() {
+        Empresa empresa = novaEmpresa("Empresa WhatsApp");
+        Cliente cliente = novoClienteComWhatsappProprio(empresa, "Ana", "11987654321", "11912345678");
+
+        // O service normaliza (whatsapp = null quando telefoneEWhatsapp = true);
+        // aqui o objetivo e provar que o banco tambem protege a regra.
+        cliente.atualizarDados("Ana", null, "11987654321", true, "11912345678", null);
+
+        assertThatThrownBy(() -> clienteRepository.saveAndFlush(cliente))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    // ---------- Listagem e busca ----------
+
+    @Test
+    void buscarPorEmpresaFiltraPorStatusEOrdenaPorNome() {
+        Empresa empresa = novaEmpresa("Empresa Status");
+        novoCliente(empresa, "Carla", null, null);
+        novoCliente(empresa, "Ana", null, null);
+        Cliente inativo = novoCliente(empresa, "Bruno", null, null);
+        inativo.inativar();
+        clienteRepository.saveAndFlush(inativo);
+
+        assertThat(clienteRepository.buscarPorEmpresa(empresa.getId(), null))
+                .extracting(Cliente::getNome).containsExactly("Ana", "Bruno", "Carla");
+        assertThat(clienteRepository.buscarPorEmpresa(empresa.getId(), false))
+                .extracting(Cliente::getNome).containsExactly("Bruno");
+    }
+
+    @Test
+    void buscarPorNomeIgnoraMaiusculas() {
+        Empresa empresa = novaEmpresa("Empresa Nome");
+        novoCliente(empresa, "ANA Souza", null, null);
+        novoCliente(empresa, "Mariana", null, null);
+        novoCliente(empresa, "Bruno", null, null);
+
+        assertThat(clienteRepository.buscarPorNome(empresa.getId(), "%ana%", null))
+                .extracting(Cliente::getNome).containsExactly("ANA Souza", "Mariana");
+    }
+
+    @Test
+    void buscarPorNomeOuDigitosEncontraPorTelefoneCpfEWhatsapp() {
+        Empresa empresa = novaEmpresa("Empresa Digitos");
+        novoCliente(empresa, "Pelo Telefone", null, "11987654321");
+        novoClienteComWhatsappProprio(empresa, "Pelo WhatsApp", "1133224455", "11998765000");
+        novoCliente(empresa, "Pelo CPF", CPF_VALIDO, null);
+        novoCliente(empresa, "Sem Os Digitos", null, "21912340000");
+        // Padrao de nome que nao casa com ninguem: so os digitos decidem.
+        String padraoNomeSemCasamento = "%(11) 98765%";
+
+        assertThat(clienteRepository.buscarPorNomeOuDigitos(empresa.getId(), padraoNomeSemCasamento, "%98765%", null))
+                .extracting(Cliente::getNome).containsExactly("Pelo Telefone", "Pelo WhatsApp");
+        assertThat(clienteRepository.buscarPorNomeOuDigitos(empresa.getId(), "%444777%", "%444777%", null))
+                .extracting(Cliente::getNome).containsExactly("Pelo CPF");
+    }
+
+    @Test
+    void buscaTrataPercentualESublinhadoComoLiterais() {
+        Empresa empresa = novaEmpresa("Empresa Curingas");
+        novoCliente(empresa, "100% Pet", null, null);
+        novoCliente(empresa, "Loja X", null, null);
+
+        // Padroes ja escapados, como o service os montara.
+        assertThat(clienteRepository.buscarPorNome(empresa.getId(), "%100\\%%", null))
+                .extracting(Cliente::getNome).containsExactly("100% Pet");
+        assertThat(clienteRepository.buscarPorNome(empresa.getId(), "%\\_%", null)).isEmpty();
+        assertThat(clienteRepository.buscarPorNomeOuDigitos(empresa.getId(), "%\\_%", "%\\_%", null)).isEmpty();
+    }
+}
