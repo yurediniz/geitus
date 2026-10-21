@@ -1,0 +1,258 @@
+import { useMemo } from 'react'
+import { Controller, useFormContext } from 'react-hook-form'
+import type { UseQueryResult } from '@tanstack/react-query'
+import { Loader2, RotateCcw, XCircle } from 'lucide-react'
+
+import { Button } from '@/components/ui/button'
+import {
+  AvisoCatalogo,
+  CampoSelect,
+  CampoTexto,
+  ErroDoCampo,
+  GrupoCampos,
+} from '@/features/products/CamposFormulario'
+import {
+  opcoesDeUnidade,
+  textoConversao,
+  type ProdutoFormValues,
+} from '@/features/products/produtoFormulario'
+import { SeloStatus } from '@/features/products/SeloStatus'
+import { SeletorCategoria } from '@/features/products/SeletorCategoria'
+import type { Categoria, UnidadeMedida } from '@/types/catalogo'
+import type { Produto } from '@/types/produto'
+
+export interface AbaGeralProps {
+  /** Produto em edicao (null no cadastro): mantem unidade/categoria atuais mesmo inativas. */
+  produto: Produto | null
+  unidadesQuery: UseQueryResult<UnidadeMedida[]>
+  categoriasQuery: UseQueryResult<Categoria[]>
+  /** Sigla por id de unidade (lista + unidades do produto), para "1 CX = 12 UN". */
+  siglaPorId: ReadonlyMap<string, string>
+  desabilitado: boolean
+  somenteLeitura: boolean
+  aoAlterarCampo: () => void
+  onAlterarStatus: () => void
+  alterandoStatus: boolean
+}
+
+/** Aba Geral: identificacao, unidade e embalagem, descricao e status. */
+export function AbaGeral({
+  produto,
+  unidadesQuery,
+  categoriasQuery,
+  siglaPorId,
+  desabilitado,
+  somenteLeitura,
+  aoAlterarCampo,
+  onAlterarStatus,
+  alterandoStatus,
+}: AbaGeralProps) {
+  const {
+    control,
+    register,
+    watch,
+    getValues,
+    setValue,
+    formState: { errors },
+  } = useFormContext<ProdutoFormValues>()
+
+  const unidades = useMemo(() => unidadesQuery.data ?? [], [unidadesQuery.data])
+  const categorias = useMemo(() => categoriasQuery.data ?? [], [categoriasQuery.data])
+  const [unidadeIdAtual, unidadeCompraIdAtual, fatorAtual] = watch(['unidadeId', 'unidadeCompraId', 'fatorConversao'])
+
+  const opcoesUnidadeVenda = useMemo(
+    () => opcoesDeUnidade(unidades, produto?.unidade ?? null),
+    [unidades, produto],
+  )
+  // A unidade de venda nao e oferecida como compra: "Mesma da venda" ja cobre esse caso.
+  const opcoesUnidadeCompra = useMemo(
+    () => opcoesDeUnidade(unidades, produto?.unidadeCompra ?? null).filter((opcao) => opcao.id !== unidadeIdAtual),
+    [unidades, produto, unidadeIdAtual],
+  )
+
+  const siglaVenda = siglaPorId.get(unidadeIdAtual)
+  const siglaCompra = siglaPorId.get(unidadeCompraIdAtual)
+  const temUnidadeCompra = unidadeCompraIdAtual !== ''
+  const ajudaConversao = textoConversao(siglaCompra, siglaVenda, fatorAtual)
+  const carregandoUnidades = unidadesQuery.isPending
+
+  /** Venda igual a compra deixa a compra sem sentido: limpa compra e fator. */
+  const aoAlterarUnidadeVenda = (event: { target: { value: string } }) => {
+    if (event.target.value !== '' && event.target.value === getValues('unidadeCompraId')) {
+      setValue('unidadeCompraId', '', { shouldDirty: true })
+      setValue('fatorConversao', '', { shouldDirty: true })
+    }
+    aoAlterarCampo()
+  }
+
+  /** Sem unidade de compra, o fator fica oculto e e descartado. */
+  const aoAlterarUnidadeCompra = (event: { target: { value: string } }) => {
+    if (event.target.value === '') {
+      setValue('fatorConversao', '', { shouldDirty: true })
+    }
+    aoAlterarCampo()
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2">
+        <CampoTexto
+          id="nome"
+          label="Nome"
+          obrigatorio
+          erro={errors.nome?.message}
+          inputProps={register('nome', { onChange: aoAlterarCampo })}
+          disabled={desabilitado}
+        />
+        {/* Task 4: contador n/30 e previa "No cupom: ...". */}
+        <CampoTexto
+          id="nomeCurto"
+          label="Nome curto (opcional)"
+          erro={errors.nomeCurto?.message}
+          ajuda="Usado no cupom e nos botões do PDV."
+          inputProps={register('nomeCurto', { onChange: aoAlterarCampo })}
+          disabled={desabilitado}
+          maxLength={30}
+        />
+        <div className="space-y-1.5">
+          <CampoSelect
+            id="unidadeId"
+            label="Unidade de venda"
+            obrigatorio
+            erro={errors.unidadeId?.message}
+            selectProps={register('unidadeId', { onChange: aoAlterarUnidadeVenda })}
+            disabled={desabilitado || carregandoUnidades}
+            opcaoVazia={carregandoUnidades ? 'Carregando unidades...' : 'Selecione a unidade'}
+            opcoes={opcoesUnidadeVenda}
+          />
+          <AvisoCatalogo
+            carregouComFalha={unidadesQuery.isError}
+            mensagemFalha="Não foi possível carregar as unidades."
+            onTentarNovamente={() => unidadesQuery.refetch()}
+            semOpcoes={unidadesQuery.isSuccess && opcoesUnidadeVenda.length === 0}
+            mensagemSemOpcoes="Nenhuma unidade ativa."
+            linkSemOpcoes={somenteLeitura ? undefined : { to: '/produtos/unidades', rotulo: 'Cadastrar em Unidades' }}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label id="categoriaId-rotulo" htmlFor="categoriaId" className="text-sm font-medium">
+            Categoria (opcional)
+          </label>
+          <Controller
+            control={control}
+            name="categoriaId"
+            render={({ field }) => (
+              <SeletorCategoria
+                id="categoriaId"
+                idRotulo="categoriaId-rotulo"
+                categorias={categorias}
+                valor={field.value}
+                valorAtual={produto?.categoria ?? null}
+                onChange={(categoriaId) => {
+                  field.onChange(categoriaId)
+                  aoAlterarCampo()
+                }}
+                podeCriar={!somenteLeitura}
+                desabilitado={desabilitado || categoriasQuery.isPending}
+              />
+            )}
+          />
+          <AvisoCatalogo
+            carregouComFalha={categoriasQuery.isError}
+            mensagemFalha="Não foi possível carregar as categorias."
+            onTentarNovamente={() => categoriasQuery.refetch()}
+          />
+        </div>
+        {/* Task 4: marca e fornecedor viram CampoSugestao (autocomplete). */}
+        <CampoTexto
+          id="marca"
+          label="Marca (opcional)"
+          erro={errors.marca?.message}
+          inputProps={register('marca', { onChange: aoAlterarCampo })}
+          disabled={desabilitado}
+          placeholder="Ex.: Tio João"
+        />
+        <CampoTexto
+          id="fornecedor"
+          label="Fornecedor principal (opcional)"
+          erro={errors.fornecedor?.message}
+          inputProps={register('fornecedor', { onChange: aoAlterarCampo })}
+          disabled={desabilitado}
+        />
+      </div>
+
+      <GrupoCampos
+        titulo="Unidade e embalagem"
+        descricao="Preencha se você compra em outra unidade (ex.: caixa com 12 unidades)."
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          <CampoSelect
+            id="unidadeCompraId"
+            label="Unidade de compra (opcional)"
+            erro={errors.unidadeCompraId?.message}
+            selectProps={register('unidadeCompraId', { onChange: aoAlterarUnidadeCompra })}
+            disabled={desabilitado || carregandoUnidades}
+            opcaoVazia="Mesma da venda"
+            opcoes={opcoesUnidadeCompra}
+          />
+          {/* So faz sentido com unidade de compra: ate la fica oculto. */}
+          {temUnidadeCompra && (
+            <CampoTexto
+              id="fatorConversao"
+              label={`Quantas ${siglaVenda ?? 'unidades de venda'} vêm em 1 ${siglaCompra ?? 'unidade de compra'}?`}
+              erro={errors.fatorConversao?.message}
+              ajuda={ajudaConversao ?? undefined}
+              inputProps={register('fatorConversao', { onChange: aoAlterarCampo })}
+              disabled={desabilitado}
+              type="number"
+              step="0.0001"
+              min="0"
+              placeholder="Ex.: 12"
+            />
+          )}
+        </div>
+      </GrupoCampos>
+
+      <div className="space-y-1.5">
+        <label htmlFor="descricao" className="text-sm font-medium">
+          Descrição (opcional)
+        </label>
+        <textarea
+          id="descricao"
+          rows={3}
+          disabled={desabilitado}
+          aria-invalid={errors.descricao ? true : undefined}
+          aria-describedby={errors.descricao ? 'descricao-erro' : undefined}
+          placeholder="Observações e detalhes do produto"
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive"
+          {...register('descricao', { onChange: aoAlterarCampo })}
+        />
+        <ErroDoCampo id="descricao-erro" mensagem={errors.descricao?.message} />
+      </div>
+
+      {produto && (
+        <section aria-labelledby="status-produto-titulo" className="flex flex-wrap items-center gap-3 border-t pt-4">
+          <h3 id="status-produto-titulo" className="text-sm font-medium">
+            Status
+          </h3>
+          <SeloStatus ativo={produto.ativo} />
+          {!somenteLeitura && (
+            <Button type="button" variant="outline" size="sm" onClick={onAlterarStatus} disabled={alterandoStatus}>
+              {alterandoStatus ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : produto.ativo ? (
+                <XCircle className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+              )}
+              {produto.ativo ? 'Inativar' : 'Reativar'}
+            </Button>
+          )}
+          {!produto.ativo && (
+            <p className="basis-full text-xs text-muted-foreground">Produto inativo não aparece para venda no PDV.</p>
+          )}
+        </section>
+      )}
+    </div>
+  )
+}

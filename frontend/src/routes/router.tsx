@@ -6,7 +6,8 @@ import { CategoriasPage } from '@/features/catalog/CategoriasPage'
 import { UnidadesPage } from '@/features/catalog/UnidadesPage'
 import { EmpresaPage } from '@/features/company/EmpresaPage'
 import { ClientesPage } from '@/features/customers/ClientesPage'
-import { ProdutosPage } from '@/features/products/ProdutosPage'
+import { ProdutoPage } from '@/features/products/ProdutoPage'
+import { ProdutosListaPage } from '@/features/products/ProdutosListaPage'
 import { UsuariosPage } from '@/features/usuarios/UsuariosPage'
 import { AdminRoute } from '@/routes/AdminRoute'
 import { HomePage } from '@/routes/HomePage'
@@ -44,10 +45,14 @@ const privateRoutes: RouteObject[] = [
         element: <RootLayout />,
         children: [
           { index: true, element: <HomePage /> },
-          { path: 'produtos', element: <ProdutosPage /> },
+          { path: 'produtos', element: <ProdutosListaPage /> },
           // Catalogo: leitura a qualquer autenticado; escrita so ADMIN (pagina e backend, DEC-031).
+          // Declaradas antes de `produtos/:id` por legibilidade (o ranking do React Router ja prefere o segmento fixo).
           { path: 'produtos/categorias', element: <CategoriasPage /> },
           { path: 'produtos/unidades', element: <UnidadesPage /> },
+          // Pagina do produto: OPERADOR abre em modo leitura; cadastro e escrita so ADMIN (pagina e backend).
+          { path: 'produtos/novo', element: <ProdutoPage /> },
+          { path: 'produtos/:id', element: <ProdutoPage /> },
           // Clientes: qualquer autenticado (inativar/reativar so ADMIN, controlado na pagina e no backend).
           { path: 'clientes', element: <ClientesPage /> },
           { path: 'empresa', element: <EmpresaPage /> },

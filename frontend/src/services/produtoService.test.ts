@@ -2,31 +2,41 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 import {
   atualizarProduto,
+  buscarProduto,
   cadastrarProduto,
+  excluirProduto,
   inativarProduto,
   listarProdutos,
+  listarSugestoes,
   reativarProduto,
+  sugerirSku,
 } from '@/services/produtoService'
-import { apiGet, apiPatch, apiPost } from '@/services/httpClient'
+import { apiDelete, apiGet, apiPatch, apiPost } from '@/services/httpClient'
 import type { ProdutoRequest } from '@/types/produto'
 
 vi.mock('@/services/httpClient', () => ({
   apiGet: vi.fn(),
   apiPatch: vi.fn(),
   apiPost: vi.fn(),
+  apiDelete: vi.fn(),
 }))
 
 const apiGetMock = vi.mocked(apiGet)
 const apiPostMock = vi.mocked(apiPost)
 const apiPatchMock = vi.mocked(apiPatch)
+const apiDeleteMock = vi.mocked(apiDelete)
+
+const ID = '3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e5f'
 
 const produtoRequest: ProdutoRequest = {
   nome: 'Arroz 5kg',
+  nomeCurto: null,
   unidadeId: '6f1c2b8e-0000-4000-8000-000000000001',
   categoriaId: null,
   unidadeCompraId: null,
   fatorConversao: null,
   marca: null,
+  fornecedor: null,
   descricao: null,
   precoVenda: 25.9,
   custo: null,
@@ -34,7 +44,7 @@ const produtoRequest: ProdutoRequest = {
   estoqueMinimo: null,
   estoqueMaximo: null,
   pontoReposicao: null,
-  codigoBarras: null,
+  codigosBarras: ['7891000315507'],
   sku: 'SKU-1',
 }
 
@@ -84,21 +94,67 @@ describe('produtoService', () => {
     expect(apiPostMock.mock.calls[0]?.[1]).not.toHaveProperty('empresaId')
   })
 
-  it('atualiza produto via PATCH autenticado', async () => {
-    apiPatchMock.mockResolvedValue({})
+  it('busca produto pelo UUID', async () => {
+    apiGetMock.mockResolvedValue({})
 
-    await atualizarProduto(7, produtoRequest)
+    await buscarProduto(ID)
 
-    expect(apiPatchMock).toHaveBeenCalledWith('/produtos/7', produtoRequest, { autenticada: true })
+    expect(apiGetMock).toHaveBeenCalledWith(`/produtos/${ID}`, { autenticada: true })
   })
 
-  it('inativa e reativa produto via PATCH autenticado', async () => {
+  it('atualiza produto via PATCH autenticado pelo UUID', async () => {
     apiPatchMock.mockResolvedValue({})
 
-    await inativarProduto(7)
-    await reativarProduto(7)
+    await atualizarProduto(ID, produtoRequest)
 
-    expect(apiPatchMock).toHaveBeenNthCalledWith(1, '/produtos/7/inativar', {}, { autenticada: true })
-    expect(apiPatchMock).toHaveBeenNthCalledWith(2, '/produtos/7/reativar', {}, { autenticada: true })
+    expect(apiPatchMock).toHaveBeenCalledWith(`/produtos/${ID}`, produtoRequest, { autenticada: true })
+  })
+
+  it('inativa e reativa produto via PATCH autenticado pelo UUID', async () => {
+    apiPatchMock.mockResolvedValue({})
+
+    await inativarProduto(ID)
+    await reativarProduto(ID)
+
+    expect(apiPatchMock).toHaveBeenNthCalledWith(1, `/produtos/${ID}/inativar`, {}, { autenticada: true })
+    expect(apiPatchMock).toHaveBeenNthCalledWith(2, `/produtos/${ID}/reativar`, {}, { autenticada: true })
+  })
+
+  it('exclui produto via DELETE autenticado pelo UUID', async () => {
+    apiDeleteMock.mockResolvedValue(undefined)
+
+    await excluirProduto(ID)
+
+    expect(apiDeleteMock).toHaveBeenCalledWith(`/produtos/${ID}`, { autenticada: true })
+  })
+
+  it('codifica o id na rota', async () => {
+    apiGetMock.mockResolvedValue({})
+
+    await buscarProduto('a/b')
+
+    expect(apiGetMock).toHaveBeenCalledWith('/produtos/a%2Fb', { autenticada: true })
+  })
+
+  it('sugere SKU devolvendo apenas o texto', async () => {
+    apiGetMock.mockResolvedValue({ sku: 'P000031' })
+
+    await expect(sugerirSku()).resolves.toBe('P000031')
+    expect(apiGetMock).toHaveBeenCalledWith('/produtos/sku/sugestao', { autenticada: true })
+  })
+
+  it('lista sugestoes de marca com o termo aparado', async () => {
+    apiGetMock.mockResolvedValue(['Golden'])
+
+    await expect(listarSugestoes('marca', ' gol ')).resolves.toEqual(['Golden'])
+    expect(apiGetMock).toHaveBeenCalledWith('/produtos/sugestoes?campo=marca&termo=gol', { autenticada: true })
+  })
+
+  it('lista sugestoes de fornecedor sem termo (mais usados)', async () => {
+    apiGetMock.mockResolvedValue([])
+
+    await listarSugestoes('fornecedor', '  ')
+
+    expect(apiGetMock).toHaveBeenCalledWith('/produtos/sugestoes?campo=fornecedor', { autenticada: true })
   })
 })
