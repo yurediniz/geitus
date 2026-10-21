@@ -42,6 +42,7 @@ final class ProdutoTesteBuilder {
     private BigDecimal quantidadeMinimaAtacado;
     private Long id;
     private boolean ativo = true;
+    private boolean controlaEstoque = true;
     private final List<CodigoBarrasValidado> codigos = new ArrayList<>();
 
     private ProdutoTesteBuilder(Empresa empresa, UnidadeMedida unidade) {
@@ -142,6 +143,11 @@ final class ProdutoTesteBuilder {
         return this;
     }
 
+    ProdutoTesteBuilder semControleDeEstoque() {
+        this.controlaEstoque = false;
+        return this;
+    }
+
     ProdutoTesteBuilder inativo() {
         this.ativo = false;
         return this;
@@ -162,7 +168,7 @@ final class ProdutoTesteBuilder {
         Produto produto = new Produto(empresa, new DadosProduto(nome, nomeCurto, marca, fornecedor, descricao,
                 unidade, categoria, unidadeCompra, fatorConversao, precoVenda, custo, precoMinimo, estoqueMinimo,
                 estoqueMaximo, pontoReposicao, sku, precoPromocional, promocaoInicio, promocaoFim, precoAtacado,
-                quantidadeMinimaAtacado));
+                quantidadeMinimaAtacado, controlaEstoque));
         produto.substituirCodigos(codigos);
         if (!ativo) {
             produto.inativar();

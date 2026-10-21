@@ -731,7 +731,8 @@ public class ProdutoService {
                 promocao.map(PromocaoRequest::inicio).orElse(null),
                 promocao.map(PromocaoRequest::fim).orElse(null),
                 atacado.map(AtacadoRequest::preco).orElse(null),
-                atacado.map(AtacadoRequest::quantidadeMinima).orElse(null));
+                atacado.map(AtacadoRequest::quantidadeMinima).orElse(null),
+                true);
     }
 
     /** Resposta de um produto; a arvore so e carregada se o produto tiver categoria. */

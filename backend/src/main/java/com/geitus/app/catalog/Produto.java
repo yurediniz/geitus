@@ -48,6 +48,10 @@ import jakarta.persistence.Table;
  * isso {@code cascade} e {@code orphanRemoval} —, nome curto e fornecedor
  * principal.
  *
+ * <p>Fase D (V9, docs/modules/produtos-estoque.md): o produto tem a flag
+ * {@code controlaEstoque}; o saldo fica no pacote {@code inventory}, derivado
+ * de movimentos, e nunca e um campo do produto.
+ *
  * <p>Nao deve ser exposta diretamente na API: o {@code ProdutoController} usa
  * DTOs ({@code ProdutoRequest}/{@code ProdutoResponse}).
  */
@@ -138,6 +142,10 @@ public class Produto {
     @Column(nullable = false)
     private boolean ativo = true;
 
+    /** Fase D (V9): se o saldo do produto e controlado por movimentacoes. */
+    @Column(name = "controla_estoque", nullable = false)
+    private boolean controlaEstoque = true;
+
     @OneToMany(mappedBy = "produto", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("ordem")
     private List<ProdutoCodigoBarras> codigosBarras = new ArrayList<>();
@@ -206,6 +214,7 @@ public class Produto {
         this.promocaoFim = dados.promocaoFim();
         this.precoAtacado = dados.precoAtacado();
         this.quantidadeMinimaAtacado = dados.quantidadeMinimaAtacado();
+        this.controlaEstoque = dados.controlaEstoque();
     }
 
     /**
@@ -403,6 +412,14 @@ public class Produto {
 
     public boolean isAtivo() {
         return ativo;
+    }
+
+    /**
+     * Se o produto controla estoque (spec 4.1 da Fase D). Desligado, o saldo e o
+     * historico ficam guardados, mas nao se aceitam ajustes.
+     */
+    public boolean isControlaEstoque() {
+        return controlaEstoque;
     }
 
     public LocalDateTime getCriadoEm() {

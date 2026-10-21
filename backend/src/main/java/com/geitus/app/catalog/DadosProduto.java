@@ -20,6 +20,9 @@ import com.geitus.app.catalog.unidade.UnidadeMedida;
  * {@code promocaoFim}) e atacado ({@code precoAtacado},
  * {@code quantidadeMinimaAtacado}) vem todos preenchidos ou todos nulos em
  * cada bloco.
+ *
+ * <p>Fase D: {@code controlaEstoque} liga ou desliga o controle de estoque do
+ * produto (o saldo em si nunca e um dado do cadastro).
  */
 public record DadosProduto(
         String nome,
@@ -42,5 +45,6 @@ public record DadosProduto(
         LocalDate promocaoInicio,
         LocalDate promocaoFim,
         BigDecimal precoAtacado,
-        BigDecimal quantidadeMinimaAtacado) {
+        BigDecimal quantidadeMinimaAtacado,
+        boolean controlaEstoque) {
 }
