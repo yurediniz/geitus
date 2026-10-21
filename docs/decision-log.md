@@ -664,3 +664,56 @@ Migration `V5__clientes.sql`, pacote `customer` (entidade, repository, service, 
 
 **Observações futuras:**
 Pessoa jurídica, endereço, e-mail e data de nascimento entram quando uma capacidade exigir (fiscal, entrega, relacionamento). Paginação da listagem registrada como DT-020.
+
+## DEC-030 — Evolução do cadastro de produtos em 6 fases (amplia o escopo do MVP de Produtos)
+
+**Data:** 2026-10-20
+**Status:** Aceita
+**Contexto:**
+Para o uso diário de um comércio, o cadastro de produtos (texto livre para categoria e unidade, um código de barras, sem promoções nem estoque) ficou insuficiente. O usuário pediu um cadastro mais completo, **sem nada fiscal**. Vários itens pedidos estavam explicitamente fora do escopo registrado: `produtos.md` §3 (promoções/tabela de preços) e a DEC-028 (categoria/unidade como entidades, múltiplos códigos). O estoque com movimentações é a etapa 12 da ordem do `CLAUDE.md`, e o PDV (etapa 11) ainda não existe.
+
+**Decisão:**
+- Ampliar o escopo de Produtos, executado em **6 fases**, cada uma com spec → plano → execução → revisão:
+  - **A** — Categorias hierárquicas e Unidades de medida (cadastros próprios, migração dos textos).
+  - **B** — Identificação (nome curto, SKU automático, múltiplos códigos de barras com validação EAN-8/EAN-13/UPC-A, fornecedor principal, autocomplete) e formulário em abas.
+  - **C** — Preços (promocional com vigência, atacado por quantidade mínima, histórico de custo/preço, margem → preço, máscara pt-BR).
+  - **D** — Estoque básico **antecipado** (flag "controla estoque", movimentos imutáveis como fonte de verdade, ajuste com motivo, indicadores) — cumpre parte da etapa 12.
+  - **E** — Listagem (paginação no servidor, busca em tempo real sem acento, ordenação, filtros, estado na URL).
+  - **F** — Imagem do produto (PostgreSQL, comprimida no navegador).
+- Regras "na venda" (fracionamento, preço vigente promocional/atacado, busca por qualquer código) entram como **regras de domínio testadas**, consumidas quando o PDV existir.
+- Busca sem acento por **coluna normalizada** mantida pela aplicação (sem extensão `unaccent`).
+- **Exclusão física de produto** permitida apenas quando nunca houve movimentação/venda; caso contrário, só inativação.
+- Códigos de barras e SKU continuam **únicos por empresa** (multi-tenant, DEC-016).
+- Continua **fora**: fiscal (NCM, CFOP, CST, impostos), variações/grade, lote/série/validade, múltiplos estoques, marca e fornecedor como entidades.
+
+**Motivo:**
+Decisão do usuário para tornar o produto útil ao comércio desde o MVP, mantendo o fiscal à parte. A divisão em fases mantém cada entrega pequena, testável e revisável, e respeita "primeiro funcionar bem" do `CLAUDE.md`.
+
+**Impacto:**
+Substitui, para Produtos, os itens correspondentes de "fora do escopo" de `produtos.md` §3 e da DEC-028. Antecipa parte da etapa 12 antes da etapa 10 (Caixa). Cada fase registra suas decisões de modelagem em DEC própria (a Fase A na DEC-031).
+
+**Observações futuras:**
+Revisar a ordem do `CLAUDE.md` ("Ordem recomendada de desenvolvimento") ao concluir a Fase D, já que parte do Estoque básico terá sido entregue.
+
+## DEC-031 — Categorias hierárquicas e Unidades de medida por empresa (Fase A)
+
+**Data:** 2026-10-20
+**Status:** Aceita
+**Contexto:**
+Primeira fase da DEC-030. Categoria e unidade eram texto livre no produto, com variações do mesmo valor e sem noção de hierarquia ou de quantidade fracionada.
+
+**Decisão:**
+- **Unidades de medida por empresa** (`unidades_medida`): sigla única por empresa (maiúscula, até 20), descrição, `fracionada`, `ativo`; 10 padrões (UN, KG, G, L, ML, M, CX, PCT, DZ, FD — fracionadas: KG, G, L, ML, M) semeados para cada empresa. Exclusão só sem uso.
+- **Categorias em árvore** (`categorias` com `parent_id`), profundidade ilimitada; nome único entre irmãos sem diferenciar maiúsculas; ciclos impedidos no service; exclusão física só sem subcategorias e sem produtos; inativação **sem cascata** (o ramo sai do seletor, nada é alterado).
+- **Produto:** `unidade_id` obrigatório, `categoria_id` opcional (qualquer nível), `unidade_compra_id` + `fator_conversao` (ambos ou nenhum).
+- **Migração V6** converte os textos atuais (com sinônimos de unidade e deduplicação sem diferenciar maiúsculas/espaços), atribui UN a produtos sem unidade e **preserva** as colunas de texto antigas até a Fase B.
+- Identificador público UUID nas novas entidades (DEC-019/029). Escrita ADMIN, leitura livre (padrão DEC-025).
+
+**Motivo:**
+Unidades por empresa dão autonomia sem cadastro global a manter; árvore com `parent_id` é o modelo mais simples que atende profundidade ilimitada; inativação sem cascata é reversível; preservar as colunas antigas protege contra erro de migração.
+
+**Impacto:**
+Migration V6, entidades e telas novas em `catalog`, mudança no contrato da API de produtos (`categoria`/`unidade` passam de texto a objetos; request com `unidadeId`/`categoriaId`). Spec: `docs/modules/categorias-e-unidades.md`.
+
+**Observações futuras:**
+Remover `produtos.categoria`/`produtos.unidade` na Fase B; revalidar a troca de `fracionada` quando houver estoque (Fase D).

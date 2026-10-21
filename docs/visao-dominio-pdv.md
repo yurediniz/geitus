@@ -63,8 +63,9 @@ O acesso é concedido por um **Vínculo Usuário↔Empresa** (associação M:N) 
 | Entidade | Papel | Fase |
 |---|---|---|
 | Produto | Identidade comercial/operacional do vendável (mínimo: nome, unidade, preço, status) | **MVP** (existe, mínimo) |
-| UnidadeMedida | UN/KG/LT/CX, casas decimais, fracionamento | **Futuro** (quando peso/estoque) |
-| Categoria / Marca / Fabricante | Organização e origem do produto | **Futuro** |
+| UnidadeMedida | UN/KG/LT/CX, casas decimais, fracionamento | **Fase A da DEC-030** (por empresa, com fracionamento) |
+| Categoria | Organização hierárquica do produto | **Fase A da DEC-030** (árvore com `parent_id`) |
+| Marca / Fabricante | Origem do produto | **Futuro** (marca segue como texto com autocomplete) |
 | VariacaoProduto / AtributoProduto / ValorAtributo | Versões vendáveis (cor/tamanho...) — grade | **Futuro** (roupas) |
 | CodigoBarrasProduto | Múltiplos GTIN/EAN por produto/variação | **Futuro** |
 

@@ -1,5 +1,7 @@
 # Módulo: Produtos
 
+> **Evolução em andamento (DEC-030):** o cadastro de produtos está sendo ampliado em 6 fases (A–F). Itens que esta spec lista como fora do escopo — categorias e unidades como cadastros, múltiplos códigos de barras, promoções/atacado e estoque com movimentações — passam a fazer parte do escopo por decisão do usuário. Fase A especificada em [categorias-e-unidades.md](categorias-e-unidades.md); esta spec será atualizada ao fim de cada fase. Fiscal continua fora.
+
 ## 1. Visão geral
 
 Produto é o item físico que um pequeno negócio vende. É a entidade central que conecta PDV, estoque, financeiro e relatórios: sem produto cadastrado, não há venda, não há movimentação de estoque e não há receita a registrar.
