@@ -37,6 +37,8 @@ final class ProdutoRequestBuilder {
     private String sku;
     private PromocaoRequest promocao;
     private AtacadoRequest atacado;
+    private Boolean controlaEstoque = true;
+    private BigDecimal estoqueInicial;
 
     private ProdutoRequestBuilder(UUID unidadeId) {
         this.unidadeId = unidadeId;
@@ -149,9 +151,20 @@ final class ProdutoRequestBuilder {
         return this;
     }
 
+    /** {@code null} simula o campo ausente no JSON (o Bean Validation recusa). */
+    ProdutoRequestBuilder controlaEstoque(Boolean valor) {
+        this.controlaEstoque = valor;
+        return this;
+    }
+
+    ProdutoRequestBuilder estoqueInicial(String valor) {
+        this.estoqueInicial = valor == null ? null : new BigDecimal(valor);
+        return this;
+    }
+
     ProdutoRequest build() {
         return new ProdutoRequest(nome, nomeCurto, marca, fornecedor, descricao, unidadeId, categoriaId,
                 unidadeCompraId, fatorConversao, precoVenda, custo, estoqueMinimo, estoqueMaximo, pontoReposicao,
-                precoMinimo, codigosBarras, sku, promocao, atacado);
+                precoMinimo, codigosBarras, sku, promocao, atacado, controlaEstoque, estoqueInicial);
     }
 }

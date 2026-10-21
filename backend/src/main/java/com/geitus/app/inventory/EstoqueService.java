@@ -19,9 +19,9 @@ import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ProdutoConflitoException;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
 import com.geitus.app.catalog.ProdutoRepository;
+import com.geitus.app.catalog.QuantidadeDeEstoque;
 import com.geitus.app.catalog.RegraDeNegocioException;
 import com.geitus.app.catalog.dto.PaginaResponse;
-import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
@@ -54,16 +54,11 @@ public class EstoqueService {
     static final String MENSAGEM_MOTIVO_DO_SISTEMA = "Este motivo é registrado só pelo sistema.";
     static final String MENSAGEM_MOTIVO_DE_OUTRO_TIPO = "Este motivo não vale para o tipo de movimento escolhido.";
     static final String MENSAGEM_DESCREVA_O_MOTIVO = "Descreva o motivo.";
-    static final String MENSAGEM_QUANTIDADE_NAO_POSITIVA = "Informe uma quantidade maior que zero.";
-    static final String MENSAGEM_QUANTIDADE_NEGATIVA = "A quantidade não pode ser negativa.";
-    static final String MENSAGEM_CASAS_DECIMAIS = "A quantidade deve ter no máximo 3 casas decimais.";
     static final String MENSAGEM_SALDO_INSUFICIENTE = "Saldo insuficiente: há %s.";
     static final String MENSAGEM_SALDO_IGUAL = "O saldo já é %s.";
     static final String MENSAGEM_SALDO_ACIMA_DO_LIMITE = "O saldo não pode passar de 999.999.999,999.";
     static final String MENSAGEM_CHAVE_COM_OUTROS_DADOS = "Esta operação já foi registrada com outros dados.";
 
-    /** Casas decimais das quantidades ({@code NUMERIC(12,3)}, V9). */
-    static final int CASAS_DA_QUANTIDADE = 3;
     /** Maior valor de {@code NUMERIC(12,3)}: acima disso o banco recusaria com erro generico. */
     static final BigDecimal SALDO_MAXIMO = new BigDecimal("999999999.999");
 
@@ -157,27 +152,6 @@ public class EstoqueService {
                 observacao, usuarioId, chave));
     }
 
-    /**
-     * Regras da quantidade informada, comuns ao ajuste e ao estoque inicial:
-     * maior que zero (ou zero ou mais, se {@code aceitaZero}), ate 3 casas e
-     * fracao so em unidade fracionada. {@code campo} e a chave de
-     * {@code campos} no erro.
-     */
-    static void validarQuantidade(BigDecimal quantidade, boolean aceitaZero, UnidadeMedida unidade, String campo) {
-        if (quantidade.signum() < 0) {
-            throw new RegraDeNegocioException(MENSAGEM_QUANTIDADE_NEGATIVA, campo);
-        }
-        if (quantidade.signum() == 0 && !aceitaZero) {
-            throw new RegraDeNegocioException(MENSAGEM_QUANTIDADE_NAO_POSITIVA, campo);
-        }
-        if (quantidade.stripTrailingZeros().scale() > CASAS_DA_QUANTIDADE) {
-            throw new RegraDeNegocioException(MENSAGEM_CASAS_DECIMAIS, campo);
-        }
-        if (quantidade.signum() > 0 && !UnidadeMedida.quantidadeValida(unidade.isFracionada(), quantidade)) {
-            throw new RegraDeNegocioException(UnidadeMedida.mensagemSemFracao(unidade.getSigla()), campo);
-        }
-    }
-
     // ---------- Ajuste manual ----------
 
     /** Ordem da spec: chave -> produto (trava, 404) -> chave de novo -> regras -> movimento. */
@@ -211,8 +185,11 @@ public class EstoqueService {
         if (request.motivo() == MotivoMovimento.OUTRO && !StringUtils.hasText(request.observacao())) {
             throw new RegraDeNegocioException(MENSAGEM_DESCREVA_O_MOTIVO, CAMPO_OBSERVACAO);
         }
-        validarQuantidade(request.quantidade(), request.tipo() == TipoMovimento.AJUSTE, produto.getUnidade(),
-                CAMPO_QUANTIDADE);
+        if (request.tipo() == TipoMovimento.AJUSTE) {
+            QuantidadeDeEstoque.validarNaoNegativa(request.quantidade(), produto.getUnidade(), CAMPO_QUANTIDADE);
+        } else {
+            QuantidadeDeEstoque.validarPositiva(request.quantidade(), produto.getUnidade(), CAMPO_QUANTIDADE);
+        }
     }
 
     private static void validarMotivo(TipoMovimento tipo, MotivoMovimento motivo) {
@@ -295,7 +272,7 @@ public class EstoqueService {
 
     /** Quantidade na escala da coluna; ja validada com ate 3 casas, entao nunca arredonda. */
     private static BigDecimal emEscalaDeQuantidade(BigDecimal quantidade) {
-        return quantidade.setScale(CASAS_DA_QUANTIDADE, RoundingMode.UNNECESSARY);
+        return quantidade.setScale(QuantidadeDeEstoque.CASAS_DECIMAIS, RoundingMode.UNNECESSARY);
     }
 
     /** "3 UN", "2,5 KG": sem zeros a direita e com virgula decimal. */

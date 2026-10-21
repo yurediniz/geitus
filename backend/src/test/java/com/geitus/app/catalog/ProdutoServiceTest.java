@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -47,6 +49,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -111,6 +114,12 @@ class ProdutoServiceTest {
     @Mock
     private HistoricoPrecoRepository historicoPrecoRepository;
 
+    @Mock
+    private UsoDoProdutoNoEstoque usoNoEstoque;
+
+    @Mock
+    private RegistroDeEstoqueInicial registroDeEstoqueInicial;
+
     private ProdutoService produtoService;
 
     private Empresa empresa;
@@ -120,7 +129,8 @@ class ProdutoServiceTest {
     @BeforeEach
     void setUp() {
         produtoService = new ProdutoService(produtoRepository, empresaRepository, usuarioRepository,
-                unidadeService, categoriaService, historicoPrecoRepository, RELOGIO);
+                unidadeService, categoriaService, historicoPrecoRepository, usoNoEstoque, registroDeEstoqueInicial,
+                RELOGIO);
         empresa = empresaComId(EMPRESA_ID);
         un = unidade(10L, empresa, "UN");
     }
@@ -810,27 +820,21 @@ class ProdutoServiceTest {
 
     @Test
     void excluirBloqueadoLanca409ComMensagemFixa() {
-        ProdutoService comMovimentacao = new ProdutoService(produtoRepository, empresaRepository,
-                usuarioRepository, unidadeService, categoriaService, historicoPrecoRepository, RELOGIO) {
-            @Override
-            boolean podeExcluir(Produto produto) {
-                return false;
-            }
-        };
         produtoExistente();
+        resumoDoProduto(new ResumoDeEstoque(new BigDecimal("5"), 2, 1));
 
-        assertThatThrownBy(() -> comMovimentacao.excluir(ID_USUARIO, EMPRESA_ID, produtoUuid))
+        assertThatThrownBy(() -> produtoService.excluir(ID_USUARIO, EMPRESA_ID, produtoUuid))
                 .isInstanceOf(ProdutoConflitoException.class)
-                .hasMessage("Este produto já teve movimentação e não pode ser excluído. "
-                        + "Inative-o para que não apareça na venda.");
+                .hasMessage(MENSAGEM_EXCLUSAO_COM_MOVIMENTO);
 
         verify(produtoRepository, never()).delete(any());
+        verify(registroDeEstoqueInicial, never()).removerParaExclusao(anyLong(), anyLong());
     }
 
     @Test
     void excluirDeOutraEmpresaLanca404() {
         UUID deOutraEmpresa = UUID.randomUUID();
-        when(produtoRepository.findByUuidAndEmpresa_Id(deOutraEmpresa, EMPRESA_ID)).thenReturn(Optional.empty());
+        when(produtoRepository.buscarPorUuidParaAtualizar(deOutraEmpresa, EMPRESA_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> produtoService.excluir(ID_USUARIO, EMPRESA_ID, deOutraEmpresa))
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
@@ -1786,6 +1790,323 @@ class ProdutoServiceTest {
                 .isInstanceOf(CredenciaisInvalidasException.class);
 
         verify(produtoRepository, never()).save(any());
+    }
+
+    // ---------- Fase D: estoque (docs/modules/produtos-estoque.md) ----------
+
+    private static final String MENSAGEM_EXCLUSAO_COM_MOVIMENTO =
+            "Este produto já teve movimentação de estoque e não pode ser excluído. Inative-o.";
+
+    /** Resumo de estoque devolvido para o produto {@link #PRODUTO_ID}. */
+    private void resumoDoProduto(ResumoDeEstoque resumo) {
+        when(usoNoEstoque.resumos(EMPRESA_ID, List.of(PRODUTO_ID))).thenReturn(Map.of(PRODUTO_ID, resumo));
+    }
+
+    private static ResumoDeEstoque soEstoqueInicial(String saldo) {
+        return new ResumoDeEstoque(new BigDecimal(saldo), 1, 0);
+    }
+
+    private static ResumoDeEstoque comAjuste(String saldo) {
+        return new ResumoDeEstoque(new BigDecimal(saldo), 2, 1);
+    }
+
+    @Test
+    void cadastroComEstoqueInicialRegistraEntrada() {
+        cadastroPermitido();
+
+        Produto produto = cadastrar(requestComUN().estoqueInicial("12").build());
+
+        InOrder ordem = inOrder(produtoRepository, registroDeEstoqueInicial);
+        ordem.verify(produtoRepository).save(produto);
+        ordem.verify(registroDeEstoqueInicial).registrar(produto, new BigDecimal("12"), ID_USUARIO);
+        assertThat(produto.isControlaEstoque()).isTrue();
+    }
+
+    @Test
+    void cadastroSemEstoqueInicialNaoRegistraMovimento() {
+        cadastroPermitido();
+
+        cadastrar(requestComUN().build());
+
+        verifyNoInteractions(registroDeEstoqueInicial);
+    }
+
+    @Test
+    void cadastroComControleDesligadoGravaAFlag() {
+        cadastroPermitido();
+
+        Produto produto = cadastrar(requestComUN().controlaEstoque(false).build());
+
+        assertThat(produto.isControlaEstoque()).isFalse();
+    }
+
+    @Test
+    void cadastroComEstoqueInicialSemControle_400() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().controlaEstoque(false).estoqueInicial("5").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Ligue o controle de estoque para informar o estoque inicial.")
+                .satisfies(noCampo("estoqueInicial"));
+
+        verify(produtoRepository, never()).save(any());
+        verifyNoInteractions(registroDeEstoqueInicial);
+    }
+
+    @Test
+    void estoqueInicialFracionadoEmUN_400() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().estoqueInicial("2.5").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("A unidade UN não aceita quantidade fracionada.")
+                .satisfies(noCampo("estoqueInicial"));
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void estoqueInicialZero_400() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().estoqueInicial("0").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Informe uma quantidade maior que zero.")
+                .satisfies(noCampo("estoqueInicial"));
+    }
+
+    @Test
+    void estoqueInicialComMaisDeTresCasas_400() {
+        UnidadeMedida kg = new UnidadeMedida(empresa, "KG", "Quilograma", true);
+        unidadeDaEmpresa(kg);
+
+        assertThatThrownBy(() -> cadastrar(comUnidade(kg.getUuid()).estoqueInicial("1.0005").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("A quantidade deve ter no máximo 3 casas decimais.")
+                .satisfies(noCampo("estoqueInicial"));
+    }
+
+    @Test
+    void estoqueInicialFracionadoEmKG_ok() {
+        UnidadeMedida kg = new UnidadeMedida(empresa, "KG", "Quilograma", true);
+        unidadeDaEmpresa(kg);
+        when(empresaRepository.findById(EMPRESA_ID)).thenReturn(Optional.of(empresa));
+        salvamentoDevolveOProduto();
+
+        Produto produto = cadastrar(comUnidade(kg.getUuid()).estoqueInicial("2.5").build());
+
+        verify(registroDeEstoqueInicial).registrar(produto, new BigDecimal("2.5"), ID_USUARIO);
+    }
+
+    @Test
+    void estoqueInicialNoPatch_400() {
+        produtoExistente();
+
+        assertThatThrownBy(() -> atualizar(requestComUN().estoqueInicial("3").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("O estoque inicial só pode ser informado no cadastro. Use Ajustar estoque.")
+                .satisfies(noCampo("estoqueInicial"));
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void trocarUnidadeComMovimento_400() {
+        produtoExistente();
+        UnidadeMedida kg = unidade(11L, empresa, "KG");
+        unidadeDaEmpresa(kg);
+        resumoDoProduto(soEstoqueInicial("10"));
+
+        assertThatThrownBy(() -> atualizar(comUnidade(kg.getUuid()).build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Não é possível trocar a unidade de um produto com movimentação de estoque.")
+                .satisfies(noCampo("unidadeId"));
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void trocarUnidadeSemMovimento_ok() {
+        produtoExistente();
+        UnidadeMedida kg = unidade(11L, empresa, "KG");
+        unidadeDaEmpresa(kg);
+        salvamentoDevolveOProduto();
+
+        Produto atualizado = atualizar(comUnidade(kg.getUuid()).build());
+
+        assertThat(atualizado.getUnidade()).isSameAs(kg);
+    }
+
+    @Test
+    void manterAUnidadeNaoConsultaOEstoque() {
+        produtoExistente();
+        edicaoPermitida();
+
+        atualizar(requestComUN().nome("Outro nome").build());
+
+        verifyNoInteractions(usoNoEstoque);
+    }
+
+    @Test
+    void desligarOControleEPermitido() {
+        produtoExistente();
+        edicaoPermitida();
+
+        Produto atualizado = atualizar(requestComUN().controlaEstoque(false).build());
+
+        assertThat(atualizado.isControlaEstoque()).isFalse();
+    }
+
+    @Test
+    void pontoMenorQueMinimo_400() {
+        assertThatThrownBy(() -> cadastrar(requestComUN().estoqueMinimo("5").pontoReposicao("3").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("O ponto de reposição não pode ser menor que o estoque mínimo.")
+                .satisfies(noCampo("pontoReposicao"));
+    }
+
+    @Test
+    void maximoMenorQuePonto_400() {
+        assertThatThrownBy(() -> cadastrar(requestComUN().pontoReposicao("10").estoqueMaximo("8").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("O estoque máximo não pode ser menor que o ponto de reposição.")
+                .satisfies(noCampo("estoqueMaximo"));
+    }
+
+    @Test
+    void niveisIguaisSaoAceitos() {
+        cadastroPermitido();
+
+        Produto produto = cadastrar(requestComUN().estoqueMinimo("5").pontoReposicao("5").estoqueMaximo("5")
+                .build());
+
+        assertThat(produto.getPontoReposicao()).isEqualByComparingTo("5");
+    }
+
+    @Test
+    void podeExcluirSemMovimento() {
+        usuarioAtivoDaEmpresa(9L);
+        produtoExistente();
+
+        assertThat(produtoService.buscarPorIdParaUsuario(9L, produtoUuid).podeExcluir()).isTrue();
+    }
+
+    @Test
+    void podeExcluirSoComEstoqueInicial() {
+        usuarioAtivoDaEmpresa(9L);
+        produtoExistente();
+        resumoDoProduto(soEstoqueInicial("5"));
+
+        assertThat(produtoService.buscarPorIdParaUsuario(9L, produtoUuid).podeExcluir()).isTrue();
+    }
+
+    @Test
+    void naoPodeExcluirComAjuste() {
+        usuarioAtivoDaEmpresa(9L);
+        produtoExistente();
+        resumoDoProduto(comAjuste("5"));
+
+        assertThat(produtoService.buscarPorIdParaUsuario(9L, produtoUuid).podeExcluir()).isFalse();
+    }
+
+    /** Review Focus 4: desligado, o saldo guardado continua na resposta e a situacao vem nula. */
+    @Test
+    void respostaComControleDesligadoMantemSaldoESituacaoNula() {
+        usuarioAtivoDaEmpresa(9L);
+        produtoExistente(existente().semControleDeEstoque().pontoReposicao("20"));
+        resumoDoProduto(comAjuste("12"));
+
+        ProdutoResponse resposta = produtoService.buscarPorIdParaUsuario(9L, produtoUuid);
+
+        assertThat(resposta.controlaEstoque()).isFalse();
+        assertThat(resposta.estoqueAtual()).isEqualByComparingTo("12");
+        assertThat(resposta.situacaoEstoque()).isNull();
+    }
+
+    @Test
+    void respostaComControleLigadoCalculaASituacao() {
+        usuarioAtivoDaEmpresa(9L);
+        produtoExistente(existente().pontoReposicao("15"));
+        resumoDoProduto(comAjuste("12"));
+
+        ProdutoResponse resposta = produtoService.buscarPorIdParaUsuario(9L, produtoUuid);
+
+        assertThat(resposta.controlaEstoque()).isTrue();
+        assertThat(resposta.estoqueAtual()).isEqualByComparingTo("12");
+        assertThat(resposta.situacaoEstoque()).isEqualTo(SituacaoEstoque.BAIXO);
+    }
+
+    @Test
+    void produtoSemMovimentoTemSaldoZeroESemEstoque() {
+        usuarioAtivoDaEmpresa(9L);
+        produtoExistente();
+
+        ProdutoResponse resposta = produtoService.buscarPorIdParaUsuario(9L, produtoUuid);
+
+        assertThat(resposta.estoqueAtual()).isEqualByComparingTo("0");
+        assertThat(resposta.situacaoEstoque()).isEqualTo(SituacaoEstoque.SEM_ESTOQUE);
+    }
+
+    @Test
+    void listagemCarregaOEstoqueDeTodosOsProdutosNumaChamada() {
+        usuarioAtivoDaEmpresa(9L);
+        Produto arroz = ProdutoTesteBuilder.produto(empresa, un).id(5L).nome("Arroz").build();
+        Produto feijao = ProdutoTesteBuilder.produto(empresa, un).id(6L).nome("Feijão").build();
+        when(produtoRepository.buscarPorEmpresa(EMPRESA_ID, null)).thenReturn(List.of(arroz, feijao));
+        when(usoNoEstoque.resumos(EMPRESA_ID, List.of(5L, 6L)))
+                .thenReturn(Map.of(5L, comAjuste("3"), 6L, soEstoqueInicial("4")));
+
+        List<ProdutoResponse> produtos = produtoService.listarParaUsuario(9L, null, null);
+
+        assertThat(produtos).extracting(ProdutoResponse::estoqueAtual)
+                .usingElementComparator(BigDecimal::compareTo)
+                .containsExactly(new BigDecimal("3"), new BigDecimal("4"));
+        assertThat(produtos).extracting(ProdutoResponse::podeExcluir).containsExactly(false, true);
+        verify(usoNoEstoque, times(1)).resumos(any(), any());
+    }
+
+    @Test
+    void excluirSemMovimentoNaoMexeNoEstoque() {
+        Produto produto = produtoExistente();
+
+        produtoService.excluir(ID_USUARIO, EMPRESA_ID, produtoUuid);
+
+        verify(produtoRepository).buscarPorUuidParaAtualizar(produtoUuid, EMPRESA_ID);
+        verify(produtoRepository).delete(produto);
+        verify(registroDeEstoqueInicial, never()).removerParaExclusao(anyLong(), anyLong());
+    }
+
+    @Test
+    void excluirSoComEstoqueInicialRemoveOMovimentoAntesDoProdutoERegistraNoLog() {
+        Produto produto = produtoExistente();
+        resumoDoProduto(soEstoqueInicial("5.000"));
+        Logger logDoService = (Logger) LoggerFactory.getLogger(ProdutoService.class);
+        ListAppender<ILoggingEvent> capturados = new ListAppender<>();
+        capturados.start();
+        logDoService.addAppender(capturados);
+        try {
+            produtoService.excluir(ID_USUARIO, EMPRESA_ID, produtoUuid);
+        } finally {
+            logDoService.detachAppender(capturados);
+        }
+
+        InOrder ordem = inOrder(registroDeEstoqueInicial, produtoRepository);
+        ordem.verify(registroDeEstoqueInicial).removerParaExclusao(EMPRESA_ID, PRODUTO_ID);
+        ordem.verify(produtoRepository).delete(produto);
+        ordem.verify(produtoRepository).flush();
+        assertThat(capturados.list).extracting(ILoggingEvent::getFormattedMessage)
+                .anySatisfy(mensagem -> assertThat(mensagem).contains("produto=" + produtoUuid, "estoqueInicial=5"));
+    }
+
+    /** Review Focus 2: violacao de FK no DELETE (movimento gravado por outro caminho) vira 409, nunca 500. */
+    @Test
+    void violacaoDeFkAoExcluirVira409() {
+        produtoExistente();
+        doThrow(new DataIntegrityViolationException("fk_movimento_estoque_produto")).when(produtoRepository).flush();
+
+        assertThatThrownBy(() -> produtoService.excluir(ID_USUARIO, EMPRESA_ID, produtoUuid))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage(MENSAGEM_EXCLUSAO_COM_MOVIMENTO);
     }
 
     private void usuarioAtivoDaEmpresa(Long idUsuario) {

@@ -1,5 +1,7 @@
 package com.geitus.app.inventory;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -44,4 +46,19 @@ public interface EstoqueSaldoRepository extends JpaRepository<EstoqueSaldo, Long
             """)
     Optional<EstoqueSaldo> buscarParaAtualizar(@Param("empresaId") Long empresaId,
             @Param("produtoId") Long produtoId);
+
+    /** Saldos dos produtos da empresa, em uma consulta; produto sem linha fica fora da lista (saldo 0). */
+    @Query("""
+            SELECT new com.geitus.app.inventory.SaldoPorProduto(s.produtoId, s.saldo)
+              FROM EstoqueSaldo s
+             WHERE s.empresaId = :empresaId
+               AND s.produtoId IN :produtoIds
+            """)
+    List<SaldoPorProduto> saldos(@Param("empresaId") Long empresaId,
+            @Param("produtoIds") Collection<Long> produtoIds);
+
+    /** Apaga a linha de saldo do produto (so na exclusao de produto com apenas o estoque inicial). */
+    @Modifying
+    @Query("DELETE FROM EstoqueSaldo s WHERE s.empresaId = :empresaId AND s.produtoId = :produtoId")
+    int apagarDoProduto(@Param("empresaId") Long empresaId, @Param("produtoId") Long produtoId);
 }

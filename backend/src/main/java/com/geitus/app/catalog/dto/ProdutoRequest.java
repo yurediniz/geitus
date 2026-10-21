@@ -44,6 +44,11 @@ import jakarta.validation.constraints.Size;
  * como os demais opcionais (a excecao de {@code codigosBarras} nao vale aqui).
  * Os blocos sao validados em cascata ({@code @Valid}), com os erros nas chaves
  * aninhadas ({@code promocao.preco}, {@code atacado.quantidadeMinima}...).
+ *
+ * <p>Fase D (docs/modules/produtos-estoque.md, 5): {@code controlaEstoque} e
+ * obrigatorio no POST e no PATCH. {@code estoqueInicial} so vale no POST (no
+ * PATCH, 400): vira a primeira entrada de estoque. O saldo nunca e editado por
+ * aqui; muda so por movimentos ({@code /api/produtos/{id}/estoque/ajustes}).
  */
 @Schema(description = "Dados para cadastro ou atualizacao de um produto")
 public record ProdutoRequest(
@@ -134,5 +139,15 @@ public record ProdutoRequest(
 
         @Schema(description = "Atacado (preco e quantidade minima); null ou ausente = sem atacado")
         @Valid
-        AtacadoRequest atacado) {
+        AtacadoRequest atacado,
+
+        @Schema(description = "Se o produto controla estoque; desligar guarda o saldo e o historico",
+                example = "true")
+        @NotNull(message = "Informe se o produto controla estoque.")
+        Boolean controlaEstoque,
+
+        @Schema(description = "Estoque inicial (opcional, maior que zero), so no cadastro; registrado como a "
+                + "primeira entrada. Fracao so em unidade fracionada.", example = "12")
+        @Digits(integer = 9, fraction = 3, message = "O estoque inicial deve ter no máximo 3 casas decimais.")
+        BigDecimal estoqueInicial) {
 }

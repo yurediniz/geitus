@@ -30,6 +30,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.geitus.app.catalog.CatalogoConflitoException;
 import com.geitus.app.catalog.CatalogoNaoEncontradoException;
 import com.geitus.app.catalog.RegraDeNegocioException;
+import com.geitus.app.catalog.UsoDoProdutoNoEstoque;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaRequest;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaResponse;
 import com.geitus.app.company.Empresa;
@@ -59,6 +60,9 @@ class UnidadeMedidaServiceTest {
 
     @Mock
     private UsuarioRepository usuarioRepository;
+
+    @Mock
+    private UsoDoProdutoNoEstoque usoNoEstoque;
 
     @InjectMocks
     private UnidadeMedidaService unidadeService;
@@ -160,6 +164,49 @@ class UnidadeMedidaServiceTest {
         assertThatThrownBy(() -> unidadeService.atualizarParaUsuario(ID_USUARIO, UUID.randomUUID(),
                 new UnidadeMedidaRequest("UN", "Unidade", false)))
                 .isInstanceOf(CatalogoNaoEncontradoException.class);
+    }
+
+    // ---------- Fase D: unidade usada por produto movimentado (produtos-estoque.md, 4.8) ----------
+
+    private UnidadeMedida existenteFracionada(String sigla) {
+        UnidadeMedida unidade = existente(sigla);
+        unidade.atualizar(sigla, "Descrição " + sigla, true);
+        return unidade;
+    }
+
+    @Test
+    void desligarFracionadaComProdutoMovimentado_400() {
+        UnidadeMedida kg = existenteFracionada("KG");
+        when(usoNoEstoque.algumProdutoDaUnidadeTemMovimentos(ID_EMPRESA, ID_UNIDADE)).thenReturn(true);
+
+        assertThatThrownBy(() -> unidadeService.atualizarParaUsuario(ID_USUARIO, kg.getUuid(),
+                new UnidadeMedidaRequest("KG", "Quilograma", false)))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Esta unidade é usada por produtos com movimentação de estoque.");
+        assertThat(kg.isFracionada()).isTrue();
+        verify(unidadeRepository, never()).save(any());
+    }
+
+    @Test
+    void desligarFracionadaSemMovimento_ok() {
+        UnidadeMedida kg = existenteFracionada("KG");
+
+        UnidadeMedidaResponse resposta = unidadeService.atualizarParaUsuario(ID_USUARIO, kg.getUuid(),
+                new UnidadeMedidaRequest("KG", "Quilograma", false));
+
+        assertThat(resposta.fracionada()).isFalse();
+        verify(usoNoEstoque).algumProdutoDaUnidadeTemMovimentos(ID_EMPRESA, ID_UNIDADE);
+    }
+
+    @Test
+    void manterOuLigarFracionadaNaoConsultaOEstoque() {
+        UnidadeMedida kg = existenteFracionada("KG");
+        UnidadeMedida cx = existente("CX");
+
+        unidadeService.atualizarParaUsuario(ID_USUARIO, kg.getUuid(), new UnidadeMedidaRequest("KG", "Quilo", true));
+        unidadeService.atualizarParaUsuario(ID_USUARIO, cx.getUuid(), new UnidadeMedidaRequest("CX", "Caixa", true));
+
+        verify(usoNoEstoque, never()).algumProdutoDaUnidadeTemMovimentos(anyLong(), anyLong());
     }
 
     // ---------- Exclusao ----------

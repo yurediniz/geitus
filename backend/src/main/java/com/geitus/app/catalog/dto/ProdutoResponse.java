@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.UUID;
 
 import com.geitus.app.catalog.Produto;
+import com.geitus.app.catalog.ResumoDeEstoque;
+import com.geitus.app.catalog.SituacaoEstoque;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 
@@ -39,6 +41,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * <p>Fase C: {@code promocao} (com a situacao calculada para {@code hoje}) e
  * {@code atacado} saem {@code null} quando nao existem; {@code emPromocao} e
  * {@code true} so com a promocao vigente.
+ *
+ * <p>Fase D (docs/modules/produtos-estoque.md, 5): {@code estoqueAtual} e o
+ * saldo guardado, mesmo com o controle desligado; {@code situacaoEstoque} e
+ * calculada e vem {@code null} sem controle.
  */
 @Schema(description = "Dados publicos de um produto")
 public record ProdutoResponse(
@@ -76,11 +82,19 @@ public record ProdutoResponse(
         BigDecimal estoqueMinimo,
         BigDecimal estoqueMaximo,
         BigDecimal pontoReposicao,
+        @Schema(description = "Se o produto controla estoque")
+        boolean controlaEstoque,
+        @Schema(description = "Saldo atual (derivado dos movimentos); guardado mesmo com o controle desligado",
+                example = "12.000")
+        BigDecimal estoqueAtual,
+        @Schema(description = "NORMAL, BAIXO ou SEM_ESTOQUE; null sem controle de estoque")
+        SituacaoEstoque situacaoEstoque,
         @Schema(description = "Codigos de barras na ordem (o primeiro e o principal)")
         List<CodigoBarrasResponse> codigosBarras,
         String sku,
         boolean ativo,
-        @Schema(description = "Se o produto pode ser excluido (nunca teve venda nem movimentacao de estoque)")
+        @Schema(description = "Se o produto pode ser excluido: sem movimentacao de estoque ou so com o estoque "
+                + "inicial do cadastro")
         boolean podeExcluir,
         @Schema(description = "Margem sobre a venda em %: (preco - custo) / preco * 100. Null se sem custo/preco.")
         BigDecimal margem,
@@ -97,10 +111,11 @@ public record ProdutoResponse(
      * empresa do produto (so e consultada quando o produto tem categoria);
      * {@code podeExcluir} vem da regra centralizada no {@code ProdutoService};
      * {@code hoje} e a data do relogio da aplicacao (fuso de Sao Paulo), calculada
-     * uma vez por requisicao, que decide a situacao da promocao.
+     * uma vez por requisicao, que decide a situacao da promocao; {@code estoque}
+     * vem do pacote de estoque, em lote na listagem.
      */
     public static ProdutoResponse de(Produto produto, CategoriaArvore arvore, boolean podeExcluir,
-            LocalDate hoje) {
+            LocalDate hoje, ResumoDeEstoque estoque) {
         BigDecimal preco = produto.getPrecoVenda();
         BigDecimal custo = produto.getCusto();
         PromocaoResponse promocao = PromocaoResponse.deOuNulo(produto, hoje);
@@ -126,6 +141,10 @@ public record ProdutoResponse(
                 produto.getEstoqueMinimo(),
                 produto.getEstoqueMaximo(),
                 produto.getPontoReposicao(),
+                produto.isControlaEstoque(),
+                estoque.saldo(),
+                SituacaoEstoque.de(produto.isControlaEstoque(), estoque.saldo(), produto.getPontoReposicao(),
+                        produto.getEstoqueMinimo()),
                 produto.getCodigosBarras().stream().map(CodigoBarrasResponse::de).toList(),
                 produto.getSku(),
                 produto.isAtivo(),

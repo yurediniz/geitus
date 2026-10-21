@@ -86,7 +86,7 @@ class ProdutoControllerTest {
     /** Corpo JSON valido minimo (nome, preco e unidade) mais campos extras opcionais. */
     private static String corpo(String nome, String preco, String... extras) {
         StringBuilder json = new StringBuilder("{ \"nome\": \"").append(nome).append("\", \"precoVenda\": ")
-                .append(preco).append(", ").append(UNIDADE_JSON);
+                .append(preco).append(", ").append(UNIDADE_JSON).append(", \"controlaEstoque\": true");
         for (String extra : extras) {
             json.append(", ").append(extra);
         }
@@ -94,7 +94,8 @@ class ProdutoControllerTest {
     }
 
     private ProdutoResponse respostaComId(UUID id, String nome, String sku) {
-        return ProdutoResponse.de(produtoComId(id, nome, sku), CategoriaArvore.de(List.of()), true, HOJE);
+        return ProdutoResponse.de(produtoComId(id, nome, sku), CategoriaArvore.de(List.of()), true, HOJE,
+                ResumoDeEstoque.VAZIO);
     }
 
     /** Produto com id interno numerico preenchido, para provar que ele nunca sai na resposta. */
@@ -485,7 +486,8 @@ class ProdutoControllerTest {
         Produto produto = ProdutoTesteBuilder.produto(empresa, un).id(5L).nome("Sachê").categoria(umida)
                 .compra(cx, "12.0000").precoVenda("3.50").build();
         when(produtoService.buscarPorIdParaUsuario(1L, produto.getUuid()))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of(racao, umida)), true, HOJE));
+                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of(racao, umida)), true, HOJE,
+                        ResumoDeEstoque.VAZIO));
 
         String token = tokenParaUsuario(1L);
 
@@ -586,7 +588,8 @@ class ProdutoControllerTest {
         Produto produto = produtoComId(PRODUTO_ID, "Produto", null);
         produto.inativar();
         when(produtoService.inativarParaUsuario(1L, PRODUTO_ID))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE));
+                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE,
+                ResumoDeEstoque.VAZIO));
 
         String token = tokenParaUsuario(1L);
 
@@ -650,7 +653,8 @@ class ProdutoControllerTest {
                 .codigo("7891000315507").codigo("ABC-1").build();
         ReflectionTestUtils.setField(produto.getCodigosBarras().get(0), "id", 77L);
         when(produtoService.buscarPorIdParaUsuario(1L, produto.getUuid()))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE));
+                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE,
+                ResumoDeEstoque.VAZIO));
 
         String token = tokenParaUsuario(1L);
 
@@ -906,7 +910,8 @@ class ProdutoControllerTest {
                         new UnidadeMedida(new Empresa("Empresa 7"), "UN", "Unidade", false))
                 .promocao("8.90", LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 15)).atacado("4.20", "12").build();
         when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE));
+                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE,
+                ResumoDeEstoque.VAZIO));
 
         mockMvc.perform(post("/api/produtos")
                         .header("Authorization", "Bearer " + tokenParaUsuario(1L))
@@ -927,6 +932,61 @@ class ProdutoControllerTest {
                 .isEqualTo(LocalDate.of(2026, 11, 1));
         assertThat(request.getValue().atacado().quantidadeMinima())
                 .isEqualByComparingTo("12");
+    }
+
+    // ---------- Fase D: estoque ----------
+
+    @Test
+    void controlaEstoqueAusente_400() throws Exception {
+        String semControle = "{ \"nome\": \"Produto\", \"precoVenda\": 10.00, " + UNIDADE_JSON + " }";
+
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(semControle))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[?(@.campo=='controlaEstoque')].mensagem")
+                        .value("Informe se o produto controla estoque."));
+
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void estoqueInicialComCasasDemais_400() throws Exception {
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corpo("Produto", "10.00", "\"estoqueInicial\": 1.2345")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[?(@.campo=='estoqueInicial')].mensagem")
+                        .value("O estoque inicial deve ter no máximo 3 casas decimais."));
+
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void estoqueInicialChegaAoServiceERespostaTrazOEstoque() throws Exception {
+        Empresa empresa = new Empresa("Empresa 7");
+        Produto produto = ProdutoTesteBuilder.produto(empresa, new UnidadeMedida(empresa, "UN", "Unidade", false))
+                .pontoReposicao("15").build();
+        when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
+                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE,
+                        new ResumoDeEstoque(new BigDecimal("12.000"), 1, 0)));
+
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corpo("Produto", "10.00", "\"estoqueInicial\": 12")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.controlaEstoque").value(true))
+                .andExpect(jsonPath("$.estoqueAtual").value(12.0))
+                .andExpect(jsonPath("$.situacaoEstoque").value("BAIXO"))
+                .andExpect(jsonPath("$.podeExcluir").value(true));
+
+        ArgumentCaptor<ProdutoRequest> request = ArgumentCaptor.forClass(ProdutoRequest.class);
+        verify(produtoService).cadastrarParaUsuario(eq(1L), request.capture());
+        assertThat(request.getValue().controlaEstoque()).isTrue();
+        assertThat(request.getValue().estoqueInicial()).isEqualByComparingTo("12");
     }
 
     // ---------- Fase C: historico de precos ----------

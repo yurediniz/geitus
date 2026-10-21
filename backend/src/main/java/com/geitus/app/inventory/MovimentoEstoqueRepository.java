@@ -1,11 +1,14 @@
 package com.geitus.app.inventory;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -44,4 +47,45 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
             """)
     Page<MovimentoEstoqueResponse> movimentosDoProduto(@Param("empresaId") Long empresaId,
             @Param("produtoId") Long produtoId, Pageable pageable);
+
+    /**
+     * Contagem de movimentos por produto, em uma consulta: o total e os que nao
+     * sao da origem informada (o estoque inicial, {@code CADASTRO}). Produto sem
+     * movimentos fica fora da lista.
+     */
+    @Query("""
+            SELECT new com.geitus.app.inventory.ContagemDeMovimentos(
+                       m.produto.id, count(m), sum(CASE WHEN m.origem <> :origemInicial THEN 1 ELSE 0 END))
+              FROM MovimentoEstoque m
+             WHERE m.empresaId = :empresaId
+               AND m.produto.id IN :produtoIds
+             GROUP BY m.produto.id
+            """)
+    List<ContagemDeMovimentos> contagens(@Param("empresaId") Long empresaId,
+            @Param("produtoIds") Collection<Long> produtoIds,
+            @Param("origemInicial") OrigemMovimento origemInicial);
+
+    /** Se algum produto da empresa com esta unidade de venda tem movimento de estoque. */
+    @Query("""
+            SELECT CASE WHEN count(m) > 0 THEN true ELSE false END
+              FROM MovimentoEstoque m
+             WHERE m.empresaId = :empresaId
+               AND m.produto.unidade.id = :unidadeId
+            """)
+    boolean existeMovimentoDeProdutoDaUnidade(@Param("empresaId") Long empresaId,
+            @Param("unidadeId") Long unidadeId);
+
+    /**
+     * Apaga os movimentos da origem informada do produto (so o estoque inicial,
+     * na exclusao de produto cadastrado por engano; spec 4.7).
+     */
+    @Modifying
+    @Query("""
+            DELETE FROM MovimentoEstoque m
+             WHERE m.empresaId = :empresaId
+               AND m.produto.id = :produtoId
+               AND m.origem = :origem
+            """)
+    int apagarDoProdutoPelaOrigem(@Param("empresaId") Long empresaId, @Param("produtoId") Long produtoId,
+            @Param("origem") OrigemMovimento origem);
 }

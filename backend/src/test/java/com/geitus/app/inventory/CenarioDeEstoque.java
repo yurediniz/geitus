@@ -87,10 +87,16 @@ class CenarioDeEstoque {
         return produtoService.cadastrarParaUsuario(empresa.admin(), produto(unidade(empresa, sigla), nome)).id();
     }
 
-    /** Request minimo de cadastro (nome, preco e unidade). */
+    /** Request minimo de cadastro (nome, preco e unidade), controlando estoque e sem estoque inicial. */
     static ProdutoRequest produto(UUID unidadeId, String nome) {
+        return produto(unidadeId, nome, true, null);
+    }
+
+    /** Request minimo com o controle de estoque e o estoque inicial informados ({@code null} = sem). */
+    static ProdutoRequest produto(UUID unidadeId, String nome, boolean controlaEstoque, String estoqueInicial) {
         return new ProdutoRequest(nome, null, null, null, null, unidadeId, null, null, null,
-                new BigDecimal("10.00"), null, null, null, null, null, List.of(), null, null, null);
+                new BigDecimal("10.00"), null, null, null, null, null, List.of(), null, null, null, controlaEstoque,
+                estoqueInicial == null ? null : new BigDecimal(estoqueInicial));
     }
 
     /** Saldo gravado do produto; 0 sem linha de saldo. */

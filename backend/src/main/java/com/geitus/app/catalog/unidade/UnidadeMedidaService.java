@@ -12,6 +12,7 @@ import com.geitus.app.catalog.CatalogoConflitoException;
 import com.geitus.app.catalog.CatalogoNaoEncontradoException;
 import com.geitus.app.catalog.ContagensPorId;
 import com.geitus.app.catalog.RegraDeNegocioException;
+import com.geitus.app.catalog.UsoDoProdutoNoEstoque;
 import com.geitus.app.catalog.unidade.UnidadesPadrao.UnidadePadrao;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaRequest;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaResponse;
@@ -40,18 +41,22 @@ public class UnidadeMedidaService {
     static final String MENSAGEM_SIGLA_LONGA = "A sigla deve ter no máximo 20 caracteres.";
     /** Espelha {@code sigla VARCHAR(20)} da V6 e o {@code @Size} do request. */
     private static final int TAMANHO_MAXIMO_SIGLA = 20;
+    static final String MENSAGEM_FRACAO_EM_USO = "Esta unidade é usada por produtos com movimentação de estoque.";
+    private static final String CAMPO_FRACIONADA = "fracionada";
     private static final String MENSAGEM_EM_USO =
             "Esta unidade está em uso por %d produto(s). Inative-a para que não apareça em novos cadastros.";
 
     private final UnidadeMedidaRepository unidadeRepository;
     private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
+    private final UsoDoProdutoNoEstoque usoNoEstoque;
 
     public UnidadeMedidaService(UnidadeMedidaRepository unidadeRepository, EmpresaRepository empresaRepository,
-            UsuarioRepository usuarioRepository) {
+            UsuarioRepository usuarioRepository, UsoDoProdutoNoEstoque usoNoEstoque) {
         this.unidadeRepository = unidadeRepository;
         this.empresaRepository = empresaRepository;
         this.usuarioRepository = usuarioRepository;
+        this.usoNoEstoque = usoNoEstoque;
     }
 
     // ---------- API publica (empresa sempre resolvida do usuario do JWT) ----------
@@ -89,6 +94,7 @@ public class UnidadeMedidaService {
         if (unidadeRepository.existsBySiglaAndEmpresa_IdAndIdNot(sigla, empresaId, unidade.getId())) {
             throw new CatalogoConflitoException(MENSAGEM_SIGLA_REPETIDA);
         }
+        exigirFracaoMantidaSeMovimentada(empresaId, unidade, request.fracionada());
         unidade.atualizar(sigla, request.descricao().trim(), request.fracionada());
         return responder(unidadeRepository.save(unidade));
     }
@@ -151,6 +157,18 @@ public class UnidadeMedidaService {
     }
 
     // ---------- Apoio ----------
+
+    /**
+     * Unidade usada por produto com movimentos de estoque nao deixa de ser
+     * fracionada: as quantidades fracionadas ja gravadas ficariam invalidas
+     * (docs/modules/produtos-estoque.md, 4.8; DEC-031). Ligar a fracao e livre.
+     */
+    private void exigirFracaoMantidaSeMovimentada(Long empresaId, UnidadeMedida unidade, boolean fracionada) {
+        boolean deixaDeSerFracionada = unidade.isFracionada() && !fracionada;
+        if (deixaDeSerFracionada && usoNoEstoque.algumProdutoDaUnidadeTemMovimentos(empresaId, unidade.getId())) {
+            throw new RegraDeNegocioException(MENSAGEM_FRACAO_EM_USO, CAMPO_FRACIONADA);
+        }
+    }
 
     private UnidadeMedidaResponse responder(UnidadeMedida unidade) {
         return UnidadeMedidaResponse.de(unidade, contarUso(unidade));

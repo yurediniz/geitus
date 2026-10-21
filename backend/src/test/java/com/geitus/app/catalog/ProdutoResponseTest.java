@@ -50,7 +50,7 @@ class ProdutoResponseTest {
     }
 
     private static ProdutoResponse responder(Produto produto) {
-        return ProdutoResponse.de(produto, SEM_CATEGORIAS, true, HOJE);
+        return ProdutoResponse.de(produto, SEM_CATEGORIAS, true, HOJE, ResumoDeEstoque.VAZIO);
     }
 
     private static Categoria categoria(Long id, Empresa empresa, Categoria pai, String nome) {
@@ -165,7 +165,7 @@ class ProdutoResponseTest {
                 .precoVenda("3.50").build();
 
         ProdutoResponse response = ProdutoResponse.de(produto, CategoriaArvore.de(List.of(racao, umida, sache)), true,
-                HOJE);
+                HOJE, ResumoDeEstoque.VAZIO);
 
         assertThat(response.categoria().id()).isEqualTo(sache.getUuid());
         assertThat(response.categoria().nome()).isEqualTo("Sachê");
@@ -193,7 +193,7 @@ class ProdutoResponseTest {
                 .fornecedor("Distribuidora X").build();
 
         ProdutoResponse podeExcluir = responder(produto);
-        ProdutoResponse bloqueado = ProdutoResponse.de(produto, SEM_CATEGORIAS, false, HOJE);
+        ProdutoResponse bloqueado = ProdutoResponse.de(produto, SEM_CATEGORIAS, false, HOJE, ResumoDeEstoque.VAZIO);
 
         assertThat(podeExcluir.nomeCurto()).isNull();
         assertThat(podeExcluir.nomeCurtoEfetivo()).isEqualTo("Ração Golden Adulto Frango e A");
@@ -212,9 +212,11 @@ class ProdutoResponseTest {
         Clock relogioVigente = Clock.fixed(Instant.parse("2026-11-16T01:30:00Z"), ZoneId.of("America/Sao_Paulo"));
 
         ProdutoResponse vigente = ProdutoResponse.de(comPromocao, SEM_CATEGORIAS, true,
-                SituacaoPromocao.hoje(relogioVigente));
-        ProdutoResponse agendada = ProdutoResponse.de(comPromocao, SEM_CATEGORIAS, true, inicio.minusDays(1));
-        ProdutoResponse encerrada = ProdutoResponse.de(comPromocao, SEM_CATEGORIAS, true, fim.plusDays(1));
+                SituacaoPromocao.hoje(relogioVigente), ResumoDeEstoque.VAZIO);
+        ProdutoResponse agendada = ProdutoResponse.de(comPromocao, SEM_CATEGORIAS, true, inicio.minusDays(1),
+                ResumoDeEstoque.VAZIO);
+        ProdutoResponse encerrada = ProdutoResponse.de(comPromocao, SEM_CATEGORIAS, true, fim.plusDays(1),
+                ResumoDeEstoque.VAZIO);
 
         assertThat(vigente.promocao())
                 .isEqualTo(new PromocaoResponse(new BigDecimal("8.90"), inicio, fim, SituacaoPromocao.VIGENTE));
@@ -239,5 +241,41 @@ class ProdutoResponseTest {
         ProdutoResponse response = responder(ProdutoTesteBuilder.produto(empresa, kg).atacado("4.20", "12.000").build());
 
         assertThat(response.atacado()).isEqualTo(new AtacadoResponse(new BigDecimal("4.20"), new BigDecimal("12.000")));
+    }
+
+    // ---------- Fase D: estoque ----------
+
+    @Test
+    void estoqueAtualESituacaoVemDoResumo() {
+        Produto produto = ProdutoTesteBuilder.produto(empresa, un).pontoReposicao("5").build();
+
+        ProdutoResponse response = ProdutoResponse.de(produto, SEM_CATEGORIAS, true, HOJE,
+                new ResumoDeEstoque(new BigDecimal("4.000"), 2, 1));
+
+        assertThat(response.controlaEstoque()).isTrue();
+        assertThat(response.estoqueAtual()).isEqualByComparingTo("4");
+        assertThat(response.situacaoEstoque()).isEqualTo(SituacaoEstoque.BAIXO);
+    }
+
+    @Test
+    void semControleMantemOSaldoESituacaoNula() {
+        Produto produto = ProdutoTesteBuilder.produto(empresa, un).semControleDeEstoque().build();
+
+        ProdutoResponse response = ProdutoResponse.de(produto, SEM_CATEGORIAS, true, HOJE,
+                new ResumoDeEstoque(new BigDecimal("12"), 1, 0));
+
+        assertThat(response.controlaEstoque()).isFalse();
+        assertThat(response.estoqueAtual()).isEqualByComparingTo("12");
+        assertThat(response.situacaoEstoque()).isNull();
+    }
+
+    @Test
+    void resumoVazioTemSaldoZeroESemEstoque() {
+        ProdutoResponse response = responder(ProdutoTesteBuilder.produto(empresa, un).build());
+
+        assertThat(response.estoqueAtual()).isEqualByComparingTo("0");
+        assertThat(response.situacaoEstoque()).isEqualTo(SituacaoEstoque.SEM_ESTOQUE);
+        assertThat(ResumoDeEstoque.VAZIO.temMovimentos()).isFalse();
+        assertThat(ResumoDeEstoque.VAZIO.permiteExcluir()).isTrue();
     }
 }

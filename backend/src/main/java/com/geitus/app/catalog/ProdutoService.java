@@ -5,10 +5,12 @@ import java.math.BigInteger;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -18,6 +20,7 @@ import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -65,7 +68,7 @@ import com.geitus.app.shared.busca.PadraoLike;
  *
  * <p>Fase B (docs/modules/produtos-identificacao-e-formulario.md, secao 4):
  * codigos de barras multiplos, nome curto, fornecedor, SKU sugerido, sugestoes
- * de marca/fornecedor e exclusao fisica condicionada a {@link #podeExcluir}.
+ * de marca/fornecedor e exclusao fisica condicionada ao estoque (ver {@link #excluir}).
  *
  * <p>Fase C (docs/modules/produtos-precos.md, 4.3 e 4.4): promocao e atacado
  * validados contra o preco de venda, o preco minimo e a unidade de venda; a
@@ -73,11 +76,31 @@ import com.geitus.app.shared.busca.PadraoLike;
  * ({@code America/Sao_Paulo}), lida uma vez por requisicao. O historico de
  * custo e preco de venda (4.6) e gravado na mesma transacao do produto, com o
  * usuario autenticado, so para o que realmente mudou.
+ *
+ * <p>Fase D (docs/modules/produtos-estoque.md, 4.1, 4.4, 4.6 a 4.8): o
+ * produto liga ou desliga o controle de estoque; o estoque inicial do cadastro
+ * vira a primeira entrada, na mesma transacao; a resposta traz o saldo e a
+ * situacao; os niveis seguem minimo <= ponto <= maximo; produto movimentado nao
+ * troca de unidade; e a exclusao so acontece sem movimentos ou so com o estoque
+ * inicial. O estoque e consultado e escrito pelas interfaces
+ * {@link UsoDoProdutoNoEstoque} e {@link RegistroDeEstoqueInicial}, implementadas
+ * no pacote {@code inventory}: o catalogo nao depende dele.
  */
 @Service
 public class ProdutoService {
 
     static final String MENSAGEM_UNIDADE_OBRIGATORIA = "Unidade é obrigatória.";
+    static final String MENSAGEM_CONTROLE_DE_ESTOQUE_OBRIGATORIO = "Informe se o produto controla estoque.";
+    static final String MENSAGEM_ESTOQUE_INICIAL_SEM_CONTROLE =
+            "Ligue o controle de estoque para informar o estoque inicial.";
+    static final String MENSAGEM_ESTOQUE_INICIAL_SO_NO_CADASTRO =
+            "O estoque inicial só pode ser informado no cadastro. Use Ajustar estoque.";
+    static final String MENSAGEM_UNIDADE_DE_PRODUTO_MOVIMENTADO =
+            "Não é possível trocar a unidade de um produto com movimentação de estoque.";
+    static final String MENSAGEM_PONTO_MENOR_QUE_MINIMO =
+            "O ponto de reposição não pode ser menor que o estoque mínimo.";
+    static final String MENSAGEM_MAXIMO_MENOR_QUE_PONTO =
+            "O estoque máximo não pode ser menor que o ponto de reposição.";
     static final String MENSAGEM_COMPRA_E_FATOR_JUNTOS = "Informe a unidade de compra e o fator de conversão juntos.";
     static final String MENSAGEM_FATOR_DA_MESMA_UNIDADE =
             "Quando a unidade de compra é a mesma de venda, o fator deve ser 1.";
@@ -94,8 +117,8 @@ public class ProdutoService {
     static final String MENSAGEM_DIGITO_INVALIDO = "Código de barras %s com dígito verificador inválido. "
             + "Confira a leitura.";
     static final String MENSAGEM_CODIGO_EM_OUTRO_PRODUTO = "O código de barras %s já está cadastrado no produto \"%s\".";
-    static final String MENSAGEM_EXCLUSAO_BLOQUEADA = "Este produto já teve movimentação e não pode ser excluído. "
-            + "Inative-o para que não apareça na venda.";
+    static final String MENSAGEM_EXCLUSAO_BLOQUEADA =
+            "Este produto já teve movimentação de estoque e não pode ser excluído. Inative-o.";
     static final String MENSAGEM_CAMPO_DE_SUGESTAO_INVALIDO = "Campo de sugestão inválido.";
 
     static final String MENSAGEM_PRECO_PROMOCIONAL_OBRIGATORIO = "Informe o preço promocional.";
@@ -116,6 +139,11 @@ public class ProdutoService {
     static final String CAMPO_PROMOCAO_FIM = "promocao.fim";
     static final String CAMPO_ATACADO_PRECO = "atacado.preco";
     static final String CAMPO_ATACADO_QUANTIDADE_MINIMA = "atacado.quantidadeMinima";
+    static final String CAMPO_UNIDADE = "unidadeId";
+    static final String CAMPO_CONTROLA_ESTOQUE = "controlaEstoque";
+    static final String CAMPO_ESTOQUE_INICIAL = "estoqueInicial";
+    static final String CAMPO_PONTO_REPOSICAO = "pontoReposicao";
+    static final String CAMPO_ESTOQUE_MAXIMO = "estoqueMaximo";
 
     static final int MAXIMO_CODIGOS_POR_PRODUTO = 20;
     static final int TAMANHO_MAXIMO_CODIGO = 50;
@@ -137,23 +165,30 @@ public class ProdutoService {
     private final UnidadeMedidaService unidadeService;
     private final CategoriaService categoriaService;
     private final HistoricoPrecoRepository historicoPrecoRepository;
+    private final UsoDoProdutoNoEstoque usoNoEstoque;
+    private final RegistroDeEstoqueInicial registroDeEstoqueInicial;
     private final Clock relogio;
 
     public ProdutoService(ProdutoRepository produtoRepository, EmpresaRepository empresaRepository,
             UsuarioRepository usuarioRepository, UnidadeMedidaService unidadeService,
-            CategoriaService categoriaService, HistoricoPrecoRepository historicoPrecoRepository, Clock relogio) {
+            CategoriaService categoriaService, HistoricoPrecoRepository historicoPrecoRepository,
+            UsoDoProdutoNoEstoque usoNoEstoque, RegistroDeEstoqueInicial registroDeEstoqueInicial, Clock relogio) {
         this.produtoRepository = produtoRepository;
         this.empresaRepository = empresaRepository;
         this.usuarioRepository = usuarioRepository;
         this.unidadeService = unidadeService;
         this.categoriaService = categoriaService;
         this.historicoPrecoRepository = historicoPrecoRepository;
+        this.usoNoEstoque = usoNoEstoque;
+        this.registroDeEstoqueInicial = registroDeEstoqueInicial;
         this.relogio = relogio;
     }
 
     /**
      * Cadastra o produto e registra no historico o preco de venda e o custo
-     * iniciais (valor anterior nulo), atribuidos a {@code idUsuario}.
+     * iniciais (valor anterior nulo), atribuidos a {@code idUsuario}. Com
+     * {@code estoqueInicial}, registra tambem a primeira entrada de estoque, na
+     * mesma transacao: se o cadastro falhar, nada fica gravado.
      */
     Produto cadastrar(Long idUsuario, Long empresaId, ProdutoRequest request) {
         validarCampos(request);
@@ -162,6 +197,7 @@ public class ProdutoService {
         garantirSkuDisponivelParaNovoProduto(empresaId, sku);
         Vinculos vinculos = resolverVinculos(empresaId, request, null);
         validarPromocaoEAtacado(request, vinculos.unidade());
+        validarEstoqueInicial(request, vinculos.unidade());
 
         Empresa empresa = empresaRepository.findById(empresaId)
                 .orElseThrow(() -> new RegraDeNegocioException("Empresa informada não encontrada."));
@@ -170,6 +206,9 @@ public class ProdutoService {
         produto.substituirCodigos(codigos);
         Produto gravado = produtoRepository.save(produto);
         registrarHistorico(gravado, idUsuario, null, null);
+        if (request.estoqueInicial() != null) {
+            registroDeEstoqueInicial.registrar(gravado, request.estoqueInicial(), idUsuario);
+        }
         return gravado;
     }
 
@@ -185,12 +224,16 @@ public class ProdutoService {
         Produto produto = produtoRepository.buscarPorUuidParaAtualizar(produtoId, empresaId)
                 .orElseThrow(ProdutoNaoEncontradoException::new);
 
+        if (request.estoqueInicial() != null) {
+            throw new RegraDeNegocioException(MENSAGEM_ESTOQUE_INICIAL_SO_NO_CADASTRO, CAMPO_ESTOQUE_INICIAL);
+        }
         validarCampos(request);
         Optional<List<CodigoBarrasValidado>> codigos = Optional.ofNullable(request.codigosBarras())
                 .map(informados -> validarCodigos(empresaId, informados, produto));
         String sku = normalizarOuNulo(request.sku());
         garantirSkuDisponivelParaProdutoExistente(empresaId, produto.getId(), sku);
         Vinculos vinculos = resolverVinculos(empresaId, request, produto);
+        exigirUnidadeMantidaSeMovimentado(produto, vinculos.unidade());
         validarPromocaoEAtacado(request, vinculos.unidade());
 
         BigDecimal custoAnterior = produto.getCusto();
@@ -215,37 +258,63 @@ public class ProdutoService {
     }
 
     /**
-     * Exclusao fisica (spec 4.5, DEC-030): so se {@link #podeExcluir}; senao 409.
-     * Os codigos de barras saem junto (cascade na entidade e no banco).
+     * Exclusao fisica (spec 4.5, DEC-030; Fase D, 4.7): so sem movimentos de
+     * estoque ou so com o estoque inicial do cadastro, que e apagado junto com
+     * a linha de saldo; senao 409. Os codigos de barras e o historico de precos
+     * saem junto (cascade).
+     *
+     * <p>Trava a linha do produto, a mesma trava do ajuste de estoque: um ajuste
+     * simultaneo espera e depois nao encontra o produto (404), ou conclui antes
+     * e a exclusao ve o movimento (409). Se ainda assim o banco recusar o
+     * {@code DELETE} pela FK RESTRICT dos movimentos, a resposta e o mesmo 409,
+     * nunca 500 (Review Focus 2).
      *
      * <p><b>Rastro provisorio</b> ate existir a auditoria (divida tecnica): log
      * {@code INFO} so com identificadores — usuario, empresa e UUID publico do
-     * produto —, nunca nome, SKU ou outro dado do cadastro. O {@code flush}
-     * executa o {@code DELETE} antes do log, para o rastro so ser registrado
-     * depois de o banco aceitar a exclusao.
+     * produto — e a quantidade do estoque inicial apagado, nunca nome, SKU ou
+     * outro dado do cadastro. O {@code flush} executa o {@code DELETE} antes do
+     * log, para o rastro so ser registrado depois de o banco aceitar a exclusao.
      */
     void excluir(Long idUsuario, Long empresaId, UUID produtoId) {
-        Produto produto = buscarPorId(empresaId, produtoId);
-        if (!podeExcluir(produto)) {
+        Produto produto = produtoRepository.buscarPorUuidParaAtualizar(produtoId, empresaId)
+                .orElseThrow(ProdutoNaoEncontradoException::new);
+        ResumoDeEstoque estoque = resumoDeEstoque(produto);
+        if (!estoque.permiteExcluir()) {
             throw new ProdutoConflitoException(MENSAGEM_EXCLUSAO_BLOQUEADA);
         }
-        produtoRepository.delete(produto);
-        produtoRepository.flush();
+        if (estoque.temMovimentos()) {
+            registroDeEstoqueInicial.removerParaExclusao(empresaId, produto.getId());
+        }
+        apagar(produto);
+        registrarExclusao(idUsuario, empresaId, produtoId, estoque);
+    }
+
+    private void apagar(Produto produto) {
+        try {
+            produtoRepository.delete(produto);
+            produtoRepository.flush();
+        } catch (DataIntegrityViolationException movimentadoNoMeioTempo) {
+            throw new ProdutoConflitoException(MENSAGEM_EXCLUSAO_BLOQUEADA);
+        }
+    }
+
+    private static void registrarExclusao(Long idUsuario, Long empresaId, UUID produtoId, ResumoDeEstoque estoque) {
+        if (estoque.temMovimentos()) {
+            LOG.info("Produto excluido: usuario={} empresa={} produto={} estoqueInicial={}", idUsuario, empresaId,
+                    produtoId, estoque.saldo().stripTrailingZeros().toPlainString());
+            return;
+        }
         LOG.info("Produto excluido: usuario={} empresa={} produto={}", idUsuario, empresaId, produtoId);
     }
 
     /**
-     * Se o produto pode ser excluido fisicamente: so quando nunca teve venda
-     * nem movimentacao de estoque (DEC-030).
-     *
-     * <p><b>Ponto de extensao das Fases C/D:</b> nesta fase ainda nao existem
-     * vendas nem movimentacoes, entao todo produto pode ser excluido. Quando
-     * esses modulos existirem, a verificacao entra AQUI (e so aqui): ela
-     * decide tanto o {@code DELETE} quanto o {@code podeExcluir} da resposta.
-     * Package-private e nao final para os testes simularem o bloqueio.
+     * Resumo de estoque do produto (saldo e movimentos), que decide tanto o
+     * {@code DELETE} quanto o {@code podeExcluir} da resposta. Quando vendas
+     * existirem, a verificacao delas entra junto desta.
      */
-    boolean podeExcluir(Produto produto) {
-        return true;
+    private ResumoDeEstoque resumoDeEstoque(Produto produto) {
+        return usoNoEstoque.resumos(produto.getEmpresaId(), Collections.singletonList(produto.getId()))
+                .getOrDefault(produto.getId(), ResumoDeEstoque.VAZIO);
     }
 
     Produto buscarPorId(Long empresaId, UUID produtoId) {
@@ -341,15 +410,21 @@ public class ProdutoService {
         return responder(buscarPorId(resolverEmpresaId(idUsuario), produtoId));
     }
 
-    /** Lista com filtros; a arvore de categorias e montada uma unica vez para todos os produtos. */
+    /**
+     * Lista com filtros; a arvore de categorias e montada uma unica vez e o
+     * estoque de todos os produtos vem numa unica chamada (em lote, sem N+1).
+     */
     @Transactional(readOnly = true)
     public List<ProdutoResponse> listarParaUsuario(Long idUsuario, String busca, Boolean ativo) {
         Long empresaId = resolverEmpresaId(idUsuario);
         List<Produto> produtos = listarPorEmpresaComFiltros(empresaId, busca, ativo);
         CategoriaArvore arvore = categoriaService.arvoreDaEmpresa(empresaId);
         LocalDate hoje = SituacaoPromocao.hoje(relogio);
+        Map<Long, ResumoDeEstoque> estoques = usoNoEstoque.resumos(empresaId,
+                produtos.stream().map(Produto::getId).toList());
         return produtos.stream()
-                .map(produto -> ProdutoResponse.de(produto, arvore, podeExcluir(produto), hoje))
+                .map(produto -> responder(produto, arvore, hoje,
+                        estoques.getOrDefault(produto.getId(), ResumoDeEstoque.VAZIO)))
                 .toList();
     }
 
@@ -658,6 +733,38 @@ public class ProdutoService {
         }
     }
 
+    // ---------- Estoque (docs/modules/produtos-estoque.md, 4.4 e 4.8) ----------
+
+    /**
+     * Estoque inicial do cadastro (opcional): exige o controle de estoque
+     * ligado e segue as regras de quantidade (maior que zero, ate 3 casas,
+     * fracao so em unidade fracionada).
+     */
+    private static void validarEstoqueInicial(ProdutoRequest request, UnidadeMedida unidade) {
+        BigDecimal estoqueInicial = request.estoqueInicial();
+        if (estoqueInicial == null) {
+            return;
+        }
+        if (!request.controlaEstoque()) {
+            throw new RegraDeNegocioException(MENSAGEM_ESTOQUE_INICIAL_SEM_CONTROLE, CAMPO_ESTOQUE_INICIAL);
+        }
+        QuantidadeDeEstoque.validarPositiva(estoqueInicial, unidade, CAMPO_ESTOQUE_INICIAL);
+    }
+
+    /**
+     * Produto com movimentos de estoque nao troca a unidade de venda: as
+     * quantidades gravadas perderiam o significado. So consulta o estoque se a
+     * unidade mudou.
+     */
+    private void exigirUnidadeMantidaSeMovimentado(Produto produto, UnidadeMedida unidadeEscolhida) {
+        if (mesmoRegistro(unidadeEscolhida.getId(), produto.getUnidade())) {
+            return;
+        }
+        if (resumoDeEstoque(produto).temMovimentos()) {
+            throw new RegraDeNegocioException(MENSAGEM_UNIDADE_DE_PRODUTO_MOVIMENTADO, CAMPO_UNIDADE);
+        }
+    }
+
     /** Campo obrigatorio do bloco (defesa alem do Bean Validation, para chamadas sem {@code @Valid}). */
     private static void exigirInformado(Object valor, String mensagem, String campo) {
         if (valor == null) {
@@ -713,7 +820,7 @@ public class ProdutoService {
                 promocao.map(PromocaoRequest::fim).orElse(null),
                 atacado.map(AtacadoRequest::preco).orElse(null),
                 atacado.map(AtacadoRequest::quantidadeMinima).orElse(null),
-                true);
+                request.controlaEstoque());
     }
 
     /** Resposta de um produto; a arvore so e carregada se o produto tiver categoria. */
@@ -721,7 +828,12 @@ public class ProdutoService {
         CategoriaArvore arvore = produto.getCategoria() == null
                 ? CategoriaArvore.de(List.of())
                 : categoriaService.arvoreDaEmpresa(produto.getEmpresaId());
-        return ProdutoResponse.de(produto, arvore, podeExcluir(produto), SituacaoPromocao.hoje(relogio));
+        return responder(produto, arvore, SituacaoPromocao.hoje(relogio), resumoDeEstoque(produto));
+    }
+
+    private static ProdutoResponse responder(Produto produto, CategoriaArvore arvore, LocalDate hoje,
+            ResumoDeEstoque estoque) {
+        return ProdutoResponse.de(produto, arvore, estoque.permiteExcluir(), hoje, estoque);
     }
 
     /**
@@ -752,6 +864,10 @@ public class ProdutoService {
     }
 
     private static void validarCampos(ProdutoRequest request) {
+        if (request.controlaEstoque() == null) {
+            // Defesa alem do Bean Validation, para chamadas sem @Valid.
+            throw new RegraDeNegocioException(MENSAGEM_CONTROLE_DE_ESTOQUE_OBRIGATORIO, CAMPO_CONTROLA_ESTOQUE);
+        }
         validarDadosBasicos(request.nome(), request.precoVenda(), request.custo(), request.estoqueMinimo());
         validarCamposCadastrais(request.precoVenda(), request.estoqueMinimo(), request.estoqueMaximo(),
                 request.pontoReposicao(), request.precoMinimo());
@@ -799,6 +915,13 @@ public class ProdutoService {
         }
         if (estoqueMaximo != null && estoqueMinimo != null && estoqueMaximo.compareTo(estoqueMinimo) < 0) {
             throw new RegraDeNegocioException("Estoque máximo não pode ser menor que o estoque mínimo.");
+        }
+        // Fase D (spec 4.6): minimo <= ponto de reposicao <= maximo, quando os dois lados existem.
+        if (pontoReposicao != null && estoqueMinimo != null && pontoReposicao.compareTo(estoqueMinimo) < 0) {
+            throw new RegraDeNegocioException(MENSAGEM_PONTO_MENOR_QUE_MINIMO, CAMPO_PONTO_REPOSICAO);
+        }
+        if (estoqueMaximo != null && pontoReposicao != null && estoqueMaximo.compareTo(pontoReposicao) < 0) {
+            throw new RegraDeNegocioException(MENSAGEM_MAXIMO_MENOR_QUE_PONTO, CAMPO_ESTOQUE_MAXIMO);
         }
     }
 
