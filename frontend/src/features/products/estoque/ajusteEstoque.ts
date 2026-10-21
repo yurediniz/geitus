@@ -171,6 +171,8 @@ export interface TextoMovimento {
   quantidade: string
   /** "12 → 10" */
   saldos: string
+  /** Os saldos para o leitor de tela, no lugar da seta: "saldo de 12 para 10". */
+  saldosFalados: string
 }
 
 /** Textos de uma linha de movimento no historico. */
@@ -180,5 +182,6 @@ export function textoMovimento(movimento: MovimentoEstoque, sigla: string): Text
     titulo: `${ROTULO_TIPO_HISTORICO[movimento.tipo]} · ${ROTULO_MOTIVO[movimento.motivo]}`,
     quantidade: `${sinal}${formatarQuantidade(Math.abs(movimento.quantidade), sigla)}`,
     saldos: `${numero(movimento.saldoAnterior)} → ${numero(movimento.saldoNovo)}`,
+    saldosFalados: `saldo de ${numero(movimento.saldoAnterior)} para ${numero(movimento.saldoNovo)}`,
   }
 }

@@ -17,6 +17,7 @@ import {
   sucessoDaNavegacao,
   type EstadoParaProduto,
 } from '@/features/products/navegacaoProdutos'
+import { SeloSituacaoEstoque } from '@/features/products/estoque/SeloSituacaoEstoque'
 import { SeloStatus } from '@/features/products/SeloStatus'
 import { useAuth } from '@/hooks/useAuth'
 import { inativarProduto, listarProdutos, reativarProduto } from '@/services/produtoService'
@@ -292,6 +293,27 @@ function PrecoDoProduto({ produto }: { produto: Produto }) {
   )
 }
 
+/**
+ * Saldo da lista: "12 UN" com o selo "Estoque baixo" ou "Sem estoque"; "—"
+ * para produto sem controle de estoque (o saldo guardado nao aparece).
+ */
+function EstoqueDoProduto({ produto }: { produto: Produto }) {
+  if (!produto.controlaEstoque) {
+    return (
+      <>
+        <span aria-hidden="true">—</span>
+        <span className="sr-only">Não controla estoque</span>
+      </>
+    )
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="tabular-nums">{formatarQuantidade(produto.estoqueAtual, produto.unidade.sigla)}</span>
+      <SeloSituacaoEstoque situacao={produto.situacaoEstoque} />
+    </span>
+  )
+}
+
 function ProdutoItem({ produto, somenteLeitura, estadoParaProduto, onAlterarStatus, alterandoStatus }: ProdutoItemProps) {
   const margem = formatarPercentual(produto.margem)
   const markup = formatarPercentual(produto.markup)
@@ -312,6 +334,12 @@ function ProdutoItem({ produto, somenteLeitura, estadoParaProduto, onAlterarStat
               <dt className="font-medium text-foreground">Preço</dt>
               <dd>
                 <PrecoDoProduto produto={produto} />
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium text-foreground">Estoque</dt>
+              <dd>
+                <EstoqueDoProduto produto={produto} />
               </dd>
             </div>
             {produto.custo !== null && (

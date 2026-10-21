@@ -876,7 +876,11 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
                 </TabsContent>
                 {produto && (
                   <TabsContent value="historico">
-                    <AbaHistorico produtoId={produto.id} />
+                    <AbaHistorico
+                      produtoId={produto.id}
+                      sigla={produto.unidade.sigla}
+                      controlaEstoque={produto.controlaEstoque}
+                    />
                   </TabsContent>
                 )}
               </CardContent>

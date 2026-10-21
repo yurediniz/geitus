@@ -15,6 +15,10 @@ export const PRODUTOS_QUERY_KEY = ['produtos'] as const
 export function chaveDoHistoricoDePrecos(produtoId: string) {
   return [...PRODUTOS_QUERY_KEY, produtoId, 'historico-precos'] as const
 }
+/** Movimentos de estoque de um produto (sob o prefixo de produtos; ajustar o estoque ou salvar o invalida). */
+export function chaveDosMovimentosDeEstoque(produtoId: string) {
+  return [...PRODUTOS_QUERY_KEY, produtoId, 'movimentos-estoque'] as const
+}
 
 interface TextosErroCatalogo {
   /** Mensagem usada quando nao ha nada mais especifico a dizer. */

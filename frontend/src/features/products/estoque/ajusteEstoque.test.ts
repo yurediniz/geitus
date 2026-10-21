@@ -130,6 +130,7 @@ describe('ajusteEstoque', () => {
         titulo: 'Saída · Perda/avaria',
         quantidade: '−2 UN',
         saldos: '12 → 10',
+        saldosFalados: 'saldo de 12 para 10',
       })
     })
 
@@ -139,7 +140,12 @@ describe('ajusteEstoque', () => {
           { ...movimento, tipo: 'ENTRADA', motivo: 'ESTOQUE_INICIAL', origem: 'CADASTRO', quantidade: 2.5, saldoAnterior: 0, saldoNovo: 2.5 },
           'KG',
         ),
-      ).toEqual({ titulo: 'Entrada · Estoque inicial', quantidade: '+2,5 KG', saldos: '0 → 2,5' })
+      ).toEqual({
+        titulo: 'Entrada · Estoque inicial',
+        quantidade: '+2,5 KG',
+        saldos: '0 → 2,5',
+        saldosFalados: 'saldo de 0 para 2,5',
+      })
       expect(textoMovimento({ ...movimento, tipo: 'AJUSTE', motivo: 'CONTAGEM' }, 'UN').titulo).toBe(
         'Ajuste · Contagem/inventário',
       )

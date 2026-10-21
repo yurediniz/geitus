@@ -493,4 +493,49 @@ describe('ProdutosListaPage', () => {
       expect(within(card).getByText(/^R\$\s25,90$/).tagName).not.toBe('S')
     })
   })
+
+  describe('estoque (Fase D)', () => {
+    /** Valor do item "Estoque" do card. */
+    async function estoqueDoCard(nome: string): Promise<HTMLElement> {
+      const card = await cardDoProduto(nome)
+      const rotulo = within(card).getByText('Estoque', { selector: 'dt' })
+      return rotulo.nextElementSibling as HTMLElement
+    }
+
+    it('saldo normal mostra a quantidade com a sigla, sem selo', async () => {
+      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      renderLista()
+
+      const estoque = await estoqueDoCard('Arroz 5kg')
+      expect(estoque).toHaveTextContent(/^12 UN$/)
+    })
+
+    it('estoque baixo e sem estoque ganham o selo', async () => {
+      listarProdutosMock.mockResolvedValue([
+        { ...produtoAtivo, estoqueAtual: 8, situacaoEstoque: 'BAIXO' },
+        { ...produtoInativo, estoqueAtual: 0, situacaoEstoque: 'SEM_ESTOQUE' },
+      ])
+      renderLista()
+
+      const baixo = await estoqueDoCard('Arroz 5kg')
+      expect(within(baixo).getByText('8 UN')).toBeInTheDocument()
+      expect(within(baixo).getByText('Estoque baixo')).toBeInTheDocument()
+      const sem = await estoqueDoCard('Feijão 1kg')
+      expect(within(sem).getByText('0 UN')).toBeInTheDocument()
+      expect(within(sem).getByText('Sem estoque')).toBeInTheDocument()
+    })
+
+    it('produto sem controle de estoque mostra "—" (e o leitor de tela ouve o motivo)', async () => {
+      listarProdutosMock.mockResolvedValue([
+        { ...produtoAtivo, controlaEstoque: false, estoqueAtual: 12, situacaoEstoque: null },
+      ])
+      renderLista()
+
+      const estoque = await estoqueDoCard('Arroz 5kg')
+      expect(within(estoque).getByText('—')).toHaveAttribute('aria-hidden', 'true')
+      expect(within(estoque).getByText('Não controla estoque')).toHaveClass('sr-only')
+      // O saldo guardado nao aparece enquanto o controle esta desligado.
+      expect(within(estoque).queryByText(/12/)).not.toBeInTheDocument()
+    })
+  })
 })

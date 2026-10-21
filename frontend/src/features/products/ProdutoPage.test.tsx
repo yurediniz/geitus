@@ -2303,7 +2303,7 @@ describe('ProdutoPage', () => {
       await esperarFormulario()
       abrirAba(/histórico/i)
 
-      expect(screen.getByText('Carregando histórico...')).toBeInTheDocument()
+      expect(screen.getByText('Carregando histórico de preços...')).toBeInTheDocument()
       await act(async () => responder(pagina([], 0, 0)))
 
       expect(await screen.findByText('Nenhuma alteração de preço registrada ainda.')).toBeInTheDocument()
@@ -2868,6 +2868,153 @@ describe('ProdutoPage', () => {
       fireEvent.keyDown(within(modal).getByRole('textbox', { name: /^quantidade/i }), { key: 'Enter', ctrlKey: true })
 
       expect(atualizarProdutoMock).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('aba Histórico (estoque, Fase D)', () => {
+    const SAIDA: MovimentoEstoque = {
+      id: 'mov-2',
+      tipo: 'SAIDA',
+      motivo: 'PERDA_AVARIA',
+      origem: 'AJUSTE_MANUAL',
+      quantidade: -2,
+      saldoAnterior: 12,
+      saldoNovo: 10,
+      observacao: 'Caixa amassada',
+      usuarioNome: 'Carla Dias',
+      criadoEm: '2026-10-21T15:20:00',
+    }
+    const INICIAL: MovimentoEstoque = {
+      id: 'mov-1',
+      tipo: 'ENTRADA',
+      motivo: 'ESTOQUE_INICIAL',
+      origem: 'CADASTRO',
+      quantidade: 12,
+      saldoAnterior: 0,
+      saldoNovo: 12,
+      observacao: null,
+      usuarioNome: 'Davi Reis',
+      criadoEm: '2026-10-20T09:00:00',
+    }
+
+    function paginaDeMovimentos(
+      itens: MovimentoEstoque[],
+      numero: number,
+      totalItens: number,
+    ): PaginaResponse<MovimentoEstoque> {
+      return { itens, pagina: numero, tamanho: 20, totalItens }
+    }
+
+    function linhasDeEstoque(): HTMLElement[] {
+      return within(screen.getByRole('list', { name: 'Movimentações de estoque' })).getAllByRole('listitem')
+    }
+
+    function secao(nome: string): HTMLElement {
+      return screen.getByRole('region', { name: nome })
+    }
+
+    beforeEach(() => {
+      listarHistoricoDePrecosMock.mockResolvedValue({ itens: [], pagina: 0, tamanho: 20, totalItens: 0 })
+    })
+
+    it('tem as seções Estoque (primeiro) e Preços, cada uma com a sua consulta', async () => {
+      listarMovimentosDeEstoqueMock.mockResolvedValue(paginaDeMovimentos([SAIDA], 0, 1))
+      renderEdicao()
+      await esperarFormulario()
+      expect(listarMovimentosDeEstoqueMock).not.toHaveBeenCalled()
+
+      abrirAba(/histórico/i)
+
+      expect(await screen.findByText('Carla Dias')).toBeInTheDocument()
+      const titulos = within(screen.getByRole('tabpanel'))
+        .getAllByRole('heading', { level: 3 })
+        .map((titulo) => titulo.textContent)
+      expect(titulos).toEqual(['Estoque', 'Preços'])
+      expect(listarMovimentosDeEstoqueMock).toHaveBeenCalledWith(ID_ARROZ, 0)
+      expect(listarHistoricoDePrecosMock).toHaveBeenCalledWith(ID_ARROZ, 0)
+      expect(within(secao('Preços')).getByText('Nenhuma alteração de preço registrada ainda.')).toBeInTheDocument()
+    })
+
+    it('a linha mostra tipo e motivo, a quantidade com sinal e sigla, os saldos, a observação, quem e quando', async () => {
+      listarMovimentosDeEstoqueMock.mockResolvedValue(paginaDeMovimentos([SAIDA, INICIAL], 0, 2))
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/histórico/i)
+      await screen.findByText('Carla Dias')
+
+      const [saida, inicial] = linhasDeEstoque()
+      expect(within(saida).getByText('Saída · Perda/avaria')).toBeInTheDocument()
+      expect(within(saida).getByText('−2 UN')).toBeInTheDocument()
+      expect(within(saida).getByText('12 → 10')).toHaveAttribute('aria-hidden', 'true')
+      expect(within(saida).getByText('saldo de 12 para 10')).toHaveClass('sr-only')
+      expect(within(saida).getByText('Caixa amassada')).toBeInTheDocument()
+      expect(within(saida).getByText('21/10/2026 15:20')).toBeInTheDocument()
+      expect(within(inicial).getByText('Entrada · Estoque inicial')).toBeInTheDocument()
+      expect(within(inicial).getByText('+12 UN')).toBeInTheDocument()
+      expect(within(inicial).getByText('Davi Reis')).toBeInTheDocument()
+    })
+
+    it('"Carregar mais" do estoque busca a página 1 sem mexer na seção de preços', async () => {
+      listarMovimentosDeEstoqueMock
+        .mockResolvedValueOnce(paginaDeMovimentos([SAIDA], 0, 2))
+        .mockResolvedValueOnce(paginaDeMovimentos([INICIAL], 1, 2))
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/histórico/i)
+      await screen.findByText('Carla Dias')
+
+      fireEvent.click(within(secao('Estoque')).getByRole('button', { name: 'Carregar mais' }))
+
+      expect(await screen.findByText('Davi Reis')).toBeInTheDocument()
+      expect(listarMovimentosDeEstoqueMock).toHaveBeenLastCalledWith(ID_ARROZ, 1)
+      expect(linhasDeEstoque()).toHaveLength(2)
+      expect(listarHistoricoDePrecosMock).toHaveBeenCalledTimes(1)
+      expect(within(secao('Estoque')).queryByRole('button', { name: 'Carregar mais' })).not.toBeInTheDocument()
+      // O botao fica no formulario do produto: carregar mais nao salva.
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('mostra carregando e, sem movimentos, o estado vazio', async () => {
+      let responder: (valor: PaginaResponse<MovimentoEstoque>) => void = () => {}
+      listarMovimentosDeEstoqueMock.mockReturnValue(new Promise((resolve) => (responder = resolve)))
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/histórico/i)
+
+      expect(within(secao('Estoque')).getByText('Carregando movimentações...')).toBeInTheDocument()
+      await act(async () => responder(paginaDeMovimentos([], 0, 0)))
+
+      expect(await within(secao('Estoque')).findByText('Nenhuma movimentação de estoque ainda.')).toBeInTheDocument()
+    })
+
+    it('falha ao carregar mostra erro amigável e "Tentar de novo" só na seção de estoque', async () => {
+      listarMovimentosDeEstoqueMock
+        .mockRejectedValueOnce(new HttpError(500, 'SQLException em movimentos'))
+        .mockResolvedValueOnce(paginaDeMovimentos([SAIDA], 0, 1))
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/histórico/i)
+
+      expect(
+        await within(secao('Estoque')).findByText('Não foi possível carregar as movimentações de estoque.'),
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/SQLException/)).not.toBeInTheDocument()
+      expect(within(secao('Preços')).queryByRole('button', { name: 'Tentar de novo' })).not.toBeInTheDocument()
+
+      fireEvent.click(within(secao('Estoque')).getByRole('button', { name: 'Tentar de novo' }))
+
+      expect(await screen.findByText('Carla Dias')).toBeInTheDocument()
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('com o controle desligado, mostra os movimentos que existem e avisa', async () => {
+      listarMovimentosDeEstoqueMock.mockResolvedValue(paginaDeMovimentos([SAIDA], 0, 1))
+      renderEdicao({ ...produtoAtivo, controlaEstoque: false, situacaoEstoque: null })
+      await esperarFormulario()
+      abrirAba(/histórico/i)
+
+      expect(await screen.findByText('Carla Dias')).toBeInTheDocument()
+      expect(within(secao('Estoque')).getByText('Este produto não controla estoque no momento.')).toBeInTheDocument()
     })
   })
 })
