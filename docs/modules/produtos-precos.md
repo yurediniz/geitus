@@ -1,6 +1,6 @@
 # Produtos: Preços (Fase C da evolução de Produtos)
 
-> **Status:** spec escrita em 2026-10-21, aguardando aprovação. Terceira das 6 fases da DEC-030; decisões desta fase na **DEC-033**. Depende da Fase B ([produtos-identificacao-e-formulario.md](produtos-identificacao-e-formulario.md)). Registro de design: [`docs/superpowers/specs/2026-10-21-produtos-fase-c-design.md`](../superpowers/specs/2026-10-21-produtos-fase-c-design.md).
+> **Status:** implementado em 2026-10-21 (migration V8 aplicada). Ajustes das revisões em §10. Terceira das 6 fases da DEC-030; decisões desta fase na **DEC-033**. Depende da Fase B ([produtos-identificacao-e-formulario.md](produtos-identificacao-e-formulario.md)). Registro de design: [`docs/superpowers/specs/2026-10-21-produtos-fase-c-design.md`](../superpowers/specs/2026-10-21-produtos-fase-c-design.md).
 
 ## 1. Visão geral
 
@@ -298,3 +298,22 @@ Desligar um interruptor limpa os campos daquele bloco (o produto fica sem promo�
 ## 9. Pontos em aberto
 - **Fuso fixo `America/Sao_Paulo`:** um fuso por empresa fica para quando houver cliente fora dele.
 - **Custo visível a OPERADOR:** já era assim antes desta fase. A restrição por perfil será decidida com o PDV e os relatórios.
+
+## 10. Ajustes incorporados na implementação (revisões)
+- **Edição com trava:** a edição do produto lê a linha com `SELECT ... FOR UPDATE` (lock pessimista), para que edições simultâneas não quebrem a cadeia anterior → novo do histórico. O conflito otimista (`@Version`) continua na DT-029.
+- **Paginação:** página cujo deslocamento passa de `Integer.MAX_VALUE` → 400 ("A página informada é grande demais.").
+- **Aba Preços:**
+  - "Remover promoção" aparece só com a promoção **encerrada**, ao lado do selo; nos outros casos basta o interruptor;
+  - o preço de venda aparece sempre no bloco de margem;
+  - Enter em "Margem desejada" calcula o preço, sem salvar;
+  - ao ligar a promoção, o início vem com a data de hoje (São Paulo) e o foco vai para o preço promocional;
+  - com promoção e atacado ligados, a tela explica que vale o menor preço;
+  - rótulo do atacado: "Quantidade mínima (UN)", com a ajuda "A partir de 12 UN, o preço passa a ser R$ 4,20 por unidade.".
+- **Aviso de custo:** mostra a diferença ("R$ 0,50 abaixo do custo (R$ 5,00). Vender por este preço dá prejuízo.") e vale para os preços de venda, promocional e de atacado.
+- **Selo da promoção:** usa a data de São Paulo também no navegador, inclui o ano quando é outro e, encerrada, diz "O produto voltou ao preço normal.". Vigente usa o mesmo destaque do selo "Promoção" da listagem.
+- **Histórico:** "(valor inicial)" no cadastro e "→ sem custo" quando o custo é removido; o estado vazio diz que as próximas mudanças aparecerão ali.
+- **`CampoMoeda`:**
+  - trata teclado físico, `beforeinput` (teclado virtual, arrastar e soltar, ditado, autopreenchimento) e colagem;
+  - um bloco de texto inserido de uma vez é interpretado como número, igual a uma colagem;
+  - Ctrl/Alt+Backspace limpa o campo.
+- **Dívidas registradas:** DT-028 (exclusão apaga o histórico), DT-030 (fuso dos carimbos, antes do primeiro deploy) e DT-031 (endurecimentos menores, incluindo validar o `CampoMoeda` em Android e iOS).

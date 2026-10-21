@@ -38,7 +38,11 @@ Frontend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Co
   - "Salvar e cadastrar outro";
   - aviso de alterações não salvas;
   - excluir, inativar e reativar no cabeçalho;
-  - modo leitura para OPERADOR.
+  - modo leitura para OPERADOR;
+  - aba Preços com preço pela margem, aviso de preço abaixo do custo, preço promocional por datas e preço de atacado;
+  - aba Histórico (custo e preço de venda) na edição;
+  - campos de dinheiro com máscara que preenche da direita para a esquerda (`components/ui/campo-moeda.tsx`, lógica em `lib/moeda.ts`);
+  - selo "Promoção" na listagem.
 - **Categorias** (`/produtos/categorias`) e **Unidades** (`/produtos/unidades`), em abas dentro de Produtos: árvore de categorias (subcategorias, mover, inativar, excluir) e cadastro de unidades com fracionamento. No formulário de produto: unidade de venda (select), categoria (seletor com busca pelo caminho e "+ Nova") e unidade de compra + fator.
 - **Clientes** (`/clientes`): cadastro rápido (nome, telefone com "Este número é WhatsApp", CPF e observações), busca por nome/CPF/telefone e filtro de status; qualquer perfil cadastra e edita, inativar/reativar só ADMIN. Máscaras e validações de CPF/telefone compartilhadas em `lib/documentos.ts`.
 - Cartão de **status do backend** consumindo `GET /api/health`, com tratamento de **carregando**, **sucesso** e **erro**.

@@ -1,7 +1,7 @@
 # Design — Evolução do cadastro de produtos · Fase C (Preços)
 
 **Data:** 2026-10-21
-**Status:** Spec escrita — aguardando revisão do usuário antes do plano
+**Status:** Implementado em 2026-10-21 (plano: `docs/superpowers/plans/2026-10-21-produtos-fase-c.md`)
 **Spec canônica:** [`docs/modules/produtos-precos.md`](../../modules/produtos-precos.md) · Decisão: DEC-033
 
 ## Escopo da fase
