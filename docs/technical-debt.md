@@ -208,7 +208,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Descricao:** Nas buscas por termo (`ProdutoRepository` e `UsuarioRepository`), os caracteres `%` e `_` no termo agem como curinga (LIKE injection — nao e SQL injection). Padrao herdado do `ProdutoRepository`.
 - **Impacto:** Resultados de busca podem ser mais amplos que o esperado quando o usuario digita `%`/`_`. Sem risco de seguranca de dados.
 - **Quando revisar:** Tratar nos dois repositorios juntos numa proxima manutencao de busca.
-- **Observacoes:** Escapar `%`/`_` no termo (ex.: `ESCAPE`) ou sanear na aplicacao. O modulo Clientes (DEC-029) ja nasceu com o escape (`ClienteService` + `ESCAPE` nas queries do `ClienteRepository`) — usar como referencia ao corrigir Produtos e Usuarios.
+- **Observacoes:** **Resolvido para Produtos na Fase B (DEC-032)** — `shared/busca/PadraoLike` usado por Produtos e Clientes; falta Usuarios. Escapar `%`/`_` no termo (ex.: `ESCAPE`) ou sanear na aplicacao. O modulo Clientes (DEC-029) ja nasceu com o escape (`ClienteService` + `ESCAPE` nas queries do `ClienteRepository`) — usar como referencia ao corrigir Produtos e Usuarios.
 
 ## DT-018 — Revogacao de token na inativacao de usuario
 
@@ -305,6 +305,51 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Impacto:** Duplicacao de regra de isolamento (DEC-016) que tende a divergir a cada modulo novo.
 - **Quando revisar:** Antes do terceiro modulo de negocio (Caixa).
 - **Observacoes:** Componente em `iam` (ex.: resolvedor da empresa do usuario autenticado) reutilizado pelos services; relaciona-se com a futura empresa ativa da DEC-024.
+
+## DT-028 — Auditoria e integridade da exclusao de produto (Fases C/D)
+
+- **ID:** DT-028
+- **Modulo:** Backend (Catalogo — Produtos)
+- **Origem:** Revisoes (security-reviewer e data-reviewer) da Fase B
+- **Prioridade:** media (obrigatoria antes de existir venda/estoque)
+- **Status:** aberto
+- **Descricao:** A exclusao fisica de produto (DEC-032) hoje so deixa um log INFO com ids. `podeExcluir` sempre devolve `true` (ainda nao ha vendas nem movimentacoes) e e chamado por produto na listagem.
+- **Impacto:** Sem auditoria persistente, uma exclusao por engano ou ma-fe nao e rastreavel; sem defesa no banco, uma tabela futura com `ON DELETE CASCADE` apagaria historico.
+- **Quando revisar:** Na Fase C (historico de precos) e obrigatoriamente na Fase D (movimentos) e no PDV (etapa 11).
+- **Observacoes:**
+  - `movimentos_estoque` e itens de venda devem referenciar produto por FK composta `(empresa_id, produto_id)` com `ON DELETE RESTRICT`. Nunca referenciar `produto_codigos_barras`; gravar o codigo lido como texto (snapshot).
+  - O historico de precos pode ter cascade feito pelo banco, sem coleção com cascade mapeada no `Produto`.
+  - `podeExcluir` real em lote (sem N+1).
+  - Converter a violacao de FK no DELETE em 409 com a mensagem de exclusao bloqueada.
+  - Registrar a exclusao numa tabela de auditoria sem FK para `produtos`.
+
+## DT-029 — Endurecimentos menores da Fase B
+
+- **ID:** DT-029
+- **Modulo:** Backend/Frontend (Catalogo — Produtos)
+- **Origem:** Revisoes da Fase B
+- **Prioridade:** baixa
+- **Status:** aberto
+- **Descricao:** Itens nao bloqueantes, deixados para depois:
+  - validar o formato de todos os codigos antes da unicidade, com uma consulta `IN` unica;
+  - `@Size` por codigo aplicado antes da normalizacao;
+  - `substring(0, 30)` do nome curto pode partir emoji (surrogate), nos dois lados;
+  - `@Version` no produto (ultima gravacao vence);
+  - unicidade de codigo `OUTRO` sensivel a maiusculas;
+  - UPC-A `036000291452` e EAN-13 `0036000291452` (mesmo GTIN) nao colidem;
+  - sugestao de SKU carrega a lista de SKUs no padrao (poderia ser `LIMIT 1`);
+  - `mode()` e ordem das sugestoes dependem da collation;
+  - termo de texto da busca ainda nao remove espacos Unicode (so o de codigo);
+  - no frontend: `useWatch` nas abas, extracao de `errosProduto.ts`, altura 44px dos campos (design system), `readOnly` no modo leitura do OPERADOR, `keepPreviousData` na lista e `AbortSignal` no `httpClient`;
+  - da revisao de QA:
+    - nome curto com emoji perto do 30o caractere pode partir o par surrogate (cortar por code point) — **antes do cupom/PDV**;
+    - codigo pendente igual a um ja na lista bloqueia o salvar (avaliar descartar em silencio — decisao de produto);
+    - 404 de produto excluido em outra aba (mensagem e estado do dialogo);
+    - "Gerar automaticamente" sobrescreve SKU digitado sem aviso;
+    - corrida de cadastros com o mesmo codigo cai no 409 generico sem `campos`;
+    - o fallback pelo texto (resposta sem `campos`) no frontend reconhece `"O código de barras "`, mas a mensagem de digito invalido comeca com `"Código de barras "` — hoje sem impacto (o backend sempre manda `campos`), alinhar o fallback.
+- **Impacto:** Robustez, desempenho e clareza; nenhum risco imediato.
+- **Quando revisar:** Na Fase E (listagem) ou na proxima manutencao do catalogo.
 
 ## DT-026 — Teto de profundidade e de quantidade na arvore de categorias
 

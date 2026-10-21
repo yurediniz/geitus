@@ -1,6 +1,6 @@
 # Produtos: Identificação e formulário em abas (Fase B da evolução de Produtos)
 
-> **Status:** especificado em 2026-10-21 — aguardando implementação. Segunda das 6 fases da DEC-030; decisões desta fase na **DEC-032**. Depende da Fase A ([categorias-e-unidades.md](categorias-e-unidades.md)). Registro de design: [`docs/superpowers/specs/2026-10-21-produtos-fase-b-design.md`](../superpowers/specs/2026-10-21-produtos-fase-b-design.md).
+> **Status:** implementado em 2026-10-21 (migration V7 aplicada; página `/produtos/novo` e `/produtos/:id`). Ajustes das revisões em §6.2, §6.3 e §10. Segunda das 6 fases da DEC-030; decisões desta fase na **DEC-032**. Depende da Fase A ([categorias-e-unidades.md](categorias-e-unidades.md)). Registro de design: [`docs/superpowers/specs/2026-10-21-produtos-fase-b-design.md`](../superpowers/specs/2026-10-21-produtos-fase-b-design.md).
 
 ## 1. Visão geral
 
@@ -149,11 +149,17 @@ Aditiva sobre a V6 (que **não** é editada). Preserva todos os dados.
 - OPERADOR abre a página em **modo leitura**: campos desabilitados, sem Salvar nem Excluir.
 
 ### 6.2 Abas (desta fase)
-1. **Geral:** Nome\*, Nome curto (com contador 0/30 e a prévia "No cupom: {nomeCurtoEfetivo}"), Unidade de venda\*, Categoria, Marca (autocomplete), Fornecedor principal (autocomplete), Descrição, Status (selo + Inativar/Reativar para ADMIN).
+> **Ajuste aprovado pelo usuário após a revisão de UX (2026-10-21):** o cadastro mínimo fica inteiro na aba **Geral**. Preço de venda\* e "Adicionar código de barras" sobem para ela; o status (selo + Inativar/Reativar) vai para o cabeçalho.
+
+1. **Geral:** Nome\*, Nome curto (com contador 0/30 e a prévia "No cupom: {nomeCurtoEfetivo}"), Unidade de venda\*, **Preço de venda (por {sigla})\***, **Adicionar código de barras** (campo compacto, com os códigos como etiquetas removíveis — a mesma lista da aba Códigos), Categoria, Marca (autocomplete), Fornecedor principal (autocomplete), Descrição.
    - Grupo **"Unidade e embalagem"** com unidade de compra e "Quantas X vêm em 1 Y?".
-2. **Preços:** Preço de venda\*, Custo, Preço mínimo, com margem/markup derivados (só leitura). A Fase C amplia.
+2. **Preços:** Custo, Preço mínimo, margem/markup derivados (só leitura) e o preço de venda como referência do cálculo. A Fase C amplia.
 3. **Estoque:** Estoque mínimo, Ponto de reposição, Estoque máximo. A Fase D amplia.
-4. **Códigos:** SKU, com o botão "Gerar automaticamente". Lista de códigos de barras: campo "Adicionar código" (Enter adiciona, pensado para leitor de código de barras), selo do formato reconhecido, aviso para `OUTRO`, remover e reordenar.
+4. **Códigos:** SKU, com o botão "Gerar automaticamente". Lista completa de códigos de barras:
+   - campo "Adicionar código" (Enter adiciona, pensado para leitor de código de barras);
+   - selo do formato reconhecido, com aviso de `OUTRO` só para códigos adicionados agora (os já gravados mostram só o selo);
+   - remover e reordenar (setas só com 2+ códigos).
+- **Cabeçalho:** nome, "Voltar para produtos", selo de status, **Inativar/Reativar** e **Excluir** (ADMIN).
 
 **Regras das abas:**
 - **Erro em aba não visível:** a aba recebe um indicador (ponto + contagem acessível). Ao salvar com erro, a página vai para a primeira aba com erro e foca o campo.
@@ -162,9 +168,15 @@ Aditiva sobre a V6 (que **não** é editada). Preserva todos os dados.
 
 ### 6.3 Salvar e alterações não salvas
 - **"Salvar"** grava e volta para a lista, com a mensagem de sucesso.
-- **"Salvar e cadastrar outro"** existe só no modo novo. Grava, mostra o sucesso e reabre um formulário vazio **mantendo unidade, categoria, marca e fornecedor** (cadastro em sequência), com foco no Nome.
+- **"Salvar e cadastrar outro"** existe só no modo novo. Grava, mostra o sucesso com o nome do produto e reabre um formulário vazio **mantendo unidade, categoria, marca e fornecedor** (cadastro em sequência), com foco em **"Adicionar código de barras"**, porque quem usa leitor bipa primeiro. Só reseta em caso de sucesso.
+- **Teclado:**
+  - `/produtos/novo` abre com foco no Nome.
+  - No modo novo, Enter num campo de texto **não** envia o formulário.
+  - **Ctrl+Enter** (ou Cmd+Enter) salva, com dica visível na barra de ações.
+- **Código digitado e não adicionado:** ao salvar, o texto pendente do campo de código é incorporado com as mesmas regras. Se for bloqueado, nada é salvo e o erro aparece no campo.
+- **Erros do backend:** marcados no campo pela chave `campos` da resposta (inclusive em 409 de SKU e de código), com salto para a aba do campo.
 - **Aviso de alterações não salvas:** com o formulário alterado, sair pela navegação do app (lista, abas Categorias/Unidades, sidebar) abre o diálogo "Descartar alterações?" (Continuar editando / Descartar), via `useBlocker` do React Router. Fechar ou recarregar a aba usa o aviso nativo do navegador (`beforeunload`).
-- **Excluir** fica no cabeçalho para ADMIN, quando `podeExcluir`. Pede confirmação com o nome do produto e mostra o 409 se houver bloqueio.
+- **Excluir** fica no cabeçalho para ADMIN, quando `podeExcluir`. Pede confirmação com o nome do produto e lembra que inativar é reversível, oferecendo "Inativar" no próprio diálogo. Mostra o 409 se houver bloqueio.
 
 ### 6.4 Organização do código
 A `ProdutosPage.tsx` atual (~1200 linhas) é dividida em:
@@ -223,6 +235,25 @@ Nada de dependência nova: abas com `radix-ui` (Tabs), que já está instalado.
 **Revisores:**
 - `data-reviewer` (V7) e `security-reviewer` (rotas novas, DELETE, UUID), obrigatórios;
 - `back-end-reviewer`, `front-end-reviewer`, `product-ux-reviewer` e `qa-reviewer`.
+
+## 10. Ajustes incorporados na implementação (revisões)
+
+**Banco (V7):** `ck_codigo_barras_codigo` com `codigo !~ '\s'`; CHECKs de `nome_curto`/`fornecedor` aparados e não vazios. Colisão de códigos após normalizar aborta a migração (banco fica na V6).
+
+**Regras (backend):**
+- **PATCH sem `codigosBarras` mantém os códigos atuais** (`[]` remove todos), para evitar perda de dado. No cadastro, ausente = sem códigos.
+- **Edição dos códigos:** reconciliada por código. O código mantido conserva a linha e o formato gravado, e reordenar não viola a unicidade.
+- **`atualizado_em`:** muda quando só os códigos mudam; a resposta do PATCH, inativar e reativar já traz o valor gravado.
+- **Erros com `campos`:** os 409/400 de SKU e de códigos trazem `campos: [{campo: 'sku' | 'codigosBarras', mensagem}]`, com a mesma `mensagem`.
+- **Busca:** termo só com espaço Unicode (ex.: NBSP) equivale a "sem termo"; antes dava 500.
+- **Exclusão:** registra um log `INFO` com usuário, empresa e UUID do produto (rastro provisório até existir auditoria — DT-028).
+- **Paginação:** `fail_on_pagination_over_collection_fetch` ligado, para a Fase E não paginar em memória.
+
+**Telas (frontend):** ver §6.2 e §6.3 (essenciais na aba Geral, foco e teclado, código pendente, Inativar no cabeçalho, erros por `campos`). Também:
+- formulário montado só com dados atualizados do servidor;
+- refetch com erro não apaga o que está sendo editado;
+- busca da lista não perde o foco;
+- foco restaurado após o 409 de exclusão.
 
 ## 9. Pontos em aberto
 - **Fase C:** histórico de preços como parte do cadastro (exclusão em cascata) e a aba Histórico.

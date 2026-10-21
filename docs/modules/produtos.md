@@ -1,6 +1,13 @@
 # Módulo: Produtos
 
-> **Evolução em andamento (DEC-030):** o cadastro de produtos está sendo ampliado em 6 fases (A–F). Itens que esta spec lista como fora do escopo — categorias e unidades como cadastros, múltiplos códigos de barras, promoções/atacado e estoque com movimentações — passam a fazer parte do escopo por decisão do usuário. **Fase A concluída** ([categorias-e-unidades.md](categorias-e-unidades.md)): `categoria` e `unidade` deixaram de ser texto — o produto referencia `unidade_id` (obrigatório), `categoria_id` (opcional, qualquer nível da árvore), `unidade_compra_id` + `fator_conversao` (migration V6); a API recebe `unidadeId`/`categoriaId`/`unidadeCompraId`/`fatorConversao` e devolve `unidade`/`categoria`/`unidadeCompra` como objetos e `conversaoTexto`. As colunas de texto antigas ainda existem no banco (não lidas) e saem na Fase B. Onde esta spec fala em `categoria`/`unidade` como texto, vale o modelo novo. Fiscal continua fora.
+> **Evolução em andamento (DEC-030):** o cadastro de produtos está sendo ampliado em 6 fases (A–F). Itens que esta spec lista como fora do escopo — categorias e unidades como cadastros, múltiplos códigos de barras, promoções/atacado e estoque com movimentações — passam a fazer parte do escopo por decisão do usuário. **Fase A concluída** ([categorias-e-unidades.md](categorias-e-unidades.md)): `categoria` e `unidade` deixaram de ser texto — o produto referencia `unidade_id` (obrigatório), `categoria_id` (opcional, qualquer nível da árvore), `unidade_compra_id` + `fator_conversao` (migration V6); a API recebe `unidadeId`/`categoriaId`/`unidadeCompraId`/`fatorConversao` e devolve `unidade`/`categoria`/`unidadeCompra` como objetos e `conversaoTexto`. Onde esta spec fala em `categoria`/`unidade` como texto, vale o modelo novo. **Fase B concluída** ([produtos-identificacao-e-formulario.md](produtos-identificacao-e-formulario.md), migration V7):
+- vários códigos de barras em `produto_codigos_barras`, com validação EAN/UPC; o campo único `codigoBarras` deixou de existir;
+- nome curto, fornecedor principal e SKU sugerido;
+- exclusão física de produto que nunca movimentou;
+- **UUID público** nas rotas;
+- cadastro em página própria com abas.
+
+As colunas de texto antigas `categoria`, `unidade` e `codigo_barras` foram removidas. Fiscal continua fora.
 
 ## 1. Visão geral
 

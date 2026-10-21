@@ -22,13 +22,18 @@ Backend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Con
 - Maven Wrapper (`mvnw` / `mvnw.cmd`) fixado no Maven 3.9.16.
 - Estrutura de pacotes por domínio (ver abaixo).
 - `application.yml` lendo configurações de variáveis de ambiente.
-- Flyway habilitado, com as migrations `V1__baseline.sql` a `V6__catalogo_unidades_categorias.sql` (empresa, usuário, produtos e seus incrementos, clientes, unidades de medida e categorias).
+- Flyway habilitado, com as migrations `V1__baseline.sql` a `V7__produtos_identificacao.sql` (empresa, usuário, produtos e seus incrementos, clientes, unidades de medida e categorias, códigos de barras múltiplos e UUID do produto).
 - Health check da aplicação em `GET /api/health` e health check padrão do Actuator em `GET /actuator/health`.
 - CORS básico liberado para o frontend local (Vite).
 - **Autenticação:** login por e-mail/senha (BCrypt) com emissão de JWT (HS256), filtro de autenticação por Bearer token e endpoint de dados do usuário autenticado (`GET /api/auth/me`, com a empresa aninhada).
 - **Empresa:** `GET/PATCH /api/empresas/minha` — cadastro com representante legal, tipo de pessoa (PF/PJ, CNPJ único) e endereço; sempre derivada do usuário autenticado, nunca de parâmetro externo. Edição exige `ADMIN`.
 - **Usuários:** `GET/POST /api/usuarios`, `GET/PATCH /api/usuarios/{id}`, `PATCH /api/usuarios/{id}/inativar`, `/reativar` e `/senha` (apenas `ADMIN`), além de `PATCH /api/usuarios/me/senha` (troca da própria senha). Perfis `ADMIN` e `OPERADOR`.
-- **Produtos:** `GET/POST /api/produtos`, `GET/PATCH /api/produtos/{id}`, `PATCH /api/produtos/{id}/inativar` e `/reativar`, com filtros opcionais `busca` e `ativo`; escrita exige `ADMIN` (DEC-025); isolamento por empresa, unicidade de SKU/código de barras por empresa (`409`, DEC-026) e margem/markup calculados na resposta.
+- **Produtos:** `GET/POST /api/produtos`, `GET/PATCH/DELETE /api/produtos/{id}` (o `{id}` é o **UUID público**), `PATCH /api/produtos/{id}/inativar` e `/reativar`, `GET /api/produtos/sku/sugestao` (próximo `P000001`, ADMIN) e `GET /api/produtos/sugestoes?campo=marca|fornecedor&termo=`; filtros `busca` (nome, nome curto, SKU ou qualquer código de barras) e `ativo`.
+  - **Escrita e exclusão:** exigem `ADMIN` (DEC-025).
+  - **Isolamento:** por empresa; SKU e códigos de barras únicos por empresa (`409`, com `campos`).
+  - **Códigos de barras:** até 20 por produto, com dígito verificador EAN-8/EAN-13/UPC-A validado; outros formatos aceitos como `OUTRO` (DEC-032).
+  - **Exclusão física:** só se o produto nunca movimentou.
+  - **Derivados:** margem/markup e `nomeCurtoEfetivo` calculados na resposta.
 - **Unidades de medida:** `GET/POST /api/unidades`, `PATCH /api/unidades/{id}`, `/inativar`, `/reativar` e `DELETE` (só sem uso). 10 unidades padrão por empresa (UN, KG, G, L, ML, M, CX, PCT, DZ, FD). Escrita: `ADMIN` (DEC-031).
 - **Categorias (árvore):** `GET/POST /api/categorias`, `PATCH /api/categorias/{id}` (renomear e mover, sem ciclos), `/inativar`, `/reativar` e `DELETE` (só sem subcategorias e produtos). A listagem é plana com `caminho` ("Ração › Úmida › Sachê"). Escrita: `ADMIN`.
 - **Produto** passa a referenciar unidade de venda (obrigatória), categoria e unidade de compra + fator de conversão (`unidadeId`, `categoriaId`, `unidadeCompraId`, `fatorConversao`).
