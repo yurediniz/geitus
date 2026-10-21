@@ -119,6 +119,8 @@ public class ProdutoController {
     }
 
     @Operation(summary = "Cadastra um novo produto na empresa do usuario autenticado",
+            description = "Com estoqueInicial (exige controlaEstoque), registra a primeira entrada de estoque "
+                    + "na mesma transacao.",
             security = @SecurityRequirement(name = "bearer-jwt"))
     @PostMapping
     public ResponseEntity<ProdutoResponse> cadastrar(
@@ -128,7 +130,9 @@ public class ProdutoController {
     }
 
     @Operation(summary = "Atualiza um produto da empresa do usuario autenticado",
-            description = "Substitui a lista inteira de codigos de barras pela informada.",
+            description = "Substitui a lista inteira de codigos de barras pela informada. estoqueInicial nao e "
+                    + "aceito (400: use o ajuste de estoque); produto com movimentacao de estoque nao troca a "
+                    + "unidade de venda (400).",
             security = @SecurityRequirement(name = "bearer-jwt"))
     @PatchMapping("/{id}")
     public ResponseEntity<ProdutoResponse> atualizar(
@@ -156,9 +160,10 @@ public class ProdutoController {
         return ResponseEntity.ok(produtoService.reativarParaUsuario(idUsuario, id));
     }
 
-    @Operation(summary = "Exclui um produto que nunca teve movimentacao (ADMIN)",
-            description = "409 se o produto ja teve venda ou movimentacao de estoque; os codigos de barras "
-                    + "sao excluidos junto.",
+    @Operation(summary = "Exclui um produto sem movimentacao de estoque (ADMIN)",
+            description = "Permitido sem movimentos ou quando o unico movimento e o estoque inicial do cadastro "
+                    + "(apagado junto com o saldo); 409 com qualquer outro movimento. Os codigos de barras e o "
+                    + "historico de precos sao excluidos junto.",
             security = @SecurityRequirement(name = "bearer-jwt"))
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> excluir(

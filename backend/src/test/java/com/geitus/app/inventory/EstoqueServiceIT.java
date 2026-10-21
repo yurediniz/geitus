@@ -2,6 +2,9 @@ package com.geitus.app.inventory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -17,9 +20,11 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -48,6 +53,7 @@ import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
  * Requer Docker.
  */
 @SpringBootTest
+@AutoConfigureMockMvc
 @Testcontainers
 @Import(CenarioDeEstoque.class)
 class EstoqueServiceIT {
@@ -76,6 +82,9 @@ class EstoqueServiceIT {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private MockMvc mockMvc;
 
     private static AjusteEstoqueRequest entrada(String quantidade) {
         return entrada(quantidade, UUID.randomUUID());
@@ -295,5 +304,20 @@ class EstoqueServiceIT {
 
         assertThat(daB.criado()).isTrue();
         assertThat(cenario.contarMovimentos(produtoDaB)).isEqualTo(1);
+    }
+
+    // ---------- Documentacao da API (Task 4) ----------
+
+    /** O OpenAPI gerado traz os endpoints de estoque e os campos novos do produto. */
+    @Test
+    void openApiDocumentaOsEndpointsDeEstoque() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/produtos/{id}/estoque/ajustes'].post.summary").exists())
+                .andExpect(jsonPath("$.paths['/api/produtos/{id}/estoque/movimentos'].get.summary").exists())
+                .andExpect(jsonPath("$.components.schemas.AjusteEstoqueRequest.properties.chave").exists())
+                .andExpect(jsonPath("$.components.schemas.MovimentoEstoqueResponse.properties.usuarioNome").exists())
+                .andExpect(jsonPath("$.components.schemas.ProdutoRequest.properties.estoqueInicial").exists())
+                .andExpect(jsonPath("$.components.schemas.ProdutoResponse.properties.situacaoEstoque").exists());
     }
 }

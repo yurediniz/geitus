@@ -69,6 +69,8 @@ public class UnidadeMedidaController {
     }
 
     @Operation(summary = "Edita uma unidade de medida (apenas ADMIN)",
+            description = "400 ao deixar de ser fracionada se algum produto com movimentacao de estoque usa a "
+                    + "unidade.",
             security = @SecurityRequirement(name = "bearer-jwt"))
     @PatchMapping("/{id}")
     public ResponseEntity<UnidadeMedidaResponse> atualizar(
