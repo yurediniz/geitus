@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch'
 import { CampoTexto, GrupoCampos } from '@/features/products/CamposFormulario'
 import { ModalAjusteEstoque } from '@/features/products/estoque/ModalAjusteEstoque'
 import { SeloSituacaoEstoque } from '@/features/products/estoque/SeloSituacaoEstoque'
+import { mensagemDeSucesso } from '@/features/products/estoque/ajusteEstoque'
 import { formatarQuantidade } from '@/features/products/formatacaoProduto'
 import type { ProdutoFormValues } from '@/features/products/produtoFormulario'
 import type { Produto } from '@/types/produto'
@@ -26,10 +27,12 @@ export interface AbaEstoqueProps {
 
 /** Campos de nivel: texto com teclado decimal (aceitam virgula, como as demais quantidades). */
 const NIVEIS = [
-  { id: 'estoqueMinimo', label: 'Estoque mínimo (opcional)' },
-  { id: 'pontoReposicao', label: 'Ponto de reposição (opcional)' },
-  { id: 'estoqueMaximo', label: 'Estoque máximo (opcional)' },
+  { id: 'estoqueMinimo', nome: 'Estoque mínimo' },
+  { id: 'pontoReposicao', nome: 'Ponto de reposição' },
+  { id: 'estoqueMaximo', nome: 'Estoque máximo' },
 ] as const
+
+const DICA_AJUSTE_BLOQUEADO = 'Salve a mudança de controle ou de unidade antes de ajustar o estoque.'
 
 /**
  * Aba Estoque: o interruptor "Controlar estoque", o saldo atual (so leitura,
@@ -50,13 +53,24 @@ export function AbaEstoque({
     register,
     watch,
     clearErrors,
-    formState: { errors, isDirty },
+    formState: { errors, dirtyFields },
   } = useFormContext<ProdutoFormValues>()
   const [ajustando, setAjustando] = useState(false)
+  // Niveis que um erro mostrou com o controle desligado: ficam ate religar o controle (ou o
+  // formulario recomecar), para o campo em edicao nao sumir quando o erro e corrigido.
+  const [manterNiveis, setManterNiveis] = useState(false)
   const botaoAjustarRef = useRef<HTMLButtonElement>(null)
   const [controla, unidadeId] = watch(['controlaEstoque', 'unidadeId'])
   const siglaVenda = siglaPorId.get(unidadeId)
   const erroNosNiveis = NIVEIS.some(({ id }) => errors[id] !== undefined)
+  if (!controla && erroNosNiveis && !manterNiveis) {
+    setManterNiveis(true)
+  } else if (controla && manterNiveis) {
+    setManterNiveis(false)
+  }
+  const mostrarNiveis = controla || erroNosNiveis || manterNiveis
+  // So o que muda o sentido do saldo bloqueia o ajuste; nome, preco etc. continuam no formulario.
+  const ajusteBloqueado = Boolean(dirtyFields.controlaEstoque || dirtyFields.unidadeId)
   // O saldo e da unidade gravada (produto com movimento nao troca de unidade).
   const saldoTexto = produto ? formatarQuantidade(produto.estoqueAtual, produto.unidade.sigla) : null
   const avisarSaldoGuardado = produto !== null && produto.controlaEstoque && !controla && produto.estoqueAtual > 0
@@ -108,22 +122,27 @@ export function AbaEstoque({
             {!somenteLeitura && (
               <div className="space-y-1 pt-2">
                 {/* type="button": a aba fica dentro do formulario do produto. */}
+                {/* aria-disabled (e nao disabled): o botao segue no Tab e a dica chega ao leitor de tela. */}
                 <Button
                   ref={botaoAjustarRef}
                   type="button"
                   variant="outline"
-                  className="min-h-11"
-                  onClick={() => setAjustando(true)}
-                  // Com alteracoes pendentes, o ajuste esperaria um formulario que ainda nao foi salvo.
-                  disabled={desabilitado || isDirty}
-                  aria-describedby={isDirty ? 'ajustar-estoque-dica' : undefined}
+                  className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                  onClick={() => {
+                    if (!ajusteBloqueado) {
+                      setAjustando(true)
+                    }
+                  }}
+                  disabled={desabilitado}
+                  aria-disabled={ajusteBloqueado || undefined}
+                  aria-describedby={ajusteBloqueado ? 'ajustar-estoque-dica' : undefined}
                 >
                   <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
                   Ajustar estoque
                 </Button>
-                {isDirty && (
+                {ajusteBloqueado && (
                   <p id="ajustar-estoque-dica" className="text-xs text-muted-foreground">
-                    Salve o produto antes de ajustar o estoque.
+                    {DICA_AJUSTE_BLOQUEADO}
                   </p>
                 )}
               </div>
@@ -150,27 +169,29 @@ export function AbaEstoque({
         {avisarSaldoGuardado && saldoTexto && (
           <p role="status" className="flex items-start gap-2 text-sm text-warning-soft-foreground">
             <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            <span>{`O saldo atual de ${saldoTexto} fica guardado e volta se você religar o controle.`}</span>
+            <span>{`Ao salvar, o saldo de ${saldoTexto} deixa de aparecer e de ser atualizado. Ele fica guardado e volta se você religar o controle.`}</span>
           </p>
         )}
       </GrupoCampos>
 
-      {(controla || erroNosNiveis) && (
+      {mostrarNiveis && (
         <section aria-labelledby="niveis-estoque-titulo" className="space-y-3">
           <div>
             <h3 id="niveis-estoque-titulo" className="text-sm font-medium">
               Níveis de referência
             </h3>
             <p className="text-xs text-muted-foreground">
-              Avisam quando o estoque está baixo. O ponto de reposição fica entre o mínimo e o máximo.
+              {controla
+                ? 'O selo Estoque baixo aparece quando o saldo chega ao ponto de reposição (ou ao mínimo, se o ponto estiver vazio).'
+                : 'Corrija ou apague estes valores para salvar.'}
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
-            {NIVEIS.map(({ id, label }) => (
+            {NIVEIS.map(({ id, nome }) => (
               <CampoTexto
                 key={id}
                 id={id}
-                label={label}
+                label={siglaVenda ? `${nome} em ${siglaVenda} (opcional)` : `${nome} (opcional)`}
                 erro={errors[id]?.message}
                 inputProps={register(id, { onChange: aoAlterarCampo })}
                 disabled={desabilitado}
@@ -191,7 +212,7 @@ export function AbaEstoque({
           focoAoFechar={() => botaoAjustarRef.current}
           aoConcluir={(movimento) => {
             setAjustando(false)
-            aoAjustarEstoque(`Estoque atualizado: ${formatarQuantidade(movimento.saldoNovo, produto.unidade.sigla)}.`)
+            aoAjustarEstoque(mensagemDeSucesso(movimento, produto.unidade.sigla))
           }}
         />
       )}

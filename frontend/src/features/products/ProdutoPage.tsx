@@ -22,6 +22,7 @@ import { AbaGeral } from '@/features/products/abas/AbaGeral'
 import { AbaHistorico } from '@/features/products/abas/AbaHistorico'
 import { AbaPrecos } from '@/features/products/abas/AbaPrecos'
 import { CatalogoNav } from '@/features/products/CatalogoNav'
+import { formatarQuantidade } from '@/features/products/formatacaoProduto'
 import { destinoDaLista, type EstadoParaLista } from '@/features/products/navegacaoProdutos'
 import {
   ABAS_PRODUTO,
@@ -432,7 +433,8 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
 
   // Depois do primeiro envio, os erros que comparam campos acompanham o campo
   // de que dependem (o RHF so revalida o campo alterado): preco de venda ou
-  // minimo mudou -> revalida minimo, promocional e atacado. Trocar a unidade
+  // minimo mudou -> revalida minimo, promocional e atacado; um nivel de estoque
+  // mudou -> revalida ponto e maximo. Trocar a unidade
   // apaga o erro de fracao (atacado e estoque inicial), checado de novo no proximo envio.
   useEffect(() => {
     if (!isSubmitted) {
@@ -441,6 +443,9 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     const assinatura = watch((_, { name }) => {
       if (name === 'precoVenda' || name === 'precoMinimo') {
         void trigger(['precoMinimo', 'precoPromocional', 'precoAtacado'])
+      } else if (name === 'estoqueMinimo' || name === 'pontoReposicao' || name === 'estoqueMaximo') {
+        // minimo <= ponto <= maximo: o erro fica no ponto ou no maximo, e muda com qualquer um dos tres.
+        void trigger(['pontoReposicao', 'estoqueMaximo'])
       } else if (name === 'unidadeId') {
         for (const campo of CAMPOS_COM_ERRO_DE_FRACAO) {
           if (getFieldState(campo).error?.type === 'manual') {
@@ -919,6 +924,10 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
           descricao={
             <>
               <p>Esta ação não pode ser desfeita. Os códigos de barras do produto também serão excluídos.</p>
+              {/* Excluir com saldo so e possivel quando o unico movimento e o estoque inicial (spec 4.7). */}
+              {produto.estoqueAtual > 0 && (
+                <p>{`O estoque inicial de ${formatarQuantidade(produto.estoqueAtual, produto.unidade.sigla)} também será apagado.`}</p>
+              )}
               {produto.ativo && <p>Se quiser apenas tirar o produto da venda, inative-o; dá para reativar depois.</p>}
               {erroExcluir && <ErroInline mensagem={erroExcluir} />}
             </>

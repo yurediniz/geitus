@@ -28,6 +28,8 @@ const MOVIMENTO: MovimentoEstoque = {
   criadoEm: '2026-10-21T15:20:00',
 }
 
+const CHAVE_DO_PRODUTO = [...PRODUTOS_QUERY_KEY, 'detalhe', ID_ARROZ]
+
 function renderModal(props: Partial<ModalAjusteEstoqueProps> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   const aoConcluir = vi.fn()
@@ -69,8 +71,18 @@ function campoObservacao(): HTMLElement {
   return screen.getByRole('textbox', { name: /^observação/i })
 }
 
+/** O botao de confirmar: o rotulo muda com a acao ("Registrar saída", "Zerar estoque"...). */
+function botaoConfirmar(): HTMLButtonElement {
+  return dialogo().querySelector('button[type="submit"]') as HTMLButtonElement
+}
+
 function confirmar() {
-  fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+  fireEvent.click(botaoConfirmar())
+}
+
+/** Regiao viva da previa (anuncia a previa, o erro de saldo e a contagem que confere). */
+function regiaoDaPrevia(): HTMLElement {
+  return dialogo().querySelector('[aria-live="polite"]') as HTMLElement
 }
 
 function rotulosDosMotivos(): string[] {
@@ -96,284 +108,406 @@ describe('ModalAjusteEstoque', () => {
     vi.clearAllMocks()
   })
 
-  it('abre com o saldo atual, o tipo Entrada marcado e o foco no tipo', async () => {
-    renderModal()
+  describe('abertura e tipo', () => {
+    it('abre com o saldo atual, Entrada marcada com Compra/recebimento e o foco no tipo', async () => {
+      renderModal()
 
-    expect(within(dialogo()).getByText('Saldo atual: 12 UN')).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: 'Entrada' })).toBeChecked()
-    await waitFor(() => expect(screen.getByRole('radio', { name: 'Entrada' })).toHaveFocus())
-    expect(campoQuantidade()).toHaveAccessibleName('Quantidade (UN)')
-    expect(campoQuantidade()).toHaveAttribute('inputmode', 'decimal')
-  })
+      expect(within(dialogo()).getByText('Saldo atual: 12 UN')).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: 'Entrada' })).toBeChecked()
+      await waitFor(() => expect(screen.getByRole('radio', { name: 'Entrada' })).toHaveFocus())
+      expect(campoMotivo()).toHaveValue('COMPRA')
+      expect(campoQuantidade()).toHaveAccessibleName('Quantidade (UN)')
+      expect(campoQuantidade()).toHaveAttribute('inputmode', 'decimal')
+    })
 
-  it('o motivo é filtrado pelo tipo e muda ao trocar o tipo', () => {
-    renderModal()
+    it('o tipo marcado tem um ícone de check, além da cor', () => {
+      renderModal()
 
-    expect(rotulosDosMotivos()).toEqual(['Selecione o motivo', 'Compra/recebimento', 'Devolução de cliente', 'Outro'])
-    fireEvent.change(campoMotivo(), { target: { value: 'COMPRA' } })
+      const marcado = screen.getByRole('radio', { name: 'Entrada' }).closest('label') as HTMLElement
+      const desmarcado = screen.getByRole('radio', { name: 'Saída' }).closest('label') as HTMLElement
+      expect(marcado.querySelector('svg')).not.toBeNull()
+      expect(desmarcado.querySelector('svg')).toBeNull()
+    })
 
-    escolherTipo('Saída')
+    it('o motivo é filtrado pelo tipo; a saída abre sem motivo escolhido', () => {
+      renderModal()
 
-    expect(rotulosDosMotivos()).toEqual([
-      'Selecione o motivo',
-      'Perda/avaria',
-      'Vencido',
-      'Uso interno',
-      'Devolução ao fornecedor',
-      'Outro',
-    ])
-    // O motivo de entrada nao vale na saida: volta para "Selecione".
-    expect(campoMotivo()).toHaveValue('')
-  })
+      expect(rotulosDosMotivos()).toEqual(['Compra/recebimento', 'Devolução de cliente', 'Outro'])
 
-  it('"Contar e ajustar para" pré-seleciona Contagem e muda o rótulo para "Saldo contado"', () => {
-    renderModal()
+      escolherTipo('Saída')
 
-    escolherTipo('Contar e ajustar para')
+      expect(rotulosDosMotivos()).toEqual([
+        'Selecione o motivo',
+        'Perda/avaria',
+        'Vencido',
+        'Uso interno',
+        'Devolução ao fornecedor',
+        'Outro',
+      ])
+      expect(campoMotivo()).toHaveValue('')
+    })
 
-    expect(campoMotivo()).toHaveValue('CONTAGEM')
-    expect(rotulosDosMotivos()).toEqual(['Contagem/inventário', 'Outro'])
-    expect(campoQuantidade()).toHaveAccessibleName('Saldo contado (UN)')
-  })
+    it('"Contagem" pré-seleciona Contagem/inventário e muda o rótulo para "Saldo contado", com ajuda', () => {
+      renderModal()
 
-  it('"Outro" exige a observação', async () => {
-    renderModal()
-    preencherSaida()
-    fireEvent.change(campoMotivo(), { target: { value: 'OUTRO' } })
-    expect(campoObservacao()).toHaveAccessibleName(/obrigatório/)
+      escolherTipo('Contagem')
 
-    confirmar()
+      expect(campoMotivo()).toHaveValue('CONTAGEM')
+      expect(rotulosDosMotivos()).toEqual(['Contagem/inventário', 'Outro'])
+      expect(campoQuantidade()).toHaveAccessibleName('Saldo contado (UN)')
+      expect(campoQuantidade()).toHaveAccessibleDescription('Quanto você contou. O sistema calcula a diferença.')
+    })
 
-    expect(await screen.findByText('Descreva o motivo.')).toBeInTheDocument()
-    await waitFor(() => expect(campoObservacao()).toHaveFocus())
-    expect(ajustarEstoqueMock).not.toHaveBeenCalled()
-  })
+    it('"Outro" exige a observação e leva o foco a ela', async () => {
+      renderModal()
+      preencherSaida()
+      fireEvent.change(campoMotivo(), { target: { value: 'OUTRO' } })
+      expect(campoObservacao()).toHaveAccessibleName(/obrigatório/)
 
-  it('mostra a prévia do saldo nos três tipos', () => {
-    renderModal()
+      confirmar()
 
-    fireEvent.change(campoQuantidade(), { target: { value: '5' } })
-    expect(screen.getByText('Saldo: 12 UN → 17 UN')).toBeInTheDocument()
-
-    escolherTipo('Saída')
-    fireEvent.change(campoQuantidade(), { target: { value: '2' } })
-    expect(screen.getByText('Saldo: 12 UN → 10 UN')).toBeInTheDocument()
-
-    escolherTipo('Contar e ajustar para')
-    fireEvent.change(campoQuantidade(), { target: { value: '7' } })
-    expect(screen.getByText('Saldo: 12 UN → 7 UN')).toBeInTheDocument()
-  })
-
-  it('saída acima do saldo mostra o erro já ao digitar e bloqueia o envio', () => {
-    renderModal()
-    preencherSaida('13')
-
-    expect(screen.getByText('Saldo insuficiente: há 12 UN.')).toBeInTheDocument()
-    expect(campoQuantidade()).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.queryByText(/^Saldo: /)).not.toBeInTheDocument()
-
-    confirmar()
-
-    expect(ajustarEstoqueMock).not.toHaveBeenCalled()
-  })
-
-  it('"2,5" em UN dá o erro de fração sem enviar (Review Focus 5)', async () => {
-    renderModal()
-    preencherSaida('2,5')
-
-    confirmar()
-
-    expect(await screen.findByText('A unidade UN não aceita quantidade fracionada.')).toBeInTheDocument()
-    expect(ajustarEstoqueMock).not.toHaveBeenCalled()
-  })
-
-  it('"2,5" em KG vai como 2.5, com a chave e sem observação vazia', async () => {
-    ajustarEstoqueMock.mockResolvedValue({ ...MOVIMENTO, quantidade: -2.5, saldoNovo: 9.5 })
-    renderModal({ sigla: 'KG', fracionada: true })
-    preencherSaida('2,5')
-
-    confirmar()
-
-    await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
-    expect(ajustarEstoqueMock).toHaveBeenCalledWith(ID_ARROZ, {
-      tipo: 'SAIDA',
-      quantidade: 2.5,
-      motivo: 'PERDA_AVARIA',
-      observacao: null,
-      chave: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
+      expect(await screen.findByText('Descreva o motivo.')).toBeInTheDocument()
+      await waitFor(() => expect(campoObservacao()).toHaveFocus())
+      expect(ajustarEstoqueMock).not.toHaveBeenCalled()
     })
   })
 
-  it('duplo clique em Confirmar envia uma vez só e o botão fica desabilitado', async () => {
-    ajustarEstoqueMock.mockReturnValue(new Promise(() => {}))
-    renderModal()
-    preencherSaida()
+  describe('prévia e botão de confirmar', () => {
+    it('mostra a prévia (com a diferença na contagem) e o botão diz a ação', () => {
+      renderModal()
 
-    confirmar()
-    confirmar()
+      fireEvent.change(campoQuantidade(), { target: { value: '5' } })
+      expect(within(regiaoDaPrevia()).getByText('Saldo: 12 UN → 17 UN')).toBeInTheDocument()
+      expect(botaoConfirmar()).toHaveTextContent('Registrar entrada')
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /confirmar|registrando/i })).toBeDisabled())
-    expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1)
+      escolherTipo('Saída')
+      fireEvent.change(campoQuantidade(), { target: { value: '2' } })
+      expect(within(regiaoDaPrevia()).getByText('Saldo: 12 UN → 10 UN')).toBeInTheDocument()
+      expect(botaoConfirmar()).toHaveTextContent('Registrar saída')
+
+      escolherTipo('Contagem')
+      fireEvent.change(campoQuantidade(), { target: { value: '10' } })
+      expect(within(regiaoDaPrevia()).getByText('Saldo: 12 UN → 10 UN (−2 UN)')).toBeInTheDocument()
+      expect(botaoConfirmar()).toHaveTextContent('Ajustar para 10 UN')
+    })
+
+    it('saída acima do saldo mostra o erro na região viva, já ao digitar, e bloqueia o envio', async () => {
+      renderModal()
+      preencherSaida('13')
+
+      expect(within(regiaoDaPrevia()).getByText('Saldo insuficiente: há 12 UN.')).toBeInTheDocument()
+      expect(campoQuantidade()).toHaveAttribute('aria-invalid', 'true')
+      expect(campoQuantidade()).toHaveAccessibleDescription('Saldo insuficiente: há 12 UN.')
+      expect(screen.queryByText(/^Saldo: /)).not.toBeInTheDocument()
+
+      confirmar()
+
+      await waitFor(() => expect(campoQuantidade()).toHaveFocus())
+      // O erro aparece uma vez so (na regiao viva), nao repetido sob o campo.
+      expect(screen.getAllByText('Saldo insuficiente: há 12 UN.')).toHaveLength(1)
+      expect(ajustarEstoqueMock).not.toHaveBeenCalled()
+    })
+
+    it('contagem igual ao saldo confere em tom neutro, e o botão vira "Fechar"', () => {
+      const { aoFechar } = renderModal()
+      escolherTipo('Contagem')
+      fireEvent.change(campoQuantidade(), { target: { value: '12' } })
+
+      expect(
+        within(regiaoDaPrevia()).getByText('A contagem confere com o saldo (12 UN). Não há nada a ajustar.'),
+      ).toBeInTheDocument()
+      expect(campoQuantidade()).not.toHaveAttribute('aria-invalid')
+      expect(botaoConfirmar()).toHaveTextContent('Fechar')
+
+      confirmar()
+
+      expect(aoFechar).toHaveBeenCalled()
+      expect(ajustarEstoqueMock).not.toHaveBeenCalled()
+    })
   })
 
-  it('erro de rede seguido de nova tentativa usa a mesma chave (Review Focus 3)', async () => {
-    ajustarEstoqueMock
-      .mockRejectedValueOnce(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
-      .mockResolvedValueOnce(MOVIMENTO)
-    const { aoConcluir } = renderModal()
-    preencherSaida()
+  describe('Zerar estoque', () => {
+    it('preenche Contagem, saldo contado 0 e Contagem/inventário; confirmar envia quantidade 0', async () => {
+      ajustarEstoqueMock.mockResolvedValue({ ...MOVIMENTO, tipo: 'AJUSTE', motivo: 'CONTAGEM', quantidade: -12, saldoNovo: 0 })
+      renderModal()
 
-    confirmar()
+      fireEvent.click(within(dialogo()).getByRole('button', { name: 'Zerar estoque' }))
 
-    expect(await screen.findByText('Não foi possível registrar o ajuste. Confira a conexão e tente de novo.')).toBeInTheDocument()
-    expect(screen.queryByText(/Nao foi possivel conectar/)).not.toBeInTheDocument()
-    const primeiraChave = ultimoAjuste().chave
+      expect(screen.getByRole('radio', { name: 'Contagem' })).toBeChecked()
+      expect(campoQuantidade()).toHaveValue('0')
+      expect(campoMotivo()).toHaveValue('CONTAGEM')
+      expect(within(regiaoDaPrevia()).getByText('Saldo: 12 UN → 0 UN (−12 UN)')).toBeInTheDocument()
+      // O atalho sai da tela depois de aplicado: o unico "Zerar estoque" e o de confirmar.
+      expect(within(dialogo()).getAllByRole('button', { name: 'Zerar estoque' })).toEqual([botaoConfirmar()])
 
-    confirmar()
+      confirmar()
 
-    await waitFor(() => expect(aoConcluir).toHaveBeenCalledWith(MOVIMENTO))
-    expect(ajustarEstoqueMock).toHaveBeenCalledTimes(2)
-    expect(ultimoAjuste().chave).toBe(primeiraChave)
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
+      expect(ultimoAjuste()).toMatchObject({ tipo: 'AJUSTE', quantidade: 0, motivo: 'CONTAGEM', observacao: null })
+    })
+
+    it('o motivo preenchido pode ser trocado', () => {
+      renderModal()
+      fireEvent.click(within(dialogo()).getByRole('button', { name: 'Zerar estoque' }))
+
+      fireEvent.change(campoMotivo(), { target: { value: 'OUTRO' } })
+
+      expect(campoMotivo()).toHaveValue('OUTRO')
+      expect(campoQuantidade()).toHaveValue('0')
+    })
+
+    it('não aparece com saldo zero', () => {
+      renderModal({ saldo: 0 })
+      expect(within(dialogo()).queryByRole('button', { name: 'Zerar estoque' })).not.toBeInTheDocument()
+    })
   })
 
-  it('cada abertura do modal gera uma chave nova', async () => {
-    ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
-    const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
-    const props: ModalAjusteEstoqueProps = {
-      aberto: true,
-      produtoId: ID_ARROZ,
-      saldo: 12,
-      sigla: 'UN',
-      fracionada: false,
-      aoFechar: vi.fn(),
-      aoConcluir: vi.fn(),
-    }
-    const { rerender } = render(
-      <QueryClientProvider client={queryClient}>
-        <ModalAjusteEstoque {...props} />
-      </QueryClientProvider>,
-    )
-    preencherSaida()
-    confirmar()
-    await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
-    const primeira = ultimoAjuste().chave
+  describe('quantidade e fração', () => {
+    it('"2,5" em UN dá o erro de fração sem enviar (Review Focus 5)', async () => {
+      renderModal()
+      preencherSaida('2,5')
 
-    for (const aberto of [false, true]) {
-      rerender(
+      confirmar()
+
+      expect(await screen.findByText('A unidade UN não aceita quantidade fracionada.')).toBeInTheDocument()
+      expect(ajustarEstoqueMock).not.toHaveBeenCalled()
+    })
+
+    it('"2,5" em KG vai como 2.5, com a chave e sem observação vazia', async () => {
+      ajustarEstoqueMock.mockResolvedValue({ ...MOVIMENTO, quantidade: -2.5, saldoNovo: 9.5 })
+      renderModal({ sigla: 'KG', fracionada: true })
+      preencherSaida('2,5')
+
+      confirmar()
+
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
+      expect(ajustarEstoqueMock).toHaveBeenCalledWith(ID_ARROZ, {
+        tipo: 'SAIDA',
+        quantidade: 2.5,
+        motivo: 'PERDA_AVARIA',
+        observacao: null,
+        chave: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
+      })
+    })
+
+    it('contagem com saldo contado 0 envia quantidade: 0', async () => {
+      ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
+      renderModal()
+      escolherTipo('Contagem')
+      fireEvent.change(campoQuantidade(), { target: { value: '0' } })
+
+      confirmar()
+
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
+      expect(ultimoAjuste()).toMatchObject({ tipo: 'AJUSTE', quantidade: 0, motivo: 'CONTAGEM' })
+    })
+  })
+
+  describe('envio e idempotência', () => {
+    it('duplo clique em confirmar envia uma vez só e o botão fica desabilitado', async () => {
+      ajustarEstoqueMock.mockReturnValue(new Promise(() => {}))
+      renderModal()
+      preencherSaida()
+
+      confirmar()
+      confirmar()
+
+      await waitFor(() => expect(botaoConfirmar()).toBeDisabled())
+      expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('erro de rede: recarrega o produto e a nova tentativa usa a mesma chave (Review Focus 3)', async () => {
+      ajustarEstoqueMock
+        .mockRejectedValueOnce(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
+        .mockResolvedValueOnce(MOVIMENTO)
+      const { aoConcluir, queryClient } = renderModal()
+      queryClient.setQueryData(CHAVE_DO_PRODUTO, {})
+      preencherSaida()
+
+      confirmar()
+
+      expect(
+        await screen.findByText('Não foi possível registrar o ajuste. Confira a conexão e tente de novo.'),
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/Nao foi possivel conectar/)).not.toBeInTheDocument()
+      // O saldo real aparece antes de tentar de novo (o envio pode ter chegado ao servidor).
+      expect(queryClient.getQueryState(CHAVE_DO_PRODUTO)?.isInvalidated).toBe(true)
+      const primeiraChave = ultimoAjuste().chave
+
+      confirmar()
+
+      await waitFor(() => expect(aoConcluir).toHaveBeenCalledWith(MOVIMENTO))
+      expect(ajustarEstoqueMock).toHaveBeenCalledTimes(2)
+      expect(ultimoAjuste().chave).toBe(primeiraChave)
+    })
+
+    it('cada abertura do modal gera uma chave nova', async () => {
+      ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
+      const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
+      const props: ModalAjusteEstoqueProps = {
+        aberto: true,
+        produtoId: ID_ARROZ,
+        saldo: 12,
+        sigla: 'UN',
+        fracionada: false,
+        aoFechar: vi.fn(),
+        aoConcluir: vi.fn(),
+      }
+      const { rerender } = render(
         <QueryClientProvider client={queryClient}>
-          <ModalAjusteEstoque {...props} aberto={aberto} />
+          <ModalAjusteEstoque {...props} />
         </QueryClientProvider>,
       )
-    }
-    preencherSaida()
-    confirmar()
+      preencherSaida()
+      confirmar()
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
+      const primeira = ultimoAjuste().chave
 
-    await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(2))
-    expect(ultimoAjuste().chave).not.toBe(primeira)
-  })
+      for (const aberto of [false, true]) {
+        rerender(
+          <QueryClientProvider client={queryClient}>
+            <ModalAjusteEstoque {...props} aberto={aberto} />
+          </QueryClientProvider>,
+        )
+      }
+      preencherSaida()
+      confirmar()
 
-  it('400 do servidor com campos mostra o erro no campo', async () => {
-    ajustarEstoqueMock.mockRejectedValue(
-      new HttpError(400, 'Dados invalidos.', { quantidade: 'Saldo insuficiente: há 1 UN.' }),
-    )
-    renderModal()
-    preencherSaida()
-
-    confirmar()
-
-    expect(await screen.findByText('Saldo insuficiente: há 1 UN.')).toBeInTheDocument()
-    expect(campoQuantidade()).toHaveAccessibleDescription('Saldo insuficiente: há 1 UN.')
-    // Mudar o campo tira o erro do servidor.
-    fireEvent.change(campoQuantidade(), { target: { value: '1' } })
-    expect(screen.queryByText('Saldo insuficiente: há 1 UN.')).not.toBeInTheDocument()
-  })
-
-  it('400 sem campos (produto sem controle) mostra a mensagem no topo', async () => {
-    ajustarEstoqueMock.mockRejectedValue(new HttpError(400, 'Este produto não controla estoque.'))
-    renderModal()
-    preencherSaida()
-
-    confirmar()
-
-    expect(await within(dialogo()).findByRole('alert')).toHaveTextContent('Este produto não controla estoque.')
-  })
-
-  it('409 mostra a mensagem no topo, atualiza o produto e a próxima tentativa é uma operação nova', async () => {
-    ajustarEstoqueMock
-      .mockRejectedValueOnce(new HttpError(409, 'Esta operação já foi registrada com outros dados.'))
-      .mockResolvedValueOnce(MOVIMENTO)
-    const { queryClient } = renderModal()
-    const chaveDoProduto = [...PRODUTOS_QUERY_KEY, 'detalhe', ID_ARROZ]
-    queryClient.setQueryData(chaveDoProduto, { id: ID_ARROZ })
-    preencherSaida()
-
-    confirmar()
-
-    expect(await within(dialogo()).findByRole('alert')).toHaveTextContent(
-      'Esta operação já foi registrada com outros dados.',
-    )
-    expect(queryClient.getQueryState(chaveDoProduto)?.isInvalidated).toBe(true)
-    const primeira = ultimoAjuste().chave
-
-    confirmar()
-
-    await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(2))
-    expect(ultimoAjuste().chave).not.toBe(primeira)
-  })
-
-  it('403 e falha interna usam textos fixos, sem vazar detalhe', async () => {
-    ajustarEstoqueMock
-      .mockRejectedValueOnce(new HttpError(403, 'Forbidden'))
-      .mockRejectedValueOnce(new HttpError(500, 'NullPointerException'))
-    renderModal()
-    preencherSaida()
-
-    confirmar()
-    expect(await screen.findByText('Somente administradores podem ajustar o estoque.')).toBeInTheDocument()
-
-    confirmar()
-    expect(await screen.findByText('Não foi possível registrar o ajuste. Confira a conexão e tente de novo.')).toBeInTheDocument()
-    expect(screen.queryByText(/NullPointer|Forbidden/)).not.toBeInTheDocument()
-  })
-
-  it('sucesso: avisa a página com o movimento e invalida os produtos (detalhe, listas e histórico)', async () => {
-    ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
-    const { aoConcluir, queryClient } = renderModal()
-    const chaves = [
-      [...PRODUTOS_QUERY_KEY, 'detalhe', ID_ARROZ],
-      [...PRODUTOS_QUERY_KEY, { busca: '', status: 'todos' }],
-      [...PRODUTOS_QUERY_KEY, ID_ARROZ, 'movimentos-estoque'],
-    ]
-    for (const chave of chaves) {
-      queryClient.setQueryData(chave, {})
-    }
-    preencherSaida()
-
-    confirmar()
-
-    await waitFor(() => expect(aoConcluir).toHaveBeenCalledWith(MOVIMENTO))
-    for (const chave of chaves) {
-      expect(queryClient.getQueryState(chave)?.isInvalidated).toBe(true)
-    }
-  })
-
-  it('Enter num campo confirma (envio do próprio formulário do modal)', async () => {
-    ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
-    renderModal()
-    preencherSaida()
-
-    await act(async () => {
-      fireEvent.submit(campoQuantidade().closest('form') as HTMLFormElement)
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(2))
+      expect(ultimoAjuste().chave).not.toBe(primeira)
     })
 
-    expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1)
+    it('o envio do formulário do modal (o Enter num campo) confirma', async () => {
+      ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
+      renderModal()
+      preencherSaida()
+
+      await act(async () => {
+        fireEvent.submit(campoQuantidade().closest('form') as HTMLFormElement)
+      })
+
+      expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('sucesso: avisa a página com o movimento e invalida os produtos (detalhe, listas e histórico)', async () => {
+      ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
+      const { aoConcluir, queryClient } = renderModal()
+      const chaves = [
+        CHAVE_DO_PRODUTO,
+        [...PRODUTOS_QUERY_KEY, { busca: '', status: 'todos' }],
+        [...PRODUTOS_QUERY_KEY, ID_ARROZ, 'movimentos-estoque'],
+      ]
+      for (const chave of chaves) {
+        queryClient.setQueryData(chave, {})
+      }
+      preencherSaida()
+
+      confirmar()
+
+      await waitFor(() => expect(aoConcluir).toHaveBeenCalledWith(MOVIMENTO))
+      for (const chave of chaves) {
+        expect(queryClient.getQueryState(chave)?.isInvalidated).toBe(true)
+      }
+    })
   })
 
-  it('Esc fecha', () => {
-    const { aoFechar } = renderModal()
+  describe('erros do servidor', () => {
+    it('400 com campos mostra o erro no campo e leva o foco a ele', async () => {
+      ajustarEstoqueMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { quantidade: 'Saldo insuficiente: há 1 UN.' }),
+      )
+      renderModal()
+      preencherSaida()
 
-    fireEvent.keyDown(dialogo(), { key: 'Escape' })
+      confirmar()
 
-    expect(aoFechar).toHaveBeenCalled()
+      expect(await screen.findByText('Saldo insuficiente: há 1 UN.')).toBeInTheDocument()
+      await waitFor(() => expect(campoQuantidade()).toHaveFocus())
+      expect(campoQuantidade()).toHaveAccessibleDescription('Saldo insuficiente: há 1 UN.')
+      // Mudar o campo tira o erro do servidor.
+      fireEvent.change(campoQuantidade(), { target: { value: '1' } })
+      expect(screen.queryByText('Saldo insuficiente: há 1 UN.')).not.toBeInTheDocument()
+    })
+
+    it('400 sem campos (produto sem controle) mostra a mensagem no topo, com o foco nela', async () => {
+      ajustarEstoqueMock.mockRejectedValue(new HttpError(400, 'Este produto não controla estoque.'))
+      renderModal()
+      preencherSaida()
+
+      confirmar()
+
+      const alerta = await within(dialogo()).findByRole('alert')
+      expect(alerta).toHaveTextContent('Este produto não controla estoque.')
+      await waitFor(() => expect(alerta.parentElement).toHaveFocus())
+    })
+
+    it('409: texto fixo, recarrega o produto e a próxima tentativa é uma operação nova', async () => {
+      ajustarEstoqueMock
+        .mockRejectedValueOnce(new HttpError(409, 'Esta operação já foi registrada com outros dados.'))
+        .mockResolvedValueOnce(MOVIMENTO)
+      const { queryClient } = renderModal()
+      queryClient.setQueryData(CHAVE_DO_PRODUTO, { id: ID_ARROZ })
+      preencherSaida()
+
+      confirmar()
+
+      expect(await within(dialogo()).findByRole('alert')).toHaveTextContent(
+        'Um ajuste deste produto já foi registrado agora há pouco. Confira o saldo atual antes de confirmar de novo.',
+      )
+      expect(queryClient.getQueryState(CHAVE_DO_PRODUTO)?.isInvalidated).toBe(true)
+      const primeira = ultimoAjuste().chave
+
+      confirmar()
+
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(2))
+      expect(ultimoAjuste().chave).not.toBe(primeira)
+    })
+
+    it('403, 404 e falha interna usam textos fixos, sem vazar detalhe; 5xx recarrega o produto', async () => {
+      ajustarEstoqueMock
+        .mockRejectedValueOnce(new HttpError(403, 'Forbidden'))
+        .mockRejectedValueOnce(new HttpError(404, 'Not Found'))
+        .mockRejectedValueOnce(new HttpError(500, 'NullPointerException'))
+      const { queryClient } = renderModal()
+      preencherSaida()
+
+      confirmar()
+      expect(await screen.findByText('Somente administradores podem ajustar o estoque.')).toBeInTheDocument()
+
+      confirmar()
+      expect(await screen.findByText('Este produto não existe mais. Atualize a tela.')).toBeInTheDocument()
+
+      queryClient.setQueryData(CHAVE_DO_PRODUTO, {})
+      confirmar()
+      expect(
+        await screen.findByText('Não foi possível registrar o ajuste. Confira a conexão e tente de novo.'),
+      ).toBeInTheDocument()
+      expect(queryClient.getQueryState(CHAVE_DO_PRODUTO)?.isInvalidated).toBe(true)
+      expect(screen.queryByText(/NullPointer|Forbidden|Not Found/)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('fechar', () => {
+    it('Esc fecha', () => {
+      const { aoFechar } = renderModal()
+
+      fireEvent.keyDown(dialogo(), { key: 'Escape' })
+
+      expect(aoFechar).toHaveBeenCalled()
+    })
+
+    it('durante o envio, Esc não fecha e não há botão de fechar', async () => {
+      ajustarEstoqueMock.mockReturnValue(new Promise(() => {}))
+      const { aoFechar } = renderModal()
+      preencherSaida()
+      confirmar()
+      await waitFor(() => expect(botaoConfirmar()).toBeDisabled())
+      expect(aoFechar).not.toHaveBeenCalled()
+
+      fireEvent.keyDown(dialogo(), { key: 'Escape' })
+
+      expect(aoFechar).not.toHaveBeenCalled()
+      expect(within(dialogo()).queryByRole('button', { name: 'Fechar' })).not.toBeInTheDocument()
+    })
   })
 })

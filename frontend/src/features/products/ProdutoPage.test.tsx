@@ -2623,7 +2623,9 @@ describe('ProdutoPage', () => {
 
       expect(screen.queryByRole('group', { name: 'Saldo atual' })).not.toBeInTheDocument()
       expect(
-        screen.getByText('O saldo atual de 12 UN fica guardado e volta se você religar o controle.'),
+        screen.getByText(
+          'Ao salvar, o saldo de 12 UN deixa de aparecer e de ser atualizado. Ele fica guardado e volta se você religar o controle.',
+        ),
       ).toBeInTheDocument()
 
       fireEvent.click(botaoSalvar())
@@ -2757,6 +2759,106 @@ describe('ProdutoPage', () => {
       expect(screen.getByLabelText(/estoque máximo/i)).toBeInTheDocument()
       expect(screen.getByText('O estoque máximo não pode ser menor que o ponto de reposição.')).toBeInTheDocument()
       expect(interruptorControle()).toHaveAttribute('aria-checked', 'false')
+      expect(screen.getByText('Corrija ou apague estes valores para salvar.')).toBeInTheDocument()
+
+      // Corrigir o valor nao tira o campo da tela (o foco nao some no meio da edicao).
+      const maximo = screen.getByLabelText(/estoque máximo/i)
+      maximo.focus()
+      fireEvent.change(maximo, { target: { value: '' } })
+
+      expect(screen.getByLabelText(/estoque máximo/i)).toBe(maximo)
+      expect(maximo).toHaveFocus()
+      await waitFor(() =>
+        expect(screen.queryByText('O estoque máximo não pode ser menor que o ponto de reposição.')).not.toBeInTheDocument(),
+      )
+      expect(screen.getByLabelText(/estoque máximo/i)).toBe(maximo)
+
+      // Religar o controle volta ao normal (e desligar de novo esconde os niveis, agora sem erro).
+      fireEvent.click(interruptorControle())
+      fireEvent.click(interruptorControle())
+      expect(screen.queryByLabelText(/estoque máximo/i)).not.toBeInTheDocument()
+    })
+
+    it('os níveis mostram a sigla da unidade de venda e explicam o selo de estoque baixo', async () => {
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/estoque/i)
+
+      expect(screen.getByLabelText('Estoque mínimo em UN (opcional)')).toBeInTheDocument()
+      expect(screen.getByLabelText('Ponto de reposição em UN (opcional)')).toBeInTheDocument()
+      expect(screen.getByLabelText('Estoque máximo em UN (opcional)')).toBeInTheDocument()
+      expect(
+        screen.getByText(
+          'O selo Estoque baixo aparece quando o saldo chega ao ponto de reposição (ou ao mínimo, se o ponto estiver vazio).',
+        ),
+      ).toBeInTheDocument()
+    })
+
+    it('depois do envio, mudar o mínimo revalida o ponto de reposição e o máximo', async () => {
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      abrirAba(/estoque/i)
+      fireEvent.change(screen.getByLabelText(/estoque mínimo/i), { target: { value: '5' } })
+      fireEvent.change(screen.getByLabelText(/ponto de reposição/i), { target: { value: '3' } })
+      fireEvent.click(botaoSalvar())
+      expect(
+        await screen.findByText('O ponto de reposição não pode ser menor que o estoque mínimo.'),
+      ).toBeInTheDocument()
+
+      fireEvent.change(screen.getByLabelText(/estoque mínimo/i), { target: { value: '2' } })
+
+      await waitFor(() =>
+        expect(screen.queryByText('O ponto de reposição não pode ser menor que o estoque mínimo.')).not.toBeInTheDocument(),
+      )
+
+      fireEvent.change(screen.getByLabelText(/estoque máximo/i), { target: { value: '1' } })
+      expect(
+        await screen.findByText('O estoque máximo não pode ser menor que o ponto de reposição.'),
+      ).toBeInTheDocument()
+      fireEvent.change(screen.getByLabelText(/ponto de reposição/i), { target: { value: '1' } })
+      await waitFor(() =>
+        expect(screen.queryByText('O estoque máximo não pode ser menor que o ponto de reposição.')).not.toBeInTheDocument(),
+      )
+    })
+
+    it('400 do servidor em unidadeId vai ao campo de unidade na aba Geral', async () => {
+      atualizarProdutoMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', {
+          unidadeId: 'Não é possível trocar a unidade de um produto com movimentação de estoque.',
+        }),
+      )
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/estoque/i)
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(aba(/geral/i)).toHaveAttribute('aria-selected', 'true'))
+      expect(
+        screen.getByText('Não é possível trocar a unidade de um produto com movimentação de estoque.'),
+      ).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByLabelText(/unidade de venda/i)).toHaveFocus())
+    })
+
+    it('o diálogo de exclusão avisa que o estoque inicial também será apagado', async () => {
+      renderEdicao()
+      await esperarFormulario()
+
+      fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))
+
+      const dialogo = await screen.findByRole('dialog', { name: 'Excluir Arroz 5kg?' })
+      expect(within(dialogo).getByText('O estoque inicial de 12 UN também será apagado.')).toBeInTheDocument()
+    })
+
+    it('sem saldo, o diálogo de exclusão não fala de estoque', async () => {
+      renderEdicao({ ...produtoAtivo, estoqueAtual: 0, situacaoEstoque: 'SEM_ESTOQUE' })
+      await esperarFormulario()
+
+      fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))
+
+      const dialogo = await screen.findByRole('dialog', { name: 'Excluir Arroz 5kg?' })
+      expect(within(dialogo).queryByText(/estoque inicial/)).not.toBeInTheDocument()
     })
   })
 
@@ -2776,6 +2878,12 @@ describe('ProdutoPage', () => {
 
     function botaoAjustar(): HTMLElement {
       return screen.getByRole('button', { name: 'Ajustar estoque' })
+    }
+
+    /** O botao de confirmar do modal (o rotulo diz a acao, ex.: "Registrar saída"). */
+    function confirmarNoModal() {
+      const modal = screen.getByRole('dialog', { name: 'Ajustar estoque' })
+      fireEvent.click(modal.querySelector('button[type="submit"]') as HTMLElement)
     }
 
     async function abrirEstoqueDaEdicao(produto: Produto = produtoAtivo) {
@@ -2807,10 +2915,18 @@ describe('ProdutoPage', () => {
       expect(screen.queryByRole('button', { name: 'Ajustar estoque' })).not.toBeInTheDocument()
     })
 
-    it('não aparece no cadastro novo nem com o controle desligado', async () => {
+    it('não aparece no cadastro novo', async () => {
       renderNovo()
       await esperarFormulario()
       abrirAba(/estoque/i)
+      expect(screen.queryByRole('button', { name: 'Ajustar estoque' })).not.toBeInTheDocument()
+    })
+
+    it('desligar o controle na edição tira o botão da tela', async () => {
+      await abrirEstoqueDaEdicao()
+
+      fireEvent.click(screen.getByRole('switch', { name: 'Controlar estoque' }))
+
       expect(screen.queryByRole('button', { name: 'Ajustar estoque' })).not.toBeInTheDocument()
     })
 
@@ -2819,34 +2935,98 @@ describe('ProdutoPage', () => {
       expect(screen.queryByRole('button', { name: 'Ajustar estoque' })).not.toBeInTheDocument()
     })
 
-    it('com alterações pendentes fica desabilitado, com a dica de salvar antes', async () => {
-      await abrirEstoqueDaEdicao()
+    it('trocar a unidade de venda bloqueia o ajuste, com a dica alcançável pelo teclado', async () => {
+      renderEdicao()
+      await esperarFormulario()
+      await selecionarUnidadeVenda('kg')
+      abrirAba(/estoque/i)
 
-      fireEvent.change(screen.getByLabelText(/estoque mínimo/i), { target: { value: '3' } })
-
-      expect(botaoAjustar()).toBeDisabled()
-      expect(botaoAjustar()).toHaveAccessibleDescription('Salve o produto antes de ajustar o estoque.')
+      expect(botaoAjustar()).toHaveAttribute('aria-disabled', 'true')
+      expect(botaoAjustar()).toBeEnabled()
+      expect(botaoAjustar()).toHaveAccessibleDescription(
+        'Salve a mudança de controle ou de unidade antes de ajustar o estoque.',
+      )
+      fireEvent.click(botaoAjustar())
+      expect(screen.queryByRole('dialog', { name: 'Ajustar estoque' })).not.toBeInTheDocument()
     })
 
-    it('sucesso fecha o modal, mostra "Estoque atualizado: 10 UN." e atualiza o saldo sem marcar o formulário', async () => {
+    it('produto salvo sem controle e com saldo: ligar mostra o saldo e o ajuste fica bloqueado até salvar', async () => {
+      await abrirEstoqueDaEdicao({ ...produtoAtivo, controlaEstoque: false, situacaoEstoque: null })
+
+      fireEvent.click(screen.getByRole('switch', { name: 'Controlar estoque' }))
+
+      expect(screen.getByRole('group', { name: 'Saldo atual' })).toHaveTextContent('12 UN')
+      expect(botaoAjustar()).toHaveAttribute('aria-disabled', 'true')
+      expect(botaoAjustar()).toHaveAccessibleDescription(
+        'Salve a mudança de controle ou de unidade antes de ajustar o estoque.',
+      )
+    })
+
+    it('desligar e religar o controle volta ao saldo, tira o aviso e libera o ajuste', async () => {
+      await abrirEstoqueDaEdicao()
+      const interruptor = screen.getByRole('switch', { name: 'Controlar estoque' })
+
+      fireEvent.click(interruptor)
+      expect(screen.getByText(/fica guardado/)).toBeInTheDocument()
+      fireEvent.click(interruptor)
+
+      expect(screen.getByRole('group', { name: 'Saldo atual' })).toHaveTextContent('12 UN')
+      expect(screen.queryByText(/fica guardado/)).not.toBeInTheDocument()
+      expect(botaoAjustar()).not.toHaveAttribute('aria-disabled')
+    })
+
+    it('outras alterações não bloqueiam: o ajuste mantém o que foi digitado e o formulário segue alterado', async () => {
+      ajustarEstoqueMock.mockResolvedValue(SAIDA)
+      atualizarProdutoMock.mockResolvedValue(produtoAtivo)
+      renderEdicao()
+      await esperarFormulario()
+      fireEvent.change(campoNome(), { target: { value: 'Arroz Tio João 5kg' } })
+      abrirAba(/estoque/i)
+      fireEvent.change(screen.getByLabelText(/estoque mínimo/i), { target: { value: '3' } })
+      buscarProdutoMock.mockResolvedValue({ ...produtoAtivo, estoqueAtual: 10 })
+
+      expect(botaoAjustar()).not.toHaveAttribute('aria-disabled')
+      fireEvent.click(botaoAjustar())
+      registrarSaidaDeDois()
+      confirmarNoModal()
+
+      expect(await screen.findByText('Saída de 2 UN registrada. Saldo: 10 UN.')).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByRole('group', { name: 'Saldo atual' })).toHaveTextContent('10 UN'))
+      expect(screen.getByLabelText(/estoque mínimo/i)).toHaveValue('3')
+      abrirAba(/geral/i)
+      expect(campoNome()).toHaveValue('Arroz Tio João 5kg')
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(
+          ID_ARROZ,
+          expect.objectContaining({ nome: 'Arroz Tio João 5kg', estoqueMinimo: 3 }),
+        ),
+      )
+    })
+
+    it('sucesso fecha o modal, mostra a mensagem e atualiza o saldo sem marcar o formulário', async () => {
       ajustarEstoqueMock.mockResolvedValue(SAIDA)
       await abrirEstoqueDaEdicao()
       buscarProdutoMock.mockResolvedValue({ ...produtoAtivo, estoqueAtual: 10 })
 
       fireEvent.click(botaoAjustar())
       registrarSaidaDeDois()
-      fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+      confirmarNoModal()
 
-      expect(await screen.findByText('Estoque atualizado: 10 UN.')).toBeInTheDocument()
+      expect(await screen.findByText('Saída de 2 UN registrada. Saldo: 10 UN.')).toBeInTheDocument()
       expect(screen.queryByRole('dialog', { name: 'Ajustar estoque' })).not.toBeInTheDocument()
       await waitFor(() => expect(screen.getByRole('group', { name: 'Saldo atual' })).toHaveTextContent('10 UN'))
-      // O ajuste nao e alteracao do formulario: o botao continua liberado e salvar nao foi chamado.
-      expect(botaoAjustar()).toBeEnabled()
+      // O ajuste nao e alteracao do formulario: sair nao pede confirmacao e salvar nao foi chamado.
+      expect(botaoAjustar()).not.toHaveAttribute('aria-disabled')
       expect(atualizarProdutoMock).not.toHaveBeenCalled()
       await waitFor(() => expect(botaoAjustar()).toHaveFocus())
+      fireEvent.click(screen.getByRole('link', { name: /voltar para produtos/i }))
+      expect(await screen.findByRole('heading', { name: 'Lista de produtos' })).toBeInTheDocument()
     })
 
-    it('Enter no modal confirma o ajuste e não envia o formulário do produto', async () => {
+    it('o envio do formulário do modal confirma o ajuste e não envia o formulário do produto', async () => {
       ajustarEstoqueMock.mockResolvedValue(SAIDA)
       await abrirEstoqueDaEdicao()
       fireEvent.click(botaoAjustar())
@@ -2866,8 +3046,11 @@ describe('ProdutoPage', () => {
       const modal = registrarSaidaDeDois()
 
       fireEvent.keyDown(within(modal).getByRole('textbox', { name: /^quantidade/i }), { key: 'Enter', ctrlKey: true })
+      // O salvar do produto e assincrono (validacao do handleSubmit): espera antes de afirmar que nao houve.
+      await act(async () => {})
 
       expect(atualizarProdutoMock).not.toHaveBeenCalled()
+      expect(screen.getByRole('dialog', { name: 'Ajustar estoque' })).toBeInTheDocument()
     })
   })
 
