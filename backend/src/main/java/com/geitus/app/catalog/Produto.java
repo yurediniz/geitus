@@ -1,6 +1,7 @@
 package com.geitus.app.catalog;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -118,6 +119,21 @@ public class Produto {
 
     @Column(length = 50)
     private String sku;
+
+    @Column(name = "preco_promocional", precision = 12, scale = 2)
+    private BigDecimal precoPromocional;
+
+    @Column(name = "promocao_inicio")
+    private LocalDate promocaoInicio;
+
+    @Column(name = "promocao_fim")
+    private LocalDate promocaoFim;
+
+    @Column(name = "preco_atacado", precision = 12, scale = 2)
+    private BigDecimal precoAtacado;
+
+    @Column(name = "quantidade_minima_atacado", precision = 12, scale = 3)
+    private BigDecimal quantidadeMinimaAtacado;
 
     @Column(nullable = false)
     private boolean ativo = true;
@@ -352,6 +368,31 @@ public class Produto {
 
     public String getSku() {
         return sku;
+    }
+
+    /** Preco promocional, ou {@code null} sem promocao (V8: os tres campos da promocao vem juntos). */
+    public BigDecimal getPrecoPromocional() {
+        return precoPromocional;
+    }
+
+    /** Primeiro dia da promocao (inclusivo), ou {@code null} sem promocao. */
+    public LocalDate getPromocaoInicio() {
+        return promocaoInicio;
+    }
+
+    /** Ultimo dia da promocao (inclusivo), ou {@code null} sem promocao. */
+    public LocalDate getPromocaoFim() {
+        return promocaoFim;
+    }
+
+    /** Preco de atacado, ou {@code null} sem atacado (V8: vem junto com a quantidade minima). */
+    public BigDecimal getPrecoAtacado() {
+        return precoAtacado;
+    }
+
+    /** Quantidade a partir da qual o atacado vale (maior que 1), ou {@code null} sem atacado. */
+    public BigDecimal getQuantidadeMinimaAtacado() {
+        return quantidadeMinimaAtacado;
     }
 
     public boolean isAtivo() {
