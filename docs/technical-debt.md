@@ -312,7 +312,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Modulo:** Backend (Catalogo — Produtos)
 - **Origem:** Revisoes (security-reviewer e data-reviewer) da Fase B
 - **Prioridade:** media (obrigatoria antes de existir venda/estoque)
-- **Status:** aberto
+- **Status:** parcialmente resolvido (Fase D)
 - **Descricao:** A exclusao fisica de produto (DEC-032) hoje so deixa um log INFO com ids. `podeExcluir` sempre devolve `true` (ainda nao ha vendas nem movimentacoes) e e chamado por produto na listagem.
 - **Impacto:** Sem auditoria persistente, uma exclusao por engano ou ma-fe nao e rastreavel; sem defesa no banco, uma tabela futura com `ON DELETE CASCADE` apagaria historico.
 - **Quando revisar:** Na Fase C (historico de precos) e obrigatoriamente na Fase D (movimentos) e no PDV (etapa 11).
@@ -322,6 +322,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
   - `podeExcluir` real em lote (sem N+1).
   - Converter a violacao de FK no DELETE em 409 com a mensagem de exclusao bloqueada.
   - Registrar a exclusao numa tabela de auditoria sem FK para `produtos`.
+  - **Resolvido na Fase D (DEC-034):** `movimentos_estoque` e `estoque_saldos` referenciam o produto por FK composta com `ON DELETE RESTRICT`; `podeExcluir` real e em lote; violacao de FK no DELETE vira 409. **Continua aberto:** a auditoria persistente da exclusao (hoje so o log INFO, que tambem registra a quantidade do estoque inicial apagado).
   - **Atualizacao Fase C (DEC-033):** o historico de precos (`produto_historico_precos`) sai em cascata (`ON DELETE CASCADE`) quando o produto e excluido. Hoje o unico rastro que sobra e o log INFO com ids. A auditoria de exclusao deve guardar um retrato do ultimo preco e custo, ou registrar a decisao de nao guardar.
 
 ## DT-029 — Endurecimentos menores da Fase B
@@ -390,6 +391,38 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
   - **Validacao manual:** `CampoMoeda` em Android (Gboard e teclado Samsung) e iOS.
 - **Impacto:** Organizacao, acessibilidade e robustez; nenhum risco imediato.
 - **Quando revisar:** Na Fase E ou antes de reaproveitar o `CampoMoeda` no Caixa/PDV.
+
+## DT-032 — Endurecimentos e regras futuras do estoque basico (Fase D)
+
+- **ID:** DT-032
+- **Modulo:** Backend/Frontend (Estoque — inventory)
+- **Origem:** Revisoes da Fase D
+- **Prioridade:** media (itens marcados sao obrigatorios antes do PDV)
+- **Status:** aberto
+- **Descricao:**
+  - **Banco:**
+    - imutabilidade de `movimentos_estoque` so por convencao: trigger `BEFORE UPDATE` (proibir) e `BEFORE DELETE` (so `origem = 'CADASTRO'`);
+    - ordenar o historico so por `id DESC` quando resolver a DT-030 (o `criado_em` usa o relogio da JVM).
+  - **Consultas:**
+    - `algumProdutoDaUnidadeTemMovimentos` com `count` sobre todos os movimentos; trocar por `EXISTS` a partir de `produtos`.
+  - **Concorrencia:**
+    - desligar `fracionada` de uma unidade nao trava os produtos, entao um ajuste fracionado simultaneo pode passar (risco baixo).
+  - **Seguranca:**
+    - perfil do JWT nao e revalidado no banco: um ADMIN rebaixado continua com acesso ate o token expirar (transversal, todas as rotas ADMIN).
+  - **API:**
+    - `tipo`/`motivo` invalidos dao 400 generico, sem `campos`;
+    - deteccao da violacao da chave pelo texto da mensagem (usar o nome da constraint do Hibernate).
+  - **Organizacao:**
+    - mover `Paginacao`/`PaginaResponse` para `shared` e criar uma excecao de conflito propria do estoque quando Caixa ou Vendas precisarem.
+  - **Frontend:**
+    - "1.500" em KG e lido como 1,5 (ponto como decimal); avaliar dica ou recusa;
+    - modal usa `useState` e validacao em funcoes puras, nao RHF + Zod (excecao consciente pelo tamanho do formulario).
+  - **Obrigatorio antes do PDV:**
+    - toda baixa por venda deve travar o produto antes de inserir (mesma ordem de travas do ajuste) e, numa venda com varios itens, travar os produtos em ordem de `id`;
+    - a chave de idempotencia unica por empresa nao aceita varios movimentos por venda: usar chave por item/consequencia ou `(empresa_id, origem, chave)`;
+    - registrar a escolha de trava pessimista no lugar do bloqueio otimista do principio 9.
+- **Impacto:** Robustez e preparacao do PDV; nenhum risco imediato no uso atual.
+- **Quando revisar:** Na spec do PDV (etapa 11) e no endurecimento pre-deploy.
 
 ## DT-026 — Teto de profundidade e de quantidade na arvore de categorias
 
