@@ -114,7 +114,38 @@ describe('httpClient', () => {
   })
 
   describe('mapeamento de erros', () => {
-    it('mapeia 400 para HttpError com campos quando o backend os fornece', async () => {
+    it('normaliza a lista de campos do backend (ApiError.CampoInvalido) em Record', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(
+        respostaFake(400, {
+          mensagem: 'Um ou mais campos sao invalidos.',
+          campos: [{ campo: 'telefone', mensagem: 'Telefone inválido.' }],
+        }),
+      )
+
+      const erro = await apiPost('/clientes', {}).catch((e: unknown) => e)
+      expect(erro).toBeInstanceOf(HttpError)
+      expect((erro as HttpError).campos).toEqual({ telefone: 'Telefone inválido.' })
+    })
+
+    it('ignora itens malformados na lista de campos', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(
+        respostaFake(400, {
+          campos: [{ campo: 'nome', mensagem: 'Informe o nome.' }, { campo: 'cpf' }, 'texto', null],
+        }),
+      )
+
+      const erro = await apiPost('/clientes', {}).catch((e: unknown) => e)
+      expect((erro as HttpError).campos).toEqual({ nome: 'Informe o nome.' })
+    })
+
+    it('mantem undefined quando o corpo 400 nao traz campos', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(400, { mensagem: 'CPF inválido.' }))
+
+      const erro = await apiPost('/clientes', {}).catch((e: unknown) => e)
+      expect((erro as HttpError).campos).toBeUndefined()
+    })
+
+    it('aceita campos ja no formato Record', async () => {
       vi.mocked(globalThis.fetch).mockResolvedValue(
         respostaFake(400, { mensagem: 'Um ou mais campos sao invalidos.', campos: { email: 'Informe o e-mail.' } }),
       )

@@ -5,6 +5,7 @@ import {
   cpfValido,
   mascararCpf,
   mascararTelefone,
+  normalizarDigitosTelefone,
   telefoneValido,
 } from '@/lib/documentos'
 
@@ -24,6 +25,20 @@ describe('documentos', () => {
     expect(mascararTelefone('1133224455')).toBe('(11) 3322-4455')
   })
 
+  it('remove o codigo do pais (+55) de telefones colados', () => {
+    expect(normalizarDigitosTelefone('+55 11 98765-4321')).toBe('11987654321')
+    expect(normalizarDigitosTelefone('551133224455')).toBe('1133224455')
+    expect(normalizarDigitosTelefone('11987654321')).toBe('11987654321')
+    // DDD 55 sem codigo do pais permanece intacto.
+    expect(normalizarDigitosTelefone('55987654321')).toBe('55987654321')
+  })
+
+  it('mascara telefone colado com +55 sem tratar o 55 como DDD', () => {
+    expect(mascararTelefone('+55 11 98765-4321')).toBe('(11) 98765-4321')
+    expect(mascararTelefone('551133224455')).toBe('(11) 3322-4455')
+    expect(mascararTelefone('11987654321')).toBe('(11) 98765-4321')
+  })
+
   it('valida CPF pelos digitos verificadores', () => {
     expect(cpfValido('111.444.777-35')).toBe(true)
     expect(cpfValido('111.111.111-11')).toBe(false)
@@ -36,5 +51,6 @@ describe('documentos', () => {
     expect(telefoneValido('(01) 98765-4321')).toBe(false)
     expect(telefoneValido('(10) 98765-4321')).toBe(false)
     expect(telefoneValido('(11) 9876-543')).toBe(false)
+    expect(telefoneValido('+55 11 98765-4321')).toBe(true)
   })
 })

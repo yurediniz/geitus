@@ -21,9 +21,22 @@ export function mascararCpf(valor: string): string {
     .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4')
 }
 
+/**
+ * Digitos de um telefone BR sem o codigo do pais: quando ha 12 ou 13 digitos
+ * comecando com 55 (ex.: numero colado como "+55 11 98765-4321"), remove o
+ * prefixo. Evita que o "55" vire DDD e corte o final do numero.
+ */
+export function normalizarDigitosTelefone(valor: string): string {
+  const d = apenasDigitos(valor)
+  if ((d.length === 12 || d.length === 13) && d.startsWith('55')) {
+    return d.slice(2)
+  }
+  return d
+}
+
 /** Formata telefone BR progressivamente: (00) 0000-0000 ou (00) 00000-0000. */
 export function mascararTelefone(valor: string): string {
-  const d = apenasDigitos(valor).slice(0, 11)
+  const d = normalizarDigitosTelefone(valor).slice(0, 11)
   if (d.length <= 10) {
     return d
       .replace(/^(\d{2})(\d)/, '($1) $2')
@@ -69,7 +82,7 @@ export function cpfValido(valor: string): boolean {
  * igual ao `Telefones.valido` do backend.
  */
 export function telefoneValido(valor: string): boolean {
-  const d = apenasDigitos(valor)
+  const d = normalizarDigitosTelefone(valor)
   if (d.length !== 10 && d.length !== 11) {
     return false
   }

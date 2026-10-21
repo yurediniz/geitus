@@ -43,10 +43,41 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
   unauthorizedHandler = handler
 }
 
-/** Formato do corpo de erro padronizado do backend (ApiError). */
+/**
+ * Formato do corpo de erro padronizado do backend (ApiError). O backend envia
+ * `campos` como lista de `{ campo, mensagem }` (ApiError.CampoInvalido); o
+ * tipo fica `unknown` porque o corpo nao e confiavel e e normalizado abaixo.
+ */
 interface ApiErrorBody {
   mensagem?: string
-  campos?: Record<string, string>
+  campos?: unknown
+}
+
+function ehObjeto(valor: unknown): valor is Record<string, unknown> {
+  return typeof valor === 'object' && valor !== null
+}
+
+/**
+ * Converte `campos` do corpo de erro em `Record<campo, mensagem>`. Aceita a
+ * lista do backend e, por compatibilidade, um objeto ja nesse formato. Itens
+ * malformados sao ignorados; sem nenhum campo valido, retorna undefined.
+ */
+function normalizarCampos(campos: unknown): Record<string, string> | undefined {
+  const resultado: Record<string, string> = {}
+  if (Array.isArray(campos)) {
+    for (const item of campos) {
+      if (ehObjeto(item) && typeof item.campo === 'string' && typeof item.mensagem === 'string') {
+        resultado[item.campo] = item.mensagem
+      }
+    }
+  } else if (ehObjeto(campos)) {
+    for (const [campo, mensagem] of Object.entries(campos)) {
+      if (typeof mensagem === 'string') {
+        resultado[campo] = mensagem
+      }
+    }
+  }
+  return Object.keys(resultado).length > 0 ? resultado : undefined
 }
 
 /** Extrai o corpo padronizado de erro, quando presente e no formato esperado. */
@@ -92,8 +123,7 @@ async function tratarErro(resposta: Response, autenticada: boolean): Promise<nev
 
   if (resposta.status === 400) {
     const corpo = await lerCorpoDoErro(resposta)
-    const campos = corpo?.campos && typeof corpo.campos === 'object' ? corpo.campos : undefined
-    throw new HttpError(400, corpo?.mensagem ?? 'Dados invalidos.', campos)
+    throw new HttpError(400, corpo?.mensagem ?? 'Dados invalidos.', normalizarCampos(corpo?.campos))
   }
 
   if (resposta.status === 409) {

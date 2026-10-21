@@ -15,6 +15,7 @@ import {
   cpfValido,
   mascararCpf,
   mascararTelefone,
+  normalizarDigitosTelefone,
   telefoneValido,
 } from '@/lib/documentos'
 import { buscarCep } from '@/services/cepService'
@@ -195,7 +196,7 @@ function montarRequest(valores: EmpresaFormValues): EmpresaAtualizarRequest {
   const inscricao = valores.inscricaoEstadual.trim()
   return {
     nome: valores.nome.trim(),
-    telefone: apenasDigitos(valores.telefone),
+    telefone: normalizarDigitosTelefone(valores.telefone),
     email: valores.email.trim(),
     tipoPessoa: juridica ? 'JURIDICA' : 'FISICA',
     cnpj: juridica ? apenasDigitos(valores.cnpj) : null,
@@ -204,7 +205,7 @@ function montarRequest(valores: EmpresaFormValues): EmpresaAtualizarRequest {
     representanteLegal: {
       nome: valores.representanteNome.trim(),
       cpf: apenasDigitos(valores.representanteCpf),
-      telefone: apenasDigitos(valores.representanteTelefone),
+      telefone: normalizarDigitosTelefone(valores.representanteTelefone),
       email: valores.representanteEmail.trim(),
     },
     endereco: {

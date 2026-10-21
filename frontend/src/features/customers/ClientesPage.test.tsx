@@ -236,6 +236,25 @@ describe('ClientesPage', () => {
     })
   })
 
+  it('telefone colado com +55 e enviado sem o codigo do pais', async () => {
+    listarClientesMock.mockResolvedValue([])
+    cadastrarClienteMock.mockResolvedValue({ ...clienteAtivo, nome: 'Ana', cpf: null })
+
+    renderComProviders(<ClientesPage />)
+
+    const nome = await abrirFormularioNovo()
+    fireEvent.change(nome, { target: { value: 'Ana' } })
+    fireEvent.change(screen.getByLabelText(/^telefone/i), { target: { value: '+55 11 98765-4321' } })
+    expect(screen.getByLabelText(/^telefone/i)).toHaveValue('(11) 98765-4321')
+    salvar()
+
+    await waitFor(() => {
+      expect(cadastrarClienteMock).toHaveBeenCalledWith(
+        expect.objectContaining({ telefone: '11987654321' }),
+      )
+    })
+  })
+
   it('valida cpf invalido no formulario', async () => {
     listarClientesMock.mockResolvedValue([])
 

@@ -11,6 +11,7 @@ import {
   cpfValido,
   mascararCpf,
   mascararTelefone,
+  normalizarDigitosTelefone,
   telefoneValido,
 } from '@/lib/documentos'
 import type { Cliente, ClienteRequest } from '@/types/cliente'
@@ -71,6 +72,12 @@ function digitosOuNulo(valor: string): string | null {
   return digitos === '' ? null : digitos
 }
 
+/** Telefone em digitos sem o codigo do pais (+55); vazio -> null. */
+function telefoneOuNulo(valor: string): string | null {
+  const digitos = normalizarDigitosTelefone(valor)
+  return digitos === '' ? null : digitos
+}
+
 function textoOuNulo(valor: string): string | null {
   const texto = valor.trim()
   return texto === '' ? null : texto
@@ -81,9 +88,9 @@ function montarRequest(valores: ClienteFormValues): ClienteRequest {
   return {
     nome: valores.nome.trim(),
     cpf: digitosOuNulo(valores.cpf),
-    telefone: digitosOuNulo(valores.telefone),
+    telefone: telefoneOuNulo(valores.telefone),
     telefoneEWhatsapp: valores.telefoneEWhatsapp,
-    whatsapp: valores.telefoneEWhatsapp ? null : digitosOuNulo(valores.whatsapp),
+    whatsapp: valores.telefoneEWhatsapp ? null : telefoneOuNulo(valores.whatsapp),
     observacoes: textoOuNulo(valores.observacoes),
   }
 }
