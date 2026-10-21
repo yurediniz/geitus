@@ -22,13 +22,22 @@ export function mascararCpf(valor: string): string {
 }
 
 /**
- * Digitos de um telefone BR sem o codigo do pais: quando ha 12 ou 13 digitos
- * comecando com 55 (ex.: numero colado como "+55 11 98765-4321"), remove o
- * prefixo. Evita que o "55" vire DDD e corte o final do numero.
+ * Digitos de um telefone BR sem o codigo do pais. Remove o prefixo 55 so
+ * quando ele e claramente o codigo do pais:
+ * - o texto comeca com "+55" e tem 12 ou 13 digitos (ex.: "+55 11 98765-4321"); ou
+ * - ha exatamente 13 digitos comecando com 55 (celular colado sem o "+").
+ *
+ * Com 12 digitos e sem "+", nao remove: 55 e um DDD valido (RS), e esse e o
+ * caso de quem digita um digito a mais num numero com DDD 55 — a mascara so
+ * corta o excedente. Digitando no campo mascarado nunca se chega a 13 digitos.
  */
 export function normalizarDigitosTelefone(valor: string): string {
   const d = apenasDigitos(valor)
-  if ((d.length === 12 || d.length === 13) && d.startsWith('55')) {
+  if (!d.startsWith('55')) {
+    return d
+  }
+  const comCodigoDoPais = valor.trim().startsWith('+55') && (d.length === 12 || d.length === 13)
+  if (comCodigoDoPais || d.length === 13) {
     return d.slice(2)
   }
   return d

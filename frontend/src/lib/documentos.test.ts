@@ -25,18 +25,26 @@ describe('documentos', () => {
     expect(mascararTelefone('1133224455')).toBe('(11) 3322-4455')
   })
 
-  it('remove o codigo do pais (+55) de telefones colados', () => {
+  it('remove o codigo do pais so quando ha +55 ou 13 digitos', () => {
     expect(normalizarDigitosTelefone('+55 11 98765-4321')).toBe('11987654321')
-    expect(normalizarDigitosTelefone('551133224455')).toBe('1133224455')
+    expect(normalizarDigitosTelefone('+55 11 3322-4455')).toBe('1133224455')
+    expect(normalizarDigitosTelefone('5511987654321')).toBe('11987654321')
     expect(normalizarDigitosTelefone('11987654321')).toBe('11987654321')
-    // DDD 55 sem codigo do pais permanece intacto.
+    // DDD 55 (RS) sem codigo do pais permanece intacto, inclusive com digito a mais.
     expect(normalizarDigitosTelefone('55987654321')).toBe('55987654321')
+    expect(normalizarDigitosTelefone('551133224455')).toBe('551133224455')
   })
 
-  it('mascara telefone colado com +55 sem tratar o 55 como DDD', () => {
+  it('mascara telefone colado com codigo do pais sem tratar o 55 como DDD', () => {
     expect(mascararTelefone('+55 11 98765-4321')).toBe('(11) 98765-4321')
-    expect(mascararTelefone('551133224455')).toBe('(11) 3322-4455')
+    expect(mascararTelefone('+55 11 3322-4455')).toBe('(11) 3322-4455')
+    expect(mascararTelefone('5511987654321')).toBe('(11) 98765-4321')
     expect(mascararTelefone('11987654321')).toBe('(11) 98765-4321')
+  })
+
+  it('nao reinterpreta digito a mais em numero com DDD 55: so corta o excedente', () => {
+    expect(mascararTelefone('(55) 99876-54321')).toBe('(55) 99876-5432')
+    expect(mascararTelefone('551133224455')).toBe('(55) 11332-2445')
   })
 
   it('valida CPF pelos digitos verificadores', () => {
