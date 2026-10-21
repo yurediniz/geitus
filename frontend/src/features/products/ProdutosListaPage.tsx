@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, Eye, Loader2, Package, Pencil, Plus, RotateCcw, Search, XCircle } from 'lucide-react'
+import { AlertCircle, Eye, Loader2, Package, Pencil, Plus, RotateCcw, Search, SlidersHorizontal, XCircle } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,6 +17,8 @@ import {
   sucessoDaNavegacao,
   type EstadoParaProduto,
 } from '@/features/products/navegacaoProdutos'
+import { mensagemDeSucesso } from '@/features/products/estoque/ajusteEstoque'
+import { ModalAjusteEstoque } from '@/features/products/estoque/ModalAjusteEstoque'
 import { SeloSituacaoEstoque } from '@/features/products/estoque/SeloSituacaoEstoque'
 import { SeloStatus } from '@/features/products/SeloStatus'
 import { useAuth } from '@/hooks/useAuth'
@@ -48,6 +50,8 @@ export function ProdutosListaPage() {
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(() => sucessoDaNavegacao(location.state))
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [acaoStatusId, setAcaoStatusId] = useState<string | null>(null)
+  /** Produto com o modal "Ajustar estoque" aberto (atalho do card, so ADMIN). */
+  const [ajustando, setAjustando] = useState<Produto | null>(null)
   const temEstadoDeNavegacao = sucessoDaNavegacao(location.state) !== null
   useEffect(() => {
     if (temEstadoDeNavegacao) {
@@ -241,14 +245,39 @@ export function ProdutosListaPage() {
                   estadoParaProduto={estadoParaProduto}
                   onAlterarStatus={() => statusMutation.mutate({ produto, proximoAtivo: !produto.ativo })}
                   alterandoStatus={acaoStatusId === produto.id}
+                  onAjustarEstoque={() => setAjustando(produto)}
                 />
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {ajustando && (
+        <ModalAjusteEstoque
+          aberto
+          produtoId={ajustando.id}
+          saldo={ajustando.estoqueAtual}
+          sigla={ajustando.unidade.sigla}
+          fracionada={ajustando.unidade.fracionada}
+          aoFechar={() => setAjustando(null)}
+          focoAoFechar={() => document.getElementById(idDoAtalhoDeEstoque(ajustando.id))}
+          aoConcluir={(movimento) => {
+            // O modal ja invalidou os produtos: a lista recarrega com o saldo novo.
+            const mensagem = mensagemDeSucesso(movimento, ajustando.unidade.sigla)
+            setAjustando(null)
+            setErroGeral(null)
+            setMensagemSucesso(`${ajustando.nome}: ${mensagem.charAt(0).toLowerCase()}${mensagem.slice(1)}`)
+          }}
+        />
+      )}
     </div>
   )
+}
+
+/** Id do botao "Ajustar estoque" do card (recebe o foco quando o modal fecha). */
+function idDoAtalhoDeEstoque(produtoId: string): string {
+  return `ajustar-estoque-${produtoId}`
 }
 
 interface ProdutoItemProps {
@@ -257,6 +286,8 @@ interface ProdutoItemProps {
   estadoParaProduto: EstadoParaProduto
   onAlterarStatus: () => void
   alterandoStatus: boolean
+  /** Abre o modal "Ajustar estoque" (so ADMIN e com o controle ligado). */
+  onAjustarEstoque: () => void
 }
 
 /** "7891000315507" ou "7891000315507 (+2)" quando ha mais codigos. */
@@ -314,7 +345,16 @@ function EstoqueDoProduto({ produto }: { produto: Produto }) {
   )
 }
 
-function ProdutoItem({ produto, somenteLeitura, estadoParaProduto, onAlterarStatus, alterandoStatus }: ProdutoItemProps) {
+function ProdutoItem({
+  produto,
+  somenteLeitura,
+  estadoParaProduto,
+  onAlterarStatus,
+  alterandoStatus,
+  onAjustarEstoque,
+}: ProdutoItemProps) {
+  // Sem controle de estoque, os niveis nao valem nada na tela (o saldo nem aparece).
+  const mostrarNiveis = produto.controlaEstoque
   const margem = formatarPercentual(produto.margem)
   const markup = formatarPercentual(produto.markup)
   const codigos = textoCodigos(produto)
@@ -394,19 +434,19 @@ function ProdutoItem({ produto, somenteLeitura, estadoParaProduto, onAlterarStat
                 <dd>{produto.conversaoTexto}</dd>
               </div>
             )}
-            {produto.estoqueMinimo !== null && (
+            {mostrarNiveis && produto.estoqueMinimo !== null && (
               <div>
                 <dt className="font-medium text-foreground">Estoque mínimo</dt>
                 <dd>{formatarQuantidade(produto.estoqueMinimo, produto.unidade.sigla)}</dd>
               </div>
             )}
-            {produto.estoqueMaximo !== null && (
+            {mostrarNiveis && produto.estoqueMaximo !== null && (
               <div>
                 <dt className="font-medium text-foreground">Estoque máximo</dt>
                 <dd>{formatarQuantidade(produto.estoqueMaximo, produto.unidade.sigla)}</dd>
               </div>
             )}
-            {produto.pontoReposicao !== null && (
+            {mostrarNiveis && produto.pontoReposicao !== null && (
               <div>
                 <dt className="font-medium text-foreground">Ponto de reposição</dt>
                 <dd>{formatarQuantidade(produto.pontoReposicao, produto.unidade.sigla)}</dd>
@@ -427,6 +467,12 @@ function ProdutoItem({ produto, somenteLeitura, estadoParaProduto, onAlterarStat
               <span className="sr-only">{produto.nome}</span>
             </Link>
           </Button>
+          {!somenteLeitura && produto.controlaEstoque && (
+            <Button id={idDoAtalhoDeEstoque(produto.id)} type="button" variant="outline" size="sm" onClick={onAjustarEstoque}>
+              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+              Ajustar estoque <span className="sr-only">{produto.nome}</span>
+            </Button>
+          )}
           {!somenteLeitura && (
             <Button type="button" variant="outline" size="sm" onClick={onAlterarStatus} disabled={alterandoStatus}>
               {alterandoStatus ? (

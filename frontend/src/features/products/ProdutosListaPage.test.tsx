@@ -7,8 +7,10 @@ import { ProdutosListaPage } from '@/features/products/ProdutosListaPage'
 import { useAuth } from '@/hooks/useAuth'
 import { inativarProduto, listarProdutos, reativarProduto } from '@/services/produtoService'
 import { listarCategorias } from '@/services/categoriaService'
+import { ajustarEstoque } from '@/services/estoqueService'
 import { listarUnidades } from '@/services/unidadeService'
 import { CX, ID_ARROZ, ID_FEIJAO, produtoAtivo, produtoInativo, produtoSimples, resumo, UN } from '@/test/fixturesProduto'
+import type { MovimentoEstoque } from '@/types/estoque'
 import type { Produto } from '@/types/produto'
 
 vi.mock('@/services/produtoService', () => ({
@@ -19,6 +21,10 @@ vi.mock('@/services/produtoService', () => ({
 
 vi.mock('@/services/unidadeService', () => ({
   listarUnidades: vi.fn(),
+}))
+
+vi.mock('@/services/estoqueService', () => ({
+  ajustarEstoque: vi.fn(),
 }))
 
 vi.mock('@/services/categoriaService', () => ({
@@ -35,6 +41,7 @@ const inativarProdutoMock = vi.mocked(inativarProduto)
 const reativarProdutoMock = vi.mocked(reativarProduto)
 const listarUnidadesMock = vi.mocked(listarUnidades)
 const listarCategoriasMock = vi.mocked(listarCategorias)
+const ajustarEstoqueMock = vi.mocked(ajustarEstoque)
 const useAuthMock = vi.mocked(useAuth)
 
 function definirPerfil(perfil: 'ADMIN' | 'OPERADOR') {
@@ -537,5 +544,82 @@ describe('ProdutosListaPage', () => {
       // O saldo guardado nao aparece enquanto o controle esta desligado.
       expect(within(estoque).queryByText(/12/)).not.toBeInTheDocument()
     })
+
+    it('com o controle desligado, os níveis não aparecem no card', async () => {
+      listarProdutosMock.mockResolvedValue([{ ...produtoAtivo, controlaEstoque: false, situacaoEstoque: null }])
+      renderLista()
+
+      const card = await cardDoProduto('Arroz 5kg')
+      for (const rotulo of ['Estoque mínimo', 'Estoque máximo', 'Ponto de reposição']) {
+        expect(within(card).queryByText(rotulo)).not.toBeInTheDocument()
+      }
+    })
+  })
+
+  describe('atalho "Ajustar estoque" (Fase D)', () => {
+    const SAIDA: MovimentoEstoque = {
+      id: 'mov-1',
+      tipo: 'SAIDA',
+      motivo: 'PERDA_AVARIA',
+      origem: 'AJUSTE_MANUAL',
+      quantidade: -2,
+      saldoAnterior: 12,
+      saldoNovo: 10,
+      observacao: null,
+      usuarioNome: 'Ana Souza',
+      criadoEm: '2026-10-21T15:20:00',
+    }
+
+    it('abre o modal sem sair da lista; no sucesso recarrega a lista e mostra a mensagem', async () => {
+      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      ajustarEstoqueMock.mockResolvedValue(SAIDA)
+      const router = renderLista()
+      const card = await cardDoProduto('Arroz 5kg')
+      const botao = within(card).getByRole('button', { name: 'Ajustar estoque Arroz 5kg' })
+
+      fireEvent.click(botao)
+
+      const modal = await screen.findByRole('dialog', { name: 'Ajustar estoque' })
+      expect(within(modal).getByText('Saldo atual: 12 UN')).toBeInTheDocument()
+      fireEvent.click(within(modal).getByRole('radio', { name: 'Saída' }))
+      fireEvent.change(within(modal).getByRole('textbox', { name: /^quantidade/i }), { target: { value: '2' } })
+      fireEvent.change(within(modal).getByRole('combobox', { name: /^motivo/i }), { target: { value: 'PERDA_AVARIA' } })
+      listarProdutosMock.mockResolvedValue([{ ...produtoAtivo, estoqueAtual: 10 }])
+      fireEvent.click(modal.querySelector('button[type="submit"]') as HTMLElement)
+
+      expect(await screen.findByText('Arroz 5kg: saída de 2 UN registrada. Saldo: 10 UN.')).toBeInTheDocument()
+      expect(ajustarEstoqueMock).toHaveBeenCalledWith(ID_ARROZ, expect.objectContaining({ tipo: 'SAIDA', quantidade: 2 }))
+      expect(screen.queryByRole('dialog', { name: 'Ajustar estoque' })).not.toBeInTheDocument()
+      await waitFor(async () => expect(await estoqueDoCardAtual('Arroz 5kg')).toHaveTextContent(/^10 UN$/))
+      expect(router.state.location.pathname).toBe('/produtos')
+      await waitFor(() => expect(within(card).getByRole('button', { name: 'Ajustar estoque Arroz 5kg' })).toHaveFocus())
+    })
+
+    it('aparece só nos produtos com controle de estoque', async () => {
+      listarProdutosMock.mockResolvedValue([
+        produtoAtivo,
+        { ...produtoInativo, controlaEstoque: false, situacaoEstoque: null },
+      ])
+      renderLista()
+
+      const semControle = await cardDoProduto('Feijão 1kg')
+      expect(within(semControle).queryByRole('button', { name: /ajustar estoque/i })).not.toBeInTheDocument()
+      expect(within(await cardDoProduto('Arroz 5kg')).getByRole('button', { name: /ajustar estoque/i })).toBeInTheDocument()
+    })
+
+    it('OPERADOR não vê o atalho', async () => {
+      definirPerfil('OPERADOR')
+      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      renderLista()
+
+      const card = await cardDoProduto('Arroz 5kg')
+      expect(within(card).queryByRole('button', { name: /ajustar estoque/i })).not.toBeInTheDocument()
+    })
   })
 })
+
+/** Valor do item "Estoque" do card como esta na tela agora (o card pode ter sido recriado). */
+async function estoqueDoCardAtual(nome: string): Promise<HTMLElement> {
+  const card = await cardDoProduto(nome)
+  return within(card).getByText('Estoque', { selector: 'dt' }).nextElementSibling as HTMLElement
+}
