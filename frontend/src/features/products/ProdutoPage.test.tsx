@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 
+import { PRODUTOS_QUERY_KEY } from '@/features/catalog/catalogoQuery'
 import { ProdutoPage } from '@/features/products/ProdutoPage'
 import { HttpError } from '@/services/httpClient'
 import { useAuth } from '@/hooks/useAuth'
@@ -108,10 +109,13 @@ const ROTAS = [
   { path: '/produtos/:id', element: <ProdutoPage /> },
 ]
 
-function renderPagina(caminho: string, state?: unknown) {
-  const queryClient = new QueryClient({
+function novoQueryClient(): QueryClient {
+  return new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
+}
+
+function renderPagina(caminho: string, state?: unknown, queryClient: QueryClient = novoQueryClient()) {
   const router = createMemoryRouter(ROTAS, { initialEntries: [{ pathname: caminho, state }] })
   render(
     <QueryClientProvider client={queryClient}>
@@ -532,7 +536,7 @@ describe('ProdutoPage', () => {
       expect(botaoSalvar()).toBeInTheDocument()
     })
 
-    it('concatena as mensagens de campo quando o backend responde 400', async () => {
+    it('400 com campos: cada mensagem vai para o seu campo, com o indicador de cada aba (FE I3)', async () => {
       cadastrarProdutoMock.mockRejectedValue(
         new HttpError(400, 'Dados invalidos.', { precoVenda: 'Preço de venda inválido.', sku: 'SKU inválido.' }),
       )
@@ -542,7 +546,45 @@ describe('ProdutoPage', () => {
       await preencherMinimo()
       fireEvent.click(botaoSalvar())
 
-      expect(await screen.findByText(/preço de venda inválido\.\s*sku inválido\./i)).toBeInTheDocument()
+      expect(
+        await screen.findByText('O produto não foi salvo. Confira os erros nas abas Geral e Códigos.'),
+      ).toBeInTheDocument()
+      expect(aba(/geral/i)).toHaveAttribute('aria-selected', 'true')
+      expect(aba(/geral/i)).toHaveAccessibleName('Geral (1 erro)')
+      expect(aba(/códigos/i)).toHaveAccessibleName('Códigos (1 erro)')
+      expect(screen.getByLabelText(/preço de venda/i)).toHaveAccessibleDescription('Preço de venda inválido.')
+      await waitFor(() => expect(screen.getByLabelText(/preço de venda/i)).toHaveFocus())
+      abrirAba(/códigos/i)
+      // 400 de SKU nao e duplicidade: sem a orientacao de gerar outro.
+      expect(screen.getByLabelText(/^sku/i)).toHaveAccessibleDescription(/SKU inválido\.$/)
+    })
+
+    it('400 com campo que não é do formulário junta a mensagem ao resumo do topo', async () => {
+      cadastrarProdutoMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { empresaId: 'Empresa inválida.', nome: 'Nome inválido.' }),
+      )
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      fireEvent.click(botaoSalvar())
+
+      expect(
+        await screen.findByText('Empresa inválida. O produto não foi salvo. Confira o erro na aba Geral.'),
+      ).toBeInTheDocument()
+      expect(campoNome()).toHaveAccessibleDescription('Nome inválido.')
+    })
+
+    it('400 só com campos desconhecidos continua só no topo', async () => {
+      cadastrarProdutoMock.mockRejectedValue(new HttpError(400, 'Dados invalidos.', { empresaId: 'Empresa inválida.' }))
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('Empresa inválida.')).toBeInTheDocument()
+      expect(aba(/geral/i)).toHaveAccessibleName('Geral')
     })
 
     it('409 sem mensagem do backend mostra texto amigável, nunca o técnico', async () => {
@@ -602,7 +644,7 @@ describe('ProdutoPage', () => {
       }
       atualizarProdutoMock.mockResolvedValue({ ...produto, nome: 'Arroz Tipo 1' })
 
-      renderEdicao(produto, { voltarPara: '/produtos?status=ativos' })
+      const router = renderEdicao(produto, { voltarPara: '/produtos?status=ativos' })
       await esperarFormulario()
       fireEvent.change(campoNome(), { target: { value: 'Arroz Tipo 1' } })
       fireEvent.click(botaoSalvar())
@@ -616,6 +658,8 @@ describe('ProdutoPage', () => {
       expect(await screen.findByRole('heading', { name: 'Lista de produtos?status=ativos' })).toBeInTheDocument()
       expect(screen.getByText('Produto "Arroz Tipo 1" atualizado com sucesso.')).toBeInTheDocument()
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      // replace: o Voltar do navegador nao reabre o formulario ja salvo.
+      expect(router.state.historyAction).toBe('REPLACE')
     })
 
     it('mostra erro ao salvar a edição', async () => {
@@ -647,6 +691,57 @@ describe('ProdutoPage', () => {
       expect(await screen.findByText('Não foi possível carregar o produto.')).toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: /tentar novamente/i }))
       expect(await screen.findByRole('heading', { level: 1, name: 'Arroz 5kg' })).toBeInTheDocument()
+    })
+
+    it('refetch que falha depois de abrir não derruba o formulário (FE I1)', async () => {
+      excluirProdutoMock.mockRejectedValue(new HttpError(409, 'Este produto já teve movimentação.'))
+      buscarProdutoMock.mockResolvedValueOnce(produtoAtivo).mockRejectedValue(new Error('rede'))
+
+      renderPagina(`/produtos/${ID_ARROZ}`)
+      await esperarFormulario()
+      fireEvent.change(campoNome(), { target: { value: 'Arroz alterado' } })
+      fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))
+      const dialogo = await screen.findByRole('dialog')
+      fireEvent.click(within(dialogo).getByRole('button', { name: /^excluir$/i }))
+
+      // O 409 recarrega o produto; a recarga falha.
+      await waitFor(() => expect(buscarProdutoMock).toHaveBeenCalledTimes(2))
+      fireEvent.click(within(dialogo).getByRole('button', { name: /cancelar/i }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+      expect(screen.queryByText('Não foi possível carregar o produto.')).not.toBeInTheDocument()
+      expect(campoNome()).toHaveValue('Arroz alterado')
+    })
+
+    it('com versão antiga no cache, só monta o formulário depois de buscar de novo (FE I2)', async () => {
+      const queryClient = novoQueryClient()
+      queryClient.setQueryData([...PRODUTOS_QUERY_KEY, 'detalhe', ID_ARROZ], { ...produtoAtivo, nome: 'Arroz antigo' })
+      let responder: (produto: Produto) => void = () => undefined
+      buscarProdutoMock.mockReturnValue(
+        new Promise<Produto>((resolver) => {
+          responder = resolver
+        }),
+      )
+
+      renderPagina(`/produtos/${ID_ARROZ}`, undefined, queryClient)
+
+      expect(await screen.findByText('Carregando produto...')).toBeInTheDocument()
+      expect(screen.queryByRole('textbox', { name: /^Nome\s*\(obrigatório\)$/ })).not.toBeInTheDocument()
+
+      await act(async () => responder(produtoAtivo))
+
+      expect(await esperarFormulario()).toHaveValue('Arroz 5kg')
+      expect(screen.queryByDisplayValue('Arroz antigo')).not.toBeInTheDocument()
+    })
+
+    it('título longo quebra em até duas linhas, sem truncar numa linha (FE S11)', async () => {
+      const nome = 'Ração Golden Fórmula Cães Adultos Raças Médias e Grandes Frango e Arroz 15kg'
+      renderEdicao({ ...produtoAtivo, nome })
+
+      const titulo = await screen.findByRole('heading', { level: 1, name: nome })
+      expect(titulo).toHaveClass('line-clamp-2', 'break-words')
+      expect(titulo).not.toHaveClass('truncate')
+      expect(titulo).toHaveAttribute('title', nome)
     })
 
     it('inativa pelo cabeçalho sem perder o que está sendo editado', async () => {
@@ -869,6 +964,78 @@ describe('ProdutoPage', () => {
       )
     })
 
+    it('400 de códigos com índice (codigosBarras[2]) vai para o campo de códigos', async () => {
+      cadastrarProdutoMock.mockRejectedValue(
+        new HttpError(400, 'Um ou mais campos sao invalidos.', {
+          'codigosBarras[2]': 'O código de barras 7891000315508 tem dígito verificador inválido.',
+        }),
+      )
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      abrirAba(/códigos/i)
+      fireEvent.click(botaoSalvar())
+
+      expect(
+        await screen.findByText('O código de barras 7891000315508 tem dígito verificador inválido.'),
+      ).toBeInTheDocument()
+      // Salvando da aba Codigos, que tambem mostra o campo: fica nela.
+      expect(aba(/códigos/i)).toHaveAttribute('aria-selected', 'true')
+      expect(aba(/códigos/i)).toHaveAccessibleName('Códigos (1 erro)')
+    })
+
+    it('409 com campos (sku) marca o SKU pela chave, não pelo texto', async () => {
+      cadastrarProdutoMock.mockRejectedValue(
+        new HttpError(409, 'Conflito ao salvar.', { sku: 'Este SKU já é usado por outro produto.' }),
+      )
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('O produto não foi salvo. Confira o erro na aba Códigos.')).toBeInTheDocument()
+      expect(aba(/códigos/i)).toHaveAttribute('aria-selected', 'true')
+      expect(
+        screen.getByText('Este SKU já é usado por outro produto. Gere outro SKU ou informe um diferente.'),
+      ).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByLabelText(/^sku/i)).toHaveFocus())
+    })
+
+    it('409 com campos (codigosBarras) de produto chamado "Etiqueta SKU 100" vai para os códigos', async () => {
+      const mensagem = 'O código de barras 7891000315507 já está cadastrado no produto "Etiqueta SKU 100".'
+      cadastrarProdutoMock.mockRejectedValue(new HttpError(409, mensagem, { codigosBarras: mensagem }))
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      fireEvent.change(campoCodigoGeral(), { target: { value: '7891000315507' } })
+      fireEvent.keyDown(campoCodigoGeral(), { key: 'Enter' })
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText(mensagem)).toBeInTheDocument()
+      expect(aba(/geral/i)).toHaveAccessibleName('Geral (1 erro)')
+      expect(aba(/códigos/i)).toHaveAccessibleName('Códigos (1 erro)')
+      expect(screen.queryByText(/gere outro sku/i)).not.toBeInTheDocument()
+    })
+
+    it('fallback pelo texto (sem campos): "Etiqueta SKU 100" no nome não confunde com SKU (FE S1)', async () => {
+      const mensagem = 'O código de barras 7891000315507 já está cadastrado no produto "Etiqueta SKU 100".'
+      cadastrarProdutoMock.mockRejectedValue(new HttpError(409, mensagem))
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText(mensagem)).toBeInTheDocument()
+      expect(aba(/códigos/i)).toHaveAccessibleName('Códigos (1 erro)')
+      abrirAba(/códigos/i)
+      expect(screen.getByLabelText(/^sku/i)).not.toHaveAttribute('aria-invalid')
+      expect(screen.queryByText(/gere outro sku/i)).not.toBeInTheDocument()
+    })
+
     it('400 de códigos (validação por campo) também vai para a aba Códigos', async () => {
       cadastrarProdutoMock.mockRejectedValue(
         new HttpError(400, 'Um ou mais campos sao invalidos.', { codigosBarras: 'Informe no máximo 20 códigos de barras.' }),
@@ -907,7 +1074,8 @@ describe('ProdutoPage', () => {
       abrirAba(/códigos/i)
       fireEvent.click(screen.getByRole('button', { name: /gerar automaticamente/i }))
 
-      expect(await screen.findByText('Não foi possível gerar o SKU. Tente novamente.')).toBeInTheDocument()
+      // role="alert": a falha e anunciada.
+      expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível gerar o SKU. Tente novamente.')
       expect(screen.queryByText(/requisicao falhou/i)).not.toBeInTheDocument()
     })
   })
@@ -1036,6 +1204,44 @@ describe('ProdutoPage', () => {
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
       expect(inativarProdutoMock).toHaveBeenCalledWith(ID_ARROZ)
       expect(await screen.findByText('Produto inativado com sucesso.')).toBeInTheDocument()
+    })
+
+    it('409 com o produto recarregado sem podeExcluir: fechar devolve o foco ao título (Excluir sumiu)', async () => {
+      excluirProdutoMock.mockRejectedValue(
+        new HttpError(409, 'Este produto já teve movimentação e não pode ser excluído.'),
+      )
+      buscarProdutoMock.mockResolvedValueOnce(produtoAtivo).mockResolvedValue({ ...produtoAtivo, podeExcluir: false })
+
+      renderPagina(`/produtos/${ID_ARROZ}`)
+      await esperarFormulario()
+      botaoExcluir().focus()
+      fireEvent.click(botaoExcluir())
+      const dialogo = await screen.findByRole('dialog')
+      fireEvent.click(within(dialogo).getByRole('button', { name: /^excluir$/i }))
+
+      expect(await within(dialogo).findByText(/não pode ser excluído/)).toBeInTheDocument()
+      // O refetch trouxe podeExcluir:false: o Excluir do cabecalho sai.
+      await waitFor(() => expect(buscarProdutoMock).toHaveBeenCalledTimes(2))
+      await waitFor(() =>
+        expect(within(screen.getByRole('banner', { hidden: true })).queryByRole('button', { name: /^excluir$/i, hidden: true })).not.toBeInTheDocument(),
+      )
+
+      fireEvent.click(within(dialogo).getByRole('button', { name: /cancelar/i }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'Arroz 5kg' })).toHaveFocus())
+    })
+
+    it('excluir substitui a entrada do histórico (o Voltar não reabre o produto excluído)', async () => {
+      excluirProdutoMock.mockResolvedValue(undefined)
+
+      const router = renderEdicao()
+      await esperarFormulario()
+      fireEvent.click(botaoExcluir())
+      fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /^excluir$/i }))
+
+      expect(await screen.findByRole('heading', { name: 'Lista de produtos' })).toBeInTheDocument()
+      expect(router.state.historyAction).toBe('REPLACE')
     })
 
     it('sem podeExcluir ou no cadastro novo, não há botão Excluir', async () => {

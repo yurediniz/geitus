@@ -189,6 +189,43 @@ describe('httpClient', () => {
       })
     })
 
+    it('normaliza os campos tambem no 409 (conflito de um campo)', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(
+        respostaFake(409, {
+          mensagem: 'Já existe um produto com este SKU nesta empresa.',
+          campos: [{ campo: 'sku', mensagem: 'Já existe um produto com este SKU nesta empresa.' }],
+        }),
+      )
+
+      await expect(apiPost('/produtos', {}, { autenticada: true })).rejects.toMatchObject({
+        status: 409,
+        message: 'Já existe um produto com este SKU nesta empresa.',
+        campos: { sku: 'Já existe um produto com este SKU nesta empresa.' },
+      })
+    })
+
+    it('409 sem campos continua com campos undefined', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(409, { mensagem: 'Conflito.' }))
+
+      const erro = await apiPost('/usuarios', {}, { autenticada: true }).catch((e: unknown) => e)
+      expect((erro as HttpError).campos).toBeUndefined()
+    })
+
+    it('junta mensagens diferentes do mesmo campo repetido na lista', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(
+        respostaFake(400, {
+          campos: [
+            { campo: 'codigosBarras', mensagem: 'Código repetido.' },
+            { campo: 'codigosBarras', mensagem: 'Dígito inválido.' },
+            { campo: 'codigosBarras', mensagem: 'Dígito inválido.' },
+          ],
+        }),
+      )
+
+      const erro = await apiPost('/produtos', {}).catch((e: unknown) => e)
+      expect((erro as HttpError).campos).toEqual({ codigosBarras: 'Código repetido. Dígito inválido.' })
+    })
+
     it('usa fallback generico em 409 sem corpo', async () => {
       vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(409))
 

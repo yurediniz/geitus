@@ -81,10 +81,18 @@ export function ProdutosListaPage() {
     setSearchParams(proximos, { replace: true })
   }
 
+  // Texto do campo de busca. Acompanha a URL quando ela muda por fora
+  // (historico, sidebar) sem remontar o formulario: buscar nao tira o foco do campo.
+  const [textoBusca, setTextoBusca] = useState(busca)
+  const [buscaDaUrl, setBuscaDaUrl] = useState(busca)
+  if (busca !== buscaDaUrl) {
+    setBuscaDaUrl(busca)
+    setTextoBusca(busca)
+  }
+
   const aplicarBusca = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const valor = new FormData(event.currentTarget).get('busca')
-    atualizarFiltros({ busca: typeof valor === 'string' ? valor : '', status })
+    atualizarFiltros({ busca: textoBusca, status })
   }
 
   const statusMutation = useMutation<Produto, unknown, { produto: Produto; proximoAtivo: boolean }>({
@@ -137,8 +145,7 @@ export function ProdutosListaPage() {
 
       <Card>
         <CardContent className="pt-6">
-          {/* `key`: a busca da URL muda por fora (historico, sidebar) e o campo acompanha. */}
-          <form key={busca} onSubmit={aplicarBusca} className="grid gap-3 lg:grid-cols-[1fr_180px_auto]">
+          <form onSubmit={aplicarBusca} className="grid gap-3 lg:grid-cols-[1fr_180px_auto]">
             <div className="space-y-1.5">
               <label htmlFor="busca-produto" className="text-sm font-medium">
                 Busca
@@ -149,7 +156,8 @@ export function ProdutosListaPage() {
                   id="busca-produto"
                   name="busca"
                   type="search"
-                  defaultValue={busca}
+                  value={textoBusca}
+                  onChange={(event) => setTextoBusca(event.target.value)}
                   placeholder="Nome, nome curto, SKU ou código de barras"
                   className="pl-9"
                 />

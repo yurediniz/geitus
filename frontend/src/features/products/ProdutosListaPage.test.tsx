@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 
@@ -176,6 +176,38 @@ describe('ProdutosListaPage', () => {
         expect(listarProdutosMock).toHaveBeenLastCalledWith({ busca: 'SKU-ARROZ', status: 'todos' })
       })
       expect(router.state.location.search).toBe('?busca=SKU-ARROZ')
+    })
+
+    it('buscar não remonta o campo: o foco continua nele (FE I5)', async () => {
+      listarProdutosMock.mockResolvedValue([])
+
+      const router = renderLista()
+      await screen.findByText(/nenhum produto encontrado/i)
+      const campo = screen.getByLabelText(/busca/i)
+      campo.focus()
+      fireEvent.change(campo, { target: { value: 'arroz' } })
+
+      // Enter no campo envia o formulario de busca.
+      fireEvent.submit(campo.closest('form') as HTMLFormElement)
+
+      await waitFor(() => expect(router.state.location.search).toBe('?busca=arroz'))
+      await screen.findByText('Resultados para "arroz".')
+      expect(screen.getByLabelText(/busca/i)).toBe(campo)
+      expect(campo).toHaveFocus()
+      expect(campo).toHaveValue('arroz')
+    })
+
+    it('busca mudada por fora (histórico) atualiza o campo', async () => {
+      listarProdutosMock.mockResolvedValue([])
+
+      const router = renderLista('/produtos?busca=arroz')
+      await screen.findByText('Resultados para "arroz".')
+      expect(screen.getByLabelText(/busca/i)).toHaveValue('arroz')
+
+      await act(() => router.navigate('/produtos?busca=feijao'))
+
+      expect(await screen.findByText('Resultados para "feijao".')).toBeInTheDocument()
+      expect(screen.getByLabelText(/busca/i)).toHaveValue('feijao')
     })
 
     it('filtra por status inativo e grava na URL', async () => {

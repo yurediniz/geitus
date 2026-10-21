@@ -99,6 +99,26 @@ describe('CampoSugestao', () => {
     expect(onEnviar).not.toHaveBeenCalled()
   })
 
+  it('rola a lista até a opção destacada pelo teclado', async () => {
+    const rolar = vi.fn()
+    const original = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = rolar
+    try {
+      renderCampo()
+      fireEvent.focus(campo())
+      await screen.findByRole('option', { name: 'Golden' })
+
+      fireEvent.keyDown(campo(), { key: 'ArrowUp' })
+
+      const granplus = screen.getByRole('option', { name: 'GranPlus' })
+      expect(granplus).toHaveAttribute('aria-selected', 'true')
+      expect(rolar).toHaveBeenCalledWith({ block: 'nearest' })
+      expect(rolar.mock.contexts.at(-1)).toBe(granplus)
+    } finally {
+      Element.prototype.scrollIntoView = original
+    }
+  })
+
   it('com a lista aberta e nada destacado, Enter só fecha a lista (não envia)', async () => {
     renderCampo()
 

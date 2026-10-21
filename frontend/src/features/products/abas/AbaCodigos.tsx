@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query'
 import { Loader2, Sparkles } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { CampoTexto, ErroDoCampo } from '@/features/products/CamposFormulario'
+import { CampoTexto } from '@/features/products/CamposFormulario'
 import { CodigosBarrasDoProduto } from '@/features/products/CodigosBarrasDoProduto'
 import type { ProdutoFormValues } from '@/features/products/produtoFormulario'
 import { sugerirSku } from '@/services/produtoService'
@@ -73,10 +73,12 @@ export function AbaCodigos({ produto, desabilitado, somenteLeitura, aoAlterarCam
           <p role="status" aria-live="polite" className="sr-only">
             {anuncioSku}
           </p>
-          <ErroDoCampo
-            id="sku-gerar-erro"
-            mensagem={gerarSkuMutation.isError ? 'Não foi possível gerar o SKU. Tente novamente.' : undefined}
-          />
+          {/* role="alert": a falha e anunciada (o foco continua no botao). */}
+          {gerarSkuMutation.isError && (
+            <p id="sku-gerar-erro" role="alert" className="text-sm text-destructive">
+              Não foi possível gerar o SKU. Tente novamente.
+            </p>
+          )}
         </div>
       </div>
 

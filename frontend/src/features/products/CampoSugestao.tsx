@@ -75,6 +75,16 @@ export function CampoSugestao({
   const idOpcao = (indice: number) => `${id}-sugestao-${indice}`
   const erroId = `${id}-erro`
 
+  const idOpcaoAtiva = listaVisivel && ativo >= 0 ? idOpcao(ativo) : undefined
+
+  // A opcao destacada pelo teclado fica visivel na lista com rolagem.
+  useEffect(() => {
+    if (idOpcaoAtiva) {
+      // `?.` na chamada: o jsdom dos testes nao implementa scrollIntoView (como no SeletorCategoria).
+      document.getElementById(idOpcaoAtiva)?.scrollIntoView?.({ block: 'nearest' })
+    }
+  }, [idOpcaoAtiva])
+
   const fechar = () => {
     setAberto(false)
     setAtivo(-1)
@@ -137,7 +147,7 @@ export function CampoSugestao({
           aria-autocomplete="list"
           aria-expanded={listaVisivel}
           aria-controls={idLista}
-          aria-activedescendant={listaVisivel && ativo >= 0 ? idOpcao(ativo) : undefined}
+          aria-activedescendant={idOpcaoAtiva}
           aria-invalid={erro ? true : undefined}
           aria-describedby={erro ? erroId : undefined}
           autoComplete="off"

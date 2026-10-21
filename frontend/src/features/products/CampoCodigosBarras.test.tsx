@@ -11,7 +11,7 @@ type PropsDeTeste = Pick<CampoCodigosBarrasProps, 'desabilitado' | 'erro' | 'var
 }
 
 /** Campo com estado proprio (lista, texto e erro), dentro de um form (para provar que Enter nao o envia). */
-function CampoComEstado({ inicial = [], formatosGravados = {}, onEnviar, ...resto }: PropsDeTeste) {
+function CampoComEstado({ inicial = [], formatosGravados = new Map(), onEnviar, ...resto }: PropsDeTeste) {
   const [valor, setValor] = useState(inicial)
   const [entrada, setEntrada] = useState('')
   const [erroEntrada, setErroEntrada] = useState<string | null>(null)
@@ -156,7 +156,7 @@ describe('CampoCodigosBarras', () => {
 
   it('código já gravado como OUTRO pode voltar à lista sem bloqueio (Review Focus 1)', () => {
     render(
-      <CampoComEstado inicial={['7891000315508']} formatosGravados={{ '7891000315508': 'OUTRO' }} />,
+      <CampoComEstado inicial={['7891000315508']} formatosGravados={new Map([['7891000315508', 'OUTRO']])} />,
     )
     expect(within(itens()[0]).getByText('Outro formato')).toBeInTheDocument()
     // Ja gravado (e conferido): so o selo, sem o aviso amarelo.
@@ -206,6 +206,16 @@ describe('CampoCodigosBarras', () => {
     render(<CampoComEstado />)
 
     expect(screen.getByText('Nenhum código de barras cadastrado.')).toBeInTheDocument()
+  })
+
+  it('código com nome de propriedade de objeto ("constructor") tem selo e aviso de formato novo (S4)', () => {
+    render(<CampoComEstado />)
+
+    lerCodigo('constructor')
+
+    const [item] = itens()
+    expect(within(item).getByText('Outro formato')).toBeInTheDocument()
+    expect(within(item).getByText(/formato não reconhecido/i)).toBeInTheDocument()
   })
 
   it('com um único código não há setas de reordenar', () => {

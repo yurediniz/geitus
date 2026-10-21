@@ -102,7 +102,7 @@ export function CampoCodigosBarras({
 
   /** Codigo novo (nao gravado) com formato desconhecido: merece o aviso amarelo. */
   const ehOutroNovo = (codigo: string) =>
-    formatosGravados[codigo] === undefined && detectarFormato(codigo) === 'OUTRO'
+    !formatosGravados.has(codigo) && detectarFormato(codigo) === 'OUTRO'
 
   const adicionar = () => {
     const resultado = avaliarNovoCodigo(entrada, valor, formatosGravados)
@@ -217,7 +217,7 @@ export function CampoCodigosBarras({
       ) : (
         <ol aria-label="Códigos de barras do produto" className="space-y-2">
           {valor.map((codigo, indice) => {
-            const formato = formatosGravados[codigo] ?? detectarFormato(codigo)
+            const formato = formatosGravados.get(codigo) ?? detectarFormato(codigo)
             const outro = formato === 'OUTRO'
             // Com um unico codigo nao ha o que reordenar: as setas somem.
             const podeReordenar = valor.length > 1

@@ -109,48 +109,103 @@ interface ErroAoSalvar {
   campos: readonly (keyof ProdutoFormValues)[]
 }
 
+/** Id do titulo da pagina (destino do foco quando a origem some). */
+const ID_TITULO_PRODUTO = 'produto-titulo'
+
+/** Ao fechar o dialogo, volta o foco a origem; se ela sumiu (ex.: Excluir apos o 409), ao titulo. */
+function focoAoFecharDialogo(origem: HTMLElement | null): HTMLElement | null {
+  return origem?.isConnected ? origem : document.getElementById(ID_TITULO_PRODUTO)
+}
+
 /** Tecla do atalho de salvar mostrada na barra de acoes (Cmd no Mac, Ctrl nos demais). */
 const TECLA_ATALHO = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.userAgent) ? '⌘' : 'Ctrl'
 
-/** Erro do backend que pertence a um campo (SKU ou codigos de barras). */
+/** Erro do backend levado a um campo do formulario. */
 interface ErroDeCampoDoServidor {
-  campo: 'sku' | 'codigosBarras'
+  campo: keyof ProdutoFormValues
   mensagem: string
 }
 
-const MENCIONA_CODIGO_DE_BARRAS = /c[oó]digos? de barras/i
+/** Campos do formulario que podem receber erro do backend (o texto pendente nunca vai no request). */
+const CAMPOS_COM_ERRO_DO_SERVIDOR: ReadonlySet<string> = new Set(
+  Object.keys(valoresIniciais()).filter((campo) => campo !== 'codigoPendente'),
+)
+
+function ehCampoComErroDoServidor(campo: string): campo is keyof ProdutoFormValues {
+  return CAMPOS_COM_ERRO_DO_SERVIDOR.has(campo)
+}
+
+/** Inicio fixo das mensagens do backend sobre um codigo de barras (409 de outro produto, 400 de digito). */
+const INICIO_MENSAGEM_CODIGO_DE_BARRAS = 'O código de barras '
+/** Mensagem fixa do backend para SKU repetido (409). */
+const MENSAGEM_SKU_DUPLICADO = 'Já existe um produto com este SKU nesta empresa.'
 
 /**
- * Leva ao campo os erros do backend sobre SKU e codigos de barras: 409 de SKU
- * ou de codigo em outro produto, e 400 de codigos (digito invalido, repetido,
- * mais de 20). Os demais continuam so na mensagem do topo.
+ * Erros do backend que pertencem a campos do formulario, para marcar cada
+ * campo (e a aba dele). Usa `campos` da resposta (400 e 409): a chave sem o
+ * indice (`codigosBarras[2]` -> `codigosBarras`). Sem `campos`, o texto e so o
+ * fallback: codigo de barras primeiro, pelo inicio fixo da mensagem (o nome de
+ * outro produto citado nela pode conter "SKU"), depois a mensagem exata de SKU.
+ * `restantes` sao mensagens de chaves que nao sao campos do formulario.
  */
-function erroDeCampoDoServidor(erro: unknown): ErroDeCampoDoServidor | null {
-  if (!(erro instanceof HttpError)) {
-    return null
+function errosDeCampoDoServidor(erro: unknown): { erros: ErroDeCampoDoServidor[]; restantes: string[] } {
+  const vazio = { erros: [], restantes: [] }
+  if (!(erro instanceof HttpError) || (erro.status !== 400 && erro.status !== 409)) {
+    return vazio
   }
-  if (erro.status === 409 && !ehMensagemGenerica(erro.message)) {
-    if (/\bSKU\b/.test(erro.message)) {
-      return { campo: 'sku', mensagem: `${erro.message} ${ORIENTACAO_SKU_DUPLICADO}` }
+  const comOrientacao = (campo: keyof ProdutoFormValues, mensagem: string) =>
+    erro.status === 409 && campo === 'sku' ? `${mensagem} ${ORIENTACAO_SKU_DUPLICADO}` : mensagem
+
+  if (erro.campos) {
+    const porCampo = new Map<keyof ProdutoFormValues, string[]>()
+    const restantes: string[] = []
+    for (const [chave, mensagem] of Object.entries(erro.campos)) {
+      const campo = chave.split(/[[.]/)[0]
+      if (ehCampoComErroDoServidor(campo)) {
+        const mensagens = porCampo.get(campo) ?? []
+        if (!mensagens.includes(mensagem)) {
+          mensagens.push(mensagem)
+        }
+        porCampo.set(campo, mensagens)
+      } else {
+        restantes.push(mensagem)
+      }
     }
-    if (MENCIONA_CODIGO_DE_BARRAS.test(erro.message)) {
-      return { campo: 'codigosBarras', mensagem: erro.message }
-    }
-    return null
+    const erros = [...porCampo].map(([campo, mensagens]) => ({
+      campo,
+      mensagem: comOrientacao(campo, mensagens.join(' ')),
+    }))
+    return { erros, restantes }
   }
-  if (erro.status === 400) {
-    const campos = Object.entries(erro.campos ?? {})
-    if (campos.length > 0) {
-      const todosDeCodigos = campos.every(([campo]) => campo.startsWith('codigosBarras'))
-      return todosDeCodigos
-        ? { campo: 'codigosBarras', mensagem: [...new Set(campos.map(([, mensagem]) => mensagem))].join(' ') }
-        : null
-    }
-    if (!ehMensagemGenerica(erro.message) && MENCIONA_CODIGO_DE_BARRAS.test(erro.message)) {
-      return { campo: 'codigosBarras', mensagem: erro.message }
-    }
+
+  if (ehMensagemGenerica(erro.message)) {
+    return vazio
   }
-  return null
+  if (erro.message.startsWith(INICIO_MENSAGEM_CODIGO_DE_BARRAS)) {
+    return { erros: [{ campo: 'codigosBarras', mensagem: erro.message }], restantes: [] }
+  }
+  if (erro.status === 409 && erro.message === MENSAGEM_SKU_DUPLICADO) {
+    return { erros: [{ campo: 'sku', mensagem: comOrientacao('sku', erro.message) }], restantes: [] }
+  }
+  return vazio
+}
+
+/**
+ * Resumo no topo quando os erros foram levados aos campos: diz em que aba(s)
+ * olhar. `abaAtual` conta para um campo que ela tambem mostra.
+ */
+function mensagemErrosNosCampos(campos: readonly (keyof ProdutoFormValues)[], abaAtual: AbaProduto): string {
+  const abas = ABAS_PRODUTO.filter((aba) =>
+    campos.some((campo) => primeiroCampoComErro((alvo) => alvo === campo, abaAtual)?.aba === aba),
+  )
+  if (abas.length <= 1) {
+    const aba = abas[0] ?? abaAtual
+    return campos.length > 1
+      ? `O produto não foi salvo. Confira os erros na aba ${ROTULO_ABA[aba]}.`
+      : mensagemErroNaAba(aba)
+  }
+  const nomes = abas.map((aba) => ROTULO_ABA[aba])
+  return `O produto não foi salvo. Confira os erros nas abas ${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}.`
 }
 
 /** Mensagem do dialogo quando a exclusao falha (409 traz o motivo curado do backend). */
@@ -225,7 +280,16 @@ function EstruturaPagina({ titulo, voltarPara, ativo, acaoStatus, acoes, childre
           Voltar para produtos
         </Link>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">{titulo}</h1>
+          {/* Nome longo ocupa ate duas linhas (palavra longa quebra em vez de vazar); o nome completo fica no title. */}
+          {/* tabIndex -1: recebe o foco quando o elemento de origem sai da tela (ex.: Excluir apos o 409). */}
+          <h1
+            id={ID_TITULO_PRODUTO}
+            tabIndex={-1}
+            title={titulo}
+            className="line-clamp-2 min-w-0 text-2xl font-semibold tracking-tight break-words outline-none"
+          >
+            {titulo}
+          </h1>
           {ativo !== undefined && <SeloStatus ativo={ativo} />}
           {acaoStatus}
           {acoes && <div className="ml-auto flex items-center gap-2">{acoes}</div>}
@@ -245,14 +309,20 @@ interface CarregamentoProdutoProps {
   somenteLeitura: boolean
 }
 
-/** Busca o produto e trata carregando / nao encontrado / falha antes do formulario. */
+/**
+ * Busca o produto e trata carregando / nao encontrado / falha antes do formulario.
+ * - So a falha da primeira carga troca a pagina pela tela de erro: um refetch
+ *   que falha depois (ex.: apos o 409 da exclusao) nao derruba o formulario.
+ * - O formulario so monta com dados buscados nesta abertura: os valores
+ *   iniciais sao lidos uma vez, e o cache pode ter uma versao antiga.
+ */
 function CarregamentoProduto({ id, voltarPara, somenteLeitura }: CarregamentoProdutoProps) {
   const produtoQuery = useQuery<Produto>({
     queryKey: chaveDoProduto(id),
     queryFn: () => buscarProduto(id),
   })
 
-  if (produtoQuery.isPending) {
+  if (!produtoQuery.isLoadingError && (produtoQuery.data === undefined || !produtoQuery.isFetchedAfterMount)) {
     return (
       <EstruturaPagina titulo="Produto" voltarPara={voltarPara}>
         <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -263,7 +333,7 @@ function CarregamentoProduto({ id, voltarPara, somenteLeitura }: CarregamentoPro
     )
   }
 
-  if (produtoQuery.isError) {
+  if (produtoQuery.data === undefined) {
     const erro = produtoQuery.error
     // 400 = id malformado na URL; para o usuario, e o mesmo que nao encontrado.
     const naoEncontrado = erro instanceof HttpError && (erro.status === 404 || erro.status === 400)
@@ -344,7 +414,8 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
 
   useEffect(() => {
     if (saida) {
-      navigate(saida.para, { state: saida.estado })
+      // replace: o "Voltar" do navegador nao reabre o produto recem-salvo ou ja excluido.
+      navigate(saida.para, { state: saida.estado, replace: true })
     }
   }, [saida, navigate])
 
@@ -439,17 +510,24 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     },
     onError: async (erro) => {
       setMensagemSucesso(null)
-      const erroDeCampo = erroDeCampoDoServidor(erro)
-      if (erroDeCampo) {
-        // Mostra o erro junto do campo (com o indicador da aba).
-        setError(erroDeCampo.campo, { type: 'server', message: erroDeCampo.mensagem })
-        const abaDestino = primeiroCampoComErro((campo) => campo === erroDeCampo.campo, aba)?.aba ?? aba
-        setErroSalvar({ mensagem: mensagemErroNaAba(abaDestino), campos: [erroDeCampo.campo] })
-        setAba(abaDestino)
-        setCampoParaFocar(erroDeCampo.campo)
-        return
+      const { erros: errosDeCampo, restantes } = errosDeCampoDoServidor(erro)
+      if (errosDeCampo.length > 0) {
+        // Cada erro vai para o seu campo (com o indicador da aba); a pagina vai
+        // para a primeira aba com erro (ou fica, se a atual mostra o campo).
+        for (const { campo, mensagem } of errosDeCampo) {
+          setError(campo, { type: 'server', message: mensagem })
+        }
+        const campos = errosDeCampo.map(({ campo }) => campo)
+        const destino = primeiroCampoComErro((campo) => campos.includes(campo), aba)
+        const resumo = mensagemErrosNosCampos(campos, aba)
+        setErroSalvar({ mensagem: [...restantes, resumo].join(' '), campos: restantes.length > 0 ? [] : campos })
+        if (destino) {
+          setAba(destino.aba)
+          setCampoParaFocar(destino.campo)
+        }
+      } else {
+        setErroSalvar({ mensagem: mensagemErroSalvar(erro), campos: [] })
       }
-      setErroSalvar({ mensagem: mensagemErroSalvar(erro), campos: [] })
       // 400/404: a unidade ou a categoria escolhida pode ter sido inativada ou
       // removida; recarrega as listas para o select e o seletor sairem dela.
       if (erro instanceof HttpError && (erro.status === 400 || erro.status === 404)) {
@@ -743,6 +821,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
           excluindo={excluirMutation.isPending}
           onConfirmar={() => excluirMutation.mutate(produto)}
           onCancelar={fecharExclusao}
+          destinoFoco={focoAoFecharDialogo}
           podeExcluir={!exclusaoBloqueada}
           // Inativar e oferecido desde a abertura; vira a acao principal se o 409 barrar a exclusao.
           alternativa={

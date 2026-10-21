@@ -20,6 +20,7 @@ import {
   type ProdutoFormValues,
 } from '@/features/products/produtoFormulario'
 import { CX, produtoAtivo, resumo } from '@/test/fixturesProduto'
+import type { FormatoCodigoBarras } from '@/types/produto'
 
 describe('produtoFormulario', () => {
   it('todo campo do formulario esta em alguma aba; so os codigos de barras estao em duas (Geral e Codigos)', () => {
@@ -65,25 +66,33 @@ describe('produtoFormulario', () => {
   })
 
   describe('avaliarNovoCodigo', () => {
+    const SEM_GRAVADOS: ReadonlyMap<string, FormatoCodigoBarras> = new Map()
+
     it('normaliza e aceita, devolvendo a lista nova', () => {
-      expect(avaliarNovoCodigo(' 7891 000315507\n', ['96385074'], {})).toEqual({
+      expect(avaliarNovoCodigo(' 7891 000315507\n', ['96385074'], SEM_GRAVADOS)).toEqual({
         tipo: 'aceito',
         codigo: '7891000315507',
         lista: ['96385074', '7891000315507'],
       })
-      expect(avaliarNovoCodigo('ABC-1', [], {})).toMatchObject({ tipo: 'aceito', codigo: 'ABC-1' })
+      expect(avaliarNovoCodigo('ABC-1', [], SEM_GRAVADOS)).toMatchObject({ tipo: 'aceito', codigo: 'ABC-1' })
     })
 
     it('texto vazio nao e erro', () => {
-      expect(avaliarNovoCodigo('   ', [], {})).toEqual({ tipo: 'vazio' })
+      expect(avaliarNovoCodigo('   ', [], SEM_GRAVADOS)).toEqual({ tipo: 'vazio' })
     })
 
     it('barra repetido, limite, tamanho e digito invalido de codigo novo', () => {
-      expect(avaliarNovoCodigo('96385074', ['96385074'], {})).toEqual({ tipo: 'bloqueado', motivo: MENSAGEM_CODIGO_REPETIDO })
+      expect(avaliarNovoCodigo('96385074', ['96385074'], SEM_GRAVADOS)).toEqual({ tipo: 'bloqueado', motivo: MENSAGEM_CODIGO_REPETIDO })
       const vinte = Array.from({ length: 20 }, (_, i) => `C${i}`)
-      expect(avaliarNovoCodigo('X1', vinte, {})).toEqual({ tipo: 'bloqueado', motivo: MENSAGEM_LIMITE_CODIGOS })
-      expect(avaliarNovoCodigo('A'.repeat(51), [], {})).toMatchObject({ tipo: 'bloqueado' })
-      expect(avaliarNovoCodigo('7891000315508', [], {})).toEqual({ tipo: 'bloqueado', motivo: MENSAGEM_DIGITO_INVALIDO })
+      expect(avaliarNovoCodigo('X1', vinte, SEM_GRAVADOS)).toEqual({ tipo: 'bloqueado', motivo: MENSAGEM_LIMITE_CODIGOS })
+      expect(avaliarNovoCodigo('A'.repeat(51), [], SEM_GRAVADOS)).toMatchObject({ tipo: 'bloqueado' })
+      expect(avaliarNovoCodigo('7891000315508', [], SEM_GRAVADOS)).toEqual({ tipo: 'bloqueado', motivo: MENSAGEM_DIGITO_INVALIDO })
+    })
+
+    it('codigo com nome de propriedade de objeto nao e tomado por "ja gravado" (S4)', () => {
+      const gravados = formatosDoProduto(produtoAtivo)
+      expect(gravados.has('constructor')).toBe(false)
+      expect(avaliarNovoCodigo('constructor', [], gravados)).toMatchObject({ tipo: 'aceito', codigo: 'constructor' })
     })
 
     it('codigo ja gravado (OUTRO com digito invalido) volta sem bloqueio', () => {

@@ -295,11 +295,11 @@ export const MENSAGEM_LIMITE_CODIGOS = `Limite de ${MAXIMO_CODIGOS_BARRAS} códi
 export const MENSAGEM_CODIGO_LONGO = `O código deve ter no máximo ${TAMANHO_MAXIMO_CODIGO} caracteres.`
 
 /** Formatos dos codigos ja gravados no produto, por codigo. */
-export type FormatosGravados = Record<string, FormatoCodigoBarras>
+export type FormatosGravados = ReadonlyMap<string, FormatoCodigoBarras>
 
 /** Formatos gravados do produto em edicao (vazio no cadastro). */
 export function formatosDoProduto(produto: Produto | null): FormatosGravados {
-  return Object.fromEntries((produto?.codigosBarras ?? []).map(({ codigo, formato }) => [codigo, formato]))
+  return new Map((produto?.codigosBarras ?? []).map(({ codigo, formato }) => [codigo, formato]))
 }
 
 /** Resultado de tentar colocar o texto digitado na lista de codigos. */
@@ -332,7 +332,7 @@ export function avaliarNovoCodigo(
   if (codigo.length > TAMANHO_MAXIMO_CODIGO) {
     return { tipo: 'bloqueado', motivo: MENSAGEM_CODIGO_LONGO }
   }
-  const jaGravado = formatosGravados[codigo] !== undefined
+  const jaGravado = formatosGravados.has(codigo)
   if (!jaGravado && ehCandidatoGs1(codigo) && !digitoVerificadorValido(codigo)) {
     return { tipo: 'bloqueado', motivo: MENSAGEM_DIGITO_INVALIDO }
   }

@@ -18,7 +18,7 @@ const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
  */
 export class HttpError extends Error {
   readonly status: number
-  /** Erros de validacao por campo, quando o backend os fornece (HTTP 400). */
+  /** Erros por campo, quando o backend os fornece (validacao 400 ou conflito 409 de um campo). */
   readonly campos?: Record<string, string>
 
   constructor(status: number, message: string, campos?: Record<string, string>) {
@@ -60,15 +60,22 @@ function ehObjeto(valor: unknown): valor is Record<string, unknown> {
 /**
  * Converte `campos` do corpo de erro em `Record<campo, mensagem>`. Aceita a
  * lista do backend e, por compatibilidade, um objeto ja nesse formato. Itens
- * malformados sao ignorados; sem nenhum campo valido, retorna undefined.
+ * malformados sao ignorados; sem nenhum campo valido, retorna undefined. O
+ * mesmo campo repetido na lista junta as mensagens diferentes (sem perder nenhuma).
  */
 function normalizarCampos(campos: unknown): Record<string, string> | undefined {
   const resultado: Record<string, string> = {}
   if (Array.isArray(campos)) {
+    const mensagensPorCampo = new Map<string, Set<string>>()
     for (const item of campos) {
       if (ehObjeto(item) && typeof item.campo === 'string' && typeof item.mensagem === 'string') {
-        resultado[item.campo] = item.mensagem
+        const mensagens = mensagensPorCampo.get(item.campo) ?? new Set<string>()
+        mensagens.add(item.mensagem)
+        mensagensPorCampo.set(item.campo, mensagens)
       }
+    }
+    for (const [campo, mensagens] of mensagensPorCampo) {
+      resultado[campo] = [...mensagens].join(' ')
     }
   } else if (ehObjeto(campos)) {
     for (const [campo, mensagem] of Object.entries(campos)) {
@@ -129,9 +136,11 @@ async function tratarErro(resposta: Response, autenticada: boolean): Promise<nev
   if (resposta.status === 409) {
     // Conflito de regra de negocio (ex.: e-mail duplicado, ultimo ADMIN). O
     // backend curou uma mensagem clara em `ApiError.mensagem`; surface-a para a
-    // interface exibir o motivo correto, sem vazar detalhe interno.
+    // interface exibir o motivo correto, sem vazar detalhe interno. Quando o
+    // conflito e de um campo (ex.: SKU ou codigo de barras duplicado), `campos`
+    // diz qual, para a tela marcar o campo sem depender do texto.
     const corpo = await lerCorpoDoErro(resposta)
-    throw new HttpError(409, corpo?.mensagem ?? 'Requisicao falhou (HTTP 409).')
+    throw new HttpError(409, corpo?.mensagem ?? 'Requisicao falhou (HTTP 409).', normalizarCampos(corpo?.campos))
   }
 
   throw new HttpError(resposta.status, `Requisicao falhou (HTTP ${resposta.status}).`)
