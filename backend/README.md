@@ -22,13 +22,14 @@ Backend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Con
 - Maven Wrapper (`mvnw` / `mvnw.cmd`) fixado no Maven 3.9.16.
 - Estrutura de pacotes por domínio (ver abaixo).
 - `application.yml` lendo configurações de variáveis de ambiente.
-- Flyway habilitado, com as migrations `V1__baseline.sql` a `V8__produtos_precos.sql` (empresa, usuário, produtos e seus incrementos, clientes, unidades de medida e categorias, códigos de barras múltiplos e UUID do produto, promoção, atacado e histórico de preços).
+- Flyway habilitado, com as migrations `V1__baseline.sql` a `V9__estoque_basico.sql` (empresa, usuário, produtos e seus incrementos, clientes, unidades de medida e categorias, códigos de barras múltiplos e UUID do produto, promoção, atacado e histórico de preços, saldos e movimentos de estoque).
 - Health check da aplicação em `GET /api/health` e health check padrão do Actuator em `GET /actuator/health`.
 - CORS básico liberado para o frontend local (Vite).
 - **Autenticação:** login por e-mail/senha (BCrypt) com emissão de JWT (HS256), filtro de autenticação por Bearer token e endpoint de dados do usuário autenticado (`GET /api/auth/me`, com a empresa aninhada).
 - **Empresa:** `GET/PATCH /api/empresas/minha` — cadastro com representante legal, tipo de pessoa (PF/PJ, CNPJ único) e endereço; sempre derivada do usuário autenticado, nunca de parâmetro externo. Edição exige `ADMIN`.
 - **Usuários:** `GET/POST /api/usuarios`, `GET/PATCH /api/usuarios/{id}`, `PATCH /api/usuarios/{id}/inativar`, `/reativar` e `/senha` (apenas `ADMIN`), além de `PATCH /api/usuarios/me/senha` (troca da própria senha). Perfis `ADMIN` e `OPERADOR`.
 - **Produtos:** `GET/POST /api/produtos`, `GET/PATCH/DELETE /api/produtos/{id}` (o `{id}` é o **UUID público**), `PATCH /api/produtos/{id}/inativar` e `/reativar`, `GET /api/produtos/sku/sugestao` (próximo `P000001`, ADMIN) e `GET /api/produtos/sugestoes?campo=marca|fornecedor&termo=`; filtros `busca` (nome, nome curto, SKU ou qualquer código de barras) e `ativo`; `GET /api/produtos/{id}/historico-precos?pagina=&tamanho=` (custo e preço de venda, mais recente primeiro, máx. 100 por página). O produto aceita `promocao` (preço, início, fim) e `atacado` (preço, quantidade mínima); a resposta traz `promocao.situacao` e `emPromocao`, calculados no fuso `America/Sao_Paulo`.
+- **Estoque (pacote `inventory`):** `POST /api/produtos/{id}/estoque/ajustes` (ADMIN; `{tipo, quantidade, motivo, observacao, chave}`; 201, ou 200 se a `chave` repetir) e `GET /api/produtos/{id}/estoque/movimentos?pagina=&tamanho=`. O produto traz `controlaEstoque`, `estoqueAtual` e `situacaoEstoque`; o cadastro aceita `estoqueInicial`.
   - **Escrita e exclusão:** exigem `ADMIN` (DEC-025).
   - **Isolamento:** por empresa; SKU e códigos de barras únicos por empresa (`409`, com `campos`).
   - **Códigos de barras:** até 20 por produto, com dígito verificador EAN-8/EAN-13/UPC-A validado; outros formatos aceitos como `OUTRO` (DEC-032).

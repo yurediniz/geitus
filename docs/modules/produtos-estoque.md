@@ -1,6 +1,6 @@
 # Produtos: Estoque básico (Fase D da evolução de Produtos)
 
-> **Status:** spec escrita em 2026-10-21, aguardando aprovação. Quarta das 6 fases da DEC-030; decisões desta fase na **DEC-034**. Depende da Fase C ([produtos-precos.md](produtos-precos.md)). Antecipa parte da etapa 12 (Estoque básico) do `CLAUDE.md`. Registro de design: [`docs/superpowers/specs/2026-10-21-produtos-fase-d-design.md`](../superpowers/specs/2026-10-21-produtos-fase-d-design.md).
+> **Status:** implementado em 2026-10-21 (migration V9 aplicada). Ajustes das revisões e decisões do usuário em §10. Quarta das 6 fases da DEC-030; decisões desta fase na **DEC-034**. Depende da Fase C ([produtos-precos.md](produtos-precos.md)). Antecipa parte da etapa 12 (Estoque básico) do `CLAUDE.md`. Registro de design: [`docs/superpowers/specs/2026-10-21-produtos-fase-d-design.md`](../superpowers/specs/2026-10-21-produtos-fase-d-design.md).
 
 ## 1. Visão geral
 
@@ -143,9 +143,9 @@ Aditiva sobre a V8, que **não** é editada. Preserva todos os dados.
 - **Como a exclusão acontece:** no segundo caso, o movimento inicial e a linha de saldo são apagados na mesma transação, antes do produto. É a única situação em que um movimento é apagado. O log INFO da exclusão (Fase B) registra também que havia estoque inicial (só ids e a quantidade).
 - **Qualquer outro movimento** → 409 "Este produto já teve movimentação de estoque e não pode ser excluído. Inative-o." O banco garante a mesma regra pela FK RESTRICT.
 - **Fronteira entre pacotes:** o catálogo consulta essa condição por uma interface (`UsoDoProdutoNoEstoque`, definida em `catalog` e implementada em `inventory`), com os métodos:
-  - `situacaoDeExclusao(Long empresaId, Collection<Long> produtoIds)`, que devolve, por produto, se pode excluir;
-  - `temMovimentos(Long empresaId, Long produtoId)`;
-  - `algumProdutoDaUnidadeTemMovimentos(Long empresaId, Long unidadeId)`.
+  - `resumos(Long empresaId, Collection<Long> produtoIds)`, que devolve, por produto, um `ResumoDeEstoque` (saldo, total de movimentos e movimentos que não são o estoque inicial, de onde saem `temMovimentos()` e `permiteExcluir()`), em no máximo 2 consultas;
+  - `algumProdutoDaUnidadeTemMovimentos(Long empresaId, Long unidadeId)`;
+  - e a interface `RegistroDeEstoqueInicial` (`registrar` e `removerParaExclusao`), usada no cadastro e na exclusão.
 
   Assim o catálogo não depende do pacote de estoque. Na listagem, a consulta é feita **em lote**, sem N+1.
 
@@ -220,7 +220,7 @@ Aditiva sobre a V8, que **não** é editada. Preserva todos os dados.
 7. **Confirmação:**
    - o botão diz o que vai acontecer: "Registrar entrada", "Registrar saída", "Ajustar para 10 UN" ou "Zerar estoque";
    - fica desabilitado durante o envio, e a `chave` é gerada ao abrir o modal;
-   - em caso de sucesso, o modal fecha e aparece a mensagem "Estoque atualizado: 10 UN.";
+   - em caso de sucesso, o modal fecha e aparece a mensagem do que foi feito: "Entrada de 5 UN registrada. Saldo: 17 UN.", "Saída de 2 UN registrada. Saldo: 10 UN.", "Estoque ajustado para 10 UN (−2 UN)." ou "Estoque zerado (−12 UN)." (na lista, com o nome do produto antes);
    - o saldo da página, a listagem e o histórico são atualizados (invalidação do cache);
    - o ajuste não marca o formulário do produto como alterado.
 8. **Teclado:** Enter confirma e Esc fecha. O foco começa no tipo.
@@ -317,3 +317,31 @@ Aditiva sobre a V8, que **não** é editada. Preserva todos os dados.
 ## 9. Pontos em aberto
 - **Venda sem estoque no PDV:** será decidida na spec do PDV (a visão de domínio prevê uma autorização especial).
 - **Revisar a ordem do `CLAUDE.md`:** ao concluir esta fase, revisar a "Ordem recomendada de desenvolvimento", como pede a DEC-030, porque parte do Estoque básico terá sido entregue.
+
+## 10. Ajustes incorporados na implementação (revisões e decisões do usuário)
+- **Decisões do usuário durante a revisão de UX (2026-10-21):**
+  - o bloqueio do "Ajustar estoque" vale só para alterações pendentes de controle ou de unidade;
+  - Entrada pré-seleciona "Compra/recebimento";
+  - atalho "Ajustar estoque" no card da lista;
+  - o tipo se chama "Contagem";
+  - **"Zerar estoque"** no modal (§6.2).
+- **Banco (V9):** além de §3.3, o banco garante:
+  - a matriz tipo × motivo de §4.3;
+  - `ESTOQUE_INICIAL` só com origem `CADASTRO`;
+  - o estoque inicial parte do saldo zero;
+  - no máximo um estoque inicial por produto (índice único parcial).
+
+  Assim, a exclusão nunca apaga mais que o movimento inicial.
+- **Travas:** ajuste, edição, exclusão, inativar e reativar travam a linha do produto (`FOR UPDATE`) antes de qualquer escrita, e o ajuste trava em seguida a linha do saldo. Não há ciclo de travas, e saídas concorrentes nunca deixam o saldo negativo (a perdedora recebe 400).
+- **Idempotência:** a observação também conta na comparação. Mesma chave com outra observação → 409.
+- **Listagem:** saldos e contagens com um único parâmetro de array (`= ANY`), sem limite de quantidade de produtos.
+- **Saldo:** sempre com 3 casas (`0.000` sem movimento).
+- **Limite de quantidade:** "A quantidade deve ter no máximo 9 dígitos inteiros e 3 casas decimais.".
+- **Tela de Unidades:** o erro de "desligar fracionada" aparece junto ao checkbox.
+- **Modal:**
+  - a Contagem igual ao saldo aparece em tom neutro, com o botão "Fechar";
+  - toda falha do ajuste recarrega o saldo da página;
+  - o foco vai ao campo com erro do servidor;
+  - Esc não fecha o modal durante o envio.
+- **Exclusão:** quando há estoque inicial, o diálogo avisa que ele também será apagado.
+- **Dívidas registradas:** DT-028 (parcialmente resolvida) e DT-032 (endurecimentos e regras obrigatórias para o PDV).

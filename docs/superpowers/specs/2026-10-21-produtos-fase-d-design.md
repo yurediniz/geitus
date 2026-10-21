@@ -1,7 +1,7 @@
 # Design — Evolução do cadastro de produtos · Fase D (Estoque básico)
 
 **Data:** 2026-10-21
-**Status:** Spec escrita — aguardando revisão do usuário antes do plano
+**Status:** Implementado em 2026-10-21 (plano: `docs/superpowers/plans/2026-10-21-produtos-fase-d.md`)
 **Spec canônica:** [`docs/modules/produtos-estoque.md`](../../modules/produtos-estoque.md) · Decisão: DEC-034
 
 ## Escopo da fase

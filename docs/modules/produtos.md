@@ -7,7 +7,7 @@
 - **UUID público** nas rotas;
 - cadastro em página própria com abas.
 
-As colunas de texto antigas `categoria`, `unidade` e `codigo_barras` foram removidas. **Fase C concluída** ([produtos-precos.md](produtos-precos.md), migration V8): preço promocional por datas, preço de atacado com quantidade mínima, histórico de custo e preço de venda (`GET /api/produtos/{id}/historico-precos`), preço pela margem e máscara R$; os itens "histórico de preço/custo" e "promoções" desta spec passam a valer conforme a Fase C. Fiscal continua fora.
+As colunas de texto antigas `categoria`, `unidade` e `codigo_barras` foram removidas. **Fase C concluída** ([produtos-precos.md](produtos-precos.md), migration V8): preço promocional por datas, preço de atacado com quantidade mínima, histórico de custo e preço de venda (`GET /api/produtos/{id}/historico-precos`), preço pela margem e máscara R$; os itens "histórico de preço/custo" e "promoções" desta spec passam a valer conforme a Fase C. **Fase D concluída** ([produtos-estoque.md](produtos-estoque.md), migration V9): flag "controla estoque", saldo por movimentações imutáveis (`inventory`), ajuste com motivo, estoque inicial no cadastro, indicadores na listagem e exclusão só sem movimentação (ou só com o estoque inicial). Fiscal continua fora.
 
 ## 1. Visão geral
 
