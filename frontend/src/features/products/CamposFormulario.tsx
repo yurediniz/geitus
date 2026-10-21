@@ -45,8 +45,8 @@ interface CampoTextoProps {
   label: string
   obrigatorio?: boolean
   erro?: string
-  /** Texto de apoio sob o campo (ex.: "1 CX = 12 UN"). */
-  ajuda?: string
+  /** Texto de apoio sob o campo (ex.: "1 CX = 12 UN" ou a previa do nome curto). */
+  ajuda?: ReactNode
   disabled?: boolean
   placeholder?: string
   type?: string
@@ -72,6 +72,7 @@ export function CampoTexto({
 }: CampoTextoProps) {
   const erroId = `${id}-erro`
   const ajudaId = `${id}-ajuda`
+  const temAjuda = ajuda !== undefined && ajuda !== null && ajuda !== ''
   return (
     <div className="space-y-1.5">
       <label htmlFor={id} className="text-sm font-medium">
@@ -87,10 +88,10 @@ export function CampoTexto({
         placeholder={placeholder}
         disabled={disabled}
         aria-invalid={erro ? true : undefined}
-        aria-describedby={idsDescricao(ajuda && ajudaId, erro && erroId)}
+        aria-describedby={idsDescricao(temAjuda && ajudaId, erro && erroId)}
         {...inputProps}
       />
-      {ajuda && (
+      {temAjuda && (
         <p id={ajudaId} className="text-xs text-muted-foreground">
           {ajuda}
         </p>

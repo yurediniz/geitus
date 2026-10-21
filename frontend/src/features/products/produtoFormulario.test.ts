@@ -5,6 +5,7 @@ import {
   CAMPOS_POR_ABA,
   calcularMargemMarkup,
   montarRequest,
+  nomeCurtoEfetivo,
   primeiroCampoComErro,
   produtoSchema,
   valoresDoProduto,
@@ -110,5 +111,14 @@ describe('produtoFormulario', () => {
     expect(calcularMargemMarkup('0', '5')).toEqual({ margem: null, markup: -100 })
     expect(calcularMargemMarkup('10', '')).toEqual({ margem: null, markup: null })
     expect(calcularMargemMarkup('abc', '5')).toEqual({ margem: null, markup: null })
+  })
+
+  it('nomeCurtoEfetivo usa o nome curto ou os 30 primeiros caracteres do nome, aparados', () => {
+    expect(nomeCurtoEfetivo('Ração Golden Adulto Frango e Arroz 15kg', ' Golden Frango 15kg ')).toBe('Golden Frango 15kg')
+    expect(nomeCurtoEfetivo('Ração Golden Adulto Frango e Arroz 15kg', '')).toBe('Ração Golden Adulto Frango e A')
+    expect(nomeCurtoEfetivo('Arroz 5kg', '   ')).toBe('Arroz 5kg')
+    // Corte no 30o caractere caindo num espaco: aparado no fim.
+    expect(nomeCurtoEfetivo('Biscoito Recheado Chocolate 1 Pacote', '')).toBe('Biscoito Recheado Chocolate 1')
+    expect(nomeCurtoEfetivo('', '')).toBe('')
   })
 })

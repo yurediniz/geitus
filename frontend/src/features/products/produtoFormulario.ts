@@ -32,6 +32,21 @@ const fatorConversaoSchema = z.string().trim()
 /** Limite de codigos de barras por produto (o backend aplica o mesmo). */
 export const MAXIMO_CODIGOS_BARRAS = 20
 
+/** Tamanho maximo do nome curto (cupom e botoes do PDV). */
+export const TAMANHO_MAXIMO_NOME_CURTO = 30
+
+/**
+ * Nome usado no cupom e no PDV, com a regra do backend (`nomeCurtoEfetivo`):
+ * o nome curto, ou os 30 primeiros caracteres do nome, aparados.
+ */
+export function nomeCurtoEfetivo(nome: string, nomeCurto: string): string {
+  const curto = nomeCurto.trim()
+  if (curto !== '') {
+    return curto
+  }
+  return nome.trim().slice(0, TAMANHO_MAXIMO_NOME_CURTO).trim()
+}
+
 export const produtoSchema = z.object({
   nome: z.string().trim()
     .min(1, 'Informe o nome do produto.')

@@ -10,8 +10,11 @@ import {
   atualizarProduto,
   buscarProduto,
   cadastrarProduto,
+  excluirProduto,
   inativarProduto,
+  listarSugestoes,
   reativarProduto,
+  sugerirSku,
 } from '@/services/produtoService'
 import { cadastrarCategoria, listarCategorias } from '@/services/categoriaService'
 import { listarUnidades } from '@/services/unidadeService'
@@ -37,6 +40,9 @@ vi.mock('@/services/produtoService', () => ({
   atualizarProduto: vi.fn(),
   inativarProduto: vi.fn(),
   reativarProduto: vi.fn(),
+  excluirProduto: vi.fn(),
+  sugerirSku: vi.fn(),
+  listarSugestoes: vi.fn(),
 }))
 
 vi.mock('@/services/unidadeService', () => ({
@@ -57,6 +63,9 @@ const cadastrarProdutoMock = vi.mocked(cadastrarProduto)
 const atualizarProdutoMock = vi.mocked(atualizarProduto)
 const inativarProdutoMock = vi.mocked(inativarProduto)
 const reativarProdutoMock = vi.mocked(reativarProduto)
+const excluirProdutoMock = vi.mocked(excluirProduto)
+const sugerirSkuMock = vi.mocked(sugerirSku)
+const listarSugestoesMock = vi.mocked(listarSugestoes)
 const listarUnidadesMock = vi.mocked(listarUnidades)
 const listarCategoriasMock = vi.mocked(listarCategorias)
 const cadastrarCategoriaMock = vi.mocked(cadastrarCategoria)
@@ -195,6 +204,7 @@ describe('ProdutoPage', () => {
     definirPerfil('ADMIN')
     listarUnidadesMock.mockResolvedValue(UNIDADES)
     listarCategoriasMock.mockResolvedValue(CATEGORIAS)
+    listarSugestoesMock.mockResolvedValue([])
   })
 
   describe('estrutura e abas', () => {
@@ -469,7 +479,11 @@ describe('ProdutoPage', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /salvar e cadastrar outro/i }))
 
-      expect(await screen.findByText('Já existe um produto com este SKU nesta empresa.')).toBeInTheDocument()
+      expect(
+        await screen.findByText(
+          'Já existe um produto com este SKU nesta empresa. Gere outro SKU ou informe um diferente.',
+        ),
+      ).toBeInTheDocument()
       expect(screen.getByLabelText(/^sku/i)).toHaveValue('SKU-DUP')
       abrirAba(/geral/i)
       expect(campoNome()).toHaveValue('Café 500g')
@@ -731,6 +745,250 @@ describe('ProdutoPage', () => {
     })
   })
 
+  describe('códigos de barras', () => {
+    /** Le um codigo como o leitor: digita e tecla Enter no campo "Adicionar código". */
+    function lerCodigo(codigo: string) {
+      const campo = screen.getByLabelText('Adicionar código')
+      fireEvent.change(campo, { target: { value: codigo } })
+      fireEvent.keyDown(campo, { key: 'Enter' })
+    }
+
+    it('Enter no campo de código adiciona e não envia o formulário (Review Focus 2)', async () => {
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      abrirAba(/códigos/i)
+
+      lerCodigo(' 7891000315507\n')
+
+      expect(screen.getByText('7891000315507')).toBeInTheDocument()
+      expect(screen.getByText('EAN-13')).toBeInTheDocument()
+      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
+      expect(screen.getByRole('textbox', { name: 'Adicionar código' })).toHaveValue('')
+    })
+
+    it('envia os códigos normalizados na ordem e reordenar envia a nova ordem', async () => {
+      cadastrarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Café 500g' })
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      abrirAba(/códigos/i)
+      lerCodigo('7891000315507')
+      lerCodigo('9638 5074')
+      lerCodigo('ABC-1')
+      expect(screen.getByText(/formato não reconhecido/i)).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Mover código ABC-1 para cima' }))
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(cadastrarProdutoMock).toHaveBeenCalledTimes(1))
+      expect(cadastrarProdutoMock.mock.calls[0][0].codigosBarras).toEqual(['7891000315507', 'ABC-1', '96385074'])
+    })
+
+    it('dígito inválido é bloqueado, mas o código gravado como OUTRO é mantido e salvo (Review Focus 1)', async () => {
+      const produto: Produto = {
+        ...produtoAtivo,
+        codigosBarras: [{ codigo: '7891000315508', formato: 'OUTRO' }],
+      }
+      atualizarProdutoMock.mockResolvedValue(produto)
+
+      renderEdicao(produto)
+      await esperarFormulario()
+      abrirAba(/códigos/i)
+      expect(screen.getByText('Outro formato')).toBeInTheDocument()
+
+      lerCodigo('96385075')
+      expect(screen.getByRole('alert')).toHaveTextContent('Dígito verificador inválido. Confira a leitura.')
+
+      // Remover e reler o codigo ja gravado nao o bloqueia.
+      fireEvent.click(screen.getByRole('button', { name: 'Remover código 7891000315508' }))
+      lerCodigo('7891000315508')
+      lerCodigo('96385074')
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => {
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(
+          ID_ARROZ,
+          expect.objectContaining({ codigosBarras: ['7891000315508', '96385074'] }),
+        )
+      })
+    })
+
+    it('409 de código em outro produto aparece na aba Códigos, com indicador', async () => {
+      const mensagem = 'O código de barras 7891000315507 já está cadastrado no produto "Feijão 1kg".'
+      cadastrarProdutoMock.mockRejectedValue(new HttpError(409, mensagem))
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      abrirAba(/códigos/i)
+      lerCodigo('7891000315507')
+      abrirAba(/geral/i)
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('O produto não foi salvo. Confira o erro na aba Códigos.')).toBeInTheDocument()
+      await waitFor(() => expect(aba(/códigos/i)).toHaveAttribute('aria-selected', 'true'))
+      expect(aba(/códigos/i)).toHaveAccessibleName('Códigos (1 erro)')
+      expect(screen.getByText(mensagem)).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByLabelText('Adicionar código')).toHaveFocus())
+      // Nada perdido: o codigo continua na lista.
+      expect(screen.getByText('7891000315507')).toBeInTheDocument()
+    })
+
+    it('400 de códigos (validação por campo) também vai para a aba Códigos', async () => {
+      cadastrarProdutoMock.mockRejectedValue(
+        new HttpError(400, 'Um ou mais campos sao invalidos.', { codigosBarras: 'Informe no máximo 20 códigos de barras.' }),
+      )
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('Informe no máximo 20 códigos de barras.')).toBeInTheDocument()
+      expect(aba(/códigos/i)).toHaveAccessibleName('Códigos (1 erro)')
+    })
+  })
+
+  describe('SKU sugerido', () => {
+    it('"Gerar automaticamente" preenche o SKU, que continua editável', async () => {
+      sugerirSkuMock.mockResolvedValue('P000031')
+
+      renderNovo()
+      await esperarFormulario()
+      abrirAba(/códigos/i)
+      fireEvent.click(screen.getByRole('button', { name: /gerar automaticamente/i }))
+
+      await waitFor(() => expect(screen.getByLabelText(/^sku/i)).toHaveValue('P000031'))
+      expect(screen.getByLabelText(/^sku/i)).toBeEnabled()
+      expect(screen.getByText(/SKU P000031 gerado/)).toBeInTheDocument()
+    })
+
+    it('falha ao gerar mostra mensagem amigável', async () => {
+      sugerirSkuMock.mockRejectedValue(new HttpError(500, 'Requisicao falhou (HTTP 500).'))
+
+      renderNovo()
+      await esperarFormulario()
+      abrirAba(/códigos/i)
+      fireEvent.click(screen.getByRole('button', { name: /gerar automaticamente/i }))
+
+      expect(await screen.findByText('Não foi possível gerar o SKU. Tente novamente.')).toBeInTheDocument()
+      expect(screen.queryByText(/requisicao falhou/i)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('marca, fornecedor e nome curto', () => {
+    it('marca sugere os valores já usados e envia a escolhida', async () => {
+      listarSugestoesMock.mockImplementation(async (campo) => (campo === 'marca' ? ['Golden', 'Premier'] : ['Distribuidora Sul']))
+      cadastrarProdutoMock.mockResolvedValue(produtoAtivo)
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      const marca = screen.getByRole('combobox', { name: /^marca/i })
+      fireEvent.focus(marca)
+      fireEvent.mouseDown(await screen.findByRole('option', { name: 'Golden' }))
+      const fornecedor = screen.getByRole('combobox', { name: /^fornecedor principal/i })
+      fireEvent.change(fornecedor, { target: { value: 'Fornecedor Novo' } })
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(cadastrarProdutoMock).toHaveBeenCalledTimes(1))
+      expect(cadastrarProdutoMock.mock.calls[0][0]).toMatchObject({ marca: 'Golden', fornecedor: 'Fornecedor Novo' })
+      expect(listarSugestoesMock).toHaveBeenCalledWith('marca', '')
+    })
+
+    it('nome curto mostra o contador e a prévia do cupom com a regra do backend', async () => {
+      renderNovo()
+      await esperarFormulario()
+
+      const nomeCurto = screen.getByLabelText(/^nome curto/i)
+      expect(nomeCurto).toHaveAccessibleDescription(/usado no cupom.*0 de 30 caracteres/i)
+
+      fireEvent.change(campoNome(), { target: { value: 'Ração Golden Adulto Frango e Arroz 15kg' } })
+      expect(nomeCurto).toHaveAccessibleDescription(/No cupom: Ração Golden Adulto Frango e A\s*0 de 30 caracteres/)
+
+      fireEvent.change(nomeCurto, { target: { value: 'Golden Frango 15kg' } })
+      expect(nomeCurto).toHaveAccessibleDescription(/No cupom: Golden Frango 15kg\s*18 de 30 caracteres/)
+      expect(screen.getByText('18/30')).toBeInTheDocument()
+    })
+  })
+
+  describe('excluir', () => {
+    function botaoExcluir(): HTMLElement {
+      return screen.getByRole('button', { name: /^excluir$/i })
+    }
+
+    it('confirma pelo diálogo, exclui e volta para a lista com "Produto excluído."', async () => {
+      excluirProdutoMock.mockResolvedValue(undefined)
+
+      renderEdicao(produtoAtivo, { voltarPara: '/produtos?busca=arroz' })
+      await esperarFormulario()
+      // Com alteracao em andamento: excluir nao pede "Descartar alterações?".
+      fireEvent.change(campoNome(), { target: { value: 'Arroz alterado' } })
+      fireEvent.click(botaoExcluir())
+
+      const dialogo = await screen.findByRole('dialog', { name: 'Excluir Arroz 5kg?' })
+      expect(dialogo).toHaveTextContent(
+        'Esta ação não pode ser desfeita. Os códigos de barras do produto também serão excluídos.',
+      )
+      fireEvent.click(within(dialogo).getByRole('button', { name: /^excluir$/i }))
+
+      expect(await screen.findByRole('heading', { name: 'Lista de produtos?busca=arroz' })).toBeInTheDocument()
+      expect(excluirProdutoMock).toHaveBeenCalledWith(ID_ARROZ)
+      expect(screen.getByText('Produto excluído.')).toBeInTheDocument()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('cancelar fecha o diálogo e devolve o foco ao botão Excluir', async () => {
+      renderEdicao()
+      await esperarFormulario()
+      botaoExcluir().focus()
+      fireEvent.click(botaoExcluir())
+
+      const dialogo = await screen.findByRole('dialog')
+      fireEvent.click(within(dialogo).getByRole('button', { name: /cancelar/i }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      await waitFor(() => expect(botaoExcluir()).toHaveFocus())
+      expect(excluirProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('409 mostra a mensagem do backend no diálogo e oferece Inativar', async () => {
+      const mensagem =
+        'Este produto já teve movimentação e não pode ser excluído. Inative-o para que não apareça na venda.'
+      excluirProdutoMock.mockRejectedValue(new HttpError(409, mensagem))
+      inativarProdutoMock.mockResolvedValue({ ...produtoAtivo, ativo: false })
+
+      renderEdicao()
+      await esperarFormulario()
+      fireEvent.click(botaoExcluir())
+      const dialogo = await screen.findByRole('dialog')
+      fireEvent.click(within(dialogo).getByRole('button', { name: /^excluir$/i }))
+
+      expect(await within(dialogo).findByText(mensagem)).toBeInTheDocument()
+      expect(within(dialogo).queryByRole('button', { name: /^excluir$/i })).not.toBeInTheDocument()
+
+      fireEvent.click(within(dialogo).getByRole('button', { name: /inativar/i }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(inativarProdutoMock).toHaveBeenCalledWith(ID_ARROZ)
+      expect(await screen.findByText('Produto inativado com sucesso.')).toBeInTheDocument()
+    })
+
+    it('sem podeExcluir ou no cadastro novo, não há botão Excluir', async () => {
+      renderEdicao({ ...produtoAtivo, podeExcluir: false })
+      await esperarFormulario()
+      expect(screen.queryByRole('button', { name: /^excluir$/i })).not.toBeInTheDocument()
+    })
+
+    it('cadastro novo não tem Excluir', async () => {
+      renderNovo()
+      await esperarFormulario()
+      expect(screen.queryByRole('button', { name: /^excluir$/i })).not.toBeInTheDocument()
+    })
+  })
+
   describe('OPERADOR (modo leitura)', () => {
     it('abre o produto com campos desabilitados, sem ações de escrita, e sai sem aviso', async () => {
       definirPerfil('OPERADOR')
@@ -746,8 +1004,12 @@ describe('ProdutoPage', () => {
       expect(screen.queryByRole('button', { name: /inativar/i })).not.toBeInTheDocument()
       abrirAba(/preços/i)
       expect(screen.getByLabelText(/preço de venda/i)).toBeDisabled()
+      expect(screen.queryByRole('button', { name: /excluir/i })).not.toBeInTheDocument()
       abrirAba(/códigos/i)
       expect(screen.getByLabelText(/^sku/i)).toBeDisabled()
+      expect(screen.queryByRole('button', { name: /gerar automaticamente/i })).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Adicionar código')).toBeDisabled()
+      expect(screen.getByText('7891000315507')).toBeInTheDocument()
 
       fireEvent.click(screen.getByRole('link', { name: /voltar para produtos/i }))
       expect(await screen.findByRole('heading', { name: 'Lista de produtos' })).toBeInTheDocument()

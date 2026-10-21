@@ -3,7 +3,7 @@ import { FormProvider, useForm, type FieldErrors } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Trash2, XCircle } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -14,6 +14,7 @@ import {
   TODAS_UNIDADES_QUERY_KEY,
   ehMensagemGenerica,
 } from '@/features/catalog/catalogoQuery'
+import { ConfirmarExclusaoDialog } from '@/features/catalog/ConfirmarExclusaoDialog'
 import { AvisoSomenteLeitura, ErroInline, FeedbackCatalogo } from '@/features/catalog/FeedbackCatalogo'
 import { AbaCodigos } from '@/features/products/abas/AbaCodigos'
 import { AbaEstoque } from '@/features/products/abas/AbaEstoque'
@@ -44,6 +45,7 @@ import {
   atualizarProduto,
   buscarProduto,
   cadastrarProduto,
+  excluirProduto,
   inativarProduto,
   reativarProduto,
 } from '@/services/produtoService'
@@ -90,6 +92,72 @@ function mensagemErroSalvar(erro: unknown): string {
   return 'Não foi possível salvar o produto. Tente novamente.'
 }
 
+/** Orientacao somada ao 409 de SKU: a sugestao nao reserva o SKU (spec 4.2). */
+const ORIENTACAO_SKU_DUPLICADO = 'Gere outro SKU ou informe um diferente.'
+
+/** Resumo no topo quando o erro do backend foi levado ao campo (aba Codigos). */
+const MENSAGEM_ERRO_NA_ABA_CODIGOS = 'O produto não foi salvo. Confira o erro na aba Códigos.'
+
+/** Erro do backend que pertence a um campo da aba Codigos (SKU ou codigos de barras). */
+interface ErroDeCampoDoServidor {
+  campo: 'sku' | 'codigosBarras'
+  mensagem: string
+}
+
+const MENCIONA_CODIGO_DE_BARRAS = /c[oó]digos? de barras/i
+
+/**
+ * Leva ao campo os erros do backend sobre SKU e codigos de barras: 409 de SKU
+ * ou de codigo em outro produto, e 400 de codigos (digito invalido, repetido,
+ * mais de 20). Os demais continuam so na mensagem do topo.
+ */
+function erroDeCampoDoServidor(erro: unknown): ErroDeCampoDoServidor | null {
+  if (!(erro instanceof HttpError)) {
+    return null
+  }
+  if (erro.status === 409 && !ehMensagemGenerica(erro.message)) {
+    if (/\bSKU\b/.test(erro.message)) {
+      return { campo: 'sku', mensagem: `${erro.message} ${ORIENTACAO_SKU_DUPLICADO}` }
+    }
+    if (MENCIONA_CODIGO_DE_BARRAS.test(erro.message)) {
+      return { campo: 'codigosBarras', mensagem: erro.message }
+    }
+    return null
+  }
+  if (erro.status === 400) {
+    const campos = Object.entries(erro.campos ?? {})
+    if (campos.length > 0) {
+      const todosDeCodigos = campos.every(([campo]) => campo.startsWith('codigosBarras'))
+      return todosDeCodigos
+        ? { campo: 'codigosBarras', mensagem: [...new Set(campos.map(([, mensagem]) => mensagem))].join(' ') }
+        : null
+    }
+    if (!ehMensagemGenerica(erro.message) && MENCIONA_CODIGO_DE_BARRAS.test(erro.message)) {
+      return { campo: 'codigosBarras', mensagem: erro.message }
+    }
+  }
+  return null
+}
+
+/** Mensagem do dialogo quando a exclusao falha (409 traz o motivo curado do backend). */
+function mensagemErroExcluir(erro: unknown): string {
+  if (erro instanceof HttpError) {
+    if (erro.status === 409 && !ehMensagemGenerica(erro.message)) {
+      return erro.message
+    }
+    if (erro.status === 409) {
+      return 'Este produto não pode ser excluído. Inative-o para que não apareça na venda.'
+    }
+    if (erro.status === 403) {
+      return 'Somente administradores podem excluir produtos.'
+    }
+    if (erro.status === 404) {
+      return 'Este produto não existe mais ou já foi excluído.'
+    }
+  }
+  return 'Não foi possível excluir o produto. Tente novamente.'
+}
+
 function ehAba(valor: string): valor is AbaProduto {
   return (ABAS_PRODUTO as readonly string[]).includes(valor)
 }
@@ -122,11 +190,13 @@ interface EstruturaPaginaProps {
   titulo: string
   voltarPara: string
   ativo?: boolean
+  /** Acoes do cabecalho (ex.: "Excluir"), alinhadas a direita. */
+  acoes?: ReactNode
   children: ReactNode
 }
 
 /** Sub-navegacao do catalogo, "Voltar para produtos", titulo e selo de status. */
-function EstruturaPagina({ titulo, voltarPara, ativo, children }: EstruturaPaginaProps) {
+function EstruturaPagina({ titulo, voltarPara, ativo, acoes, children }: EstruturaPaginaProps) {
   return (
     <div className="space-y-6">
       <CatalogoNav />
@@ -141,7 +211,7 @@ function EstruturaPagina({ titulo, voltarPara, ativo, children }: EstruturaPagin
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">{titulo}</h1>
           {ativo !== undefined && <SeloStatus ativo={ativo} />}
-          {/* Task 4: "Excluir" (ADMIN, quando podeExcluir). */}
+          {acoes && <div className="ml-auto flex items-center gap-2">{acoes}</div>}
         </div>
       </header>
       {children}
@@ -217,7 +287,9 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null)
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [erroSalvar, setErroSalvar] = useState<string | null>(null)
-  /** Saida apos salvar: navega no render seguinte, com o aviso de alteracoes ja desligado. */
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false)
+  const [erroExcluir, setErroExcluir] = useState<string | null>(null)
+  /** Saida apos salvar/excluir: navega no render seguinte, com o aviso de alteracoes ja desligado. */
   const [saida, setSaida] = useState<{ para: string; estado: EstadoParaLista } | null>(null)
 
   const unidadesQuery = useQuery<UnidadeMedida[]>({
@@ -239,6 +311,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     handleSubmit,
     reset,
     resetField,
+    setError,
     getValues,
     getFieldState,
     watch,
@@ -329,6 +402,15 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     },
     onError: async (erro) => {
       setMensagemSucesso(null)
+      const erroDeCampo = erroDeCampoDoServidor(erro)
+      if (erroDeCampo) {
+        // Mostra o erro junto do campo, na aba Codigos (com o indicador da aba).
+        setError(erroDeCampo.campo, { type: 'server', message: erroDeCampo.mensagem })
+        setErroSalvar(MENSAGEM_ERRO_NA_ABA_CODIGOS)
+        setAba('codigos')
+        setCampoParaFocar(erroDeCampo.campo)
+        return
+      }
       setErroSalvar(mensagemErroSalvar(erro))
       // 400/404: a unidade ou a categoria escolhida pode ter sido inativada ou
       // removida; recarrega as listas para o select e o seletor sairem dela.
@@ -357,6 +439,34 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     },
   })
 
+  const excluirMutation = useMutation<void, unknown, Produto>({
+    mutationFn: (alvo) => excluirProduto(alvo.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: PRODUTOS_QUERY_KEY, refetchType: 'none' })
+      setConfirmandoExclusao(false)
+      setSaida({ para: voltarPara, estado: { sucesso: 'Produto excluído.' } })
+    },
+    onError: (erro, alvo) => {
+      setErroExcluir(mensagemErroExcluir(erro))
+      // 409: o `podeExcluir` em tela estava desatualizado; recarrega o produto
+      // (o formulario fica como esta: os valores iniciais so sao lidos na montagem).
+      if (erro instanceof HttpError && erro.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: chaveDoProduto(alvo.id) })
+      }
+    },
+  })
+
+  const abrirExclusao = () => {
+    excluirMutation.reset()
+    setErroExcluir(null)
+    setConfirmandoExclusao(true)
+  }
+
+  const fecharExclusao = () => {
+    setConfirmandoExclusao(false)
+    setErroExcluir(null)
+  }
+
   /** Erro de validacao: vai para a primeira aba com erro e foca o campo. */
   const aoInvalidar = (erros: FieldErrors<ProdutoFormValues>) => {
     const destino = primeiroCampoComErro((campo) => erros[campo] !== undefined)
@@ -379,11 +489,30 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
 
   const errosPorAba = (alvo: AbaProduto) => CAMPOS_POR_ABA[alvo].filter((campo) => errors[campo] !== undefined).length
 
+  const podeExcluir = produto !== null && !somenteLeitura && produto.podeExcluir
+  // 409: o produto teve movimentacao; inativar e a saida que a mensagem indica.
+  const exclusaoBloqueada =
+    erroExcluir !== null && excluirMutation.error instanceof HttpError && excluirMutation.error.status === 409
+
   return (
     <EstruturaPagina
       titulo={produto ? produto.nome : 'Novo produto'}
       voltarPara={voltarPara}
       ativo={produto?.ativo}
+      acoes={
+        podeExcluir && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={abrirExclusao}
+            disabled={salvando}
+            className="min-h-11 text-destructive hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            Excluir
+          </Button>
+        )
+      }
     >
       {somenteLeitura && (
         <AvisoSomenteLeitura texto="Somente administradores podem alterar produtos. Você está no modo leitura." />
@@ -453,7 +582,12 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
                   <AbaEstoque desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
                 </TabsContent>
                 <TabsContent value="codigos">
-                  <AbaCodigos desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
+                  <AbaCodigos
+                    produto={produto}
+                    desabilitado={desabilitado}
+                    somenteLeitura={somenteLeitura}
+                    aoAlterarCampo={aoAlterarCampo}
+                  />
                 </TabsContent>
               </CardContent>
             </Card>
@@ -478,6 +612,34 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
           )}
         </form>
       </FormProvider>
+
+      {produto && (
+        <ConfirmarExclusaoDialog
+          aberto={confirmandoExclusao}
+          titulo={`Excluir ${produto.nome}?`}
+          descricao={
+            <>
+              <p>Esta ação não pode ser desfeita. Os códigos de barras do produto também serão excluídos.</p>
+              {erroExcluir && <ErroInline mensagem={erroExcluir} />}
+            </>
+          }
+          excluindo={excluirMutation.isPending}
+          onConfirmar={() => excluirMutation.mutate(produto)}
+          onCancelar={fecharExclusao}
+          podeExcluir={!exclusaoBloqueada}
+          alternativa={
+            exclusaoBloqueada && produto.ativo
+              ? {
+                  rotulo: 'Inativar',
+                  icone: XCircle,
+                  executando: statusMutation.isPending,
+                  onExecutar: () =>
+                    statusMutation.mutate({ produto, proximoAtivo: false }, { onSuccess: fecharExclusao }),
+                }
+              : undefined
+          }
+        />
+      )}
 
       {dialogo}
     </EstruturaPagina>
