@@ -171,6 +171,10 @@ public class Cliente {
         return telefoneEWhatsapp ? telefone : whatsapp;
     }
 
+    public String getObservacoes() {
+        return observacoes;
+    }
+
     public boolean isAtivo() {
         return ativo;
     }

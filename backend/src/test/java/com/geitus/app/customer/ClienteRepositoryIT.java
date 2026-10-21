@@ -30,8 +30,9 @@ import com.geitus.app.company.TipoPessoa;
  * busca de verdade — o {@code @WebMvcTest} com mock nao faz isso (licao do bug
  * {@code lower(bytea)} no {@code ProdutoRepository}). Cobre isolamento por
  * empresa (DEC-016), UUID publico (DEC-019/029), unicidade do CPF por empresa,
- * o CHECK de coerencia do WhatsApp, filtro de status, busca por nome/digitos e
- * o tratamento de {@code %}/{@code _} como literais.
+ * os CHECKs de coerencia do WhatsApp e de formato (so digitos), filtro de
+ * status, ordenacao, busca por nome/digitos e o tratamento de {@code %}/{@code _}
+ * como literais.
  *
  * <p>Usa o banco do container via {@code @AutoConfigureTestDatabase(replace =
  * NONE)} e deixa o Flyway aplicar as migrations reais.
@@ -44,6 +45,7 @@ import com.geitus.app.company.TipoPessoa;
 class ClienteRepositoryIT {
 
     private static final String CPF_VALIDO = "11144477735";
+    private static final String TELEFONE_VALIDO = "11987654321";
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
@@ -108,6 +110,22 @@ class ClienteRepositoryIT {
     }
 
     @Test
+    void listagensNaoRetornamClientesDeOutraEmpresa() {
+        Empresa empresaA = novaEmpresa("Empresa Lista A");
+        Empresa empresaB = novaEmpresa("Empresa Lista B");
+        Cliente daEmpresaA = novoCliente(empresaA, "Ana", null, TELEFONE_VALIDO);
+        novoCliente(empresaB, "Ana", null, TELEFONE_VALIDO);
+        Long idEmpresaA = empresaA.getId();
+
+        assertThat(clienteRepository.buscarPorEmpresa(idEmpresaA, null))
+                .extracting(Cliente::getId).containsExactly(daEmpresaA.getId());
+        assertThat(clienteRepository.buscarPorNome(idEmpresaA, "%ana%", null))
+                .extracting(Cliente::getId).containsExactly(daEmpresaA.getId());
+        assertThat(clienteRepository.buscarPorNomeOuDigitos(idEmpresaA, "%ana%", "%98765%", null))
+                .extracting(Cliente::getId).containsExactly(daEmpresaA.getId());
+    }
+
+    @Test
     void uuidEGeradoNaCriacaoEUnico() {
         Empresa empresa = novaEmpresa("Empresa UUID");
         Cliente naoSalvo = new Cliente(empresa, "Ana", null, null, true, null, null);
@@ -130,11 +148,18 @@ class ClienteRepositoryIT {
     void cpfDuplicadoNaMesmaEmpresaViolaConstraint() {
         Empresa empresaA = novaEmpresa("Empresa CPF A");
         Empresa empresaB = novaEmpresa("Empresa CPF B");
-        novoCliente(empresaA, "Ana", CPF_VALIDO, null);
+        Cliente donoDoCpf = novoCliente(empresaA, "Ana", CPF_VALIDO, null);
+        Cliente outroDaEmpresaA = novoCliente(empresaA, "Bruno", null, null);
 
         // Mesmo CPF em outra empresa e permitido (unicidade e por empresa).
         novoCliente(empresaB, "Ana em B", CPF_VALIDO, null);
         assertThat(clienteRepository.existsByCpfAndEmpresa_Id(CPF_VALIDO, empresaB.getId())).isTrue();
+
+        // Na edicao: o proprio cliente nao conflita consigo; outro da mesma empresa conflita.
+        assertThat(clienteRepository.existsByCpfAndEmpresa_IdAndIdNot(CPF_VALIDO, empresaA.getId(),
+                donoDoCpf.getId())).isFalse();
+        assertThat(clienteRepository.existsByCpfAndEmpresa_IdAndIdNot(CPF_VALIDO, empresaA.getId(),
+                outroDaEmpresaA.getId())).isTrue();
 
         // Fica por ultimo: apos a violacao a transacao do Postgres fica abortada.
         assertThatThrownBy(() -> novoCliente(empresaA, "Outra Ana", CPF_VALIDO, null))
@@ -164,6 +189,19 @@ class ClienteRepositoryIT {
         cliente.atualizarDados("Ana", null, "11987654321", true, "11912345678", null);
 
         assertThatThrownBy(() -> clienteRepository.saveAndFlush(cliente))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    // ---------- CHECKs de formato ----------
+
+    @Test
+    void cpfComMascaraViolaCheckDeFormato() {
+        Empresa empresa = novaEmpresa("Empresa Formato");
+        // 11 caracteres (cabe no VARCHAR(11)), mas nao sao so digitos: o service
+        // normaliza antes; o CHECK ck_cliente_cpf_digitos e a defesa no banco.
+        Cliente comMascara = new Cliente(empresa, "Ana", "111.444.777", null, true, null, null);
+
+        assertThatThrownBy(() -> clienteRepository.saveAndFlush(comMascara))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
@@ -215,6 +253,8 @@ class ClienteRepositoryIT {
     void buscaTrataPercentualESublinhadoComoLiterais() {
         Empresa empresa = novaEmpresa("Empresa Curingas");
         novoCliente(empresa, "100% Pet", null, null);
+        // "1000 Pet" casaria se o % do termo agisse como curinga ("100" + qualquer coisa).
+        novoCliente(empresa, "1000 Pet", null, null);
         novoCliente(empresa, "Loja X", null, null);
 
         // Padroes ja escapados, como o service os montara.

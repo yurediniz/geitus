@@ -159,6 +159,9 @@ public class ClienteService {
      * recebido e descartado sem validar: o WhatsApp passa a ser o proprio
      * telefone e a coluna precisa ficar {@code null} (CHECK
      * {@code ck_cliente_whatsapp_coerente}).
+     *
+     * <p>Um WhatsApp "proprio" igual ao telefone (apos normalizar) tambem vira
+     * {@code telefoneEWhatsapp = true}: o numero e cadastrado uma vez so.
      */
     private DadosNormalizados normalizarEValidar(DadosCliente dados) {
         String nome = textoOuNulo(dados.nome());
@@ -170,6 +173,10 @@ public class ClienteService {
         boolean telefoneEWhatsapp = !Boolean.FALSE.equals(dados.telefoneEWhatsapp());
         String whatsapp = telefoneEWhatsapp ? null
                 : telefoneNormalizado(dados.whatsapp(), MENSAGEM_WHATSAPP_INVALIDO);
+        if (whatsapp != null && whatsapp.equals(telefone)) {
+            telefoneEWhatsapp = true;
+            whatsapp = null;
+        }
         return new DadosNormalizados(nome, cpf, telefone, telefoneEWhatsapp, whatsapp,
                 textoOuNulo(dados.observacoes()));
     }

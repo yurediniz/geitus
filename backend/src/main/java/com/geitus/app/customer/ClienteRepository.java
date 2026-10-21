@@ -38,14 +38,15 @@ public interface ClienteRepository extends JpaRepository<Cliente, Long> {
     // Exemplo: termo "100%" vira o padrao "%100\%%".
 
     /**
-     * Lista os clientes da empresa ordenados por nome, com filtro opcional de
+     * Lista os clientes da empresa ordenados por nome (desempate pelo id, para
+     * ordem deterministica entre homonimos), com filtro opcional de
      * status ({@code ativo} e ignorado quando {@code null}).
      */
     @Query("""
             SELECT c FROM Cliente c
             WHERE c.empresa.id = :empresaId
               AND (:ativo IS NULL OR c.ativo = :ativo)
-            ORDER BY c.nome
+            ORDER BY c.nome, c.id
             """)
     List<Cliente> buscarPorEmpresa(@Param("empresaId") Long empresaId, @Param("ativo") Boolean ativo);
 
@@ -58,7 +59,7 @@ public interface ClienteRepository extends JpaRepository<Cliente, Long> {
             WHERE c.empresa.id = :empresaId
               AND LOWER(c.nome) LIKE :padraoNome ESCAPE '\\'
               AND (:ativo IS NULL OR c.ativo = :ativo)
-            ORDER BY c.nome
+            ORDER BY c.nome, c.id
             """)
     List<Cliente> buscarPorNome(@Param("empresaId") Long empresaId, @Param("padraoNome") String padraoNome,
             @Param("ativo") Boolean ativo);
@@ -76,7 +77,7 @@ public interface ClienteRepository extends JpaRepository<Cliente, Long> {
                    OR c.telefone LIKE :padraoDigitos ESCAPE '\\'
                    OR c.whatsapp LIKE :padraoDigitos ESCAPE '\\')
               AND (:ativo IS NULL OR c.ativo = :ativo)
-            ORDER BY c.nome
+            ORDER BY c.nome, c.id
             """)
     List<Cliente> buscarPorNomeOuDigitos(@Param("empresaId") Long empresaId,
             @Param("padraoNome") String padraoNome, @Param("padraoDigitos") String padraoDigitos,

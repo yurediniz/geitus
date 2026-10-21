@@ -109,9 +109,7 @@ class ClienteServiceTest {
         assertThat(cliente.getTelefone()).isEqualTo("11987654321");
         assertThat(cliente.isTelefoneEWhatsapp()).isTrue();
         assertThat(cliente.getWhatsapp()).isNull();
-        // Cliente ainda nao expoe getObservacoes() (pendencia reportada; a
-        // entidade esta em revisao): le o campo diretamente.
-        assertThat(ReflectionTestUtils.getField(cliente, "observacoes")).isNull();
+        assertThat(cliente.getObservacoes()).isNull();
         assertThat(cliente.getEmpresaId()).isEqualTo(ID_EMPRESA);
         assertThat(cliente.isAtivo()).isTrue();
         verify(clienteRepository).save(cliente);
@@ -207,6 +205,20 @@ class ClienteServiceTest {
         Cliente cliente = clienteService.cadastrarParaUsuario(ID_USUARIO,
                 dados("Ana", null, "(11) 98765-4321", true, "123"));
 
+        assertThat(cliente.getWhatsapp()).isNull();
+        assertThat(cliente.getWhatsappResolvido()).isEqualTo("11987654321");
+    }
+
+    @Test
+    void whatsappIgualAoTelefoneViraTelefoneEWhatsapp() {
+        // "Cadastrar uma vez": o mesmo numero nao e gravado duas vezes, mesmo
+        // que digitado com mascaras diferentes.
+        prepararCadastro();
+
+        Cliente cliente = clienteService.cadastrarParaUsuario(ID_USUARIO,
+                dados("Ana", null, "(11) 98765-4321", false, "11 98765 4321"));
+
+        assertThat(cliente.isTelefoneEWhatsapp()).isTrue();
         assertThat(cliente.getWhatsapp()).isNull();
         assertThat(cliente.getWhatsappResolvido()).isEqualTo("11987654321");
     }

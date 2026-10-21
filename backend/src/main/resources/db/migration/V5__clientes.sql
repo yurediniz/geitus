@@ -30,8 +30,13 @@ CREATE TABLE clientes (
     -- NULL como nao-conflitantes (mesmo padrao de SKU/codigo de barras).
     CONSTRAINT uq_cliente_empresa_cpf UNIQUE (empresa_id, cpf),
     -- Sem numero duplicado: whatsapp proprio so quando o telefone nao e WhatsApp.
-    CONSTRAINT ck_cliente_whatsapp_coerente CHECK (telefone_e_whatsapp = false OR whatsapp IS NULL)
+    CONSTRAINT ck_cliente_whatsapp_coerente CHECK (telefone_e_whatsapp = false OR whatsapp IS NULL),
+    -- Defesa no banco alem da normalizacao do service: documentos so com digitos.
+    CONSTRAINT ck_cliente_cpf_digitos CHECK (cpf IS NULL OR cpf ~ '^[0-9]{11}$'),
+    CONSTRAINT ck_cliente_telefone_digitos CHECK (telefone IS NULL OR telefone ~ '^[0-9]{10,11}$'),
+    CONSTRAINT ck_cliente_whatsapp_digitos CHECK (whatsapp IS NULL OR whatsapp ~ '^[0-9]{10,11}$')
 );
 
--- Indice para acelerar o lookup por empresa (mesmo padrao de idx_produto_empresa).
-CREATE INDEX idx_cliente_empresa ON clientes (empresa_id);
+-- Indice composto: serve a FK (empresa_id como prefixo), o filtro por empresa e
+-- o ORDER BY nome da listagem.
+CREATE INDEX idx_cliente_empresa_nome ON clientes (empresa_id, nome);
