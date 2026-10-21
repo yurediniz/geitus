@@ -512,7 +512,8 @@ function DialogExcluirCategoria({
       descricao={
         bloqueada ? (
           <>
-            <p>Esta categoria tem {vinculos}, por isso não pode ser excluída.</p>
+            {/* Contagens diretas: a arvore mostra a subarvore, por isso o "diretamente nela". */}
+            <p>Esta categoria tem {vinculos} diretamente nela, por isso não pode ser excluída.</p>
             <p>
               {categoria?.ativo
                 ? 'Ela deixa de aparecer no cadastro de produtos; os produtos continuam com ela.'

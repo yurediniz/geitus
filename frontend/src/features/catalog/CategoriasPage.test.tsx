@@ -362,7 +362,7 @@ describe('CategoriasPage', () => {
     const dialogo = await screen.findByRole('dialog', { name: 'Não é possível excluir "Ração"' })
 
     expect(dialogo).toHaveTextContent(
-      'Esta categoria tem 2 subcategorias e 4 produtos, por isso não pode ser excluída.',
+      'Esta categoria tem 2 subcategorias e 4 produtos diretamente nela, por isso não pode ser excluída.',
     )
     expect(dialogo).toHaveTextContent('Ela deixa de aparecer no cadastro de produtos; os produtos continuam com ela.')
     expect(within(dialogo).queryByRole('button', { name: 'Excluir' })).not.toBeInTheDocument()
@@ -384,13 +384,13 @@ describe('CategoriasPage', () => {
     await escolherNoMenu('Úmida', 'Excluir')
 
     expect(await screen.findByRole('dialog')).toHaveTextContent(
-      'Esta categoria tem 1 subcategoria, por isso não pode ser excluída.',
+      'Esta categoria tem 1 subcategoria diretamente nela, por isso não pode ser excluída.',
     )
   })
 
   it('exclusao recusada por corrida (409) mostra o motivo enviado pelo backend', async () => {
-    const mensagem =
-      'Não é possível excluir: há 1 subcategoria(s) e 0 produto(s) nesta categoria. Mova-os ou inative a categoria.'
+    // Formato real do backend: omite a parte zerada.
+    const mensagem = 'Não é possível excluir: há 4 produto(s) nesta categoria. Mova-os ou inative a categoria.'
     listarCategoriasMock.mockResolvedValue(TODAS)
     excluirCategoriaMock.mockRejectedValue(new HttpError(409, mensagem))
 
@@ -398,13 +398,14 @@ describe('CategoriasPage', () => {
     await screen.findByRole('tree')
     await escolherNoMenu('Bebidas', 'Excluir')
     const dialogo = await screen.findByRole('dialog', { name: 'Excluir a categoria "Bebidas"?' })
+    const listagensAntesDoErro = listarCategoriasMock.mock.calls.length
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Excluir' }))
 
     await waitFor(() => expect(excluirCategoriaMock).toHaveBeenCalledWith('bebidas'))
     expect(await screen.findByRole('alert')).toHaveTextContent(mensagem)
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     // A lista e recarregada para refletir os vinculos novos.
-    await waitFor(() => expect(listarCategoriasMock).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(listarCategoriasMock.mock.calls.length).toBeGreaterThan(listagensAntesDoErro))
   })
 
   it('exclui categoria sem vinculos e leva o foco ao no vizinho', async () => {

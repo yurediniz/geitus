@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { Check, ChevronsUpDown, Loader2, Plus, Search } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -29,7 +30,10 @@ export interface SeletorCategoriaProps {
   /** Categoria atual do produto em edicao: continua escolhivel mesmo se inativa. */
   valorAtual?: CategoriaResumo | null
   onChange: (id: string | null) => void
-  /** Mostra o atalho "+ Nova categoria" (somente ADMIN). */
+  /**
+   * Somente ADMIN: mostra o atalho "+ Nova categoria" e o link para a tela de
+   * Categorias na orientacao sobre categoria inativa.
+   */
   podeCriar: boolean
   onCriada?: (categoria: Categoria) => void
   desabilitado?: boolean
@@ -50,6 +54,16 @@ interface Opcao {
 function rotuloOpcao(opcao: Opcao): string {
   return opcao.inativa ? `${opcao.rotulo} (inativa)` : opcao.rotulo
 }
+
+/**
+ * Comparacao de nome como a unicidade do backend: ignora maiusculas e espacos
+ * nas pontas, mas respeita acentos ("Racao" e "Ração" sao nomes diferentes).
+ */
+function chaveDeNome(texto: string): string {
+  return texto.normalize('NFC').trim().toLocaleLowerCase('pt-BR')
+}
+
+const ROTA_CATEGORIAS = '/produtos/categorias'
 
 /**
  * Combobox de categoria: busca pelo caminho (sem diferenciar acentos), lista
@@ -136,14 +150,31 @@ export function SeletorCategoria({
     return 'Categoria selecionada'
   }, [valor, porId, valorAtual])
 
-  // Nome igual (sem acento/maiusculas) a uma categoria principal: criar daria nome repetido.
+  // Nome igual (sem diferenciar maiusculas) a uma principal selecionavel: ela ja
+  // aparece na lista e criar daria nome repetido. Inativas nao contam: a
+  // orientacao abaixo explica e "+ Nova" segue disponivel (ex.: como subcategoria).
   const termoEhPrincipalExistente = useMemo(() => {
-    const alvo = normalizarTexto(termo)
+    const alvo = chaveDeNome(termo)
     return (
       alvo !== '' &&
-      [...porId.values()].some((categoria) => categoria.parentId === null && normalizarTexto(categoria.nome) === alvo)
+      selecionaveis.some((categoria) => categoria.parentId === null && chaveDeNome(categoria.nome) === alvo)
     )
-  }, [termo, porId])
+  }, [termo, selecionaveis])
+
+  // Termo igual (sem acento/maiusculas) ao nome de uma categoria fora da lista
+  // (inativa ou sob ramo inativo): explica por que ela nao aparece. Prefere a
+  // mais rasa; ignora a categoria atual, que ja aparece como opcao "(inativa)".
+  const naoSelecionavelComMesmoNome = useMemo(() => {
+    const alvo = normalizarTexto(termo)
+    if (alvo === '') {
+      return null
+    }
+    const candidatas = [...porId.values()].filter(
+      (categoria) =>
+        !categoria.selecionavel && categoria.id !== opcaoAtualInativa?.id && normalizarTexto(categoria.nome) === alvo,
+    )
+    return candidatas.sort((a, b) => a.nivel - b.nivel)[0] ?? null
+  }, [termo, porId, opcaoAtualInativa])
 
   const indiceSeguro = opcoes.length === 0 ? -1 : Math.min(indiceAtivo, opcoes.length - 1)
   const idOpcao = (indice: number) => `${idBase}-opcao-${indice}`
@@ -211,7 +242,7 @@ export function SeletorCategoria({
     }
     const focaveis = Array.from(
       conteudoRef.current.querySelectorAll<HTMLElement>(
-        'input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled), [tabindex]:not([tabindex="-1"])',
+        'a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled), [tabindex]:not([tabindex="-1"])',
       ),
     )
     const limite = event.shiftKey ? focaveis[0] : focaveis[focaveis.length - 1]
@@ -340,10 +371,14 @@ export function SeletorCategoria({
               })}
             </ul>
 
-            {opcoes.length === 0 && (
-              <p className="px-3 pb-3 text-sm text-muted-foreground">
-                Nenhuma categoria encontrada{termo.trim() ? ` para "${termo.trim()}"` : ''}.
-              </p>
+            {naoSelecionavelComMesmoNome ? (
+              <OrientacaoCategoriaInativa categoria={naoSelecionavelComMesmoNome} comLink={podeCriar} />
+            ) : (
+              opcoes.length === 0 && (
+                <p className="px-3 pb-3 text-sm text-muted-foreground">
+                  Nenhuma categoria encontrada{termo.trim() ? ` para "${termo.trim()}"` : ''}.
+                </p>
+              )
             )}
 
             {podeCriar && !termoEhPrincipalExistente && (
@@ -363,6 +398,37 @@ export function SeletorCategoria({
         )}
       </PopoverContent>
     </Popover>
+  )
+}
+
+interface OrientacaoCategoriaInativaProps {
+  categoria: Categoria
+  /** Link para a tela de Categorias (somente ADMIN, que pode reativar). */
+  comLink: boolean
+}
+
+/** Explica por que uma categoria com o nome buscado nao aparece na lista. */
+function OrientacaoCategoriaInativa({ categoria, comLink }: OrientacaoCategoriaInativaProps) {
+  const destino = comLink ? (
+    <Link to={ROTA_CATEGORIAS} className="font-medium text-foreground underline underline-offset-4">
+      Categorias
+    </Link>
+  ) : (
+    'Categorias'
+  )
+  return (
+    <p className="px-3 pb-3 text-sm text-muted-foreground">
+      {categoria.ativo ? (
+        <>
+          A categoria "{categoria.caminho}" existe, mas está dentro de uma categoria inativa. Reative essa categoria
+          em {destino} para usá-la.
+        </>
+      ) : (
+        <>
+          A categoria "{categoria.caminho}" existe, mas está inativa. Reative-a em {destino} para usá-la.
+        </>
+      )}
+    </p>
   )
 }
 

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 
 import { SeletorCategoria, type SeletorCategoriaProps } from '@/features/products/SeletorCategoria'
 import { cadastrarCategoria } from '@/services/categoriaService'
@@ -79,7 +80,9 @@ function renderSeletor(props: Partial<SeletorCategoriaProps> & { onChangeSpy?: (
   const invalidarSpy = vi.spyOn(queryClient, 'invalidateQueries')
   render(
     <QueryClientProvider client={queryClient}>
-      <SeletorComEstado {...props} />
+      <MemoryRouter>
+        <SeletorComEstado {...props} />
+      </MemoryRouter>
     </QueryClientProvider>,
   )
   return { invalidarSpy }
@@ -170,6 +173,71 @@ describe('SeletorCategoria', () => {
     // Nome de subcategoria pode ser repetido como principal.
     fireEvent.change(screen.getByRole('combobox', { name: 'Buscar categoria' }), { target: { value: 'umida' } })
     expect(screen.getByRole('button', { name: /nova categoria/i })).toBeInTheDocument()
+  })
+
+  it('acento diferente nao esconde + Nova', async () => {
+    renderSeletor()
+
+    await abrir()
+    const busca = screen.getByRole('combobox', { name: 'Buscar categoria' })
+    // O backend aceita "Racao" ao lado de "Ração": so maiusculas nao diferenciam.
+    fireEvent.change(busca, { target: { value: 'Racao' } })
+    expect(screen.getByRole('button', { name: 'Nova categoria: "Racao"' })).toBeInTheDocument()
+
+    fireEvent.change(busca, { target: { value: 'RAÇÃO' } })
+    expect(screen.queryByRole('button', { name: /nova categoria/i })).not.toBeInTheDocument()
+  })
+
+  it('termo igual a categoria principal inativa explica que ela está inativa', async () => {
+    renderSeletor()
+
+    await abrir()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Buscar categoria' }), { target: { value: 'brinquedos' } })
+
+    expect(screen.queryAllByRole('option')).toHaveLength(0)
+    expect(
+      screen.getByText((_, elemento) =>
+        elemento?.tagName === 'P' &&
+        elemento.textContent === 'A categoria "Brinquedos" existe, mas está inativa. Reative-a em Categorias para usá-la.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Categorias' })).toHaveAttribute('href', '/produtos/categorias')
+    expect(screen.queryByText(/nenhuma categoria encontrada/i)).not.toBeInTheDocument()
+    // Inativa nao bloqueia criar: o nome pode virar subcategoria de outra.
+    expect(screen.getByRole('button', { name: 'Nova categoria: "brinquedos"' })).toBeInTheDocument()
+  })
+
+  it('categoria oculta por ramo inativo explica o motivo; OPERADOR ve so o texto', async () => {
+    renderSeletor({ podeCriar: false })
+
+    await abrir()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Buscar categoria' }), { target: { value: 'Bolinhas' } })
+
+    expect(
+      screen.getByText((_, elemento) =>
+        elemento?.tagName === 'P' &&
+        elemento.textContent ===
+          'A categoria "Brinquedos › Bolinhas" existe, mas está dentro de uma categoria inativa. Reative essa categoria em Categorias para usá-la.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Categorias' })).not.toBeInTheDocument()
+  })
+
+  it('termo so com espacos lista tudo e "+ Nova categoria" abre com o nome vazio', async () => {
+    renderSeletor()
+
+    const lista = await abrir()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Buscar categoria' }), { target: { value: '   ' } })
+
+    expect(within(lista).getAllByRole('option').map((opcao) => opcao.textContent)).toEqual([
+      'Sem categoria',
+      'Mercearia',
+      'Ração',
+      'Ração › Úmida',
+      'Ração › Úmida › Sachê',
+    ])
+    fireEvent.click(screen.getByRole('button', { name: 'Nova categoria' }))
+    expect(screen.getByLabelText('Nome da categoria')).toHaveValue('')
   })
 
   it('busca "umida" encontra a subcategoria pelo caminho completo', async () => {
