@@ -17,7 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { ClienteFormulario } from '@/features/customers/ClienteFormulario'
+import { ClienteFormulario, type ClienteCampoFormulario } from '@/features/customers/ClienteFormulario'
 import { useAuth } from '@/hooks/useAuth'
 import { mascararCpf, mascararTelefone } from '@/lib/documentos'
 import {
@@ -32,25 +32,67 @@ import type { Cliente, ClienteRequest, ClienteStatusFiltro } from '@/types/clien
 
 const CLIENTES_QUERY_KEY = ['clientes'] as const
 
-/** Mensagem amigavel (pt-BR) para falhas ao salvar, sem vazar detalhe interno. */
-function mensagemErroSalvar(erro: unknown): string {
+type ErroCamposCliente = Partial<Record<ClienteCampoFormulario, string>>
+
+/** Falha ao salvar traduzida para a interface: mensagem geral + erros por campo. */
+interface ErroSalvarCliente {
+  mensagem: string
+  campos?: ErroCamposCliente
+}
+
+const CAMPOS_DO_FORMULARIO: readonly ClienteCampoFormulario[] = [
+  'nome',
+  'cpf',
+  'telefone',
+  'whatsapp',
+  'observacoes',
+]
+
+function ehCampoDoFormulario(campo: string): campo is ClienteCampoFormulario {
+  return (CAMPOS_DO_FORMULARIO as readonly string[]).includes(campo)
+}
+
+const MENSAGEM_CPF_DUPLICADO_CAMPO =
+  'Já existe um cliente com este CPF. Busque pelo CPF na lista para usar o cadastro existente.'
+
+/** Traduz a falha ao salvar (pt-BR), sem vazar detalhe interno. */
+function interpretarErroSalvar(erro: unknown): ErroSalvarCliente {
   if (erro instanceof HttpError) {
     if (erro.status === 409) {
-      // CPF duplicado na empresa: usa a mensagem do backend, com fallback amigavel.
-      if (erro.message && erro.message.trim() !== '') {
-        return erro.message
-      }
-      return 'Já existe um cliente com este CPF nesta empresa.'
+      // CPF duplicado na empresa: mensagem do backend no topo e orientacao no campo CPF.
+      const mensagem =
+        erro.message && erro.message.trim() !== ''
+          ? erro.message
+          : 'Já existe um cliente com este CPF nesta empresa.'
+      return { mensagem, campos: { cpf: MENSAGEM_CPF_DUPLICADO_CAMPO } }
     }
     if (erro.status === 400) {
-      const mensagensCampos = erro.campos ? Object.values(erro.campos).filter(Boolean) : []
-      if (mensagensCampos.length > 0) {
-        return mensagensCampos.join(' ')
+      // Campos conhecidos vao para o proprio campo; os demais ficam na mensagem geral.
+      const campos: ErroCamposCliente = {}
+      const mensagensSemCampo: string[] = []
+      for (const [campo, mensagem] of Object.entries(erro.campos ?? {})) {
+        if (!mensagem) {
+          continue
+        }
+        if (ehCampoDoFormulario(campo)) {
+          campos[campo] = mensagem
+        } else {
+          mensagensSemCampo.push(mensagem)
+        }
       }
-      return 'Revise os dados do cliente e tente novamente.'
+      if (mensagensSemCampo.length > 0) {
+        return { mensagem: mensagensSemCampo.join(' '), campos }
+      }
+      if (Object.keys(campos).length > 0) {
+        return { mensagem: 'Revise os campos destacados.', campos }
+      }
+      if (erro.message && erro.message !== 'Dados invalidos.') {
+        return { mensagem: erro.message }
+      }
+      return { mensagem: 'Revise os dados do cliente e tente novamente.' }
     }
   }
-  return 'Não foi possível salvar o cliente. Tente novamente.'
+  return { mensagem: 'Não foi possível salvar o cliente. Tente novamente.' }
 }
 
 function mensagemErroStatus(erro: unknown): string {
@@ -72,6 +114,7 @@ export function ClientesPage() {
   const [clienteEmEdicao, setClienteEmEdicao] = useState<Cliente | null>(null)
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null)
   const [erroSalvar, setErroSalvar] = useState<string | null>(null)
+  const [erroCamposSalvar, setErroCamposSalvar] = useState<ErroCamposCliente | undefined>(undefined)
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [acaoStatusId, setAcaoStatusId] = useState<string | null>(null)
 
@@ -97,12 +140,15 @@ export function ClientesPage() {
       await queryClient.invalidateQueries({ queryKey: CLIENTES_QUERY_KEY })
       setMensagemSucesso(clienteEmEdicao ? 'Cliente atualizado com sucesso.' : 'Cliente cadastrado com sucesso.')
       setErroSalvar(null)
+      setErroCamposSalvar(undefined)
       setFormularioAberto(false)
       setClienteEmEdicao(null)
     },
     onError: (erro) => {
+      const { mensagem, campos } = interpretarErroSalvar(erro)
       setMensagemSucesso(null)
-      setErroSalvar(mensagemErroSalvar(erro))
+      setErroSalvar(mensagem)
+      setErroCamposSalvar(campos)
     },
   })
 
@@ -131,6 +177,7 @@ export function ClientesPage() {
     setFormularioAberto(true)
     setMensagemSucesso(null)
     setErroSalvar(null)
+    setErroCamposSalvar(undefined)
     setErroGeral(null)
   }
 
@@ -138,10 +185,12 @@ export function ClientesPage() {
     setFormularioAberto(false)
     setClienteEmEdicao(null)
     setErroSalvar(null)
+    setErroCamposSalvar(undefined)
   }
 
   const salvarCliente = (request: ClienteRequest) => {
     setErroSalvar(null)
+    setErroCamposSalvar(undefined)
     setMensagemSucesso(null)
     salvarMutation.mutate(request)
   }
@@ -151,7 +200,7 @@ export function ClientesPage() {
     setBuscaAplicada(busca.trim())
   }
 
-  const semFiltro = buscaAplicada === '' && status !== 'inativos'
+  const estadoVazio = textosEstadoVazio(buscaAplicada, status)
 
   return (
     <div className="space-y-6">
@@ -169,23 +218,28 @@ export function ClientesPage() {
         </Button>
       </div>
 
-      {mensagemSucesso && (
-        <div
-          role="status"
-          className="flex max-w-2xl items-center gap-2 rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-success"
-        >
-          <CheckCircle2 className="h-4 w-4 shrink-0" />
-          <span>{mensagemSucesso}</span>
-        </div>
-      )}
+      {/* Feedback fixo no topo: continua visivel ao agir sobre um cliente no fim da lista. */}
+      {(mensagemSucesso || erroGeral) && (
+        <div className="sticky top-0 z-10 space-y-2 bg-background py-2">
+          {mensagemSucesso && (
+            <div
+              role="status"
+              className="flex max-w-2xl items-center gap-2 rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-success"
+            >
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <span>{mensagemSucesso}</span>
+            </div>
+          )}
 
-      {erroGeral && (
-        <div
-          role="alert"
-          className="flex max-w-2xl items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{erroGeral}</span>
+          {erroGeral && (
+            <div
+              role="alert"
+              className="flex max-w-2xl items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{erroGeral}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -203,6 +257,7 @@ export function ClientesPage() {
               cliente={clienteEmEdicao}
               salvando={salvarMutation.isPending}
               erro={erroSalvar}
+              erroCampos={erroCamposSalvar}
               onSalvar={salvarCliente}
               onCancelar={cancelarFormulario}
             />
@@ -286,16 +341,14 @@ export function ClientesPage() {
 
           {!isPending && !isError && clientes.length === 0 && (
             <div className="flex max-w-xl items-start gap-3 rounded-md border border-dashed p-4">
-              <Users className="mt-0.5 h-5 w-5 text-muted-foreground" />
+              <Users className="mt-0.5 h-5 w-5 text-muted-foreground" aria-hidden="true" />
               <div>
-                <p className="text-sm font-medium">
-                  {semFiltro ? 'Nenhum cliente cadastrado ainda.' : 'Nenhum cliente encontrado.'}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {semFiltro
-                    ? 'Cadastre o primeiro cliente — só o nome já basta.'
-                    : 'Confira o termo digitado ou ajuste o filtro de status.'}
-                </p>
+                <p className="text-sm font-medium">{estadoVazio.titulo}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{estadoVazio.texto}</p>
+                <Button type="button" size="sm" className="mt-3" onClick={() => abrirFormulario(null)}>
+                  <Plus className="h-4 w-4" />
+                  Cadastrar cliente
+                </Button>
               </div>
             </div>
           )}
@@ -320,6 +373,26 @@ export function ClientesPage() {
       </Card>
     </div>
   )
+}
+
+/** Textos do estado vazio conforme busca e filtro de status. */
+function textosEstadoVazio(busca: string, status: ClienteStatusFiltro): { titulo: string; texto: string } {
+  if (busca === '' && status === 'ativos') {
+    return {
+      titulo: 'Nenhum cliente ativo.',
+      texto: 'Cadastre um cliente — só o nome já basta — ou troque o filtro para ver os inativos.',
+    }
+  }
+  if (busca === '' && status === 'todos') {
+    return {
+      titulo: 'Nenhum cliente cadastrado ainda.',
+      texto: 'Cadastre o primeiro cliente — só o nome já basta.',
+    }
+  }
+  return {
+    titulo: 'Nenhum cliente encontrado.',
+    texto: 'Confira o termo digitado ou ajuste o filtro de status.',
+  }
 }
 
 /** Selo que indica qual numero do cliente e o WhatsApp (texto + icone, nao so cor). */
@@ -396,7 +469,13 @@ function ClienteItem({ cliente, podeAlterarStatus, onEditar, onAlterarStatus, al
         </div>
 
         <div className="flex flex-wrap gap-2 lg:justify-end">
-          <Button type="button" variant="outline" size="sm" onClick={onEditar}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onEditar}
+            aria-label={`Editar ${cliente.nome}`}
+          >
             <Pencil className="h-4 w-4" />
             Editar
           </Button>
@@ -407,6 +486,7 @@ function ClienteItem({ cliente, podeAlterarStatus, onEditar, onAlterarStatus, al
               size="sm"
               onClick={onAlterarStatus}
               disabled={alterandoStatus}
+              aria-label={`${cliente.ativo ? 'Inativar' : 'Reativar'} ${cliente.nome}`}
             >
               {alterandoStatus ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

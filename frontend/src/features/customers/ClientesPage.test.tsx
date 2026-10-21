@@ -143,12 +143,32 @@ describe('ClientesPage', () => {
     expect(screen.getByText(/carregando clientes/i)).toBeInTheDocument()
   })
 
-  it('exibe estado vazio', async () => {
+  it('estado vazio com filtro ativos orienta e o botao abre o cadastro', async () => {
     listarClientesMock.mockResolvedValue([])
 
     renderComProviders(<ClientesPage />)
 
-    expect(await screen.findByText(/nenhum cliente cadastrado ainda/i)).toBeInTheDocument()
+    expect(await screen.findByText('Nenhum cliente ativo.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Cadastre um cliente — só o nome já basta — ou troque o filtro para ver os inativos.'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar cliente' }))
+
+    expect(await screen.findByLabelText(/^nome$/i)).toHaveValue('')
+    expect(screen.getByRole('button', { name: /salvar cliente/i })).toBeInTheDocument()
+  })
+
+  it('estado vazio com filtro todos indica que nao ha clientes cadastrados', async () => {
+    listarClientesMock.mockResolvedValue([])
+
+    renderComProviders(<ClientesPage />)
+
+    await screen.findByText('Nenhum cliente ativo.')
+    fireEvent.change(screen.getByLabelText(/status/i), { target: { value: 'todos' } })
+
+    expect(await screen.findByText('Nenhum cliente cadastrado ainda.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cadastrar cliente' })).toBeInTheDocument()
   })
 
   it('exibe estado vazio de busca quando ha termo aplicado', async () => {
@@ -156,7 +176,7 @@ describe('ClientesPage', () => {
 
     renderComProviders(<ClientesPage />)
 
-    await screen.findByText(/nenhum cliente cadastrado ainda/i)
+    await screen.findByText('Nenhum cliente ativo.')
     fireEvent.change(screen.getByLabelText(/busca/i), { target: { value: '(11) 98765' } })
     fireEvent.click(screen.getByRole('button', { name: /^buscar$/i }))
 
@@ -214,10 +234,10 @@ describe('ClientesPage', () => {
     renderComProviders(<ClientesPage />)
 
     const nome = await abrirFormularioNovo()
-    expect(screen.queryByLabelText(/^whatsapp/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/outro número de whatsapp/i)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('checkbox', { name: /este número é whatsapp/i }))
-    const whatsapp = await screen.findByLabelText(/^whatsapp/i)
+    const whatsapp = await screen.findByLabelText(/outro número de whatsapp/i)
 
     fireEvent.change(nome, { target: { value: 'João Pereira' } })
     fireEvent.change(screen.getByLabelText(/^telefone/i), { target: { value: '1133224455' } })
@@ -302,10 +322,32 @@ describe('ClientesPage', () => {
     expect(cadastrarClienteMock).toHaveBeenCalledWith(expect.objectContaining({ cpf: '11144477735' }))
   })
 
-  it('exibe as mensagens de campos quando o backend responde 400', async () => {
+  it('409 marca o erro no campo CPF com orientacao para buscar o cadastro existente', async () => {
     listarClientesMock.mockResolvedValue([])
     cadastrarClienteMock.mockRejectedValue(
-      new HttpError(400, 'Dados invalidos.', { telefone: 'Telefone inválido.' }),
+      new HttpError(409, 'Já existe um cliente com este CPF nesta empresa.'),
+    )
+
+    renderComProviders(<ClientesPage />)
+
+    const nome = await abrirFormularioNovo()
+    fireEvent.change(nome, { target: { value: 'Ana' } })
+    fireEvent.change(screen.getByLabelText(/^cpf/i), { target: { value: '111.444.777-35' } })
+    salvar()
+
+    expect(
+      await screen.findByText(
+        'Já existe um cliente com este CPF. Busque pelo CPF na lista para usar o cadastro existente.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText(/^cpf/i)).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('exibe as mensagens de campos no proprio campo quando o backend responde 400', async () => {
+    listarClientesMock.mockResolvedValue([])
+    // `campos` ja no formato normalizado pelo httpClient (Record campo -> mensagem).
+    cadastrarClienteMock.mockRejectedValue(
+      new HttpError(400, 'Um ou mais campos sao invalidos.', { telefone: 'Telefone inválido.' }),
     )
 
     renderComProviders(<ClientesPage />)
@@ -315,6 +357,85 @@ describe('ClientesPage', () => {
     salvar()
 
     expect(await screen.findByText('Telefone inválido.')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^telefone/i)).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByText('Revise os campos destacados.')).toBeInTheDocument()
+  })
+
+  it('exibe a mensagem do backend em 400 sem campos', async () => {
+    listarClientesMock.mockResolvedValue([])
+    cadastrarClienteMock.mockRejectedValue(new HttpError(400, 'CPF inválido.'))
+
+    renderComProviders(<ClientesPage />)
+
+    const nome = await abrirFormularioNovo()
+    fireEvent.change(nome, { target: { value: 'Ana' } })
+    salvar()
+
+    expect(await screen.findByText('CPF inválido.')).toBeInTheDocument()
+    expect(screen.queryByText('Revise os dados do cliente e tente novamente.')).not.toBeInTheDocument()
+  })
+
+  it('telefone com DDD 10 bloqueia o envio', async () => {
+    listarClientesMock.mockResolvedValue([])
+
+    renderComProviders(<ClientesPage />)
+
+    const nome = await abrirFormularioNovo()
+    fireEvent.change(nome, { target: { value: 'Ana' } })
+    fireEvent.change(screen.getByLabelText(/^telefone/i), { target: { value: '10987654321' } })
+    salvar()
+
+    expect(await screen.findByText('Informe um telefone válido com DDD.')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^telefone/i)).toHaveAttribute('aria-invalid', 'true')
+    expect(cadastrarClienteMock).not.toHaveBeenCalled()
+  })
+
+  it('whatsapp proprio invalido bloqueia o envio', async () => {
+    listarClientesMock.mockResolvedValue([])
+
+    renderComProviders(<ClientesPage />)
+
+    const nome = await abrirFormularioNovo()
+    fireEvent.change(nome, { target: { value: 'Ana' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /este número é whatsapp/i }))
+    const whatsapp = await screen.findByLabelText(/outro número de whatsapp/i)
+    expect(screen.getByText('Deixe em branco se o cliente não usa WhatsApp.')).toBeInTheDocument()
+    fireEvent.change(whatsapp, { target: { value: '1198765' } })
+    salvar()
+
+    expect(await screen.findByText('Informe um WhatsApp válido com DDD.')).toBeInTheDocument()
+    expect(whatsapp).toHaveAttribute('aria-invalid', 'true')
+    expect(cadastrarClienteMock).not.toHaveBeenCalled()
+  })
+
+  it('apagar o CPF na edicao envia cpf null', async () => {
+    listarClientesMock.mockResolvedValue([clienteAtivo])
+    atualizarClienteMock.mockResolvedValue({ ...clienteAtivo, cpf: null })
+
+    renderComProviders(<ClientesPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Maria Silva' }))
+    const cpf = await screen.findByLabelText(/^cpf/i)
+    expect(cpf).toHaveValue('111.444.777-35')
+    fireEvent.change(cpf, { target: { value: '' } })
+    salvar()
+
+    await waitFor(() => {
+      expect(atualizarClienteMock).toHaveBeenCalledWith(ID_MARIA, expect.objectContaining({ cpf: null }))
+    })
+  })
+
+  it('desmarcar whatsapp na edicao de cliente com telefone como whatsapp mostra o campo vazio', async () => {
+    listarClientesMock.mockResolvedValue([clienteAtivo])
+
+    renderComProviders(<ClientesPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar Maria Silva' }))
+    const checkbox = await screen.findByRole('checkbox', { name: /este número é whatsapp/i })
+    expect(checkbox).toBeChecked()
+    fireEvent.click(checkbox)
+
+    expect(await screen.findByLabelText(/outro número de whatsapp/i)).toHaveValue('')
   })
 
   it('edita cliente marcando o telefone como whatsapp', async () => {
@@ -327,9 +448,9 @@ describe('ClientesPage', () => {
     fireEvent.click(within(card).getByRole('button', { name: /editar/i }))
 
     expect(await screen.findByLabelText(/^nome$/i)).toHaveValue('João Pereira')
-    expect(screen.getByLabelText(/^whatsapp/i)).toHaveValue('(11) 91234-5678')
+    expect(screen.getByLabelText(/outro número de whatsapp/i)).toHaveValue('(11) 91234-5678')
     fireEvent.click(screen.getByRole('checkbox', { name: /este número é whatsapp/i }))
-    expect(screen.queryByLabelText(/^whatsapp/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/outro número de whatsapp/i)).not.toBeInTheDocument()
     salvar()
 
     await waitFor(() => {
@@ -386,5 +507,21 @@ describe('ClientesPage', () => {
       expect(reativarClienteMock).toHaveBeenCalledWith(ID_JOAO)
     })
     expect(await screen.findByText('Cliente reativado com sucesso.')).toBeInTheDocument()
+  })
+
+  it('403 ao inativar explica que so administradores alteram o status', async () => {
+    listarClientesMock.mockResolvedValue([clienteAtivo])
+    inativarClienteMock.mockRejectedValue(new HttpError(403, 'Requisicao falhou (HTTP 403).'))
+
+    renderComProviders(<ClientesPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Inativar Maria Silva' }))
+
+    expect(
+      await screen.findByText('Somente administradores podem inativar ou reativar clientes.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Somente administradores podem inativar ou reativar clientes.',
+    )
   })
 })
