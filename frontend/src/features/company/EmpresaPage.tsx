@@ -10,6 +10,13 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/hooks/useAuth'
+import {
+  apenasDigitos,
+  cpfValido,
+  mascararCpf,
+  mascararTelefone,
+  telefoneValido,
+} from '@/lib/documentos'
 import { buscarCep } from '@/services/cepService'
 import { atualizarEmpresa, obterEmpresa } from '@/services/empresaService'
 import { HttpError } from '@/services/httpClient'
@@ -24,21 +31,7 @@ const UFS = [
   'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
 ] as const
 
-// --- Normalizacao e mascaras ------------------------------------------------
-
-/** Mantem apenas os digitos de um texto. */
-function apenasDigitos(valor: string): string {
-  return valor.replace(/\D/g, '')
-}
-
-/** Formata CPF progressivamente: 000.000.000-00. */
-function mascararCpf(valor: string): string {
-  const d = apenasDigitos(valor).slice(0, 11)
-  return d
-    .replace(/^(\d{3})(\d)/, '$1.$2')
-    .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4')
-}
+// --- Mascaras e validadores exclusivos de Empresa (CNPJ e CEP) -------------
 
 /** Formata CNPJ progressivamente: 00.000.000/0000-00. */
 function mascararCnpj(valor: string): string {
@@ -50,53 +43,10 @@ function mascararCnpj(valor: string): string {
     .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, '$1.$2.$3/$4-$5')
 }
 
-/** Formata telefone BR progressivamente: (00) 0000-0000 ou (00) 00000-0000. */
-function mascararTelefone(valor: string): string {
-  const d = apenasDigitos(valor).slice(0, 11)
-  if (d.length <= 10) {
-    return d
-      .replace(/^(\d{2})(\d)/, '($1) $2')
-      .replace(/^\((\d{2})\) (\d{4})(\d)/, '($1) $2-$3')
-  }
-  return d
-    .replace(/^(\d{2})(\d)/, '($1) $2')
-    .replace(/^\((\d{2})\) (\d{5})(\d)/, '($1) $2-$3')
-}
-
 /** Formata CEP progressivamente: 00000-000. */
 function mascararCep(valor: string): string {
   const d = apenasDigitos(valor).slice(0, 8)
   return d.replace(/^(\d{5})(\d)/, '$1-$2')
-}
-
-// --- Validadores de digitos verificadores -----------------------------------
-
-/** Valida um CPF pelos digitos verificadores. */
-function cpfValido(valor: string): boolean {
-  const c = apenasDigitos(valor)
-  if (c.length !== 11 || /^(\d)\1{10}$/.test(c)) {
-    return false
-  }
-  let soma = 0
-  for (let i = 0; i < 9; i += 1) {
-    soma += Number(c[i]) * (10 - i)
-  }
-  let d1 = (soma * 10) % 11
-  if (d1 === 10) {
-    d1 = 0
-  }
-  if (d1 !== Number(c[9])) {
-    return false
-  }
-  soma = 0
-  for (let i = 0; i < 10; i += 1) {
-    soma += Number(c[i]) * (11 - i)
-  }
-  let d2 = (soma * 10) % 11
-  if (d2 === 10) {
-    d2 = 0
-  }
-  return d2 === Number(c[10])
 }
 
 /** Valida um CNPJ pelos digitos verificadores. */
@@ -121,12 +71,6 @@ function cnpjValido(valor: string): boolean {
     return false
   }
   return calcularDigito(13) === Number(c[13])
-}
-
-/** Telefone BR: DDD + numero (10 ou 11 digitos). */
-function telefoneValido(valor: string): boolean {
-  const tamanho = apenasDigitos(valor).length
-  return tamanho === 10 || tamanho === 11
 }
 
 // --- Schema do formulario ---------------------------------------------------
