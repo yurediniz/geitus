@@ -22,9 +22,11 @@ const apiPatchMock = vi.mocked(apiPatch)
 
 const produtoRequest: ProdutoRequest = {
   nome: 'Arroz 5kg',
-  categoria: null,
+  unidadeId: '6f1c2b8e-0000-4000-8000-000000000001',
+  categoriaId: null,
+  unidadeCompraId: null,
+  fatorConversao: null,
   marca: null,
-  unidade: 'UN',
   descricao: null,
   precoVenda: 25.9,
   custo: null,

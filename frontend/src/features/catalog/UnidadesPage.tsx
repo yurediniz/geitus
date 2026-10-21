@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   PRODUTOS_QUERY_KEY,
+  TODAS_UNIDADES_QUERY_KEY,
   UNIDADES_QUERY_KEY,
   mensagemErroCatalogo,
 } from '@/features/catalog/catalogoQuery'
@@ -26,7 +27,7 @@ import {
 } from '@/services/unidadeService'
 import type { UnidadeMedida, UnidadeMedidaRequest } from '@/types/catalogo'
 
-const LISTA_QUERY_KEY = [...UNIDADES_QUERY_KEY, 'todas'] as const
+const LISTA_QUERY_KEY = TODAS_UNIDADES_QUERY_KEY
 
 const CAMPOS_DO_FORMULARIO: readonly UnidadeCampoFormulario[] = ['sigla', 'descricao', 'fracionada']
 

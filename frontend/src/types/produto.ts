@@ -3,15 +3,26 @@
  *
  * Refletem o contrato da API do backend em /api/produtos. A empresa nao e
  * enviada nem recebida aqui: ela e sempre derivada do usuario autenticado.
+ * Unidade e categoria vem dos cadastros do catalogo (ver types/catalogo).
  */
+
+import type { CategoriaResumo, UnidadeResumo } from '@/types/catalogo'
 
 /** Produto conforme retornado pela API. */
 export interface Produto {
   id: number
   nome: string
-  categoria: string | null
+  /** Categoria com o caminho completo (ex.: "Ração › Úmida › Sachê"); null = sem categoria. */
+  categoria: CategoriaResumo | null
   marca: string | null
-  unidade: string | null
+  /** Unidade de venda (obrigatoria). */
+  unidade: UnidadeResumo
+  /** Unidade de compra; null quando o produto e comprado na mesma unidade de venda. */
+  unidadeCompra: UnidadeResumo | null
+  /** Quantas unidades de venda cabem em 1 unidade de compra; null sem unidade de compra. */
+  fatorConversao: number | null
+  /** Texto derivado pelo backend, ex.: "1 CX = 12 UN"; null sem unidade de compra. Só-leitura. */
+  conversaoTexto: string | null
   descricao: string | null
   precoVenda: number
   custo: number | null
@@ -37,9 +48,14 @@ export interface Produto {
 /** Corpo enviado para cadastro/atualizacao de produto. Não envia margem/markup (derivados). */
 export interface ProdutoRequest {
   nome: string
-  categoria: string | null
+  /** UUID da unidade de venda (obrigatorio). */
+  unidadeId: string
+  /** UUID da categoria; null = sem categoria. */
+  categoriaId: string | null
+  /** UUID da unidade de compra; enviado sempre junto com `fatorConversao`. */
+  unidadeCompraId: string | null
+  fatorConversao: number | null
   marca: string | null
-  unidade: string | null
   descricao: string | null
   precoVenda: number
   custo: number | null

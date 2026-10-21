@@ -6,6 +6,9 @@ import { HttpError } from '@/services/httpClient'
  */
 export const UNIDADES_QUERY_KEY = ['unidades'] as const
 export const CATEGORIAS_QUERY_KEY = ['categorias'] as const
+/** Listas completas (ativas e inativas), compartilhadas pelas telas do catalogo e pelo formulario do produto. */
+export const TODAS_UNIDADES_QUERY_KEY = [...UNIDADES_QUERY_KEY, 'todas'] as const
+export const TODAS_CATEGORIAS_QUERY_KEY = [...CATEGORIAS_QUERY_KEY, 'todas'] as const
 /** Produtos exibem unidade/categoria: alteracoes no catalogo os deixam desatualizados. */
 export const PRODUTOS_QUERY_KEY = ['produtos'] as const
 

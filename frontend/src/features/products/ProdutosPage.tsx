@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import type { UseFormRegisterReturn } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { z } from 'zod'
 import {
@@ -20,8 +21,15 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import {
+  PRODUTOS_QUERY_KEY,
+  TODAS_CATEGORIAS_QUERY_KEY,
+  TODAS_UNIDADES_QUERY_KEY,
+} from '@/features/catalog/catalogoQuery'
 import { CatalogoNav } from '@/features/products/CatalogoNav'
+import { SeletorCategoria } from '@/features/products/SeletorCategoria'
 import { useAuth } from '@/hooks/useAuth'
+import { listarCategorias } from '@/services/categoriaService'
 import { HttpError } from '@/services/httpClient'
 import {
   atualizarProduto,
@@ -30,9 +38,9 @@ import {
   listarProdutos,
   reativarProduto,
 } from '@/services/produtoService'
+import { listarUnidades } from '@/services/unidadeService'
+import type { Categoria, UnidadeMedida, UnidadeResumo } from '@/types/catalogo'
 import type { Produto, ProdutoRequest, ProdutoStatusFiltro } from '@/types/produto'
-
-const PRODUTOS_QUERY_KEY = ['produtos'] as const
 
 const textoOpcional = (max: number, mensagem: string) =>
   z.string().trim().max(max, mensagem)
@@ -47,13 +55,24 @@ const numeroOpcional = (mensagemNegativo: string) =>
     .refine((valor) => valor === '' || Number.isFinite(Number(valor)), 'Informe um número válido.')
     .refine((valor) => valor === '' || Number(valor) >= 0, mensagemNegativo)
 
+// Espelha o backend: fator > 0 com ate 8 digitos inteiros e 4 casas decimais.
+const fatorConversaoSchema = z.string().trim()
+  .refine((valor) => valor === '' || Number.isFinite(Number(valor)), 'Informe um número válido.')
+  .refine((valor) => valor === '' || Number(valor) > 0, 'O fator de conversão deve ser maior que zero.')
+  .refine(
+    (valor) => valor === '' || Number(valor) <= 0 || /^\d{1,8}(\.\d{1,4})?$/.test(valor),
+    'Use até 8 dígitos inteiros e 4 casas decimais.',
+  )
+
 const produtoSchema = z.object({
   nome: z.string().trim()
     .min(1, 'Informe o nome do produto.')
     .max(150, 'Nome deve ter no máximo 150 caracteres.'),
-  categoria: textoOpcional(100, 'Categoria deve ter no máximo 100 caracteres.'),
+  unidadeId: z.string().min(1, 'Selecione a unidade de venda.'),
+  categoriaId: z.string().nullable(),
+  unidadeCompraId: z.string(),
+  fatorConversao: fatorConversaoSchema,
   marca: textoOpcional(100, 'Marca deve ter no máximo 100 caracteres.'),
-  unidade: textoOpcional(20, 'Unidade deve ter no máximo 20 caracteres.'),
   descricao: textoOpcional(1000, 'Descrição deve ter no máximo 1000 caracteres.'),
   precoVenda: numeroObrigatorio,
   custo: numeroOpcional('Custo não pode ser negativo.'),
@@ -65,6 +84,27 @@ const produtoSchema = z.object({
   sku: textoOpcional(50, 'SKU deve ter no máximo 50 caracteres.'),
 }).superRefine((valores, ctx) => {
   const preenchido = (valor: string) => valor.trim() !== ''
+  const temUnidadeCompra = valores.unidadeCompraId !== ''
+  const temFator = preenchido(valores.fatorConversao)
+  if (temUnidadeCompra !== temFator) {
+    ctx.addIssue({
+      path: [temUnidadeCompra ? 'fatorConversao' : 'unidadeCompraId'],
+      code: z.ZodIssueCode.custom,
+      message: 'Informe a unidade de compra e o fator de conversão juntos.',
+    })
+  }
+  if (
+    temUnidadeCompra &&
+    temFator &&
+    valores.unidadeCompraId === valores.unidadeId &&
+    Number(valores.fatorConversao) !== 1
+  ) {
+    ctx.addIssue({
+      path: ['fatorConversao'],
+      code: z.ZodIssueCode.custom,
+      message: 'Quando a unidade de compra é a mesma de venda, o fator deve ser 1.',
+    })
+  }
   if (
     preenchido(valores.precoMinimo) &&
     preenchido(valores.precoVenda) &&
@@ -93,9 +133,11 @@ type ProdutoFormValues = z.infer<typeof produtoSchema>
 
 const valoresIniciais: ProdutoFormValues = {
   nome: '',
-  categoria: '',
+  unidadeId: '',
+  categoriaId: null,
+  unidadeCompraId: '',
+  fatorConversao: '',
   marca: '',
-  unidade: '',
   descricao: '',
   precoVenda: '',
   custo: '',
@@ -120,9 +162,11 @@ function numeroOuNulo(valor: string): number | null {
 function montarRequest(valores: ProdutoFormValues): ProdutoRequest {
   return {
     nome: valores.nome.trim(),
-    categoria: textoOuNulo(valores.categoria),
+    unidadeId: valores.unidadeId,
+    categoriaId: valores.categoriaId,
+    unidadeCompraId: textoOuNulo(valores.unidadeCompraId),
+    fatorConversao: numeroOuNulo(valores.fatorConversao),
     marca: textoOuNulo(valores.marca),
-    unidade: textoOuNulo(valores.unidade),
     descricao: textoOuNulo(valores.descricao),
     precoVenda: Number(valores.precoVenda),
     custo: numeroOuNulo(valores.custo),
@@ -138,9 +182,11 @@ function montarRequest(valores: ProdutoFormValues): ProdutoRequest {
 function valoresDoProduto(produto: Produto): ProdutoFormValues {
   return {
     nome: produto.nome,
-    categoria: produto.categoria ?? '',
+    unidadeId: produto.unidade.id,
+    categoriaId: produto.categoria?.id ?? null,
+    unidadeCompraId: produto.unidadeCompra?.id ?? '',
+    fatorConversao: produto.fatorConversao === null ? '' : String(produto.fatorConversao),
     marca: produto.marca ?? '',
-    unidade: produto.unidade ?? '',
     descricao: produto.descricao ?? '',
     precoVenda: String(produto.precoVenda),
     custo: produto.custo === null ? '' : String(produto.custo),
@@ -160,13 +206,55 @@ function formatarMoeda(valor: number | null): string {
   return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-/** Quantidade formatada (pt-BR) com a unidade quando houver; "Não informado" se nula. */
-function formatarQuantidade(valor: number | null, unidade: string | null): string {
+/** Quantidade formatada (pt-BR) com a sigla da unidade; "Não informado" se nula. */
+function formatarQuantidade(valor: number | null, sigla: string): string {
   if (valor === null) {
     return 'Não informado'
   }
-  const formatado = valor.toLocaleString('pt-BR')
-  return unidade ? `${formatado} ${unidade}` : formatado
+  return `${valor.toLocaleString('pt-BR')} ${sigla}`
+}
+
+interface OpcaoUnidade {
+  id: string
+  rotulo: string
+}
+
+/**
+ * Opcoes do select de unidade: as ativas ("UN — Unidade") e, se houver, a
+ * unidade atual do produto mesmo inativa, marcada "(inativa)". O backend aceita
+ * manter a atual inativa, mas recusa escolher outra inativa.
+ */
+function opcoesDeUnidade(unidades: UnidadeMedida[], atual: UnidadeResumo | null): OpcaoUnidade[] {
+  const rotular = (sigla: string, descricao: string) => `${sigla} — ${descricao}`
+  const ativas = unidades
+    .filter((unidade) => unidade.ativo)
+    .map((unidade) => ({ id: unidade.id, rotulo: rotular(unidade.sigla, unidade.descricao) }))
+  if (!atual || ativas.some((opcao) => opcao.id === atual.id)) {
+    return ativas
+  }
+  // Com a lista ainda carregando, mostra a atual sem afirmar o status.
+  const conhecida = unidades.some((unidade) => unidade.id === atual.id)
+  const rotulo = rotular(atual.sigla, atual.descricao)
+  return [...ativas, { id: atual.id, rotulo: conhecida ? `${rotulo} (inativa)` : rotulo }]
+}
+
+/** Fator em pt-BR sem zeros a direita (12 -> "12", 1.5 -> "1,5"), como o `conversaoTexto` do backend. */
+function formatarFator(valor: number): string {
+  return valor.toLocaleString('pt-BR', { maximumFractionDigits: 4, useGrouping: false })
+}
+
+/** Texto de ajuda "1 CX = 12 UN"; null enquanto faltar unidade ou fator valido. */
+function textoConversao(
+  siglaCompra: string | undefined,
+  siglaVenda: string | undefined,
+  fator: string,
+): string | null {
+  const texto = fator.trim()
+  const numero = Number(texto)
+  if (!siglaCompra || !siglaVenda || texto === '' || !Number.isFinite(numero) || numero <= 0) {
+    return null
+  }
+  return `1 ${siglaCompra} = ${formatarFator(numero)} ${siglaVenda}`
 }
 
 /** Percentual derivado (margem/markup) formatado como "X,XX%"; null quando não há custo. */
@@ -197,6 +285,9 @@ function mensagemErroSalvar(erro: unknown): string {
         return erro.message
       }
       return 'Revise os dados do produto e tente novamente.'
+    }
+    if (erro.status === 404) {
+      return 'O produto, a unidade ou a categoria escolhida não existe mais. Atualize a tela e tente novamente.'
     }
   }
   return 'Não foi possível salvar o produto. Tente novamente.'
@@ -232,15 +323,59 @@ export function ProdutosPage() {
     queryFn: () => listarProdutos({ busca: buscaAplicada, status }),
   })
 
+  // Cadastros do catalogo: so carregados com o formulario aberto (a listagem
+  // ja recebe unidade e categoria resumidas). Mesmas chaves das telas do catalogo.
+  const unidadesQuery = useQuery<UnidadeMedida[]>({
+    queryKey: TODAS_UNIDADES_QUERY_KEY,
+    queryFn: () => listarUnidades(),
+    enabled: formularioAberto,
+  })
+  const categoriasQuery = useQuery<Categoria[]>({
+    queryKey: TODAS_CATEGORIAS_QUERY_KEY,
+    queryFn: () => listarCategorias(),
+    enabled: formularioAberto,
+  })
+  const unidades = useMemo(() => unidadesQuery.data ?? [], [unidadesQuery.data])
+  const categorias = useMemo(() => categoriasQuery.data ?? [], [categoriasQuery.data])
+
   const {
+    control,
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<ProdutoFormValues>({
     resolver: zodResolver(produtoSchema),
     defaultValues: valoresIniciais,
   })
+
+  const opcoesUnidadeVenda = useMemo(
+    () => opcoesDeUnidade(unidades, produtoEmEdicao?.unidade ?? null),
+    [unidades, produtoEmEdicao],
+  )
+  const opcoesUnidadeCompra = useMemo(
+    () => opcoesDeUnidade(unidades, produtoEmEdicao?.unidadeCompra ?? null),
+    [unidades, produtoEmEdicao],
+  )
+
+  // Siglas conhecidas (lista + unidades do produto em edicao) para o texto "1 CX = 12 UN".
+  const siglaPorId = useMemo(() => {
+    const mapa = new Map(unidades.map((unidade) => [unidade.id, unidade.sigla]))
+    for (const resumo of [produtoEmEdicao?.unidade, produtoEmEdicao?.unidadeCompra]) {
+      if (resumo && !mapa.has(resumo.id)) {
+        mapa.set(resumo.id, resumo.sigla)
+      }
+    }
+    return mapa
+  }, [unidades, produtoEmEdicao])
+
+  const [unidadeIdAtual, unidadeCompraIdAtual, fatorAtual] = watch(['unidadeId', 'unidadeCompraId', 'fatorConversao'])
+  const ajudaConversao = textoConversao(
+    siglaPorId.get(unidadeCompraIdAtual),
+    siglaPorId.get(unidadeIdAtual),
+    fatorAtual,
+  )
 
   useEffect(() => {
     if (produtoEmEdicao) {
@@ -463,22 +598,55 @@ export function ProdutosPage() {
                   step="0.01"
                   min="0"
                 />
-                <CampoTexto
-                  id="categoria"
-                  label="Categoria (opcional)"
-                  erro={errors.categoria?.message}
-                  inputProps={register('categoria', { onChange: aoAlterarCampo })}
-                  disabled={salvando}
-                  placeholder="Ex.: Mercearia"
-                />
-                <CampoTexto
-                  id="unidade"
-                  label="Unidade (opcional)"
-                  erro={errors.unidade?.message}
-                  inputProps={register('unidade', { onChange: aoAlterarCampo })}
-                  disabled={salvando}
-                  placeholder="Ex.: UN, kg, cx"
-                />
+                <div className="space-y-1.5">
+                  <CampoSelect
+                    id="unidadeId"
+                    label="Unidade de venda"
+                    obrigatorio
+                    erro={errors.unidadeId?.message}
+                    selectProps={register('unidadeId', { onChange: aoAlterarCampo })}
+                    disabled={salvando || unidadesQuery.isPending}
+                    opcaoVazia={unidadesQuery.isPending ? 'Carregando unidades...' : 'Selecione a unidade'}
+                    opcoes={opcoesUnidadeVenda}
+                  />
+                  <AvisoCatalogo
+                    carregouComFalha={unidadesQuery.isError}
+                    mensagemFalha="Não foi possível carregar as unidades."
+                    onTentarNovamente={() => unidadesQuery.refetch()}
+                    semOpcoes={unidadesQuery.isSuccess && opcoesUnidadeVenda.length === 0}
+                    mensagemSemOpcoes="Nenhuma unidade ativa."
+                    linkSemOpcoes={{ to: '/produtos/unidades', rotulo: 'Cadastrar em Unidades' }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label id="categoriaId-rotulo" htmlFor="categoriaId" className="text-sm font-medium">
+                    Categoria (opcional)
+                  </label>
+                  <Controller
+                    control={control}
+                    name="categoriaId"
+                    render={({ field }) => (
+                      <SeletorCategoria
+                        id="categoriaId"
+                        idRotulo="categoriaId-rotulo"
+                        categorias={categorias}
+                        valor={field.value}
+                        valorAtual={produtoEmEdicao?.categoria ?? null}
+                        onChange={(categoriaId) => {
+                          field.onChange(categoriaId)
+                          aoAlterarCampo()
+                        }}
+                        podeCriar={!somenteLeitura}
+                        desabilitado={salvando || categoriasQuery.isPending}
+                      />
+                    )}
+                  />
+                  <AvisoCatalogo
+                    carregouComFalha={categoriasQuery.isError}
+                    mensagemFalha="Não foi possível carregar as categorias."
+                    onTentarNovamente={() => categoriasQuery.refetch()}
+                  />
+                </div>
                 <CampoTexto
                   id="marca"
                   label="Marca (opcional)"
@@ -491,12 +659,34 @@ export function ProdutosPage() {
 
               <div className="space-y-4 rounded-md bg-muted/40 p-4">
                 <div>
-                  <h3 className="text-sm font-medium">Custo, estoque e identificação (opcional)</h3>
+                  <h3 className="text-sm font-medium">Custo, compra, estoque e identificação (opcional)</h3>
                   <p className="text-xs text-muted-foreground">
-                    Custo e preços, níveis de estoque, códigos e descrição. Preencha se fizer sentido para o seu negócio.
+                    Custo e preços, unidade de compra, níveis de estoque, códigos e descrição. Preencha se fizer sentido
+                    para o seu negócio.
                   </p>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
+                  <CampoSelect
+                    id="unidadeCompraId"
+                    label="Unidade de compra (opcional)"
+                    erro={errors.unidadeCompraId?.message}
+                    selectProps={register('unidadeCompraId', { onChange: aoAlterarCampo })}
+                    disabled={salvando || unidadesQuery.isPending}
+                    opcaoVazia="Mesma da venda"
+                    opcoes={opcoesUnidadeCompra}
+                  />
+                  <CampoTexto
+                    id="fatorConversao"
+                    label="Fator de conversão"
+                    erro={errors.fatorConversao?.message}
+                    ajuda={ajudaConversao ?? 'Quantas unidades de venda vêm em 1 unidade de compra.'}
+                    inputProps={register('fatorConversao', { onChange: aoAlterarCampo })}
+                    disabled={salvando}
+                    type="number"
+                    step="0.0001"
+                    min="0"
+                    placeholder="Ex.: 12"
+                  />
                   <CampoTexto
                     id="custo"
                     label="Custo (opcional)"
@@ -665,10 +855,18 @@ export function ProdutosPage() {
   )
 }
 
+/** Junta os ids de ajuda/erro presentes para o `aria-describedby`. */
+function idsDescricao(...ids: (string | false | undefined)[]): string | undefined {
+  const presentes = ids.filter((id): id is string => Boolean(id))
+  return presentes.length > 0 ? presentes.join(' ') : undefined
+}
+
 interface CampoTextoProps {
   id: keyof ProdutoFormValues
   label: string
   erro?: string
+  /** Texto de apoio sob o campo (ex.: "1 CX = 12 UN"). */
+  ajuda?: string
   disabled?: boolean
   placeholder?: string
   type?: string
@@ -681,6 +879,7 @@ function CampoTexto({
   id,
   label,
   erro,
+  ajuda,
   disabled,
   placeholder,
   type = 'text',
@@ -689,6 +888,7 @@ function CampoTexto({
   inputProps,
 }: CampoTextoProps) {
   const erroId = `${id}-erro`
+  const ajudaId = `${id}-ajuda`
   return (
     <div className="space-y-1.5">
       <label htmlFor={id} className="text-sm font-medium">
@@ -702,9 +902,14 @@ function CampoTexto({
         placeholder={placeholder}
         disabled={disabled}
         aria-invalid={erro ? true : undefined}
-        aria-describedby={erro ? erroId : undefined}
+        aria-describedby={idsDescricao(ajuda && ajudaId, erro && erroId)}
         {...inputProps}
       />
+      {ajuda && (
+        <p id={ajudaId} className="text-xs text-muted-foreground">
+          {ajuda}
+        </p>
+      )}
       {erro && (
         <p id={erroId} className="text-sm text-destructive">
           {erro}
@@ -712,6 +917,112 @@ function CampoTexto({
       )}
     </div>
   )
+}
+
+interface CampoSelectProps {
+  id: keyof ProdutoFormValues
+  label: string
+  obrigatorio?: boolean
+  erro?: string
+  disabled?: boolean
+  /** Rotulo da opcao de valor vazio (placeholder ou "nenhuma"). */
+  opcaoVazia: string
+  opcoes: OpcaoUnidade[]
+  selectProps: UseFormRegisterReturn
+}
+
+function CampoSelect({
+  id,
+  label,
+  obrigatorio = false,
+  erro,
+  disabled,
+  opcaoVazia,
+  opcoes,
+  selectProps,
+}: CampoSelectProps) {
+  const erroId = `${id}-erro`
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="text-sm font-medium">
+        {label}
+        {obrigatorio && (
+          <span className="ml-0.5 text-destructive" aria-hidden="true">
+            *
+          </span>
+        )}
+      </label>
+      <select
+        id={id}
+        disabled={disabled}
+        aria-required={obrigatorio || undefined}
+        aria-invalid={erro ? true : undefined}
+        aria-describedby={erro ? erroId : undefined}
+        className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive"
+        {...selectProps}
+      >
+        <option value="">{opcaoVazia}</option>
+        {opcoes.map((opcao) => (
+          <option key={opcao.id} value={opcao.id}>
+            {opcao.rotulo}
+          </option>
+        ))}
+      </select>
+      {erro && (
+        <p id={erroId} className="text-sm text-destructive">
+          {erro}
+        </p>
+      )}
+    </div>
+  )
+}
+
+interface AvisoCatalogoProps {
+  carregouComFalha: boolean
+  mensagemFalha: string
+  onTentarNovamente: () => void
+  semOpcoes?: boolean
+  mensagemSemOpcoes?: string
+  linkSemOpcoes?: { to: string; rotulo: string }
+}
+
+/** Falha ao carregar um cadastro do catalogo (com nova tentativa) ou cadastro vazio. */
+function AvisoCatalogo({
+  carregouComFalha,
+  mensagemFalha,
+  onTentarNovamente,
+  semOpcoes = false,
+  mensagemSemOpcoes,
+  linkSemOpcoes,
+}: AvisoCatalogoProps) {
+  if (carregouComFalha) {
+    return (
+      <p role="alert" className="flex flex-wrap items-center gap-x-2 text-sm text-destructive">
+        <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span>{mensagemFalha}</span>
+        <button
+          type="button"
+          onClick={onTentarNovamente}
+          className="font-medium underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Tentar novamente
+        </button>
+      </p>
+    )
+  }
+  if (semOpcoes && mensagemSemOpcoes) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        {mensagemSemOpcoes}{' '}
+        {linkSemOpcoes && (
+          <Link to={linkSemOpcoes.to} className="font-medium text-foreground underline underline-offset-4">
+            {linkSemOpcoes.rotulo}
+          </Link>
+        )}
+      </p>
+    )
+  }
+  return null
 }
 
 interface ProdutoItemProps {
@@ -796,31 +1107,35 @@ function ProdutoItem({
             {produto.categoria && (
               <div>
                 <dt className="font-medium text-foreground">Categoria</dt>
-                <dd>{produto.categoria}</dd>
+                <dd>{produto.categoria.caminho}</dd>
               </div>
             )}
-            {produto.unidade && (
+            <div>
+              <dt className="font-medium text-foreground">Unidade</dt>
+              <dd title={produto.unidade.descricao}>{produto.unidade.sigla}</dd>
+            </div>
+            {produto.conversaoTexto && (
               <div>
-                <dt className="font-medium text-foreground">Unidade</dt>
-                <dd>{produto.unidade}</dd>
+                <dt className="font-medium text-foreground">Compra</dt>
+                <dd>{produto.conversaoTexto}</dd>
               </div>
             )}
             {produto.estoqueMinimo !== null && (
               <div>
                 <dt className="font-medium text-foreground">Estoque mínimo</dt>
-                <dd>{formatarQuantidade(produto.estoqueMinimo, produto.unidade)}</dd>
+                <dd>{formatarQuantidade(produto.estoqueMinimo, produto.unidade.sigla)}</dd>
               </div>
             )}
             {produto.estoqueMaximo !== null && (
               <div>
                 <dt className="font-medium text-foreground">Estoque máximo</dt>
-                <dd>{formatarQuantidade(produto.estoqueMaximo, produto.unidade)}</dd>
+                <dd>{formatarQuantidade(produto.estoqueMaximo, produto.unidade.sigla)}</dd>
               </div>
             )}
             {produto.pontoReposicao !== null && (
               <div>
                 <dt className="font-medium text-foreground">Ponto de reposição</dt>
-                <dd>{formatarQuantidade(produto.pontoReposicao, produto.unidade)}</dd>
+                <dd>{formatarQuantidade(produto.pontoReposicao, produto.unidade.sigla)}</dd>
               </div>
             )}
           </dl>
