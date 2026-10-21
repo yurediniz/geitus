@@ -743,3 +743,27 @@ Contrato da API de produtos muda (UUID, `codigosBarras`, `nomeCurto`, `fornecedo
 
 **Observações futuras:**
 GTIN-14 com validação própria, código "principal" explícito e fornecedor como cadastro ficam para quando houver necessidade.
+
+## DEC-033 — Preços do produto: promoção, atacado e histórico (Fase C)
+
+**Data:** 2026-10-21
+**Status:** Aceita
+**Contexto:**
+Terceira fase da DEC-030. O produto tinha só preço de venda, custo e preço mínimo, com margem/markup derivados. Faltavam promoção com vigência, preço de atacado, histórico de alterações (exigido pelo `CLAUDE.md`, "alteração de preço"), cálculo do preço pela margem e máscara monetária.
+
+**Decisão:**
+- **Promoção** por datas (início e fim obrigatórios, inclusivos, fuso `America/Sao_Paulo` via `Clock`) e **atacado** com uma faixa (preço + quantidade mínima > 1), ambos como colunas em `produtos`. Os dois precisam ser menores que o preço de venda e não podem ficar abaixo do preço mínimo.
+- **Preço aplicado na venda** = o menor entre normal, promocional vigente e atacado atingido (empate → promocional). É regra de domínio (`PrecoDeVenda.resolver`), sem endpoint, consumida pelo PDV.
+- **Histórico** de custo e preço de venda em `produto_historico_precos` (só inserção, valor anterior/novo, usuário, data), incluindo os valores iniciais do cadastro e sem preenchimento retroativo. Leitura para qualquer autenticado.
+- **Máscara monetária** que preenche da direita para a esquerda enquanto se digita (1234 → 12,34), em todos os campos de dinheiro do produto.
+- **Preço pela margem desejada** calculado só no frontend, sem gravar a margem.
+- **Migration V8** aditiva: colunas novas nulas, tabela de histórico e `UNIQUE (empresa_id, id)` em `usuario` para a FK composta.
+
+**Motivo:**
+Decisões do usuário (vigência por datas, menor preço vence, uma faixa, histórico de custo/preço, máscara durante a digitação). Colunas no produto e tabela de histórico específica são o modelo mais simples que atende sem preparar futuro não pedido.
+
+**Impacto:**
+Contrato da API de produtos ganha `promocao`, `atacado` e `emPromocao`, mais o endpoint `GET /api/produtos/{id}/historico-precos`; aba Histórico no formulário; selo "Promoção" na listagem. Spec: `docs/modules/produtos-precos.md`. Revisores obrigatórios: `data-reviewer` (V8) e `security-reviewer` (endpoint de histórico).
+
+**Observações futuras:**
+Várias promoções agendadas, mais faixas de atacado, fuso por empresa e restrição do custo por perfil ficam para quando houver necessidade.
