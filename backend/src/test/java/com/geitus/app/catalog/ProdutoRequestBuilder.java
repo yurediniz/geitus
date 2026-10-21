@@ -1,19 +1,24 @@
 package com.geitus.app.catalog;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 import com.geitus.app.catalog.dto.ProdutoRequest;
 
 /**
- * Monta {@link ProdutoRequest} nos testes sem repetir os 15 argumentos do
+ * Monta {@link ProdutoRequest} nos testes sem repetir os argumentos do
  * record. Parte de um produto minimo valido (nome, preco e unidade) e cada
  * teste ajusta so o que importa para ele.
  */
 final class ProdutoRequestBuilder {
 
     private String nome = "Produto";
+    private String nomeCurto;
     private String marca;
+    private String fornecedor;
     private String descricao;
     private UUID unidadeId;
     private UUID categoriaId;
@@ -25,7 +30,7 @@ final class ProdutoRequestBuilder {
     private BigDecimal estoqueMaximo;
     private BigDecimal pontoReposicao;
     private BigDecimal precoMinimo;
-    private String codigoBarras;
+    private List<String> codigosBarras = new ArrayList<>();
     private String sku;
 
     private ProdutoRequestBuilder(UUID unidadeId) {
@@ -41,8 +46,18 @@ final class ProdutoRequestBuilder {
         return this;
     }
 
+    ProdutoRequestBuilder nomeCurto(String valor) {
+        this.nomeCurto = valor;
+        return this;
+    }
+
     ProdutoRequestBuilder marca(String valor) {
         this.marca = valor;
+        return this;
+    }
+
+    ProdutoRequestBuilder fornecedor(String valor) {
+        this.fornecedor = valor;
         return this;
     }
 
@@ -97,8 +112,13 @@ final class ProdutoRequestBuilder {
         return this;
     }
 
-    ProdutoRequestBuilder codigoBarras(String valor) {
-        this.codigoBarras = valor;
+    ProdutoRequestBuilder codigosBarras(String... valores) {
+        this.codigosBarras = Arrays.asList(valores);
+        return this;
+    }
+
+    ProdutoRequestBuilder codigosBarras(List<String> valores) {
+        this.codigosBarras = valores;
         return this;
     }
 
@@ -108,7 +128,8 @@ final class ProdutoRequestBuilder {
     }
 
     ProdutoRequest build() {
-        return new ProdutoRequest(nome, marca, descricao, unidadeId, categoriaId, unidadeCompraId, fatorConversao,
-                precoVenda, custo, estoqueMinimo, estoqueMaximo, pontoReposicao, precoMinimo, codigoBarras, sku);
+        return new ProdutoRequest(nome, nomeCurto, marca, fornecedor, descricao, unidadeId, categoriaId,
+                unidadeCompraId, fatorConversao, precoVenda, custo, estoqueMinimo, estoqueMaximo, pontoReposicao,
+                precoMinimo, codigosBarras, sku);
     }
 }

@@ -100,8 +100,8 @@ public class GlobalExceptionHandler {
 
     /**
      * Parametro de rota ou de query com tipo incompativel (por exemplo,
-     * {@code /api/clientes/abc} com UUID esperado, {@code /api/produtos/abc} com
-     * id numerico ou {@code ?ativo=talvez}). Responde 400 com mensagem generica:
+     * {@code /api/clientes/abc} ou {@code /api/produtos/abc} com UUID esperado
+     * ou {@code ?ativo=talvez}). Responde 400 com mensagem generica:
      * nunca ecoa o valor recebido nem a mensagem tecnica da conversao.
      */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
@@ -170,8 +170,9 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Conflito de unicidade no modulo Produtos (SKU ou codigo de barras ja
-     * usado por outro produto da mesma empresa). Mapeado para HTTP 409.
+     * Conflito no modulo Produtos (SKU ou codigo de barras ja usado por outro
+     * produto da mesma empresa, ou exclusao de produto com movimentacao).
+     * Mapeado para HTTP 409.
      */
     @ExceptionHandler(ProdutoConflitoException.class)
     public ResponseEntity<ApiError> tratarConflitoDeProduto(ProdutoConflitoException ex,

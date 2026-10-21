@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -26,6 +27,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import com.geitus.app.catalog.categoria.CategoriaService;
 import com.geitus.app.catalog.categoria.dto.CategoriaRequest;
 import com.geitus.app.catalog.categoria.dto.CategoriaResponse;
+import com.geitus.app.catalog.dto.CodigoBarrasResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.catalog.unidade.UnidadesPadrao;
@@ -46,7 +48,10 @@ import com.geitus.app.iam.UsuarioRepository;
  * <p>Cobre o que os testes com mock nao alcancam: as transacoes reais dos
  * metodos {@code *ParaUsuario} (com {@code open-in-view: false}, os vinculos
  * LAZY do produto precisam ser lidos dentro do service) e a trava por empresa
- * que serializa mover categorias, provada com duas threads concorrentes.
+ * que serializa mover categorias, provada com duas threads concorrentes. Na
+ * Fase B, cobre os codigos de barras contra as constraints reais da V7
+ * (reordenar, codigo migrado como OUTRO, unicidade por empresa) e a exclusao
+ * com cascade, conferidos via JDBC.
  *
  * <p>Sem {@code @Transactional} na classe de proposito: cada chamada de service
  * abre e confirma a propria transacao, como em producao. Cada teste usa uma
@@ -87,6 +92,9 @@ class CatalogoServiceIT {
 
     @Autowired
     private ProdutoService produtoService;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     // ---------- Fluxo completo ----------
 
@@ -228,6 +236,159 @@ class CatalogoServiceIT {
                 return false;
             }
         };
+    }
+
+    // ---------- Fase B: codigos de barras e exclusao com banco real ----------
+
+    /**
+     * Review Focus 1: produto migrado com EAN-13 de digito invalido (gravado
+     * {@code OUTRO} pela V7) e editado sem mexer no codigo — salva e o codigo
+     * continua {@code OUTRO}, na mesma linha. Um codigo NOVO com digito
+     * invalido continua bloqueado.
+     */
+    @Test
+    void produtoComCodigoOutroMigradoEditadoSemMudar() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        ProdutoResponse cadastrado = produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("Feijão").build());
+        jdbcTemplate.update("""
+                INSERT INTO produto_codigos_barras (empresa_id, produto_id, codigo, formato, ordem)
+                SELECT empresa_id, id, '7891000315508', 'OUTRO', 0 FROM produtos WHERE uuid = ?
+                """, cadastrado.id());
+        Long linhaMigrada = idDoCodigo(cadastrado.id(), "7891000315508");
+
+        ProdutoResponse editado = produtoService.atualizarDadosBasicosParaUsuario(idUsuario, cadastrado.id(),
+                ProdutoRequestBuilder.comUnidade(un).nome("Feijão carioca 1kg").codigosBarras("7891000315508")
+                        .build());
+
+        assertThat(editado.nome()).isEqualTo("Feijão carioca 1kg");
+        assertThat(editado.codigosBarras())
+                .containsExactly(new CodigoBarrasResponse("7891000315508", FormatoCodigoBarras.OUTRO));
+        assertThat(idDoCodigo(cadastrado.id(), "7891000315508")).isEqualTo(linhaMigrada);
+        assertThatThrownBy(() -> produtoService.atualizarDadosBasicosParaUsuario(idUsuario, cadastrado.id(),
+                ProdutoRequestBuilder.comUnidade(un).nome("Feijão carioca 1kg")
+                        .codigosBarras("7891000315508", "96385075").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Código de barras 96385075 com dígito verificador inválido. Confira a leitura.");
+    }
+
+    /** I2 do data-reviewer: inverter a ordem de 2 codigos via PATCH nao viola uq_codigo_barras_empresa. */
+    @Test
+    void patchInvertendoAOrdemDeDoisCodigosPreservaLinhasEFormatos() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        ProdutoResponse cadastrado = produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("Arroz").codigosBarras("7891000315507", "ABC-1").build());
+        Long linhaEan = idDoCodigo(cadastrado.id(), "7891000315507");
+        Long linhaOutro = idDoCodigo(cadastrado.id(), "ABC-1");
+
+        ProdutoResponse editado = produtoService.atualizarDadosBasicosParaUsuario(idUsuario, cadastrado.id(),
+                ProdutoRequestBuilder.comUnidade(un).nome("Arroz").codigosBarras("ABC-1", "7891000315507").build());
+
+        assertThat(editado.codigosBarras()).containsExactly(
+                new CodigoBarrasResponse("ABC-1", FormatoCodigoBarras.OUTRO),
+                new CodigoBarrasResponse("7891000315507", FormatoCodigoBarras.EAN13));
+        assertThat(produtoService.buscarPorIdParaUsuario(idUsuario, cadastrado.id()).codigosBarras())
+                .extracting(CodigoBarrasResponse::codigo).containsExactly("ABC-1", "7891000315507");
+        assertThat(idDoCodigo(cadastrado.id(), "ABC-1")).isEqualTo(linhaOutro);
+        assertThat(idDoCodigo(cadastrado.id(), "7891000315507")).isEqualTo(linhaEan);
+    }
+
+    /** Review Focus 3: o mesmo codigo em outra empresa e permitido; na mesma, 409 com o nome. */
+    @Test
+    void codigoDuplicadoSoConflitaNaMesmaEmpresa() {
+        Empresa empresaA = novaEmpresa();
+        Long adminA = novoAdmin(empresaA);
+        Empresa empresaB = novaEmpresa();
+        Long adminB = novoAdmin(empresaB);
+        produtoService.cadastrarParaUsuario(adminA, ProdutoRequestBuilder.comUnidade(unidadePadrao(empresaA, adminA,
+                "UN")).nome("Arroz da A").codigosBarras("7891000315507").build());
+        UUID unDaB = unidadePadrao(empresaB, adminB, "UN");
+
+        ProdutoResponse daB = produtoService.cadastrarParaUsuario(adminB,
+                ProdutoRequestBuilder.comUnidade(unDaB).nome("Arroz da B").codigosBarras("7891000315507").build());
+
+        assertThat(daB.codigosBarras()).extracting(CodigoBarrasResponse::codigo).containsExactly("7891000315507");
+        assertThatThrownBy(() -> produtoService.cadastrarParaUsuario(adminB,
+                ProdutoRequestBuilder.comUnidade(unDaB).nome("Outro da B").codigosBarras("7891000315507").build()))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("O código de barras 7891000315507 já está cadastrado no produto \"Arroz da B\".");
+    }
+
+    @Test
+    void excluirProdutoApagaCodigos() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        ProdutoResponse cadastrado = produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("Bala").codigosBarras("96385074", "BALA-01").build());
+        Long idInterno = idInternoDoProduto(cadastrado.id());
+        assertThat(codigosDoProduto(idInterno)).isEqualTo(2);
+
+        produtoService.excluirParaUsuario(idUsuario, cadastrado.id());
+
+        assertThat(codigosDoProduto(idInterno)).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM produtos WHERE uuid = ?", Long.class,
+                cadastrado.id())).isZero();
+        assertThatThrownBy(() -> produtoService.buscarPorIdParaUsuario(idUsuario, cadastrado.id()))
+                .isInstanceOf(ProdutoNaoEncontradoException.class);
+    }
+
+    @Test
+    void excluirProdutoDeOutraEmpresaLanca404ENaoApaga() {
+        Empresa empresaA = novaEmpresa();
+        Long adminA = novoAdmin(empresaA);
+        Empresa empresaB = novaEmpresa();
+        Long adminB = novoAdmin(empresaB);
+        ProdutoResponse daA = produtoService.cadastrarParaUsuario(adminA, ProdutoRequestBuilder
+                .comUnidade(unidadePadrao(empresaA, adminA, "UN")).nome("Da A").codigosBarras("96385074").build());
+
+        assertThatThrownBy(() -> produtoService.excluirParaUsuario(adminB, daA.id()))
+                .isInstanceOf(ProdutoNaoEncontradoException.class);
+        assertThat(codigosDoProduto(idInternoDoProduto(daA.id()))).isEqualTo(1);
+    }
+
+    @Test
+    void sugestoesESkuSugeridoComBancoReal() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("A").marca("Golden").sku("P000030").build());
+        produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("B").marca("golden").fornecedor("Distribuidora X").build());
+
+        assertThat(produtoService.sugerirSkuParaUsuario(idUsuario)).isEqualTo("P000031");
+        assertThat(produtoService.sugestoesParaUsuario(idUsuario, "marca", "GOL")).containsExactly("Golden");
+        assertThat(produtoService.sugestoesParaUsuario(idUsuario, "fornecedor", null))
+                .containsExactly("Distribuidora X");
+    }
+
+    private UUID unidadePadrao(Empresa empresa, Long idUsuario, String sigla) {
+        unidadeService.criarPadroes(empresa);
+        return siglaParaUuid(unidadeService.listarParaUsuario(idUsuario, null), sigla);
+    }
+
+    /** Id interno da linha do codigo no produto (prova que a linha foi mantida, nao recriada). */
+    private Long idDoCodigo(UUID produtoId, String codigo) {
+        return jdbcTemplate.queryForObject("""
+                SELECT c.id FROM produto_codigos_barras c
+                  JOIN produtos p ON p.id = c.produto_id
+                WHERE p.uuid = ? AND c.codigo = ?
+                """, Long.class, produtoId, codigo);
+    }
+
+    private Long idInternoDoProduto(UUID produtoId) {
+        return jdbcTemplate.queryForObject("SELECT id FROM produtos WHERE uuid = ?", Long.class, produtoId);
+    }
+
+    /** Conta pela FK interna: continua valendo depois de o produto ser apagado. */
+    private long codigosDoProduto(Long idInterno) {
+        return jdbcTemplate.queryForObject("SELECT count(*) FROM produto_codigos_barras WHERE produto_id = ?",
+                Long.class, idInterno);
     }
 
     // ---------- Apoio ----------

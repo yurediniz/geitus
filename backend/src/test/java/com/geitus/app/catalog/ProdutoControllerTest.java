@@ -4,13 +4,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -67,6 +67,8 @@ class ProdutoControllerTest {
     private ProdutoService produtoService;
 
     private static final String NOME_151_CARACTERES = "A".repeat(151);
+    private static final UUID PRODUTO_ID = UUID.fromString("00000000-0000-0000-0000-000000000005");
+    private static final UUID OUTRO_PRODUTO_ID = UUID.fromString("00000000-0000-0000-0000-000000000099");
     private static final UUID UNIDADE_ID = UUID.fromString("00000000-0000-0000-0000-0000000000aa");
     private static final String UNIDADE_JSON = "\"unidadeId\": \"" + UNIDADE_ID + "\"";
 
@@ -80,17 +82,17 @@ class ProdutoControllerTest {
         return json.append(" }").toString();
     }
 
-    private ProdutoResponse respostaComId(Long id, String nome, String sku) {
-        return ProdutoResponse.de(produtoComId(id, nome, sku), CategoriaArvore.de(List.of()));
+    private ProdutoResponse respostaComId(UUID id, String nome, String sku) {
+        return ProdutoResponse.de(produtoComId(id, nome, sku), CategoriaArvore.de(List.of()), true);
     }
 
-    private Produto produtoComId(Long id, String nome, String sku) {
+    /** Produto com id interno numerico preenchido, para provar que ele nunca sai na resposta. */
+    private Produto produtoComId(UUID id, String nome, String sku) {
         Empresa empresa = new Empresa("Empresa 7");
         ReflectionTestUtils.setField(empresa, "id", 7L);
         UnidadeMedida unidade = new UnidadeMedida(empresa, "UN", "Unidade", false);
-        Produto produto = new Produto(empresa, nome, unidade, null, null, null, new BigDecimal("10.00"),
-                null, null, null, sku, null, null, null, null, null);
-        ReflectionTestUtils.setField(produto, "id", id);
+        Produto produto = ProdutoTesteBuilder.produto(empresa, unidade).id(5L).nome(nome).sku(sku).build();
+        ReflectionTestUtils.setField(produto, "uuid", id);
         return produto;
     }
 
@@ -124,13 +126,13 @@ class ProdutoControllerTest {
 
     @Test
     void buscarPorIdSemTokenDeveRetornar401() throws Exception {
-        mockMvc.perform(get("/api/produtos/5"))
+        mockMvc.perform(get("/api/produtos/" + PRODUTO_ID))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
     void atualizarSemTokenDeveRetornar401() throws Exception {
-        mockMvc.perform(patch("/api/produtos/5")
+        mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{ \"nome\": \"Produto\", \"precoVenda\": 10.00 }"))
                 .andExpect(status().isUnauthorized());
@@ -138,13 +140,13 @@ class ProdutoControllerTest {
 
     @Test
     void inativarSemTokenDeveRetornar401() throws Exception {
-        mockMvc.perform(patch("/api/produtos/5/inativar"))
+        mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID + "/inativar"))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
     void reativarSemTokenDeveRetornar401() throws Exception {
-        mockMvc.perform(patch("/api/produtos/5/reativar"))
+        mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID + "/reativar"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -177,7 +179,7 @@ class ProdutoControllerTest {
     void atualizarComPerfilOperadorDeveRetornar403() throws Exception {
         String token = tokenParaUsuarioComPerfil(2L, "OPERADOR");
 
-        mockMvc.perform(patch("/api/produtos/5")
+        mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{ \"nome\": \"Produto\", \"precoVenda\": 10.00 }"))
@@ -190,7 +192,7 @@ class ProdutoControllerTest {
     void inativarComPerfilOperadorDeveRetornar403() throws Exception {
         String token = tokenParaUsuarioComPerfil(2L, "OPERADOR");
 
-        mockMvc.perform(patch("/api/produtos/5/inativar").header("Authorization", "Bearer " + token))
+        mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID + "/inativar").header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden());
 
         org.mockito.Mockito.verifyNoInteractions(produtoService);
@@ -200,7 +202,7 @@ class ProdutoControllerTest {
     void reativarComPerfilOperadorDeveRetornar403() throws Exception {
         String token = tokenParaUsuarioComPerfil(2L, "OPERADOR");
 
-        mockMvc.perform(patch("/api/produtos/5/reativar").header("Authorization", "Bearer " + token))
+        mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID + "/reativar").header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden());
 
         org.mockito.Mockito.verifyNoInteractions(produtoService);
@@ -211,13 +213,13 @@ class ProdutoControllerTest {
     @Test
     void listarComTokenValidoDeveRetornarProdutosDaEmpresaDoUsuario() throws Exception {
         when(produtoService.listarParaUsuario(eq(1L), isNull(), isNull()))
-                .thenReturn(List.of(respostaComId(1L, "Arroz 5kg", "SKU-1")));
+                .thenReturn(List.of(respostaComId(PRODUTO_ID, "Arroz 5kg", "SKU-1")));
 
         String token = tokenParaUsuario(1L);
 
         mockMvc.perform(get("/api/produtos").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(1))
+                .andExpect(jsonPath("$[0].id").value(PRODUTO_ID.toString()))
                 .andExpect(jsonPath("$[0].nome").value("Arroz 5kg"));
 
         org.mockito.Mockito.verify(produtoService).listarParaUsuario(eq(1L), isNull(), isNull());
@@ -253,23 +255,23 @@ class ProdutoControllerTest {
 
     @Test
     void buscarPorIdDaPropriaEmpresaDeveRetornar200() throws Exception {
-        when(produtoService.buscarPorIdParaUsuario(1L, 5L)).thenReturn(respostaComId(5L, "Produto X", null));
+        when(produtoService.buscarPorIdParaUsuario(1L, PRODUTO_ID)).thenReturn(respostaComId(PRODUTO_ID, "Produto X", null));
 
         String token = tokenParaUsuario(1L);
 
-        mockMvc.perform(get("/api/produtos/5").header("Authorization", "Bearer " + token))
+        mockMvc.perform(get("/api/produtos/" + PRODUTO_ID).header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(5))
+                .andExpect(jsonPath("$.id").value(PRODUTO_ID.toString()))
                 .andExpect(jsonPath("$.nome").value("Produto X"));
     }
 
     @Test
     void buscarPorIdDeOutraEmpresaOuInexistenteDeveRetornar404() throws Exception {
-        when(produtoService.buscarPorIdParaUsuario(1L, 99L)).thenThrow(new ProdutoNaoEncontradoException());
+        when(produtoService.buscarPorIdParaUsuario(1L, OUTRO_PRODUTO_ID)).thenThrow(new ProdutoNaoEncontradoException());
 
         String token = tokenParaUsuario(1L);
 
-        mockMvc.perform(get("/api/produtos/99").header("Authorization", "Bearer " + token))
+        mockMvc.perform(get("/api/produtos/" + OUTRO_PRODUTO_ID).header("Authorization", "Bearer " + token))
                 .andExpect(status().isNotFound());
     }
 
@@ -290,7 +292,7 @@ class ProdutoControllerTest {
     @Test
     void cadastrarProdutoValidoDeveRetornar201() throws Exception {
         when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
-                .thenReturn(respostaComId(10L, "Produto Novo", "SKU-10"));
+                .thenReturn(respostaComId(PRODUTO_ID, "Produto Novo", "SKU-10"));
 
         String token = tokenParaUsuario(1L);
 
@@ -299,7 +301,7 @@ class ProdutoControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(corpo("Produto Novo", "10.00")))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(10))
+                .andExpect(jsonPath("$.id").value(PRODUTO_ID.toString()))
                 .andExpect(jsonPath("$.nome").value("Produto Novo"))
                 .andExpect(jsonPath("$.unidade.sigla").value("UN"));
 
@@ -350,16 +352,18 @@ class ProdutoControllerTest {
     @Test
     void cadastrarComCodigoBarrasDuplicadoDeveRetornar409() throws Exception {
         when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
-                .thenThrow(new ProdutoConflitoException("Já existe um produto com este código de barras nesta empresa."));
+                .thenThrow(new ProdutoConflitoException(
+                        "O código de barras 7891000315507 já está cadastrado no produto \"Arroz 5kg\"."));
 
         String token = tokenParaUsuario(1L);
 
         mockMvc.perform(post("/api/produtos")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(corpo("Produto", "10.00", "\"codigoBarras\": \"789123\"")))
+                        .content(corpo("Produto", "10.00", "\"codigosBarras\": [\"7891000315507\"]")))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.mensagem").value("Já existe um produto com este código de barras nesta empresa."));
+                .andExpect(jsonPath("$.mensagem")
+                        .value("O código de barras 7891000315507 já está cadastrado no produto \"Arroz 5kg\"."));
     }
 
     @Test
@@ -461,16 +465,16 @@ class ProdutoControllerTest {
         ReflectionTestUtils.setField(racao, "id", 41L);
         Categoria umida = new Categoria(empresa, racao, "Úmida");
         ReflectionTestUtils.setField(umida, "id", 42L);
-        Produto produto = new Produto(empresa, "Sachê", un, umida, cx, new BigDecimal("12.0000"),
-                new BigDecimal("3.50"), null, null, null, null, null, null, null, null, null);
-        ReflectionTestUtils.setField(produto, "id", 5L);
-        when(produtoService.buscarPorIdParaUsuario(1L, 5L))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of(racao, umida))));
+        Produto produto = ProdutoTesteBuilder.produto(empresa, un).id(5L).nome("Sachê").categoria(umida)
+                .compra(cx, "12.0000").precoVenda("3.50").build();
+        when(produtoService.buscarPorIdParaUsuario(1L, produto.getUuid()))
+                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of(racao, umida)), true));
 
         String token = tokenParaUsuario(1L);
 
-        mockMvc.perform(get("/api/produtos/5").header("Authorization", "Bearer " + token))
+        mockMvc.perform(get("/api/produtos/" + produto.getUuid()).header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(produto.getUuid().toString()))
                 .andExpect(jsonPath("$.unidade.id").value(un.getUuid().toString()))
                 .andExpect(jsonPath("$.unidade.sigla").value("UN"))
                 .andExpect(jsonPath("$.unidade.fracionada").value(false))
@@ -488,12 +492,12 @@ class ProdutoControllerTest {
 
     @Test
     void atualizarProdutoDaPropriaEmpresaDeveRetornar200() throws Exception {
-        when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(5L), any(ProdutoRequest.class)))
-                .thenReturn(respostaComId(5L, "Produto Atualizado", null));
+        when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(PRODUTO_ID), any(ProdutoRequest.class)))
+                .thenReturn(respostaComId(PRODUTO_ID, "Produto Atualizado", null));
 
         String token = tokenParaUsuario(1L);
 
-        mockMvc.perform(patch("/api/produtos/5")
+        mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(corpo("Produto Atualizado", "15.00")))
@@ -503,12 +507,12 @@ class ProdutoControllerTest {
 
     @Test
     void atualizarProdutoDeOutraEmpresaDeveRetornar404() throws Exception {
-        when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(99L), any(ProdutoRequest.class)))
+        when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(OUTRO_PRODUTO_ID), any(ProdutoRequest.class)))
                 .thenThrow(new ProdutoNaoEncontradoException());
 
         String token = tokenParaUsuario(1L);
 
-        mockMvc.perform(patch("/api/produtos/99")
+        mockMvc.perform(patch("/api/produtos/" + OUTRO_PRODUTO_ID)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(corpo("Produto", "10.00")))
@@ -517,12 +521,12 @@ class ProdutoControllerTest {
 
     @Test
     void atualizarComSkuDuplicadoDeOutroProdutoDeveRetornar409() throws Exception {
-        when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(5L), any(ProdutoRequest.class)))
+        when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(PRODUTO_ID), any(ProdutoRequest.class)))
                 .thenThrow(new ProdutoConflitoException("Já existe um produto com este SKU nesta empresa."));
 
         String token = tokenParaUsuario(1L);
 
-        mockMvc.perform(patch("/api/produtos/5")
+        mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(corpo("Produto", "10.00", "\"sku\": \"SKU-DE-OUTRO\"")))
@@ -531,12 +535,12 @@ class ProdutoControllerTest {
 
     @Test
     void atualizarMantendoOProprioSkuDeveRetornar200() throws Exception {
-        when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(5L), any(ProdutoRequest.class)))
-                .thenReturn(respostaComId(5L, "Produto", "SKU-PROPRIO"));
+        when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(PRODUTO_ID), any(ProdutoRequest.class)))
+                .thenReturn(respostaComId(PRODUTO_ID, "Produto", "SKU-PROPRIO"));
 
         String token = tokenParaUsuario(1L);
 
-        mockMvc.perform(patch("/api/produtos/5")
+        mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(corpo("Produto", "10.00", "\"sku\": \"SKU-PROPRIO\"")))
@@ -550,7 +554,7 @@ class ProdutoControllerTest {
 
         String corpo = corpo(NOME_151_CARACTERES, "10.00");
 
-        mockMvc.perform(patch("/api/produtos/5")
+        mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(corpo))
@@ -561,46 +565,255 @@ class ProdutoControllerTest {
 
     @Test
     void inativarProdutoDaPropriaEmpresaDeveRetornar200() throws Exception {
-        Produto produto = produtoComId(5L, "Produto", null);
+        Produto produto = produtoComId(PRODUTO_ID, "Produto", null);
         produto.inativar();
-        when(produtoService.inativarParaUsuario(1L, 5L))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of())));
+        when(produtoService.inativarParaUsuario(1L, PRODUTO_ID))
+                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true));
 
         String token = tokenParaUsuario(1L);
 
-        mockMvc.perform(patch("/api/produtos/5/inativar").header("Authorization", "Bearer " + token))
+        mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID + "/inativar").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ativo").value(false));
     }
 
     @Test
     void inativarProdutoDeOutraEmpresaDeveRetornar404() throws Exception {
-        when(produtoService.inativarParaUsuario(1L, 99L)).thenThrow(new ProdutoNaoEncontradoException());
+        when(produtoService.inativarParaUsuario(1L, OUTRO_PRODUTO_ID)).thenThrow(new ProdutoNaoEncontradoException());
 
         String token = tokenParaUsuario(1L);
 
-        mockMvc.perform(patch("/api/produtos/99/inativar").header("Authorization", "Bearer " + token))
+        mockMvc.perform(patch("/api/produtos/" + OUTRO_PRODUTO_ID + "/inativar").header("Authorization", "Bearer " + token))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void reativarProdutoDaPropriaEmpresaDeveRetornar200() throws Exception {
-        when(produtoService.reativarParaUsuario(1L, 5L)).thenReturn(respostaComId(5L, "Produto", null));
+        when(produtoService.reativarParaUsuario(1L, PRODUTO_ID)).thenReturn(respostaComId(PRODUTO_ID, "Produto", null));
 
         String token = tokenParaUsuario(1L);
 
-        mockMvc.perform(patch("/api/produtos/5/reativar").header("Authorization", "Bearer " + token))
+        mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID + "/reativar").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ativo").value(true));
     }
 
     @Test
     void reativarProdutoDeOutraEmpresaDeveRetornar404() throws Exception {
-        when(produtoService.reativarParaUsuario(1L, 99L)).thenThrow(new ProdutoNaoEncontradoException());
+        when(produtoService.reativarParaUsuario(1L, OUTRO_PRODUTO_ID)).thenThrow(new ProdutoNaoEncontradoException());
 
         String token = tokenParaUsuario(1L);
 
-        mockMvc.perform(patch("/api/produtos/99/reativar").header("Authorization", "Bearer " + token))
+        mockMvc.perform(patch("/api/produtos/" + OUTRO_PRODUTO_ID + "/reativar").header("Authorization", "Bearer " + token))
                 .andExpect(status().isNotFound());
+    }
+
+    // ---------- Fase B: UUID publico ----------
+
+    @Test
+    void idNumericoAntigoNaRotaRetorna400() throws Exception {
+        // As rotas passaram a usar o UUID publico: o id numerico nao e aceito.
+        String token = tokenParaUsuario(1L);
+
+        mockMvc.perform(get("/api/produtos/5").header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Identificador inválido."));
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void respostaNaoTemIdNumericoNemNoProdutoNemNosCodigos() throws Exception {
+        Empresa empresa = new Empresa("Empresa 7");
+        ReflectionTestUtils.setField(empresa, "id", 7L);
+        UnidadeMedida un = new UnidadeMedida(empresa, "UN", "Unidade", false);
+        Produto produto = ProdutoTesteBuilder.produto(empresa, un).id(5L)
+                .nome("Ração Golden Adulto Frango e Arroz 15kg").fornecedor("Distribuidora X")
+                .codigo("7891000315507").codigo("ABC-1").build();
+        ReflectionTestUtils.setField(produto.getCodigosBarras().get(0), "id", 77L);
+        when(produtoService.buscarPorIdParaUsuario(1L, produto.getUuid()))
+                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true));
+
+        String token = tokenParaUsuario(1L);
+
+        mockMvc.perform(get("/api/produtos/" + produto.getUuid()).header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(produto.getUuid().toString()))
+                .andExpect(jsonPath("$.nomeCurto").doesNotExist())
+                .andExpect(jsonPath("$.nomeCurtoEfetivo").value("Ração Golden Adulto Frango e A"))
+                .andExpect(jsonPath("$.fornecedor").value("Distribuidora X"))
+                .andExpect(jsonPath("$.podeExcluir").value(true))
+                .andExpect(jsonPath("$.codigosBarras[0].codigo").value("7891000315507"))
+                .andExpect(jsonPath("$.codigosBarras[0].formato").value("EAN13"))
+                .andExpect(jsonPath("$.codigosBarras[0].id").doesNotExist())
+                .andExpect(jsonPath("$.codigosBarras[1].formato").value("OUTRO"))
+                .andExpect(jsonPath("$.codigoBarras").doesNotExist())
+                .andExpect(jsonPath("$.empresaId").doesNotExist());
+    }
+
+    // ---------- Fase B: validacao do request ----------
+
+    @Test
+    void codigosBarrasCom21ItensRetorna400ComOCampo() throws Exception {
+        String token = tokenParaUsuario(1L);
+        StringBuilder lista = new StringBuilder("[");
+        for (int numero = 1; numero <= 21; numero++) {
+            lista.append(numero == 1 ? "" : ", ").append("\"COD-").append(numero).append('"');
+        }
+        lista.append(']');
+
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corpo("Produto", "10.00", "\"codigosBarras\": " + lista)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[?(@.campo=='codigosBarras')].mensagem")
+                        .value("Informe no máximo 20 códigos de barras."));
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void codigoComMaisDe50CaracteresENomeCurtoComMaisDe30Retornam400() throws Exception {
+        String token = tokenParaUsuario(1L);
+
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corpo("Produto", "10.00", "\"codigosBarras\": [\"" + "9".repeat(51) + "\"]",
+                                "\"nomeCurto\": \"" + "N".repeat(31) + "\"")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[?(@.campo=='codigosBarras[0]')]").exists())
+                .andExpect(jsonPath("$.campos[?(@.campo=='nomeCurto')]").exists());
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void codigoComDigitoInvalidoRetorna400ComMensagemDoService() throws Exception {
+        String mensagem = "Código de barras 7891000315508 com dígito verificador inválido. Confira a leitura.";
+        when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
+                .thenThrow(new RegraDeNegocioException(mensagem));
+
+        String token = tokenParaUsuario(1L);
+
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corpo("Produto", "10.00", "\"codigosBarras\": [\"7891000315508\"]")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value(mensagem));
+
+        ArgumentCaptor<ProdutoRequest> request = ArgumentCaptor.forClass(ProdutoRequest.class);
+        org.mockito.Mockito.verify(produtoService).cadastrarParaUsuario(eq(1L), request.capture());
+        org.assertj.core.api.Assertions.assertThat(request.getValue().codigosBarras())
+                .containsExactly("7891000315508");
+    }
+
+    // ---------- Fase B: exclusao ----------
+
+    @Test
+    void excluirComAdminRetorna204() throws Exception {
+        String token = tokenParaUsuario(1L);
+
+        mockMvc.perform(delete("/api/produtos/" + PRODUTO_ID).header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+
+        org.mockito.Mockito.verify(produtoService).excluirParaUsuario(1L, PRODUTO_ID);
+    }
+
+    @Test
+    void excluirComOperadorRetorna403() throws Exception {
+        String token = tokenParaUsuarioComPerfil(2L, "OPERADOR");
+
+        mockMvc.perform(delete("/api/produtos/" + PRODUTO_ID).header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void excluirSemTokenRetorna401() throws Exception {
+        mockMvc.perform(delete("/api/produtos/" + PRODUTO_ID))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void excluirDeOutraEmpresaRetorna404() throws Exception {
+        org.mockito.Mockito.doThrow(new ProdutoNaoEncontradoException())
+                .when(produtoService).excluirParaUsuario(1L, OUTRO_PRODUTO_ID);
+
+        String token = tokenParaUsuario(1L);
+
+        mockMvc.perform(delete("/api/produtos/" + OUTRO_PRODUTO_ID).header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void excluirBloqueadoRetorna409ComMensagem() throws Exception {
+        String mensagem = "Este produto já teve movimentação e não pode ser excluído. "
+                + "Inative-o para que não apareça na venda.";
+        org.mockito.Mockito.doThrow(new ProdutoConflitoException(mensagem))
+                .when(produtoService).excluirParaUsuario(1L, PRODUTO_ID);
+
+        String token = tokenParaUsuario(1L);
+
+        mockMvc.perform(delete("/api/produtos/" + PRODUTO_ID).header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value(mensagem));
+    }
+
+    // ---------- Fase B: SKU sugerido e sugestoes ----------
+
+    @Test
+    void sugestaoDeSkuComAdminRetorna200() throws Exception {
+        when(produtoService.sugerirSkuParaUsuario(1L)).thenReturn("P000031");
+
+        String token = tokenParaUsuario(1L);
+
+        mockMvc.perform(get("/api/produtos/sku/sugestao").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sku").value("P000031"));
+    }
+
+    @Test
+    void sugestaoDeSkuComOperadorRetorna403() throws Exception {
+        String token = tokenParaUsuarioComPerfil(2L, "OPERADOR");
+
+        mockMvc.perform(get("/api/produtos/sku/sugestao").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void sugestoesDeMarcaComOperadorRetorna200() throws Exception {
+        when(produtoService.sugestoesParaUsuario(2L, "marca", "gol")).thenReturn(List.of("Golden", "Gold Pet"));
+
+        String token = tokenParaUsuarioComPerfil(2L, "OPERADOR");
+
+        mockMvc.perform(get("/api/produtos/sugestoes").param("campo", "marca").param("termo", "gol")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").value("Golden"))
+                .andExpect(jsonPath("$[1]").value("Gold Pet"));
+    }
+
+    @Test
+    void sugestoesComCampoInvalidoRetorna400() throws Exception {
+        when(produtoService.sugestoesParaUsuario(1L, "x", null))
+                .thenThrow(new RegraDeNegocioException("Campo de sugestão inválido."));
+
+        String token = tokenParaUsuario(1L);
+
+        mockMvc.perform(get("/api/produtos/sugestoes").param("campo", "x").header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Campo de sugestão inválido."));
+    }
+
+    @Test
+    void sugestoesSemTokenRetorna401() throws Exception {
+        mockMvc.perform(get("/api/produtos/sugestoes").param("campo", "marca"))
+                .andExpect(status().isUnauthorized());
     }
 }

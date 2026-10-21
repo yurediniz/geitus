@@ -1,9 +1,18 @@
 package com.geitus.app.catalog;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +30,7 @@ import com.geitus.app.company.EmpresaRepository;
 import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
+import com.geitus.app.shared.busca.PadraoLike;
 
 /**
  * Regras de negocio do modulo Produtos.
@@ -31,18 +41,22 @@ import com.geitus.app.iam.UsuarioRepository;
  * <p>O {@code empresaId} recebido pelos metodos internos representa SEMPRE a
  * empresa do usuario autenticado (nunca uma escolha livre do chamador) e e
  * usado para isolar consultas e alteracoes por tenant (DEC-016): um produto de
- * outra empresa nunca deve ser encontrado, atualizado ou vazado. O mesmo vale
+ * outra empresa nunca deve ser encontrado, atualizado, excluido ou vazado —
+ * inclusive pelo nome, na mensagem de codigo de barras duplicado. O mesmo vale
  * para a unidade, a categoria e a unidade de compra informadas: sao buscadas
  * dentro da empresa e, se forem de outra, respondem 404.
  *
  * <p>A API publica do service e composta apenas pelos metodos {@code *ParaUsuario},
  * que recebem {@code idUsuario} (o id extraido do JWT) e resolvem a empresa
  * internamente, no mesmo padrao usado em {@code EmpresaService.buscarUsuarioAtivo}:
- * assim o controller nunca manipula {@code empresaId} diretamente. Eles devolvem
- * o {@link ProdutoResponse} ja montado, com o caminho da categoria vindo da
- * {@link CategoriaArvore} da empresa — na listagem, montada uma unica vez. Os
- * metodos que recebem {@code empresaId} sao de uso interno (package-private) e
- * concentram a regra de isolamento por tenant.
+ * assim o controller nunca manipula {@code empresaId} diretamente. O produto e
+ * identificado pelo UUID publico (DEC-019). Os metodos que recebem
+ * {@code empresaId} sao de uso interno (package-private) e concentram a regra
+ * de isolamento por tenant.
+ *
+ * <p>Fase B (docs/modules/produtos-identificacao-e-formulario.md, secao 4):
+ * codigos de barras multiplos, nome curto, fornecedor, SKU sugerido, sugestoes
+ * de marca/fornecedor e exclusao fisica condicionada a {@link #podeExcluir}.
  */
 @Service
 public class ProdutoService {
@@ -56,6 +70,27 @@ public class ProdutoService {
     static final String MENSAGEM_UNIDADE_COMPRA_INATIVA =
             "Esta unidade de compra está inativa. Escolha uma unidade ativa.";
     static final String MENSAGEM_CATEGORIA_INATIVA = "Esta categoria está inativa. Escolha uma categoria ativa.";
+    static final String MENSAGEM_SKU_DUPLICADO = "Já existe um produto com este SKU nesta empresa.";
+
+    static final String MENSAGEM_CODIGO_REPETIDO = "Código de barras repetido na lista.";
+    static final String MENSAGEM_LIMITE_DE_CODIGOS = "Informe no máximo 20 códigos de barras.";
+    static final String MENSAGEM_CODIGO_LONGO = "Código de barras deve ter no máximo 50 caracteres.";
+    static final String MENSAGEM_DIGITO_INVALIDO = "Código de barras %s com dígito verificador inválido. "
+            + "Confira a leitura.";
+    static final String MENSAGEM_CODIGO_EM_OUTRO_PRODUTO = "O código de barras %s já está cadastrado no produto \"%s\".";
+    static final String MENSAGEM_EXCLUSAO_BLOQUEADA = "Este produto já teve movimentação e não pode ser excluído. "
+            + "Inative-o para que não apareça na venda.";
+    static final String MENSAGEM_CAMPO_DE_SUGESTAO_INVALIDO = "Campo de sugestão inválido.";
+
+    static final int MAXIMO_CODIGOS_POR_PRODUTO = 20;
+    static final int TAMANHO_MAXIMO_CODIGO = 50;
+    static final int LIMITE_DE_SUGESTOES = 10;
+    static final int TAMANHO_MAXIMO_TERMO_DE_SUGESTAO = 50;
+
+    /** SKU no padrao da sugestao automatica: {@code P} + 6 ou mais digitos (spec 4.2). */
+    private static final Pattern SKU_NO_PADRAO = Pattern.compile("P([0-9]{6,})");
+    private static final String PREFIXO_SKU_SUGERIDO = "P";
+    private static final String FORMATO_NUMERO_SKU_SUGERIDO = "%06d";
 
     private final ProdutoRepository produtoRepository;
     private final EmpresaRepository empresaRepository;
@@ -75,65 +110,121 @@ public class ProdutoService {
 
     Produto cadastrar(Long empresaId, ProdutoRequest request) {
         validarCampos(request);
-        String skuNormalizado = normalizarOuNulo(request.sku());
-        String codigoBarrasNormalizado = normalizarOuNulo(request.codigoBarras());
-        validarUnicidadeParaNovoProduto(empresaId, skuNormalizado, codigoBarrasNormalizado);
+        List<CodigoBarrasValidado> codigos = validarCodigos(empresaId, request.codigosBarras(), null);
+        String sku = normalizarOuNulo(request.sku());
+        garantirSkuDisponivelParaNovoProduto(empresaId, sku);
         Vinculos vinculos = resolverVinculos(empresaId, request, null);
 
         Empresa empresa = empresaRepository.findById(empresaId)
                 .orElseThrow(() -> new RegraDeNegocioException("Empresa informada não encontrada."));
 
-        Produto produto = new Produto(empresa, request.nome().trim(), vinculos.unidade(), vinculos.categoria(),
-                vinculos.unidadeCompra(), request.fatorConversao(), request.precoVenda(), request.custo(),
-                request.estoqueMinimo(), codigoBarrasNormalizado, skuNormalizado, normalizarOuNulo(request.marca()),
-                normalizarOuNulo(request.descricao()), request.estoqueMaximo(), request.pontoReposicao(),
-                request.precoMinimo());
-
+        Produto produto = new Produto(empresa, dadosDoProduto(request, vinculos, sku));
+        produto.substituirCodigos(codigos);
         return produtoRepository.save(produto);
     }
 
-    Produto atualizarDadosBasicos(Long empresaId, Long produtoId, ProdutoRequest request) {
+    Produto atualizarDadosBasicos(Long empresaId, UUID produtoId, ProdutoRequest request) {
         Produto produto = buscarPorId(empresaId, produtoId);
 
         validarCampos(request);
-        String skuNormalizado = normalizarOuNulo(request.sku());
-        String codigoBarrasNormalizado = normalizarOuNulo(request.codigoBarras());
-        validarUnicidadeParaAtualizacao(empresaId, produtoId, skuNormalizado, codigoBarrasNormalizado);
+        List<CodigoBarrasValidado> codigos = validarCodigos(empresaId, request.codigosBarras(), produto);
+        String sku = normalizarOuNulo(request.sku());
+        garantirSkuDisponivelParaProdutoExistente(empresaId, produto.getId(), sku);
         Vinculos vinculos = resolverVinculos(empresaId, request, produto);
 
-        produto.atualizarDadosBasicos(request.nome().trim(), vinculos.unidade(), vinculos.categoria(),
-                vinculos.unidadeCompra(), request.fatorConversao(), request.precoVenda(), request.custo(),
-                request.estoqueMinimo(), codigoBarrasNormalizado, skuNormalizado, normalizarOuNulo(request.marca()),
-                normalizarOuNulo(request.descricao()), request.estoqueMaximo(), request.pontoReposicao(),
-                request.precoMinimo());
-
+        produto.atualizarDadosBasicos(dadosDoProduto(request, vinculos, sku));
+        produto.substituirCodigos(codigos);
         return produtoRepository.save(produto);
     }
 
-    Produto inativar(Long empresaId, Long produtoId) {
+    Produto inativar(Long empresaId, UUID produtoId) {
         Produto produto = buscarPorId(empresaId, produtoId);
         produto.inativar();
         return produtoRepository.save(produto);
     }
 
-    Produto reativar(Long empresaId, Long produtoId) {
+    Produto reativar(Long empresaId, UUID produtoId) {
         Produto produto = buscarPorId(empresaId, produtoId);
         produto.ativar();
         return produtoRepository.save(produto);
     }
 
-    Produto buscarPorId(Long empresaId, Long produtoId) {
-        return produtoRepository.findByIdAndEmpresa_Id(produtoId, empresaId)
+    /**
+     * Exclusao fisica (spec 4.5, DEC-030): so se {@link #podeExcluir}; senao 409.
+     * Os codigos de barras saem junto (cascade na entidade e no banco).
+     */
+    void excluir(Long empresaId, UUID produtoId) {
+        Produto produto = buscarPorId(empresaId, produtoId);
+        if (!podeExcluir(produto)) {
+            throw new ProdutoConflitoException(MENSAGEM_EXCLUSAO_BLOQUEADA);
+        }
+        produtoRepository.delete(produto);
+    }
+
+    /**
+     * Se o produto pode ser excluido fisicamente: so quando nunca teve venda
+     * nem movimentacao de estoque (DEC-030).
+     *
+     * <p><b>Ponto de extensao das Fases C/D:</b> nesta fase ainda nao existem
+     * vendas nem movimentacoes, entao todo produto pode ser excluido. Quando
+     * esses modulos existirem, a verificacao entra AQUI (e so aqui): ela
+     * decide tanto o {@code DELETE} quanto o {@code podeExcluir} da resposta.
+     * Package-private e nao final para os testes simularem o bloqueio.
+     */
+    boolean podeExcluir(Produto produto) {
+        return true;
+    }
+
+    Produto buscarPorId(Long empresaId, UUID produtoId) {
+        return produtoRepository.findByUuidAndEmpresa_Id(produtoId, empresaId)
                 .orElseThrow(ProdutoNaoEncontradoException::new);
     }
 
+    /**
+     * Lista com filtros. Com termo, casa nome, nome curto e SKU pelo termo e
+     * os codigos de barras pelo termo sem espacos; {@code %} e {@code _} do
+     * termo sao literais (DT-017). Sem termo, usa a query sem padroes (ver nota
+     * no {@link ProdutoRepository}).
+     */
     List<Produto> listarPorEmpresaComFiltros(Long empresaId, String busca, Boolean ativo) {
-        // Sem termo de busca, usa a query sem o parametro :busca — passar null
-        // para dentro de LOWER(CONCAT(...)) falha no PostgreSQL (bytea).
         if (!StringUtils.hasText(busca)) {
             return produtoRepository.buscarPorEmpresa(empresaId, ativo);
         }
-        return produtoRepository.buscarPorEmpresaComBusca(empresaId, busca.trim(), ativo);
+        String padraoTexto = PadraoLike.contem(emMinusculas(busca.trim()));
+        String padraoCodigo = PadraoLike.contem(emMinusculas(CodigoBarras.normalizar(busca)));
+        return produtoRepository.buscarPorEmpresaComBusca(empresaId, padraoTexto, padraoCodigo, ativo);
+    }
+
+    /**
+     * Proximo SKU no padrao {@code P} + 6 digitos (spec 4.2): o maior numero
+     * entre os SKUs da empresa que seguem exatamente o padrao, mais 1. SKUs
+     * fora do padrao sao ignorados; passando de 999999 o numero cresce. Nao
+     * reserva: a unicidade e conferida ao salvar.
+     */
+    String sugerirSku(Long empresaId) {
+        BigInteger maiorNumero = produtoRepository.skusNoPadrao(empresaId).stream()
+                .map(SKU_NO_PADRAO::matcher)
+                .filter(Matcher::matches)
+                .map(numero -> new BigInteger(numero.group(1)))
+                .max(Comparator.naturalOrder())
+                .orElse(BigInteger.ZERO);
+        return PREFIXO_SKU_SUGERIDO + String.format(FORMATO_NUMERO_SKU_SUGERIDO, maiorNumero.add(BigInteger.ONE));
+    }
+
+    /**
+     * Ate {@value #LIMITE_DE_SUGESTOES} valores distintos de marca ou fornecedor
+     * ja usados na empresa que contem o termo (spec 4.4). {@code campo} vem de
+     * uma allow-list (400 fora dela); o termo e aparado e limitado aos
+     * {@value #TAMANHO_MAXIMO_TERMO_DE_SUGESTAO} primeiros caracteres; sem
+     * termo, os mais usados.
+     */
+    List<String> sugestoes(Long empresaId, String campo, String termo) {
+        CampoDeSugestao campoDeSugestao = CampoDeSugestao.de(campo);
+        String padrao = PadraoLike.contem(emMinusculas(termoDeSugestao(termo)));
+        return switch (campoDeSugestao) {
+            case MARCA -> produtoRepository.sugestoesDeMarca(empresaId, padrao, LIMITE_DE_SUGESTOES);
+            case FORNECEDOR -> produtoRepository.sugestoesDeFornecedor(empresaId, padrao, LIMITE_DE_SUGESTOES);
+        };
     }
 
     // ---------- API publica (empresa sempre resolvida do usuario do JWT) ----------
@@ -144,22 +235,27 @@ public class ProdutoService {
     }
 
     @Transactional
-    public ProdutoResponse atualizarDadosBasicosParaUsuario(Long idUsuario, Long produtoId, ProdutoRequest request) {
+    public ProdutoResponse atualizarDadosBasicosParaUsuario(Long idUsuario, UUID produtoId, ProdutoRequest request) {
         return responder(atualizarDadosBasicos(resolverEmpresaId(idUsuario), produtoId, request));
     }
 
     @Transactional
-    public ProdutoResponse inativarParaUsuario(Long idUsuario, Long produtoId) {
+    public ProdutoResponse inativarParaUsuario(Long idUsuario, UUID produtoId) {
         return responder(inativar(resolverEmpresaId(idUsuario), produtoId));
     }
 
     @Transactional
-    public ProdutoResponse reativarParaUsuario(Long idUsuario, Long produtoId) {
+    public ProdutoResponse reativarParaUsuario(Long idUsuario, UUID produtoId) {
         return responder(reativar(resolverEmpresaId(idUsuario), produtoId));
     }
 
+    @Transactional
+    public void excluirParaUsuario(Long idUsuario, UUID produtoId) {
+        excluir(resolverEmpresaId(idUsuario), produtoId);
+    }
+
     @Transactional(readOnly = true)
-    public ProdutoResponse buscarPorIdParaUsuario(Long idUsuario, Long produtoId) {
+    public ProdutoResponse buscarPorIdParaUsuario(Long idUsuario, UUID produtoId) {
         return responder(buscarPorId(resolverEmpresaId(idUsuario), produtoId));
     }
 
@@ -170,8 +266,123 @@ public class ProdutoService {
         List<Produto> produtos = listarPorEmpresaComFiltros(empresaId, busca, ativo);
         CategoriaArvore arvore = categoriaService.arvoreDaEmpresa(empresaId);
         return produtos.stream()
-                .map(produto -> ProdutoResponse.de(produto, arvore))
+                .map(produto -> ProdutoResponse.de(produto, arvore, podeExcluir(produto)))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public String sugerirSkuParaUsuario(Long idUsuario) {
+        return sugerirSku(resolverEmpresaId(idUsuario));
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> sugestoesParaUsuario(Long idUsuario, String campo, String termo) {
+        return sugestoes(resolverEmpresaId(idUsuario), campo, termo);
+    }
+
+    // ---------- Codigos de barras (spec 4.3) ----------
+
+    /**
+     * Valida a lista de codigos, nesta ordem: normaliza (descartando vazios) →
+     * repetidos no envio (400) → mais de 20 (400) → para cada codigo: se o
+     * produto ja o tem com o mesmo texto, mantem o formato gravado (inclusive
+     * {@code OUTRO} de um EAN com digito errado vindo da migracao — Review
+     * Focus 1); senao detecta o formato, rejeita candidato GS1 com digito
+     * invalido (400) e confere a unicidade na empresa (409 com o nome do
+     * produto da MESMA empresa — Review Focus 3). {@code produtoAtual} e
+     * {@code null} no cadastro.
+     */
+    private List<CodigoBarrasValidado> validarCodigos(Long empresaId, List<String> informados, Produto produtoAtual) {
+        List<String> codigos = normalizarCodigos(informados);
+        exigirSemRepetidos(codigos);
+        if (codigos.size() > MAXIMO_CODIGOS_POR_PRODUTO) {
+            throw new RegraDeNegocioException(MENSAGEM_LIMITE_DE_CODIGOS);
+        }
+        List<CodigoBarrasValidado> validados = new ArrayList<>(codigos.size());
+        for (String codigo : codigos) {
+            validados.add(codigoMantidoOuNovoValidado(empresaId, codigo, produtoAtual));
+        }
+        return validados;
+    }
+
+    /** Lista normalizada: {@code null} vira vazia e codigos vazios/so espacos sao descartados. */
+    private static List<String> normalizarCodigos(List<String> informados) {
+        if (informados == null) {
+            return List.of();
+        }
+        return informados.stream()
+                .map(CodigoBarras::normalizar)
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private static void exigirSemRepetidos(List<String> codigos) {
+        Set<String> vistos = new HashSet<>();
+        for (String codigo : codigos) {
+            if (!vistos.add(codigo)) {
+                throw new RegraDeNegocioException(MENSAGEM_CODIGO_REPETIDO);
+            }
+        }
+    }
+
+    private CodigoBarrasValidado codigoMantidoOuNovoValidado(Long empresaId, String codigo, Produto produtoAtual) {
+        if (produtoAtual != null) {
+            Optional<ProdutoCodigoBarras> gravado = produtoAtual.codigoGravado(codigo);
+            if (gravado.isPresent()) {
+                return new CodigoBarrasValidado(codigo, gravado.get().getFormato());
+            }
+        }
+        return codigoNovoValidado(empresaId, codigo, produtoAtual == null ? null : produtoAtual.getId());
+    }
+
+    private CodigoBarrasValidado codigoNovoValidado(Long empresaId, String codigo, Long produtoAtualId) {
+        if (codigo.length() > TAMANHO_MAXIMO_CODIGO) {
+            throw new RegraDeNegocioException(MENSAGEM_CODIGO_LONGO);
+        }
+        if (CodigoBarras.ehCandidatoGs1(codigo) && !CodigoBarras.digitoVerificadorValido(codigo)) {
+            throw new RegraDeNegocioException(MENSAGEM_DIGITO_INVALIDO.formatted(codigo));
+        }
+        produtoRepository.produtoComCodigo(empresaId, codigo, produtoAtualId).ifPresent(nomeDoProduto -> {
+            throw new ProdutoConflitoException(MENSAGEM_CODIGO_EM_OUTRO_PRODUTO.formatted(codigo, nomeDoProduto));
+        });
+        return new CodigoBarrasValidado(codigo, CodigoBarras.detectarFormato(codigo));
+    }
+
+    // ---------- Sugestoes (spec 4.4) ----------
+
+    /** Allow-list dos campos de sugestao: o nome vindo da API nunca chega ao SQL. */
+    private enum CampoDeSugestao {
+        MARCA("marca"),
+        FORNECEDOR("fornecedor");
+
+        private final String nomeNaApi;
+
+        CampoDeSugestao(String nomeNaApi) {
+            this.nomeNaApi = nomeNaApi;
+        }
+
+        static CampoDeSugestao de(String campo) {
+            for (CampoDeSugestao candidato : values()) {
+                if (candidato.nomeNaApi.equals(campo)) {
+                    return candidato;
+                }
+            }
+            throw new RegraDeNegocioException(MENSAGEM_CAMPO_DE_SUGESTAO_INVALIDO);
+        }
+    }
+
+    private static String termoDeSugestao(String termo) {
+        if (!StringUtils.hasText(termo)) {
+            return "";
+        }
+        String aparado = termo.trim();
+        return aparado.length() <= TAMANHO_MAXIMO_TERMO_DE_SUGESTAO
+                ? aparado
+                : aparado.substring(0, TAMANHO_MAXIMO_TERMO_DE_SUGESTAO);
+    }
+
+    private static String emMinusculas(String texto) {
+        return texto.toLowerCase(Locale.ROOT);
     }
 
     // ---------- Unidade, categoria e conversao de compra ----------
@@ -264,12 +475,22 @@ public class ProdutoService {
 
     // ---------- Apoio ----------
 
+    /** Dados do cadastro a partir do request: textos aparados (vazio vira {@code null}) e vinculos resolvidos. */
+    private static DadosProduto dadosDoProduto(ProdutoRequest request, Vinculos vinculos, String sku) {
+        return new DadosProduto(request.nome().trim(), normalizarOuNulo(request.nomeCurto()),
+                normalizarOuNulo(request.marca()), normalizarOuNulo(request.fornecedor()),
+                normalizarOuNulo(request.descricao()), vinculos.unidade(), vinculos.categoria(),
+                vinculos.unidadeCompra(), request.fatorConversao(), request.precoVenda(), request.custo(),
+                request.precoMinimo(), request.estoqueMinimo(), request.estoqueMaximo(), request.pontoReposicao(),
+                sku);
+    }
+
     /** Resposta de um produto; a arvore so e carregada se o produto tiver categoria. */
     private ProdutoResponse responder(Produto produto) {
         CategoriaArvore arvore = produto.getCategoria() == null
                 ? CategoriaArvore.de(List.of())
                 : categoriaService.arvoreDaEmpresa(produto.getEmpresaId());
-        return ProdutoResponse.de(produto, arvore);
+        return ProdutoResponse.de(produto, arvore, podeExcluir(produto));
     }
 
     private Long resolverEmpresaId(Long idUsuario) {
@@ -280,12 +501,10 @@ public class ProdutoService {
     }
 
     /**
-     * Normaliza string em branco/vazia para {@code null}. Evita que
-     * {@code sku}/{@code codigoBarras} sejam persistidos como string vazia
-     * {@code ""}: a constraint UNIQUE(empresa_id, coluna) do Postgres trata
-     * multiplas strings vazias como conflitantes entre si (diferente de
-     * NULL, que nunca conflita), o que geraria erro de integridade para
-     * produtos sem SKU/codigo de barras informado.
+     * Normaliza string em branco/vazia para {@code null} e apara as demais.
+     * Evita gravar {@code ""}: a constraint UNIQUE(empresa_id, sku) do Postgres
+     * trata multiplas strings vazias como conflitantes entre si (diferente de
+     * NULL), e a V7 proibe nome curto/fornecedor vazios ou com espacos nas pontas.
      */
     private static String normalizarOuNulo(String valor) {
         return StringUtils.hasText(valor) ? valor.trim() : null;
@@ -342,24 +561,15 @@ public class ProdutoService {
         }
     }
 
-    private void validarUnicidadeParaNovoProduto(Long empresaId, String sku, String codigoBarras) {
-        if (StringUtils.hasText(sku) && produtoRepository.existsBySkuAndEmpresa_Id(sku, empresaId)) {
-            throw new ProdutoConflitoException("Já existe um produto com este SKU nesta empresa.");
-        }
-        if (StringUtils.hasText(codigoBarras)
-                && produtoRepository.existsByCodigoBarrasAndEmpresa_Id(codigoBarras, empresaId)) {
-            throw new ProdutoConflitoException("Já existe um produto com este código de barras nesta empresa.");
+    private void garantirSkuDisponivelParaNovoProduto(Long empresaId, String sku) {
+        if (sku != null && produtoRepository.existsBySkuAndEmpresa_Id(sku, empresaId)) {
+            throw new ProdutoConflitoException(MENSAGEM_SKU_DUPLICADO);
         }
     }
 
-    private void validarUnicidadeParaAtualizacao(Long empresaId, Long produtoId, String sku, String codigoBarras) {
-        if (StringUtils.hasText(sku)
-                && produtoRepository.existsBySkuAndEmpresa_IdAndIdNot(sku, empresaId, produtoId)) {
-            throw new ProdutoConflitoException("Já existe um produto com este SKU nesta empresa.");
-        }
-        if (StringUtils.hasText(codigoBarras)
-                && produtoRepository.existsByCodigoBarrasAndEmpresa_IdAndIdNot(codigoBarras, empresaId, produtoId)) {
-            throw new ProdutoConflitoException("Já existe um produto com este código de barras nesta empresa.");
+    private void garantirSkuDisponivelParaProdutoExistente(Long empresaId, Long produtoId, String sku) {
+        if (sku != null && produtoRepository.existsBySkuAndEmpresa_IdAndIdNot(sku, empresaId, produtoId)) {
+            throw new ProdutoConflitoException(MENSAGEM_SKU_DUPLICADO);
         }
     }
 }

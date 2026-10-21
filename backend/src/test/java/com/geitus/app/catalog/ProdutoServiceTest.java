@@ -4,6 +4,7 @@ import static com.geitus.app.catalog.ProdutoRequestBuilder.comUnidade;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -11,10 +12,12 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +29,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
 import com.geitus.app.catalog.categoria.CategoriaService;
+import com.geitus.app.catalog.dto.CodigoBarrasResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
@@ -39,14 +43,19 @@ import com.geitus.app.iam.UsuarioRepository;
 /**
  * Testa as regras do {@link ProdutoService}: validacoes de cadastro/atualizacao
  * (incluindo os campos cadastrais da V4 e as regras cruzadas), normalizacao de
- * texto, isolamento por empresa (DEC-016) e os vinculos com unidade de venda,
- * categoria e unidade de compra (docs/modules/categorias-e-unidades.md, 5.1).
+ * texto, isolamento por empresa (DEC-016), os vinculos com unidade de venda,
+ * categoria e unidade de compra (docs/modules/categorias-e-unidades.md, 5.1) e a
+ * identificacao da Fase B (codigos de barras, nome curto, SKU sugerido,
+ * sugestoes e exclusao — docs/modules/produtos-identificacao-e-formulario.md, 4).
  */
 @ExtendWith(MockitoExtension.class)
 class ProdutoServiceTest {
 
     private static final Long EMPRESA_ID = 1L;
     private static final Long PRODUTO_ID = 5L;
+    private static final String EAN13_VALIDO = "7891000315507";
+    private static final String EAN13_DIGITO_INVALIDO = "7891000315508";
+    private static final String EAN8_VALIDO = "96385074";
 
     @Mock
     private ProdutoRepository produtoRepository;
@@ -67,6 +76,7 @@ class ProdutoServiceTest {
 
     private Empresa empresa;
     private UnidadeMedida un;
+    private UUID produtoUuid;
 
     @BeforeEach
     void setUp() {
@@ -96,16 +106,20 @@ class ProdutoServiceTest {
         return categoria;
     }
 
-    private Produto produtoExistente(String sku, String codigoBarras) {
-        return produtoExistente(un, null, sku, codigoBarras);
+    private ProdutoTesteBuilder existente() {
+        return ProdutoTesteBuilder.produto(empresa, un).id(PRODUTO_ID).nome("Produto Existente");
     }
 
-    private Produto produtoExistente(UnidadeMedida unidade, Categoria categoria, String sku, String codigoBarras) {
-        Produto produto = new Produto(empresa, "Produto Existente", unidade, categoria, null, null,
-                new BigDecimal("10.00"), null, null, codigoBarras, sku, null, null, null, null, null);
-        ReflectionTestUtils.setField(produto, "id", PRODUTO_ID);
-        when(produtoRepository.findByIdAndEmpresa_Id(PRODUTO_ID, EMPRESA_ID)).thenReturn(Optional.of(produto));
+    /** Registra o produto como o encontrado pelo UUID dentro da empresa. */
+    private Produto produtoExistente(ProdutoTesteBuilder builder) {
+        Produto produto = builder.build();
+        produtoUuid = produto.getUuid();
+        when(produtoRepository.findByUuidAndEmpresa_Id(produtoUuid, EMPRESA_ID)).thenReturn(Optional.of(produto));
         return produto;
+    }
+
+    private Produto produtoExistente() {
+        return produtoExistente(existente());
     }
 
     private void unidadeDaEmpresa(UnidadeMedida unidade) {
@@ -121,7 +135,13 @@ class ProdutoServiceTest {
     }
 
     private void cadastroPermitido() {
+        unidadeDaEmpresa(un);
         when(empresaRepository.findById(EMPRESA_ID)).thenReturn(Optional.of(empresa));
+        salvamentoDevolveOProduto();
+    }
+
+    private void edicaoPermitida() {
+        unidadeDaEmpresa(un);
         salvamentoDevolveOProduto();
     }
 
@@ -138,26 +158,36 @@ class ProdutoServiceTest {
     }
 
     private Produto atualizar(ProdutoRequest request) {
-        return produtoService.atualizarDadosBasicos(EMPRESA_ID, PRODUTO_ID, request);
+        return produtoService.atualizarDadosBasicos(EMPRESA_ID, produtoUuid, request);
+    }
+
+    private static List<String> codigosDe(Produto produto) {
+        return produto.getCodigosBarras().stream().map(ProdutoCodigoBarras::getCodigo).toList();
+    }
+
+    private static List<FormatoCodigoBarras> formatosDe(Produto produto) {
+        return produto.getCodigosBarras().stream().map(ProdutoCodigoBarras::getFormato).toList();
     }
 
     // ---------- Cadastro: regras basicas ----------
 
     @Test
     void cadastrarProdutoValidoDeveSalvar() {
-        unidadeDaEmpresa(un);
         cadastroPermitido();
 
         Produto produto = cadastrar(requestComUN().nome("Arroz 5kg").precoVenda("25.90").custo("18.00")
-                .estoqueMinimo("2").codigoBarras("789123").sku("SKU-1").build());
+                .estoqueMinimo("2").codigosBarras(EAN13_VALIDO).sku("SKU-1").build());
 
         assertThat(produto.getNome()).isEqualTo("Arroz 5kg");
         assertThat(produto.getEmpresaId()).isEqualTo(EMPRESA_ID);
+        assertThat(produto.getUuid()).isNotNull();
         assertThat(produto.getUnidade()).isSameAs(un);
         assertThat(produto.getCategoria()).isNull();
         assertThat(produto.getUnidadeCompra()).isNull();
         assertThat(produto.getFatorConversao()).isNull();
         assertThat(produto.isAtivo()).isTrue();
+        assertThat(codigosDe(produto)).containsExactly(EAN13_VALIDO);
+        assertThat(formatosDe(produto)).containsExactly(FormatoCodigoBarras.EAN13);
         verify(produtoRepository).save(any(Produto.class));
     }
 
@@ -233,33 +263,24 @@ class ProdutoServiceTest {
     }
 
     @Test
-    void cadastrarComCodigoBarrasDuplicadoNaMesmaEmpresaDeveFalhar() {
-        when(produtoRepository.existsByCodigoBarrasAndEmpresa_Id("789123", EMPRESA_ID)).thenReturn(true);
-
-        assertThatThrownBy(() -> cadastrar(requestComUN().codigoBarras("789123").build()))
-                .isInstanceOf(ProdutoConflitoException.class);
-
-        verify(produtoRepository, never()).save(any());
-    }
-
-    @Test
-    void cadastrarSemSkuESemCodigoBarrasDevePermitir() {
-        unidadeDaEmpresa(un);
+    void cadastrarSemSkuESemCodigosDevePermitir() {
         cadastroPermitido();
 
-        Produto produto = cadastrar(requestComUN().nome("Produto Sem Codigos").build());
+        Produto produto = cadastrar(requestComUN().nome("Produto Sem Codigos").codigosBarras((List<String>) null)
+                .build());
 
         assertThat(produto.getSku()).isNull();
-        assertThat(produto.getCodigoBarras()).isNull();
+        assertThat(produto.getCodigosBarras()).isEmpty();
         verify(produtoRepository, never()).existsBySkuAndEmpresa_Id(any(), anyLong());
-        verify(produtoRepository, never()).existsByCodigoBarrasAndEmpresa_Id(any(), anyLong());
+        verify(produtoRepository, never()).produtoComCodigo(any(), any(), any());
     }
 
     // ---------- Atualizacao: regras basicas ----------
 
     @Test
     void atualizarProdutoDeOutraEmpresaDeveFalhar() {
-        when(produtoRepository.findByIdAndEmpresa_Id(PRODUTO_ID, EMPRESA_ID)).thenReturn(Optional.empty());
+        produtoUuid = UUID.randomUUID();
+        when(produtoRepository.findByUuidAndEmpresa_Id(produtoUuid, EMPRESA_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> atualizar(requestComUN().nome("Novo Nome").build()))
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
@@ -269,7 +290,7 @@ class ProdutoServiceTest {
 
     @Test
     void atualizarProdutoDentroDaEmpresaCorretaDeveAlterarDados() {
-        produtoExistente(null, null);
+        produtoExistente();
         UnidadeMedida kg = unidade(11L, empresa, "KG");
         unidadeDaEmpresa(kg);
         salvamentoDevolveOProduto();
@@ -284,7 +305,7 @@ class ProdutoServiceTest {
 
     @Test
     void atualizarComSkuJaUsadoPorOutroProdutoDaMesmaEmpresaDeveFalhar() {
-        produtoExistente("SKU-PROPRIO", null);
+        produtoExistente(existente().sku("SKU-PROPRIO"));
         when(produtoRepository.existsBySkuAndEmpresa_IdAndIdNot("SKU-DE-OUTRO", EMPRESA_ID, PRODUTO_ID))
                 .thenReturn(true);
 
@@ -295,40 +316,11 @@ class ProdutoServiceTest {
     }
 
     @Test
-    void atualizarComCodigoBarrasJaUsadoPorOutroProdutoDaMesmaEmpresaDeveFalhar() {
-        produtoExistente(null, "111222333");
-        when(produtoRepository.existsByCodigoBarrasAndEmpresa_IdAndIdNot("999888777", EMPRESA_ID, PRODUTO_ID))
-                .thenReturn(true);
-
-        assertThatThrownBy(() -> atualizar(requestComUN().codigoBarras("999888777").build()))
-                .isInstanceOf(ProdutoConflitoException.class);
-
-        verify(produtoRepository, never()).save(any());
-    }
-
-    @Test
-    void atualizarMantendoOProprioCodigoBarrasNaoDeveFalhar() {
-        produtoExistente(null, "111222333");
-        when(produtoRepository.existsByCodigoBarrasAndEmpresa_IdAndIdNot("111222333", EMPRESA_ID, PRODUTO_ID))
-                .thenReturn(false);
-        unidadeDaEmpresa(un);
-        salvamentoDevolveOProduto();
-
-        Produto atualizado = atualizar(requestComUN().nome("Produto Atualizado").precoVenda("15")
-                .codigoBarras("111222333").build());
-
-        assertThat(atualizado.getCodigoBarras()).isEqualTo("111222333");
-        verify(produtoRepository).existsByCodigoBarrasAndEmpresa_IdAndIdNot("111222333", EMPRESA_ID, PRODUTO_ID);
-        verify(produtoRepository).save(any(Produto.class));
-    }
-
-    @Test
     void atualizarMantendoOProprioSkuNaoDeveFalhar() {
-        produtoExistente("SKU-PROPRIO", null);
+        produtoExistente(existente().sku("SKU-PROPRIO"));
         when(produtoRepository.existsBySkuAndEmpresa_IdAndIdNot("SKU-PROPRIO", EMPRESA_ID, PRODUTO_ID))
                 .thenReturn(false);
-        unidadeDaEmpresa(un);
-        salvamentoDevolveOProduto();
+        edicaoPermitida();
 
         Produto atualizado = atualizar(requestComUN().nome("Produto Atualizado").precoVenda("15")
                 .sku("SKU-PROPRIO").build());
@@ -340,22 +332,339 @@ class ProdutoServiceTest {
 
     @Test
     void inativarEReativarProdutoDevemAlterarStatus() {
-        produtoExistente(null, null);
+        produtoExistente();
         salvamentoDevolveOProduto();
 
-        Produto inativado = produtoService.inativar(EMPRESA_ID, PRODUTO_ID);
+        Produto inativado = produtoService.inativar(EMPRESA_ID, produtoUuid);
         assertThat(inativado.isAtivo()).isFalse();
 
-        Produto reativado = produtoService.reativar(EMPRESA_ID, PRODUTO_ID);
+        Produto reativado = produtoService.reativar(EMPRESA_ID, produtoUuid);
         assertThat(reativado.isAtivo()).isTrue();
     }
 
     @Test
     void buscarPorIdDeOutraEmpresaDeveLancarProdutoNaoEncontrado() {
-        when(produtoRepository.findByIdAndEmpresa_Id(PRODUTO_ID, 2L)).thenReturn(Optional.empty());
+        UUID deOutraEmpresa = UUID.randomUUID();
+        when(produtoRepository.findByUuidAndEmpresa_Id(deOutraEmpresa, 2L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> produtoService.buscarPorId(2L, PRODUTO_ID))
+        assertThatThrownBy(() -> produtoService.buscarPorId(2L, deOutraEmpresa))
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
+    }
+
+    // ---------- Codigos de barras (spec 4.3) ----------
+
+    @Test
+    void codigoNovoComDigitoInvalidoLanca400ComMensagemFixa() {
+        assertThatThrownBy(() -> cadastrar(requestComUN().codigosBarras(EAN13_DIGITO_INVALIDO).build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Código de barras 7891000315508 com dígito verificador inválido. Confira a leitura.");
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void codigoNovoComDigitoInvalidoNaEdicaoTambemLanca400() {
+        produtoExistente(existente().codigo(EAN13_VALIDO));
+
+        assertThatThrownBy(() -> atualizar(requestComUN().codigosBarras(EAN13_VALIDO, "96385075").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Código de barras 96385075 com dígito verificador inválido. Confira a leitura.");
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void codigoJaGravadoComoOutroEMantidoAoEditar() {
+        // Review Focus 1: EAN-13 de digito invalido vindo da migracao (gravado OUTRO).
+        Produto produto = produtoExistente(existente().codigo(EAN13_DIGITO_INVALIDO, FormatoCodigoBarras.OUTRO));
+        ProdutoCodigoBarras gravado = produto.getCodigosBarras().get(0);
+        edicaoPermitida();
+
+        Produto atualizado = atualizar(requestComUN().nome("Feijão 1kg").codigosBarras(EAN13_DIGITO_INVALIDO)
+                .build());
+
+        assertThat(atualizado.getNome()).isEqualTo("Feijão 1kg");
+        assertThat(atualizado.getCodigosBarras()).singleElement().isSameAs(gravado);
+        assertThat(formatosDe(atualizado)).containsExactly(FormatoCodigoBarras.OUTRO);
+        verify(produtoRepository, never()).produtoComCodigo(any(), any(), any());
+    }
+
+    @Test
+    void codigoFormatoDesconhecidoAceitoComoOutro() {
+        cadastroPermitido();
+
+        Produto produto = cadastrar(requestComUN().codigosBarras("ABC-123", "123456789").build());
+
+        assertThat(codigosDe(produto)).containsExactly("ABC-123", "123456789");
+        assertThat(formatosDe(produto)).containsOnly(FormatoCodigoBarras.OUTRO);
+    }
+
+    @Test
+    void codigoEmOutroProdutoDaEmpresaLanca409ComNome() {
+        when(produtoRepository.produtoComCodigo(EMPRESA_ID, EAN13_VALIDO, null)).thenReturn(Optional.of("Arroz 5kg"));
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().codigosBarras(EAN13_VALIDO).build()))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("O código de barras 7891000315507 já está cadastrado no produto \"Arroz 5kg\".");
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void unicidadeDoCodigoNaEdicaoIgnoraOProprioProdutoESoConsultaAEmpresa() {
+        // Review Focus 3: a consulta e sempre restrita a empresa do usuario.
+        produtoExistente();
+        when(produtoRepository.produtoComCodigo(EMPRESA_ID, EAN8_VALIDO, PRODUTO_ID))
+                .thenReturn(Optional.of("Bala"));
+
+        assertThatThrownBy(() -> atualizar(requestComUN().codigosBarras(EAN8_VALIDO).build()))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("O código de barras 96385074 já está cadastrado no produto \"Bala\".");
+
+        verify(produtoRepository).produtoComCodigo(EMPRESA_ID, EAN8_VALIDO, PRODUTO_ID);
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void codigoRepetidoNoEnvioLanca400() {
+        // Repetido depois da normalizacao (espacos removidos).
+        assertThatThrownBy(() -> cadastrar(requestComUN().codigosBarras(EAN13_VALIDO, " 7891 000315507 ").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Código de barras repetido na lista.");
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void maisDe20CodigosLanca400() {
+        List<String> vinteEUm = IntStream.rangeClosed(1, 21).mapToObj(numero -> "COD-" + numero).toList();
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().codigosBarras(vinteEUm).build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Informe no máximo 20 códigos de barras.");
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void exatamente20CodigosSaoAceitos() {
+        cadastroPermitido();
+        List<String> vinte = IntStream.rangeClosed(1, 20).mapToObj(numero -> "COD-" + numero).toList();
+
+        Produto produto = cadastrar(requestComUN().codigosBarras(vinte).build());
+
+        assertThat(produto.getCodigosBarras()).hasSize(20);
+    }
+
+    @Test
+    void codigosVaziosSaoDescartadosEOsDemaisNormalizados() {
+        cadastroPermitido();
+
+        List<String> informados = new ArrayList<>(List.of("  ", " 7891 000315507\n", ""));
+        informados.add(null);
+        Produto produto = cadastrar(requestComUN().codigosBarras(informados).build());
+
+        assertThat(codigosDe(produto)).containsExactly(EAN13_VALIDO);
+    }
+
+    @Test
+    void codigoAcimaDe50CaracteresLanca400() {
+        assertThatThrownBy(() -> cadastrar(requestComUN().codigosBarras("X".repeat(51)).build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Código de barras deve ter no máximo 50 caracteres.");
+    }
+
+    @Test
+    void patchSubstituiListaDeCodigosNaOrdem() {
+        Produto produto = produtoExistente(existente().codigo(EAN13_VALIDO).codigo("ABC-1"));
+        ProdutoCodigoBarras abc = produto.getCodigosBarras().get(1);
+        edicaoPermitida();
+
+        Produto atualizado = atualizar(requestComUN().codigosBarras(EAN8_VALIDO, "ABC-1").build());
+
+        assertThat(codigosDe(atualizado)).containsExactly(EAN8_VALIDO, "ABC-1");
+        assertThat(formatosDe(atualizado)).containsExactly(FormatoCodigoBarras.EAN8, FormatoCodigoBarras.OUTRO);
+        assertThat(atualizado.getCodigosBarras()).extracting(ProdutoCodigoBarras::getOrdem).containsExactly(0, 1);
+        // Codigo mantido e a mesma linha (so a ordem muda); o removido sai da lista.
+        assertThat(atualizado.getCodigosBarras().get(1)).isSameAs(abc);
+    }
+
+    @Test
+    void patchInvertendoAOrdemReaproveitaAsLinhasEPreservaFormatos() {
+        Produto produto = produtoExistente(existente().codigo(EAN13_VALIDO).codigo(EAN13_DIGITO_INVALIDO,
+                FormatoCodigoBarras.OUTRO));
+        List<ProdutoCodigoBarras> originais = List.copyOf(produto.getCodigosBarras());
+        edicaoPermitida();
+
+        Produto atualizado = atualizar(requestComUN().codigosBarras(EAN13_DIGITO_INVALIDO, EAN13_VALIDO).build());
+
+        assertThat(atualizado.getCodigosBarras()).containsExactly(originais.get(1), originais.get(0));
+        assertThat(formatosDe(atualizado)).containsExactly(FormatoCodigoBarras.OUTRO, FormatoCodigoBarras.EAN13);
+        assertThat(atualizado.getCodigosBarras()).extracting(ProdutoCodigoBarras::getOrdem).containsExactly(0, 1);
+    }
+
+    @Test
+    void patchSemCodigosRemoveTodos() {
+        produtoExistente(existente().codigo(EAN13_VALIDO));
+        edicaoPermitida();
+
+        Produto atualizado = atualizar(requestComUN().codigosBarras(Collections.emptyList()).build());
+
+        assertThat(atualizado.getCodigosBarras()).isEmpty();
+    }
+
+    // ---------- Nome curto e fornecedor (spec 4.1 e 4.4) ----------
+
+    @Test
+    void nomeCurtoEfetivoUsaNomeCurtoOuTrunca() {
+        Produto comNomeCurto = ProdutoTesteBuilder.produto(empresa, un)
+                .nome("Ração Golden Adulto Frango e Arroz 15kg").nomeCurto("Golden Frango 15kg").build();
+        Produto nomeLongo = ProdutoTesteBuilder.produto(empresa, un)
+                .nome("Ração Golden Adulto Frango e Arroz 15kg").build();
+        Produto nomeCurtoDeFato = ProdutoTesteBuilder.produto(empresa, un).nome("Arroz 5kg").build();
+        Produto cortaNoEspaco = ProdutoTesteBuilder.produto(empresa, un)
+                .nome("Biscoito recheado chocolate 1 kg").build();
+
+        assertThat(comNomeCurto.nomeCurtoEfetivo()).isEqualTo("Golden Frango 15kg");
+        assertThat(nomeLongo.nomeCurtoEfetivo()).isEqualTo("Ração Golden Adulto Frango e A").hasSize(30);
+        assertThat(nomeCurtoDeFato.nomeCurtoEfetivo()).isEqualTo("Arroz 5kg");
+        // Os 30 primeiros terminam em espaco: o efetivo sai aparado.
+        assertThat(cortaNoEspaco.nomeCurtoEfetivo()).isEqualTo("Biscoito recheado chocolate 1");
+    }
+
+    @Test
+    void nomeCurtoEFornecedorSaoAparadosEVazioViraNulo() {
+        cadastroPermitido();
+
+        Produto informado = cadastrar(requestComUN().nomeCurto("  Golden 15kg ").fornecedor("  Distribuidora X ")
+                .build());
+        Produto emBranco = cadastrar(requestComUN().nomeCurto("   ").fornecedor("").build());
+
+        assertThat(informado.getNomeCurto()).isEqualTo("Golden 15kg");
+        assertThat(informado.getFornecedor()).isEqualTo("Distribuidora X");
+        assertThat(emBranco.getNomeCurto()).isNull();
+        assertThat(emBranco.getFornecedor()).isNull();
+    }
+
+    // ---------- SKU sugerido (spec 4.2) ----------
+
+    @Test
+    void sugerirSkuUsaMaiorDoPadraoMaisUm() {
+        when(produtoRepository.skusNoPadrao(EMPRESA_ID)).thenReturn(List.of("P000001", "P000007", "ABC", "p000009"));
+
+        assertThat(produtoService.sugerirSku(EMPRESA_ID)).isEqualTo("P000008");
+    }
+
+    @Test
+    void sugerirSkuSemPadraoComecaEmP000001() {
+        when(produtoRepository.skusNoPadrao(EMPRESA_ID)).thenReturn(List.of());
+
+        assertThat(produtoService.sugerirSku(EMPRESA_ID)).isEqualTo("P000001");
+    }
+
+    @Test
+    void sugerirSkuAcimaDe999999() {
+        when(produtoRepository.skusNoPadrao(EMPRESA_ID)).thenReturn(List.of("P999999", "P12345", "PX000001"));
+
+        assertThat(produtoService.sugerirSku(EMPRESA_ID)).isEqualTo("P1000000");
+    }
+
+    @Test
+    void sugerirSkuComNumeroMaiorQueLongNaoEstoura() {
+        when(produtoRepository.skusNoPadrao(EMPRESA_ID)).thenReturn(List.of("P99999999999999999999"));
+
+        assertThat(produtoService.sugerirSku(EMPRESA_ID)).isEqualTo("P100000000000000000000");
+    }
+
+    // ---------- Sugestoes de marca e fornecedor (spec 4.4) ----------
+
+    @Test
+    void sugestoesCampoInvalidoLanca400() {
+        assertThatThrownBy(() -> produtoService.sugestoes(EMPRESA_ID, "x", "gol"))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Campo de sugestão inválido.");
+        assertThatThrownBy(() -> produtoService.sugestoes(EMPRESA_ID, null, "gol"))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Campo de sugestão inválido.");
+        assertThatThrownBy(() -> produtoService.sugestoes(EMPRESA_ID, "nome", "gol"))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Campo de sugestão inválido.");
+    }
+
+    @Test
+    void sugestoesDeMarcaUsamPadraoEscapadoEmMinusculasELimite10() {
+        when(produtoRepository.sugestoesDeMarca(EMPRESA_ID, "%gol\\_den\\%%", 10)).thenReturn(List.of("Gol_den%"));
+
+        assertThat(produtoService.sugestoes(EMPRESA_ID, "marca", "  GOL_den% ")).containsExactly("Gol_den%");
+        verify(produtoRepository, never()).sugestoesDeFornecedor(any(), any(), anyInt());
+    }
+
+    @Test
+    void sugestoesDeFornecedorSemTermoTrazemOsMaisUsados() {
+        when(produtoRepository.sugestoesDeFornecedor(EMPRESA_ID, "%%", 10)).thenReturn(List.of("Distribuidora X"));
+
+        assertThat(produtoService.sugestoes(EMPRESA_ID, "fornecedor", null)).containsExactly("Distribuidora X");
+        assertThat(produtoService.sugestoes(EMPRESA_ID, "fornecedor", "   ")).containsExactly("Distribuidora X");
+    }
+
+    @Test
+    void sugestoesComTermoAcimaDe50CaracteresUsamOs50Primeiros() {
+        String termo = "a".repeat(60);
+        when(produtoRepository.sugestoesDeMarca(EMPRESA_ID, "%" + "a".repeat(50) + "%", 10)).thenReturn(List.of());
+
+        assertThat(produtoService.sugestoes(EMPRESA_ID, "marca", termo)).isEmpty();
+    }
+
+    // ---------- Exclusao (spec 4.5) ----------
+
+    @Test
+    void excluirRemoveQuandoPodeExcluir() {
+        Produto produto = produtoExistente();
+
+        produtoService.excluir(EMPRESA_ID, produtoUuid);
+
+        verify(produtoRepository).delete(produto);
+    }
+
+    @Test
+    void excluirBloqueadoLanca409ComMensagemFixa() {
+        ProdutoService comMovimentacao = new ProdutoService(produtoRepository, empresaRepository,
+                usuarioRepository, unidadeService, categoriaService) {
+            @Override
+            boolean podeExcluir(Produto produto) {
+                return false;
+            }
+        };
+        produtoExistente();
+
+        assertThatThrownBy(() -> comMovimentacao.excluir(EMPRESA_ID, produtoUuid))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("Este produto já teve movimentação e não pode ser excluído. "
+                        + "Inative-o para que não apareça na venda.");
+
+        verify(produtoRepository, never()).delete(any());
+    }
+
+    @Test
+    void excluirDeOutraEmpresaLanca404() {
+        UUID deOutraEmpresa = UUID.randomUUID();
+        when(produtoRepository.findByUuidAndEmpresa_Id(deOutraEmpresa, EMPRESA_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> produtoService.excluir(EMPRESA_ID, deOutraEmpresa))
+                .isInstanceOf(ProdutoNaoEncontradoException.class);
+
+        verify(produtoRepository, never()).delete(any());
+    }
+
+    @Test
+    void podeExcluirNestaFaseSempreVerdadeiroERespostaInforma() {
+        usuarioAtivoDaEmpresa(9L);
+        produtoExistente();
+
+        ProdutoResponse resposta = produtoService.buscarPorIdParaUsuario(9L, produtoUuid);
+
+        assertThat(resposta.podeExcluir()).isTrue();
+        assertThat(resposta.id()).isEqualTo(produtoUuid);
     }
 
     // ---------- Listagem ----------
@@ -363,23 +672,25 @@ class ProdutoServiceTest {
     @Test
     void listarSemTermoDeBuscaDeveUsarQuerySemParametroDeBusca() {
         // Regressao do bug "function lower(bytea) does not exist": sem termo de
-        // busca (null ou em branco), a query que usa :busca NAO deve ser chamada.
+        // busca (null ou em branco), a query que usa os padroes NAO deve ser chamada.
         when(produtoRepository.buscarPorEmpresa(EMPRESA_ID, true)).thenReturn(List.of());
 
         produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, null, true);
         produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, "   ", true);
 
         verify(produtoRepository, times(2)).buscarPorEmpresa(EMPRESA_ID, true);
-        verify(produtoRepository, never()).buscarPorEmpresaComBusca(any(), any(), any());
+        verify(produtoRepository, never()).buscarPorEmpresaComBusca(any(), any(), any(), any());
     }
 
     @Test
-    void listarComTermoDeBuscaDeveUsarQueryComBusca() {
-        when(produtoRepository.buscarPorEmpresaComBusca(EMPRESA_ID, "arroz", null)).thenReturn(List.of());
+    void listarComTermoDeBuscaDeveUsarPadroesEscapadosDeTextoEDeCodigo() {
+        // DT-017: '%' e '_' digitados sao literais; o padrao de codigo vem normalizado (sem espacos).
+        when(produtoRepository.buscarPorEmpresaComBusca(EMPRESA_ID, "%50\\%\\_ arroz%", "%50\\%\\_arroz%", null))
+                .thenReturn(List.of());
 
-        produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, " arroz ", null);
+        produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, " 50%_ Arroz ", null);
 
-        verify(produtoRepository).buscarPorEmpresaComBusca(EMPRESA_ID, "arroz", null);
+        verify(produtoRepository).buscarPorEmpresaComBusca(EMPRESA_ID, "%50\\%\\_ arroz%", "%50\\%\\_arroz%", null);
         verify(produtoRepository, never()).buscarPorEmpresa(any(), any());
     }
 
@@ -388,10 +699,9 @@ class ProdutoServiceTest {
         usuarioAtivoDaEmpresa(9L);
         Categoria racao = categoria(100L, empresa, null, "Ração");
         Categoria umida = categoria(101L, empresa, racao, "Úmida");
-        Produto comCategoria = new Produto(empresa, "Sachê", un, umida, null, null, new BigDecimal("3.00"),
-                null, null, null, null, null, null, null, null, null);
-        Produto semCategoria = new Produto(empresa, "Avulso", un, null, null, null, new BigDecimal("1.00"),
-                null, null, null, null, null, null, null, null, null);
+        Produto comCategoria = ProdutoTesteBuilder.produto(empresa, un).nome("Sachê").categoria(umida)
+                .precoVenda("3.00").codigo(EAN13_VALIDO).build();
+        Produto semCategoria = ProdutoTesteBuilder.produto(empresa, un).nome("Avulso").precoVenda("1.00").build();
         when(produtoRepository.buscarPorEmpresa(EMPRESA_ID, null)).thenReturn(List.of(comCategoria, semCategoria));
         arvoreDaEmpresa(racao, umida);
 
@@ -400,6 +710,9 @@ class ProdutoServiceTest {
         assertThat(produtos).hasSize(2);
         assertThat(produtos.get(0).categoria().caminho()).isEqualTo("Ração › Úmida");
         assertThat(produtos.get(0).unidade().sigla()).isEqualTo("UN");
+        assertThat(produtos.get(0).codigosBarras())
+                .containsExactly(new CodigoBarrasResponse(EAN13_VALIDO, FormatoCodigoBarras.EAN13));
+        assertThat(produtos.get(0).podeExcluir()).isTrue();
         assertThat(produtos.get(1).categoria()).isNull();
         verify(categoriaService, times(1)).arvoreDaEmpresa(EMPRESA_ID);
     }
@@ -408,46 +721,43 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComCamposOpcionaisEmBrancoDeveNormalizarParaNull() {
-        unidadeDaEmpresa(un);
         cadastroPermitido();
 
-        Produto produto = cadastrar(requestComUN().codigoBarras("   ").sku("").marca("  ").descricao("   ").build());
+        Produto produto = cadastrar(requestComUN().codigosBarras("   ").sku("").marca("  ").descricao("   ").build());
 
         assertThat(produto.getSku()).isNull();
-        assertThat(produto.getCodigoBarras()).isNull();
+        assertThat(produto.getCodigosBarras()).isEmpty();
         assertThat(produto.getMarca()).isNull();
         assertThat(produto.getDescricao()).isNull();
         // Sem SKU/codigo apos normalizacao, a checagem de unicidade nem e consultada.
         verify(produtoRepository, never()).existsBySkuAndEmpresa_Id(any(), anyLong());
-        verify(produtoRepository, never()).existsByCodigoBarrasAndEmpresa_Id(any(), anyLong());
+        verify(produtoRepository, never()).produtoComCodigo(any(), any(), any());
     }
 
     @Test
     void cadastrarDeveAplicarTrimNosCamposInformados() {
-        unidadeDaEmpresa(un);
         cadastroPermitido();
 
-        Produto produto = cadastrar(requestComUN().nome("  Produto  ").codigoBarras("  789123  ")
+        Produto produto = cadastrar(requestComUN().nome("  Produto  ").codigosBarras("  789123  ")
                 .sku("  SKU-1  ").marca("  Tio João  ").descricao("  Arroz tipo 1  ").build());
 
         assertThat(produto.getNome()).isEqualTo("Produto");
         assertThat(produto.getSku()).isEqualTo("SKU-1");
-        assertThat(produto.getCodigoBarras()).isEqualTo("789123");
+        assertThat(codigosDe(produto)).containsExactly("789123");
         assertThat(produto.getMarca()).isEqualTo("Tio João");
         assertThat(produto.getDescricao()).isEqualTo("Arroz tipo 1");
     }
 
     @Test
     void atualizarComCamposOpcionaisEmBrancoDeveNormalizarParaNull() {
-        produtoExistente("SKU-ANTIGO", "111222333");
-        unidadeDaEmpresa(un);
-        salvamentoDevolveOProduto();
+        produtoExistente(existente().sku("SKU-ANTIGO").codigo("111222333"));
+        edicaoPermitida();
 
-        Produto atualizado = atualizar(requestComUN().codigoBarras("   ").sku("").marca("  ").descricao("   ")
+        Produto atualizado = atualizar(requestComUN().codigosBarras("   ").sku("").marca("  ").descricao("   ")
                 .build());
 
         assertThat(atualizado.getSku()).isNull();
-        assertThat(atualizado.getCodigoBarras()).isNull();
+        assertThat(atualizado.getCodigosBarras()).isEmpty();
         assertThat(atualizado.getMarca()).isNull();
         assertThat(atualizado.getDescricao()).isNull();
     }
@@ -499,7 +809,6 @@ class ProdutoServiceTest {
     @Test
     void cadastrarComEstoqueMaximoIgualAoEstoqueMinimoDevePermitir() {
         // Limite da regra cruzada: a validacao usa "<" (menor que), nao "<=".
-        unidadeDaEmpresa(un);
         cadastroPermitido();
 
         Produto produto = cadastrar(requestComUN().estoqueMinimo("10").estoqueMaximo("10").build());
@@ -511,7 +820,6 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComEstoqueMaximoSemEstoqueMinimoNaoDeveAplicarRegraCruzada() {
-        unidadeDaEmpresa(un);
         cadastroPermitido();
 
         Produto produto = cadastrar(requestComUN().estoqueMaximo("2").build());
@@ -522,7 +830,6 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComCamposCadastraisValidosDevePreservarOsValores() {
-        unidadeDaEmpresa(un);
         cadastroPermitido();
 
         Produto produto = cadastrar(requestComUN().nome("Arroz 5kg").precoVenda("25.90").custo("18.00")
@@ -538,7 +845,6 @@ class ProdutoServiceTest {
 
     @Test
     void cadastrarComPrecoMinimoIgualAoPrecoVendaDevePermitir() {
-        unidadeDaEmpresa(un);
         cadastroPermitido();
 
         Produto produto = cadastrar(requestComUN().precoVenda("10.00").precoMinimo("10.00").build());
@@ -548,7 +854,7 @@ class ProdutoServiceTest {
 
     @Test
     void atualizarComPrecoMinimoMaiorQuePrecoVendaDeveFalhar() {
-        produtoExistente(null, null);
+        produtoExistente();
 
         assertThatThrownBy(() -> atualizar(requestComUN().precoVenda("10.00").precoMinimo("12.00").build()))
                 .isInstanceOf(RegraDeNegocioException.class)
@@ -644,7 +950,6 @@ class ProdutoServiceTest {
 
     @Test
     void mesmaUnidadeComFatorUmEPermitido() {
-        unidadeDaEmpresa(un);
         cadastroPermitido();
 
         Produto produto = cadastrar(requestComUN().compra(un.getUuid(), "1.0000").build());
@@ -656,7 +961,6 @@ class ProdutoServiceTest {
     @Test
     void unidadeCompraEFatorSaoGravados() {
         UnidadeMedida cx = unidade(12L, empresa, "CX");
-        unidadeDaEmpresa(un);
         unidadeDaEmpresa(cx);
         cadastroPermitido();
 
@@ -668,7 +972,7 @@ class ProdutoServiceTest {
 
     @Test
     void unidadeInativaSoSeJaForAAtual() {
-        // Review Focus 4. Cadastrar com unidade inativa -> 400.
+        // Review Focus 4 (Fase A). Cadastrar com unidade inativa -> 400.
         UnidadeMedida inativa = unidade(13L, empresa, "PCT");
         inativa.inativar();
         unidadeDaEmpresa(inativa);
@@ -677,7 +981,7 @@ class ProdutoServiceTest {
                 .hasMessage("Esta unidade está inativa. Escolha uma unidade ativa.");
 
         // Editar mantendo a mesma unidade, inativada depois -> salva.
-        produtoExistente(inativa, null, null, null);
+        produtoExistente(ProdutoTesteBuilder.produto(empresa, inativa).id(PRODUTO_ID));
         salvamentoDevolveOProduto();
         Produto atualizado = atualizar(comUnidade(inativa.getUuid()).nome("Novo nome").build());
         assertThat(atualizado.getUnidade()).isSameAs(inativa);
@@ -703,9 +1007,7 @@ class ProdutoServiceTest {
                 .isInstanceOf(RegraDeNegocioException.class)
                 .hasMessage("Esta unidade de compra está inativa. Escolha uma unidade ativa.");
 
-        Produto existente = produtoExistente(null, null);
-        existente.atualizarDadosBasicos("Produto Existente", un, null, caixaInativa, new BigDecimal("12"),
-                new BigDecimal("10.00"), null, null, null, null, null, null, null, null, null);
+        produtoExistente(existente().compra(caixaInativa, "12"));
         salvamentoDevolveOProduto();
         Produto atualizado = atualizar(requestComUN().compra(caixaInativa.getUuid(), "6").build());
         assertThat(atualizado.getUnidadeCompra()).isSameAs(caixaInativa);
@@ -714,7 +1016,7 @@ class ProdutoServiceTest {
 
     @Test
     void categoriaNaoSelecionavelSoSeJaForAAtual() {
-        // Review Focus 4: categoria inativa (ou sob ancestral inativo).
+        // Review Focus 4 (Fase A): categoria inativa (ou sob ancestral inativo).
         Categoria racao = categoria(100L, empresa, null, "Ração");
         Categoria umida = categoria(101L, empresa, racao, "Úmida");
         racao.inativar();
@@ -728,7 +1030,7 @@ class ProdutoServiceTest {
                 .hasMessage("Esta categoria está inativa. Escolha uma categoria ativa.");
 
         // Editar mantendo a mesma categoria -> salva (sem consultar a arvore de novo).
-        produtoExistente(un, umida, null, null);
+        produtoExistente(existente().categoria(umida));
         salvamentoDevolveOProduto();
         Produto atualizado = atualizar(requestComUN().categoriaId(umida.getUuid()).nome("Novo nome").build());
         assertThat(atualizado.getCategoria()).isSameAs(umida);
@@ -744,7 +1046,6 @@ class ProdutoServiceTest {
     @Test
     void categoriaSelecionavelEGravada() {
         Categoria bebidas = categoria(102L, empresa, null, "Bebidas");
-        unidadeDaEmpresa(un);
         categoriaDaEmpresa(bebidas);
         arvoreDaEmpresa(bebidas);
         cadastroPermitido();

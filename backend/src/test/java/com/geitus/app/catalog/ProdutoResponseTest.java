@@ -10,6 +10,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
+import com.geitus.app.catalog.dto.CodigoBarrasResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.company.Empresa;
@@ -33,13 +34,16 @@ class ProdutoResponseTest {
     private final UnidadeMedida fd = new UnidadeMedida(empresa, "FD", "Fardo", false);
 
     private Produto produto(BigDecimal precoVenda, BigDecimal custo) {
-        return new Produto(empresa, "Produto", un, null, null, null, precoVenda,
-                custo, null, null, null, null, null, null, null, null);
+        return ProdutoTesteBuilder.produto(empresa, un).precoVenda(precoVenda.toPlainString())
+                .custo(custo == null ? null : custo.toPlainString()).build();
     }
 
     private Produto produtoComCompra(UnidadeMedida venda, UnidadeMedida compra, String fator) {
-        return new Produto(empresa, "Produto", venda, null, compra, new BigDecimal(fator), new BigDecimal("10.00"),
-                null, null, null, null, null, null, null, null, null);
+        return ProdutoTesteBuilder.produto(empresa, venda).compra(compra, fator).build();
+    }
+
+    private static ProdutoResponse responder(Produto produto) {
+        return ProdutoResponse.de(produto, SEM_CATEGORIAS, true);
     }
 
     private static Categoria categoria(Long id, Empresa empresa, Categoria pai, String nome) {
@@ -50,8 +54,7 @@ class ProdutoResponseTest {
 
     @Test
     void comCustoInformadoDeveCalcularMargemEMarkup() {
-        ProdutoResponse response = ProdutoResponse.de(produto(new BigDecimal("10.00"), new BigDecimal("8.00")),
-                SEM_CATEGORIAS);
+        ProdutoResponse response = responder(produto(new BigDecimal("10.00"), new BigDecimal("8.00")));
 
         assertThat(response.markup()).isEqualByComparingTo("25.00");
         assertThat(response.margem()).isEqualByComparingTo("20.00");
@@ -59,7 +62,7 @@ class ProdutoResponseTest {
 
     @Test
     void semCustoDeveDeixarMargemEMarkupNulos() {
-        ProdutoResponse response = ProdutoResponse.de(produto(new BigDecimal("10.00"), null), SEM_CATEGORIAS);
+        ProdutoResponse response = responder(produto(new BigDecimal("10.00"), null));
 
         assertThat(response.markup()).isNull();
         assertThat(response.margem()).isNull();
@@ -69,8 +72,7 @@ class ProdutoResponseTest {
     void comCustoZeroDeveDeixarMarkupNuloEMargem100() {
         // Custo 0 evita a divisao por zero do markup; a margem sobre a venda
         // (preco > 0) e 100%.
-        ProdutoResponse response = ProdutoResponse.de(produto(new BigDecimal("10.00"), new BigDecimal("0.00")),
-                SEM_CATEGORIAS);
+        ProdutoResponse response = responder(produto(new BigDecimal("10.00"), new BigDecimal("0.00")));
 
         assertThat(response.markup()).isNull();
         assertThat(response.margem()).isEqualByComparingTo("100.00");
@@ -80,12 +82,11 @@ class ProdutoResponseTest {
     void deveMapearOsCamposBrutosDoProduto() {
         // Protege contra regressao silenciosa no mapeamento entidade -> response
         // dos campos da V4 (hoje so os derivados margem/markup eram assertados).
-        Produto produto = new Produto(empresa, "Arroz 5kg", un, null, null, null,
-                new BigDecimal("25.90"), new BigDecimal("18.00"), new BigDecimal("2"), "789100200300",
-                "SKU-V4", "Tio João", "Arroz branco tipo 1", new BigDecimal("50.000"),
-                new BigDecimal("10.000"), new BigDecimal("20.00"));
+        Produto produto = ProdutoTesteBuilder.produto(empresa, un).nome("Arroz 5kg").precoVenda("25.90")
+                .custo("18.00").estoqueMinimo("2").sku("SKU-V4").marca("Tio João").descricao("Arroz branco tipo 1")
+                .estoqueMaximo("50.000").pontoReposicao("10.000").precoMinimo("20.00").build();
 
-        ProdutoResponse response = ProdutoResponse.de(produto, SEM_CATEGORIAS);
+        ProdutoResponse response = responder(produto);
 
         assertThat(response.marca()).isEqualTo("Tio João");
         assertThat(response.descricao()).isEqualTo("Arroz branco tipo 1");
@@ -97,8 +98,7 @@ class ProdutoResponseTest {
     @Test
     void deveArredondarParaDuasCasasComHalfUp() {
         // markup = 1/6 * 100 = 16.6666... -> 16.67; margem = 1/7 * 100 = 14.2857... -> 14.29.
-        ProdutoResponse response = ProdutoResponse.de(produto(new BigDecimal("7.00"), new BigDecimal("6.00")),
-                SEM_CATEGORIAS);
+        ProdutoResponse response = responder(produto(new BigDecimal("7.00"), new BigDecimal("6.00")));
 
         assertThat(response.markup()).isEqualByComparingTo("16.67");
         assertThat(response.margem()).isEqualByComparingTo("14.29");
@@ -108,7 +108,7 @@ class ProdutoResponseTest {
 
     @Test
     void unidadeDeVendaSaiComoResumoComUuidPublico() {
-        ProdutoResponse response = ProdutoResponse.de(produto(new BigDecimal("10.00"), null), SEM_CATEGORIAS);
+        ProdutoResponse response = responder(produto(new BigDecimal("10.00"), null));
 
         assertThat(response.unidade().id()).isEqualTo(un.getUuid());
         assertThat(response.unidade().sigla()).isEqualTo("UN");
@@ -119,9 +119,9 @@ class ProdutoResponseTest {
 
     @Test
     void conversaoTexto() {
-        ProdutoResponse caixa = ProdutoResponse.de(produtoComCompra(un, cx, "12"), SEM_CATEGORIAS);
-        ProdutoResponse fardo = ProdutoResponse.de(produtoComCompra(kg, fd, "1.5000"), SEM_CATEGORIAS);
-        ProdutoResponse semCompra = ProdutoResponse.de(produto(new BigDecimal("10.00"), null), SEM_CATEGORIAS);
+        ProdutoResponse caixa = responder(produtoComCompra(un, cx, "12"));
+        ProdutoResponse fardo = responder(produtoComCompra(kg, fd, "1.5000"));
+        ProdutoResponse semCompra = responder(produto(new BigDecimal("10.00"), null));
 
         assertThat(caixa.conversaoTexto()).isEqualTo("1 CX = 12 UN");
         assertThat(caixa.unidadeCompra().sigla()).isEqualTo("CX");
@@ -135,15 +135,15 @@ class ProdutoResponseTest {
     @Test
     void conversaoTextoComFatorInteiroDeEscalaQuatroNaoUsaNotacaoCientifica() {
         // 100.0000.stripTrailingZeros() vira 1E+2: o texto deve ser "100".
-        ProdutoResponse response = ProdutoResponse.de(produtoComCompra(un, cx, "100.0000"), SEM_CATEGORIAS);
+        ProdutoResponse response = responder(produtoComCompra(un, cx, "100.0000"));
 
         assertThat(response.conversaoTexto()).isEqualTo("1 CX = 100 UN");
     }
 
     @Test
     void conversaoTextoComFatorDeMilOuMaisNaoUsaSeparadorDeMilhar() {
-        ProdutoResponse fracionado = ProdutoResponse.de(produtoComCompra(un, cx, "1500.5000"), SEM_CATEGORIAS);
-        ProdutoResponse mil = ProdutoResponse.de(produtoComCompra(un, cx, "1000.0000"), SEM_CATEGORIAS);
+        ProdutoResponse fracionado = responder(produtoComCompra(un, cx, "1500.5000"));
+        ProdutoResponse mil = responder(produtoComCompra(un, cx, "1000.0000"));
 
         assertThat(fracionado.conversaoTexto()).isEqualTo("1 CX = 1500,5 UN");
         assertThat(mil.conversaoTexto()).isEqualTo("1 CX = 1000 UN");
@@ -154,13 +154,43 @@ class ProdutoResponseTest {
         Categoria racao = categoria(1L, empresa, null, "Ração");
         Categoria umida = categoria(2L, empresa, racao, "Úmida");
         Categoria sache = categoria(3L, empresa, umida, "Sachê");
-        Produto produto = new Produto(empresa, "Sachê de frango", un, sache, null, null, new BigDecimal("3.50"),
-                null, null, null, null, null, null, null, null, null);
+        Produto produto = ProdutoTesteBuilder.produto(empresa, un).nome("Sachê de frango").categoria(sache)
+                .precoVenda("3.50").build();
 
-        ProdutoResponse response = ProdutoResponse.de(produto, CategoriaArvore.de(List.of(racao, umida, sache)));
+        ProdutoResponse response = ProdutoResponse.de(produto, CategoriaArvore.de(List.of(racao, umida, sache)), true);
 
         assertThat(response.categoria().id()).isEqualTo(sache.getUuid());
         assertThat(response.categoria().nome()).isEqualTo("Sachê");
         assertThat(response.categoria().caminho()).isEqualTo("Ração › Úmida › Sachê");
+    }
+
+    // ---------- Fase B: identificacao ----------
+
+    @Test
+    void idEUuidPublicoECodigosSaemNaOrdemComFormato() {
+        Produto produto = ProdutoTesteBuilder.produto(empresa, un).id(42L).codigo("96385074")
+                .codigo("7891000315508", FormatoCodigoBarras.OUTRO).build();
+
+        ProdutoResponse response = responder(produto);
+
+        assertThat(response.id()).isEqualTo(produto.getUuid());
+        assertThat(response.codigosBarras()).containsExactly(
+                new CodigoBarrasResponse("96385074", FormatoCodigoBarras.EAN8),
+                new CodigoBarrasResponse("7891000315508", FormatoCodigoBarras.OUTRO));
+    }
+
+    @Test
+    void nomeCurtoFornecedorEPodeExcluirSaoMapeados() {
+        Produto produto = ProdutoTesteBuilder.produto(empresa, un).nome("Ração Golden Adulto Frango e Arroz 15kg")
+                .fornecedor("Distribuidora X").build();
+
+        ProdutoResponse podeExcluir = responder(produto);
+        ProdutoResponse bloqueado = ProdutoResponse.de(produto, SEM_CATEGORIAS, false);
+
+        assertThat(podeExcluir.nomeCurto()).isNull();
+        assertThat(podeExcluir.nomeCurtoEfetivo()).isEqualTo("Ração Golden Adulto Frango e A");
+        assertThat(podeExcluir.fornecedor()).isEqualTo("Distribuidora X");
+        assertThat(podeExcluir.podeExcluir()).isTrue();
+        assertThat(bloqueado.podeExcluir()).isFalse();
     }
 }

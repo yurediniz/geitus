@@ -1,6 +1,7 @@
 package com.geitus.app.catalog.dto;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -23,12 +24,17 @@ import jakarta.validation.constraints.Size;
  * 5.2); o service confirma que pertencem a empresa do usuario (404 se nao).
  *
  * <p>Os tamanhos maximos e a precisao numerica espelham as colunas das
- * migrations V3/V4/V6 ({@code nome VARCHAR(150)}, {@code marca VARCHAR(100)},
- * {@code descricao VARCHAR(1000)}, {@code codigo_barras}/{@code sku VARCHAR(50)},
+ * migrations V3/V4/V6/V7 ({@code nome VARCHAR(150)}, {@code nome_curto VARCHAR(30)},
+ * {@code marca}/{@code fornecedor VARCHAR(100)}, {@code descricao VARCHAR(1000)},
+ * {@code sku}/{@code produto_codigos_barras.codigo VARCHAR(50)},
  * {@code preco_venda}/{@code custo}/{@code preco_minimo NUMERIC(12,2)},
  * {@code estoque_minimo}/{@code estoque_maximo}/{@code ponto_reposicao NUMERIC(12,3)},
  * {@code fator_conversao NUMERIC(12,4)}). O {@code @Digits} garante um 400
  * amigavel em vez de um erro de banco quando o cliente envia casas a mais.
+ *
+ * <p>{@code codigosBarras} e a lista completa (0 a 20): o PATCH substitui a
+ * lista inteira e {@code null} equivale a lista vazia. Normalizacao, formato,
+ * repeticao e unicidade na empresa ficam no service (spec 4.3).
  */
 @Schema(description = "Dados para cadastro ou atualizacao de um produto")
 public record ProdutoRequest(
@@ -38,9 +44,18 @@ public record ProdutoRequest(
         @Size(max = 150, message = "Nome deve ter no máximo 150 caracteres.")
         String nome,
 
+        @Schema(description = "Nome para cupom e PDV; vazio usa os 30 primeiros caracteres do nome",
+                example = "Golden Frango 15kg")
+        @Size(max = 30, message = "Nome curto deve ter no máximo 30 caracteres.")
+        String nomeCurto,
+
         @Schema(example = "Tio João")
         @Size(max = 100, message = "Marca deve ter no máximo 100 caracteres.")
         String marca,
+
+        @Schema(description = "Fornecedor principal (texto livre)", example = "Distribuidora Central")
+        @Size(max = 100, message = "Fornecedor deve ter no máximo 100 caracteres.")
+        String fornecedor,
 
         @Schema(example = "Arroz branco tipo 1, pacote de 5kg.")
         @Size(max = 1000, message = "Descrição deve ter no máximo 1000 caracteres.")
@@ -93,9 +108,10 @@ public record ProdutoRequest(
         @Digits(integer = 10, fraction = 2, message = "Preço mínimo deve ter no máximo 2 casas decimais.")
         BigDecimal precoMinimo,
 
-        @Schema(example = "7891234567890")
-        @Size(max = 50, message = "Código de barras deve ter no máximo 50 caracteres.")
-        String codigoBarras,
+        @Schema(description = "Codigos de barras na ordem (o primeiro e o principal); substitui a lista inteira",
+                example = "[\"7891000315507\"]")
+        @Size(max = 20, message = "Informe no máximo 20 códigos de barras.")
+        List<@Size(max = 50, message = "Código de barras deve ter no máximo 50 caracteres.") String> codigosBarras,
 
         @Schema(example = "SKU-001")
         @Size(max = 50, message = "SKU deve ter no máximo 50 caracteres.")

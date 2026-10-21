@@ -1,11 +1,12 @@
 package com.geitus.app.catalog;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,6 +14,7 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase.Replace;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -28,15 +30,17 @@ import com.geitus.app.company.EmpresaRepository;
 import com.geitus.app.company.Endereco;
 import com.geitus.app.company.RepresentanteLegal;
 import com.geitus.app.company.TipoPessoa;
+import com.geitus.app.shared.busca.PadraoLike;
 
 /**
  * Teste de integracao do {@link ProdutoRepository} contra um PostgreSQL real
- * (Testcontainers). Exercita as queries derivadas e JPQL de verdade — algo que
- * o {@code @WebMvcTest} com mock NAO faz e que ja escondeu um bug de query
- * (function lower(bytea) does not exist). Cobre isolamento por empresa
- * (DEC-016), busca case-insensitive, filtro de status e unicidade de
- * SKU/codigo de barras, alem do mapeamento de unidade de venda, categoria e
- * unidade de compra (V6) e do JOIN FETCH das listagens.
+ * (Testcontainers). Exercita as queries derivadas, JPQL e nativas de verdade —
+ * algo que o {@code @WebMvcTest} com mock NAO faz e que ja escondeu um bug de
+ * query (function lower(bytea) does not exist). Cobre isolamento por empresa
+ * (DEC-016), busca case-insensitive (nome, nome curto, SKU e qualquer codigo de
+ * barras, com {@code %}/{@code _} literais), filtro de status, unicidade de SKU
+ * e de codigo de barras por empresa, sugestoes de marca/fornecedor, SKUs no
+ * padrao da sugestao e o mapeamento dos vinculos (V6) e dos codigos (V7).
  *
  * <p>Usa o banco do container (nao o H2 de teste) via
  * {@code @AutoConfigureTestDatabase(replace = NONE)} e deixa o Flyway aplicar
@@ -48,6 +52,9 @@ import com.geitus.app.company.TipoPessoa;
 @AutoConfigureTestDatabase(replace = Replace.NONE)
 @Testcontainers
 class ProdutoRepositoryIT {
+
+    private static final int LIMITE_DE_SUGESTOES = 10;
+    private static final String TODOS = "%%";
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
@@ -105,17 +112,25 @@ class ProdutoRepositoryIT {
         return unidadeRepository.saveAndFlush(new UnidadeMedida(empresa, sigla, "Unidade " + sigla, false));
     }
 
-    private UnidadeMedida unDa(Empresa empresa) {
-        return unidadePorEmpresa.get(empresa.getId());
+    private ProdutoTesteBuilder produtoDa(Empresa empresa) {
+        return ProdutoTesteBuilder.produto(empresa, unidadePorEmpresa.get(empresa.getId()));
     }
 
-    private Produto novoProduto(Empresa empresa, String nome, String sku, String codigoBarras, boolean ativo) {
-        Produto produto = new Produto(empresa, nome, unDa(empresa), null, null, null, new BigDecimal("10.00"),
-                null, null, codigoBarras, sku, null, null, null, null, null);
-        if (!ativo) {
-            produto.inativar();
-        }
-        return produtoRepository.saveAndFlush(produto);
+    private Produto salvar(ProdutoTesteBuilder builder) {
+        return produtoRepository.saveAndFlush(builder.build());
+    }
+
+    private Produto novoProduto(Empresa empresa, String nome, String sku, boolean ativo) {
+        ProdutoTesteBuilder builder = produtoDa(empresa).nome(nome).sku(sku);
+        return salvar(ativo ? builder : builder.inativo());
+    }
+
+    private List<String> nomesDaBusca(Empresa empresa, String termo) {
+        String padraoTexto = PadraoLike.contem(termo.toLowerCase());
+        String padraoCodigo = PadraoLike.contem(CodigoBarras.normalizar(termo).toLowerCase());
+        return produtoRepository.buscarPorEmpresaComBusca(empresa.getId(), padraoTexto, padraoCodigo, null).stream()
+                .map(Produto::getNome)
+                .toList();
     }
 
     // ---------- Campos cadastrais V4 (marca, descricao, hints de estoque/preco) ----------
@@ -123,11 +138,9 @@ class ProdutoRepositoryIT {
     @Test
     void devePersistirERelerOsCamposCadastraisDaV4() {
         Empresa empresa = novaEmpresa("Empresa V4");
-        Produto produto = new Produto(empresa, "Arroz 5kg", unDa(empresa), null, null, null, new BigDecimal("25.90"),
-                new BigDecimal("18.00"), new BigDecimal("2"), "789100200300", "SKU-V4",
-                "Tio João", "Arroz branco tipo 1, pacote de 5kg.", new BigDecimal("50.000"),
-                new BigDecimal("10.000"), new BigDecimal("20.00"));
-        Long id = produtoRepository.saveAndFlush(produto).getId();
+        Long id = salvar(produtoDa(empresa).nome("Arroz 5kg").precoVenda("25.90").custo("18.00")
+                .estoqueMinimo("2").sku("SKU-V4").marca("Tio João").descricao("Arroz branco tipo 1, pacote de 5kg.")
+                .estoqueMaximo("50.000").pontoReposicao("10.000").precoMinimo("20.00")).getId();
 
         // Limpa o contexto de persistencia (cache de 1o nivel) para forcar um
         // SELECT real no banco em vez de devolver a instancia ja gerenciada.
@@ -141,6 +154,79 @@ class ProdutoRepositoryIT {
         assertThat(relido.getPrecoMinimo()).isEqualByComparingTo("20.00");
     }
 
+    // ---------- Identificacao (V7): uuid, nome curto, fornecedor e codigos ----------
+
+    @Test
+    void devePersistirERelerUuidNomeCurtoFornecedorECodigosNaOrdem() {
+        Empresa empresa = novaEmpresa("Empresa V7");
+        Produto salvo = salvar(produtoDa(empresa).nome("Ração Golden 15kg").nomeCurto("Golden 15kg")
+                .fornecedor("Distribuidora X").codigo("96385074").codigo("ABC-1").codigo("7891000315507"));
+        UUID uuid = salvo.getUuid();
+
+        entityManager.clear();
+        Produto relido = produtoRepository.findByUuidAndEmpresa_Id(uuid, empresa.getId()).orElseThrow();
+
+        assertThat(relido.getUuid()).isEqualTo(uuid);
+        assertThat(relido.getNomeCurto()).isEqualTo("Golden 15kg");
+        assertThat(relido.getFornecedor()).isEqualTo("Distribuidora X");
+        assertThat(org.hibernate.Hibernate.isInitialized(relido.getCodigosBarras())).isTrue();
+        assertThat(relido.getCodigosBarras()).extracting(ProdutoCodigoBarras::getCodigo)
+                .containsExactly("96385074", "ABC-1", "7891000315507");
+        assertThat(relido.getCodigosBarras()).extracting(ProdutoCodigoBarras::getFormato)
+                .containsExactly(FormatoCodigoBarras.EAN8, FormatoCodigoBarras.OUTRO, FormatoCodigoBarras.EAN13);
+        assertThat(relido.getCodigosBarras()).allSatisfy(codigo -> assertThat(codigo.getCriadoEm()).isNotNull());
+    }
+
+    @Test
+    void reordenarCodigosReaproveitaAsLinhasSemViolarUnicidade() {
+        // I2 do data-reviewer: recriar a linha de um codigo mantido violaria
+        // uq_codigo_barras_empresa (o Hibernate insere antes de apagar orfaos).
+        Empresa empresa = novaEmpresa("Empresa Reordenar");
+        Produto produto = salvar(produtoDa(empresa).codigo("96385074").codigo("ABC-1"));
+        List<Long> idsAntes = produto.getCodigosBarras().stream().map(ProdutoCodigoBarras::getId).toList();
+
+        produto.substituirCodigos(List.of(new CodigoBarrasValidado("ABC-1", FormatoCodigoBarras.OUTRO),
+                new CodigoBarrasValidado("96385074", FormatoCodigoBarras.EAN8),
+                new CodigoBarrasValidado("NOVO-1", FormatoCodigoBarras.OUTRO)));
+        produtoRepository.saveAndFlush(produto);
+        entityManager.clear();
+
+        Produto relido = produtoRepository.findByUuidAndEmpresa_Id(produto.getUuid(), empresa.getId())
+                .orElseThrow();
+        assertThat(relido.getCodigosBarras()).extracting(ProdutoCodigoBarras::getCodigo)
+                .containsExactly("ABC-1", "96385074", "NOVO-1");
+        assertThat(relido.getCodigosBarras().subList(0, 2)).extracting(ProdutoCodigoBarras::getId)
+                .containsExactly(idsAntes.get(1), idsAntes.get(0));
+    }
+
+    @Test
+    void codigoUnicoPorEmpresaPermiteMesmoCodigoEmOutraEmpresa() {
+        // Review Focus 3: mesmo codigo em empresas diferentes e permitido, e a
+        // consulta do nome do produto nunca cruza a empresa.
+        Empresa empresaA = novaEmpresa("Empresa Codigo A");
+        Empresa empresaB = novaEmpresa("Empresa Codigo B");
+        Produto daA = salvar(produtoDa(empresaA).nome("Arroz da A").codigo("7891000315507"));
+        Produto daB = salvar(produtoDa(empresaB).nome("Arroz da B").codigo("7891000315507"));
+
+        assertThat(produtoRepository.produtoComCodigo(empresaA.getId(), "7891000315507", null))
+                .contains("Arroz da A");
+        assertThat(produtoRepository.produtoComCodigo(empresaB.getId(), "7891000315507", null))
+                .contains("Arroz da B");
+        // Ignorando o proprio produto, nao ha conflito em nenhuma das empresas.
+        assertThat(produtoRepository.produtoComCodigo(empresaA.getId(), "7891000315507", daA.getId())).isEmpty();
+        assertThat(produtoRepository.produtoComCodigo(empresaB.getId(), "7891000315507", daB.getId())).isEmpty();
+        assertThat(produtoRepository.produtoComCodigo(empresaA.getId(), "inexistente", null)).isEmpty();
+    }
+
+    @Test
+    void codigoRepetidoNaMesmaEmpresaViolaAConstraint() {
+        Empresa empresa = novaEmpresa("Empresa Codigo Repetido");
+        salvar(produtoDa(empresa).nome("Primeiro").codigo("7891000315507"));
+
+        assertThatThrownBy(() -> salvar(produtoDa(empresa).nome("Segundo").codigo("7891000315507")))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     // ---------- Unidade, categoria e unidade de compra (V6) ----------
 
     @Test
@@ -148,12 +234,11 @@ class ProdutoRepositoryIT {
         Empresa empresa = novaEmpresa("Empresa Vinculos");
         UnidadeMedida caixa = novaUnidade(empresa, "CX");
         Categoria racao = categoriaRepository.saveAndFlush(new Categoria(empresa, null, "Ração"));
-        Produto produto = new Produto(empresa, "Sachê", unDa(empresa), racao, caixa, new BigDecimal("12"),
-                new BigDecimal("3.50"), null, null, null, null, null, null, null, null, null);
-        Long id = produtoRepository.saveAndFlush(produto).getId();
+        UUID uuid = salvar(produtoDa(empresa).nome("Sachê").categoria(racao).compra(caixa, "12").precoVenda("3.50"))
+                .getUuid();
 
         entityManager.clear();
-        Produto relido = produtoRepository.findByIdAndEmpresa_Id(id, empresa.getId()).orElseThrow();
+        Produto relido = produtoRepository.findByUuidAndEmpresa_Id(uuid, empresa.getId()).orElseThrow();
 
         assertThat(relido.getUnidade().getSigla()).isEqualTo("UN");
         assertThat(relido.getCategoria().getNome()).isEqualTo("Ração");
@@ -166,23 +251,28 @@ class ProdutoRepositoryIT {
         Empresa empresa = novaEmpresa("Empresa Listagem Vinculos");
         UnidadeMedida caixa = novaUnidade(empresa, "CX");
         Categoria bebidas = categoriaRepository.saveAndFlush(new Categoria(empresa, null, "Bebidas"));
-        produtoRepository.saveAndFlush(new Produto(empresa, "Agua", unDa(empresa), bebidas, caixa,
-                new BigDecimal("6"), new BigDecimal("2.00"), null, null, null, "SKU-AGUA", null, null, null, null,
-                null));
-        novoProduto(empresa, "Bala", null, null, true);
+        salvar(produtoDa(empresa).nome("Agua").categoria(bebidas).compra(caixa, "6").precoVenda("2.00")
+                .sku("SKU-AGUA").codigo("96385074").codigo("ABC-1"));
+        novoProduto(empresa, "Bala", null, true);
         entityManager.clear();
 
         List<Produto> todos = produtoRepository.buscarPorEmpresa(empresa.getId(), null);
-        List<Produto> busca = produtoRepository.buscarPorEmpresaComBusca(empresa.getId(), "sku-agua", null);
+        List<Produto> busca = produtoRepository.buscarPorEmpresaComBusca(empresa.getId(), "%sku-agua%",
+                "%sku-agua%", null);
 
+        // JOIN FETCH da colecao nao duplica o produto com dois codigos.
         assertThat(todos).extracting(Produto::getNome).containsExactly("Agua", "Bala");
-        // JOIN FETCH: os vinculos ja vem carregados (sem proxy pendente).
+        // JOIN FETCH: os vinculos e os codigos ja vem carregados (sem proxy pendente).
         assertThat(org.hibernate.Hibernate.isInitialized(todos.get(0).getUnidade())).isTrue();
         assertThat(org.hibernate.Hibernate.isInitialized(todos.get(0).getCategoria())).isTrue();
         assertThat(org.hibernate.Hibernate.isInitialized(todos.get(0).getUnidadeCompra())).isTrue();
+        assertThat(org.hibernate.Hibernate.isInitialized(todos.get(0).getCodigosBarras())).isTrue();
+        assertThat(todos.get(0).getCodigosBarras()).extracting(ProdutoCodigoBarras::getCodigo)
+                .containsExactly("96385074", "ABC-1");
         assertThat(todos.get(0).getCategoria().getNome()).isEqualTo("Bebidas");
         assertThat(todos.get(1).getCategoria()).isNull();
         assertThat(todos.get(1).getUnidadeCompra()).isNull();
+        assertThat(todos.get(1).getCodigosBarras()).isEmpty();
         assertThat(busca).singleElement().satisfies(produto -> {
             assertThat(produto.getUnidadeCompra().getSigla()).isEqualTo("CX");
             assertThat(produto.getUnidade().getSigla()).isEqualTo("UN");
@@ -192,39 +282,87 @@ class ProdutoRepositoryIT {
     // ---------- Isolamento por empresa (DEC-016) ----------
 
     @Test
-    void findByIdAndEmpresaNaoDeveEncontrarProdutoDeOutraEmpresa() {
+    void findByUuidAndEmpresaNaoDeveEncontrarProdutoDeOutraEmpresa() {
         Empresa empresaA = novaEmpresa("Empresa A");
         Empresa empresaB = novaEmpresa("Empresa B");
-        Produto produtoDaA = novoProduto(empresaA, "Arroz", "SKU-A", null, true);
+        Produto produtoDaA = novoProduto(empresaA, "Arroz", "SKU-A", true);
 
-        assertThat(produtoRepository.findByIdAndEmpresa_Id(produtoDaA.getId(), empresaA.getId()))
+        assertThat(produtoRepository.findByUuidAndEmpresa_Id(produtoDaA.getUuid(), empresaA.getId()))
                 .isPresent();
-        assertThat(produtoRepository.findByIdAndEmpresa_Id(produtoDaA.getId(), empresaB.getId()))
+        assertThat(produtoRepository.findByUuidAndEmpresa_Id(produtoDaA.getUuid(), empresaB.getId()))
                 .isEmpty();
     }
 
-    // ---------- Busca case-insensitive ----------
+    // ---------- Busca ----------
 
     @Test
-    void buscarPorEmpresaComBuscaDeveEncontrarPorNomeSkuECodigoBarrasSemDiferenciarCaixa() {
+    void buscaEncontraPorNomeSkuECodigoSemDiferenciarCaixa() {
         Empresa empresa = novaEmpresa("Empresa Busca");
-        novoProduto(empresa, "Arroz Integral", "SKU-ARROZ", "789100200300", true);
+        salvar(produtoDa(empresa).nome("Arroz Integral").sku("SKU-ARROZ").codigo("789100200300"));
 
-        assertThat(produtoRepository.buscarPorEmpresaComBusca(empresa.getId(), "arroz", null))
-                .hasSize(1);
-        assertThat(produtoRepository.buscarPorEmpresaComBusca(empresa.getId(), "sku-arroz", null))
-                .hasSize(1);
-        assertThat(produtoRepository.buscarPorEmpresaComBusca(empresa.getId(), "789100", null))
-                .hasSize(1);
-        assertThat(produtoRepository.buscarPorEmpresaComBusca(empresa.getId(), "inexistente", null))
-                .isEmpty();
+        assertThat(nomesDaBusca(empresa, "arroz")).containsExactly("Arroz Integral");
+        assertThat(nomesDaBusca(empresa, "sku-arroz")).containsExactly("Arroz Integral");
+        assertThat(nomesDaBusca(empresa, "789100")).containsExactly("Arroz Integral");
+        assertThat(nomesDaBusca(empresa, "inexistente")).isEmpty();
+    }
+
+    @Test
+    void buscaEncontraPorQualquerCodigo() {
+        Empresa empresa = novaEmpresa("Empresa Busca Codigos");
+        Produto feijao = salvar(produtoDa(empresa).nome("Feijão").codigo("96385074").codigo("XYZ-778899"));
+        novoProduto(empresa, "Outro", null, true);
+        entityManager.clear();
+
+        // Segundo codigo da lista, parcial e sem diferenciar caixa.
+        assertThat(nomesDaBusca(empresa, "xyz-7788")).containsExactly("Feijão");
+        // O termo com espacos casa com o codigo normalizado.
+        assertThat(nomesDaBusca(empresa, "9638 5074")).containsExactly("Feijão");
+        // Todos os codigos do produto continuam no resultado, nao so o que casou.
+        List<Produto> resultado = produtoRepository.buscarPorEmpresaComBusca(empresa.getId(), "%xyz%", "%xyz%",
+                null);
+        assertThat(resultado).singleElement().satisfies(produto -> {
+            assertThat(produto.getUuid()).isEqualTo(feijao.getUuid());
+            assertThat(produto.getCodigosBarras()).hasSize(2);
+        });
+    }
+
+    @Test
+    void buscaPorNomeCurto() {
+        Empresa empresa = novaEmpresa("Empresa Nome Curto");
+        salvar(produtoDa(empresa).nome("Ração Golden Adulto Frango e Arroz 15kg").nomeCurto("GLD FRANGO"));
+
+        assertThat(nomesDaBusca(empresa, "gld fr")).containsExactly("Ração Golden Adulto Frango e Arroz 15kg");
+    }
+
+    @Test
+    void buscaTrataPercentualESublinhadoComoLiterais() {
+        // DT-017: sem o escape, '%' e '_' seriam curingas e casariam tudo.
+        Empresa empresa = novaEmpresa("Empresa Curingas");
+        novoProduto(empresa, "Desconto 100% algodão", null, true);
+        novoProduto(empresa, "Camiseta 100 algodão", null, true);
+        novoProduto(empresa, "Cabo_USB", null, true);
+        novoProduto(empresa, "CaboXUSB", null, true);
+
+        assertThat(nomesDaBusca(empresa, "100%")).containsExactly("Desconto 100% algodão");
+        assertThat(nomesDaBusca(empresa, "o_u")).containsExactly("Cabo_USB");
+        assertThat(nomesDaBusca(empresa, "%")).containsExactly("Desconto 100% algodão");
+    }
+
+    @Test
+    void buscaNaoEncontraProdutoDeOutraEmpresaPeloCodigo() {
+        Empresa empresaA = novaEmpresa("Empresa Busca A");
+        Empresa empresaB = novaEmpresa("Empresa Busca B");
+        salvar(produtoDa(empresaA).nome("Da A").codigo("96385074"));
+
+        assertThat(nomesDaBusca(empresaB, "96385074")).isEmpty();
+        assertThat(nomesDaBusca(empresaA, "96385074")).containsExactly("Da A");
     }
 
     @Test
     void buscarPorEmpresaSemTermoDeveRetornarTodosDaEmpresaOrdenadosPorNome() {
         Empresa empresa = novaEmpresa("Empresa Sem Termo");
-        novoProduto(empresa, "Banana", null, null, true);
-        novoProduto(empresa, "Abacaxi", null, null, true);
+        novoProduto(empresa, "Banana", null, true);
+        novoProduto(empresa, "Abacaxi", null, true);
 
         List<Produto> produtos = produtoRepository.buscarPorEmpresa(empresa.getId(), null);
 
@@ -236,32 +374,32 @@ class ProdutoRepositoryIT {
     @Test
     void buscarPorEmpresaDeveAplicarFiltroDeStatusAtivo() {
         Empresa empresa = novaEmpresa("Empresa Status");
-        novoProduto(empresa, "Ativo 1", null, null, true);
-        novoProduto(empresa, "Ativo 2", null, null, true);
-        novoProduto(empresa, "Inativo 1", null, null, false);
+        novoProduto(empresa, "Ativo 1", null, true);
+        novoProduto(empresa, "Ativo 2", null, true);
+        novoProduto(empresa, "Inativo 1", null, false);
 
         assertThat(produtoRepository.buscarPorEmpresa(empresa.getId(), null)).hasSize(3);
         assertThat(produtoRepository.buscarPorEmpresa(empresa.getId(), true)).hasSize(2);
         assertThat(produtoRepository.buscarPorEmpresa(empresa.getId(), false)).hasSize(1);
     }
 
-    // ---------- Unicidade de SKU / codigo de barras ----------
+    // ---------- Unicidade de SKU ----------
 
     @Test
-    void doisProdutosSemSkuNemCodigoBarrasDevemCoexistirNaMesmaEmpresa() {
+    void doisProdutosSemSkuNemCodigosDevemCoexistirNaMesmaEmpresa() {
         Empresa empresa = novaEmpresa("Empresa Nulos");
-        novoProduto(empresa, "Sem Codigos 1", null, null, true);
-        novoProduto(empresa, "Sem Codigos 2", null, null, true);
+        novoProduto(empresa, "Sem Codigos 1", null, true);
+        novoProduto(empresa, "Sem Codigos 2", null, true);
 
-        // A constraint UNIQUE(empresa_id, sku/codigo_barras) trata multiplos NULL
-        // como nao-conflitantes: os dois produtos convivem sem violar integridade.
+        // A constraint UNIQUE(empresa_id, sku) trata multiplos NULL como
+        // nao-conflitantes: os dois produtos convivem sem violar integridade.
         assertThat(produtoRepository.buscarPorEmpresa(empresa.getId(), null)).hasSize(2);
     }
 
     @Test
     void existsBySkuAndEmpresaDeveDetectarDuplicadoNaMesmaEmpresa() {
         Empresa empresa = novaEmpresa("Empresa SKU");
-        novoProduto(empresa, "Produto", "SKU-UNICO", null, true);
+        novoProduto(empresa, "Produto", "SKU-UNICO", true);
 
         assertThat(produtoRepository.existsBySkuAndEmpresa_Id("SKU-UNICO", empresa.getId())).isTrue();
         assertThat(produtoRepository.existsBySkuAndEmpresa_Id("SKU-OUTRO", empresa.getId())).isFalse();
@@ -271,13 +409,84 @@ class ProdutoRepositoryIT {
     void mesmoSkuEmEmpresasDiferentesNaoDeveConflitar() {
         Empresa empresaA = novaEmpresa("Empresa SKU A");
         Empresa empresaB = novaEmpresa("Empresa SKU B");
-        novoProduto(empresaA, "Produto A", "SKU-COMPARTILHADO", null, true);
-        novoProduto(empresaB, "Produto B", "SKU-COMPARTILHADO", null, true);
+        novoProduto(empresaA, "Produto A", "SKU-COMPARTILHADO", true);
+        novoProduto(empresaB, "Produto B", "SKU-COMPARTILHADO", true);
 
         assertThat(produtoRepository.existsBySkuAndEmpresa_Id("SKU-COMPARTILHADO", empresaA.getId())).isTrue();
         assertThat(produtoRepository.existsBySkuAndEmpresa_Id("SKU-COMPARTILHADO", empresaB.getId())).isTrue();
         // Cada empresa enxerga apenas o proprio produto.
         assertThat(produtoRepository.buscarPorEmpresa(empresaA.getId(), null)).hasSize(1);
         assertThat(produtoRepository.buscarPorEmpresa(empresaB.getId(), null)).hasSize(1);
+    }
+
+    // ---------- SKU sugerido (spec 4.2) ----------
+
+    @Test
+    void skusNoPadraoSoDaEmpresaESoNoFormatoExato() {
+        Empresa empresa = novaEmpresa("Empresa SKU Padrao");
+        Empresa outra = novaEmpresa("Empresa SKU Padrao Outra");
+        for (String sku : List.of("P000001", "P000007", "P1000000", "ABC", "p000009", "P12345", "PX000001",
+                "P000002-A")) {
+            novoProduto(empresa, "Produto " + sku, sku, true);
+        }
+        novoProduto(outra, "Da outra", "P999999", true);
+        novoProduto(empresa, "Sem SKU", null, true);
+
+        assertThat(produtoRepository.skusNoPadrao(empresa.getId()))
+                .containsExactlyInAnyOrder("P000001", "P000007", "P1000000");
+    }
+
+    // ---------- Sugestoes de marca e fornecedor (spec 4.4) ----------
+
+    @Test
+    void sugestoesDistintasPorFrequencia() {
+        Empresa empresa = novaEmpresa("Empresa Sugestoes");
+        for (String marca : List.of("Golden", "Golden", "Golden", "golden", "Premier", "Zebra", "Zebra")) {
+            salvar(produtoDa(empresa).nome("Produto " + marca).marca(marca));
+        }
+        novoProduto(empresa, "Sem marca", null, true);
+
+        // Golden: 4 usos (grafia mais usada); Zebra: 2; Premier: 1.
+        assertThat(produtoRepository.sugestoesDeMarca(empresa.getId(), TODOS, LIMITE_DE_SUGESTOES))
+                .containsExactly("Golden", "Zebra", "Premier");
+        assertThat(produtoRepository.sugestoesDeMarca(empresa.getId(), "%gol%", LIMITE_DE_SUGESTOES))
+                .containsExactly("Golden");
+    }
+
+    @Test
+    void sugestoesComMesmaFrequenciaSaoAlfabeticasERespeitamOLimite() {
+        Empresa empresa = novaEmpresa("Empresa Sugestoes Limite");
+        for (String fornecedor : List.of("Delta", "alfa", "Charlie", "Bravo")) {
+            salvar(produtoDa(empresa).nome("Produto " + fornecedor).fornecedor(fornecedor));
+        }
+
+        assertThat(produtoRepository.sugestoesDeFornecedor(empresa.getId(), TODOS, LIMITE_DE_SUGESTOES))
+                .containsExactly("alfa", "Bravo", "Charlie", "Delta");
+        assertThat(produtoRepository.sugestoesDeFornecedor(empresa.getId(), TODOS, 2))
+                .containsExactly("alfa", "Bravo");
+    }
+
+    @Test
+    void sugestoesIsolamPorEmpresaESeparamMarcaDeFornecedor() {
+        Empresa empresa = novaEmpresa("Empresa Sugestoes A");
+        Empresa outra = novaEmpresa("Empresa Sugestoes B");
+        salvar(produtoDa(empresa).nome("Ração").marca("Golden").fornecedor("Distribuidora Sul"));
+        salvar(produtoDa(outra).nome("Ração").marca("Premier").fornecedor("Distribuidora Norte"));
+
+        assertThat(produtoRepository.sugestoesDeMarca(empresa.getId(), TODOS, LIMITE_DE_SUGESTOES))
+                .containsExactly("Golden");
+        assertThat(produtoRepository.sugestoesDeFornecedor(empresa.getId(), TODOS, LIMITE_DE_SUGESTOES))
+                .containsExactly("Distribuidora Sul");
+        assertThat(produtoRepository.sugestoesDeMarca(outra.getId(), "%golden%", LIMITE_DE_SUGESTOES)).isEmpty();
+    }
+
+    @Test
+    void sugestoesTratamCuringasDoTermoComoLiterais() {
+        Empresa empresa = novaEmpresa("Empresa Sugestoes Curingas");
+        salvar(produtoDa(empresa).nome("A").marca("100% Natural"));
+        salvar(produtoDa(empresa).nome("B").marca("1000 Natural"));
+
+        assertThat(produtoRepository.sugestoesDeMarca(empresa.getId(), PadraoLike.contem("100%"),
+                LIMITE_DE_SUGESTOES)).containsExactly("100% Natural");
     }
 }

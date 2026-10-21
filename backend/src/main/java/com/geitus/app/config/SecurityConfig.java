@@ -96,12 +96,16 @@ public class SecurityConfig {
                         // Edicao do cadastro da empresa: exige ADMIN. A leitura (GET)
                         // segue liberada a qualquer autenticado pela regra final.
                         .requestMatchers(HttpMethod.PATCH, "/api/empresas/minha").hasRole("ADMIN")
-                        // Produtos (RBAC basico): escrita exige perfil ADMIN; leitura
-                        // liberada a qualquer autenticado. Os matchers por metodo mais
-                        // especificos (POST/PATCH) precedem o GET para nao serem
-                        // ofuscados. PATCH /** cobre /{id}, /{id}/inativar e /{id}/reativar.
+                        // Produtos (RBAC basico, DEC-025): escrita, exclusao e sugestao de
+                        // SKU exigem perfil ADMIN; leitura (inclusive as sugestoes de
+                        // marca/fornecedor) liberada a qualquer autenticado. Os matchers
+                        // de ADMIN precedem o GET geral para nao serem ofuscados — em
+                        // especial GET /sku/sugestao, que o GET /** cobriria. PATCH /**
+                        // cobre /{id}, /{id}/inativar e /{id}/reativar.
+                        .requestMatchers(HttpMethod.GET, "/api/produtos/sku/sugestao").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/produtos", "/api/produtos/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/produtos/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/produtos/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/produtos", "/api/produtos/**").authenticated()
                         // Clientes (DEC-029): inativar/reativar exige ADMIN; consultar,
                         // cadastrar e editar ficam com qualquer autenticado (o OPERADOR

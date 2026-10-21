@@ -3,6 +3,8 @@ package com.geitus.app.catalog.dto;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
 
 import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
@@ -12,6 +14,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Representacao publica de um {@link Produto}.
+ *
+ * <p>O {@code id} e o UUID publico do produto (DEC-019): nenhum id numerico
+ * interno sai na resposta (nem do produto nem dos codigos de barras).
  *
  * <p>Nao inclui {@code empresaId} nem a empresa: a empresa e implicita ao
  * usuario autenticado (ele so enxerga produtos da propria empresa), entao nao
@@ -32,11 +37,18 @@ import io.swagger.v3.oas.annotations.media.Schema;
  */
 @Schema(description = "Dados publicos de um produto")
 public record ProdutoResponse(
-        Long id,
+        @Schema(description = "Identificador publico (UUID)")
+        UUID id,
         String nome,
+        @Schema(description = "Nome curto informado; null se nao houver")
+        String nomeCurto,
+        @Schema(description = "Nome para cupom e PDV: o nome curto ou os 30 primeiros caracteres do nome")
+        String nomeCurtoEfetivo,
         @Schema(description = "Categoria com o caminho na arvore; null se sem categoria")
         CategoriaResumo categoria,
         String marca,
+        @Schema(description = "Fornecedor principal; null se nao houver")
+        String fornecedor,
         @Schema(description = "Unidade de venda")
         UnidadeResumo unidade,
         @Schema(description = "Unidade de compra; null se nao houver")
@@ -53,9 +65,12 @@ public record ProdutoResponse(
         BigDecimal estoqueMinimo,
         BigDecimal estoqueMaximo,
         BigDecimal pontoReposicao,
-        String codigoBarras,
+        @Schema(description = "Codigos de barras na ordem (o primeiro e o principal)")
+        List<CodigoBarrasResponse> codigosBarras,
         String sku,
         boolean ativo,
+        @Schema(description = "Se o produto pode ser excluido (nunca teve venda nem movimentacao de estoque)")
+        boolean podeExcluir,
         @Schema(description = "Margem sobre a venda em %: (preco - custo) / preco * 100. Null se sem custo/preco.")
         BigDecimal margem,
         @Schema(description = "Marcacao sobre o custo em %: (preco - custo) / custo * 100. Null se sem custo.")
@@ -68,16 +83,20 @@ public record ProdutoResponse(
 
     /**
      * Monta a resposta do produto. {@code arvore} e a arvore de categorias da
-     * empresa do produto (so e consultada quando o produto tem categoria).
+     * empresa do produto (so e consultada quando o produto tem categoria);
+     * {@code podeExcluir} vem da regra centralizada no {@code ProdutoService}.
      */
-    public static ProdutoResponse de(Produto produto, CategoriaArvore arvore) {
+    public static ProdutoResponse de(Produto produto, CategoriaArvore arvore, boolean podeExcluir) {
         BigDecimal preco = produto.getPrecoVenda();
         BigDecimal custo = produto.getCusto();
         return new ProdutoResponse(
-                produto.getId(),
+                produto.getUuid(),
                 produto.getNome(),
+                produto.getNomeCurto(),
+                produto.nomeCurtoEfetivo(),
                 CategoriaResumo.deOuNulo(produto.getCategoria(), arvore),
                 produto.getMarca(),
+                produto.getFornecedor(),
                 UnidadeResumo.deOuNulo(produto.getUnidade()),
                 UnidadeResumo.deOuNulo(produto.getUnidadeCompra()),
                 produto.getFatorConversao(),
@@ -89,9 +108,10 @@ public record ProdutoResponse(
                 produto.getEstoqueMinimo(),
                 produto.getEstoqueMaximo(),
                 produto.getPontoReposicao(),
-                produto.getCodigoBarras(),
+                produto.getCodigosBarras().stream().map(CodigoBarrasResponse::de).toList(),
                 produto.getSku(),
                 produto.isAtivo(),
+                podeExcluir,
                 calcularMargem(preco, custo),
                 calcularMarkup(preco, custo),
                 produto.getCriadoEm(),

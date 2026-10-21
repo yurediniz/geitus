@@ -13,6 +13,7 @@ import com.geitus.app.company.EmpresaRepository;
 import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
+import com.geitus.app.shared.busca.PadraoLike;
 import com.geitus.app.shared.validation.Documentos;
 import com.geitus.app.shared.validation.Telefones;
 
@@ -40,10 +41,6 @@ public class ClienteService {
     static final String MENSAGEM_CPF_INVALIDO = "CPF inválido.";
     static final String MENSAGEM_TELEFONE_INVALIDO = "Telefone inválido.";
     static final String MENSAGEM_WHATSAPP_INVALIDO = "WhatsApp inválido.";
-
-    private static final String CARACTERE_DE_ESCAPE = "\\";
-    private static final String CURINGA_QUALQUER_SEQUENCIA = "%";
-    private static final String CURINGA_UM_CARACTERE = "_";
 
     private final ClienteRepository clienteRepository;
     private final EmpresaRepository empresaRepository;
@@ -138,12 +135,12 @@ public class ClienteService {
         if (!StringUtils.hasText(busca)) {
             return clienteRepository.buscarPorEmpresa(empresaId, ativo);
         }
-        String padraoNome = padraoContem(busca.trim().toLowerCase(Locale.ROOT));
+        String padraoNome = PadraoLike.contem(busca.trim().toLowerCase(Locale.ROOT));
         String digitos = Documentos.somenteDigitos(busca);
         if (digitos.isEmpty()) {
             return clienteRepository.buscarPorNome(empresaId, padraoNome, ativo);
         }
-        return clienteRepository.buscarPorNomeOuDigitos(empresaId, padraoNome, padraoContem(digitos), ativo);
+        return clienteRepository.buscarPorNomeOuDigitos(empresaId, padraoNome, PadraoLike.contem(digitos), ativo);
     }
 
     // ---------- Normalizacao e validacao ----------
@@ -217,22 +214,6 @@ public class ClienteService {
         if (cpf != null && clienteRepository.existsByCpfAndEmpresa_IdAndIdNot(cpf, empresaId, clienteId)) {
             throw new ClienteConflitoException(MENSAGEM_CPF_DUPLICADO);
         }
-    }
-
-    // ---------- Busca ----------
-
-    /**
-     * Monta o padrao LIKE "contem": escapa o caractere de escape e os curingas
-     * do termo (nessa ordem, para nao escapar duas vezes a barra inserida) e
-     * envolve com {@code %}. Assim {@code %} e {@code _} digitados sao texto
-     * literal, nao curinga (combina com {@code ESCAPE '\'} das queries).
-     */
-    private String padraoContem(String termo) {
-        String escapado = termo
-                .replace(CARACTERE_DE_ESCAPE, CARACTERE_DE_ESCAPE + CARACTERE_DE_ESCAPE)
-                .replace(CURINGA_QUALQUER_SEQUENCIA, CARACTERE_DE_ESCAPE + CURINGA_QUALQUER_SEQUENCIA)
-                .replace(CURINGA_UM_CARACTERE, CARACTERE_DE_ESCAPE + CURINGA_UM_CARACTERE);
-        return CURINGA_QUALQUER_SEQUENCIA + escapado + CURINGA_QUALQUER_SEQUENCIA;
     }
 
     // ---------- Resolucao da empresa ----------
