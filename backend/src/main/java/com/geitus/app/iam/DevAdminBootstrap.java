@@ -10,6 +10,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.company.Empresa;
 import com.geitus.app.company.EmpresaRepository;
 import com.geitus.app.company.Endereco;
@@ -25,8 +26,9 @@ import com.geitus.app.iam.UsuarioRepository;
  * senha fica fixa em codigo: a senha vem da variavel
  * {@code GEITUS_DEV_ADMIN_PASSWORD} e e armazenada apenas como hash BCrypt.
  *
- * <p>Idempotente: cria a empresa apenas se nao existir pelo nome e o usuario
- * apenas se o e-mail ainda nao existir. Rodar varias vezes nao duplica dados.
+ * <p>Idempotente: cria a empresa apenas se nao existir pelo nome (ja com as
+ * unidades de medida padrao) e o usuario apenas se o e-mail ainda nao existir.
+ * Rodar varias vezes nao duplica dados.
  *
  * <p>Nao deve ser usado em producao. Serve para agilizar o desenvolvimento local
  * sem inserir credenciais manualmente no banco.
@@ -63,6 +65,7 @@ public class DevAdminBootstrap implements ApplicationRunner {
     private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UnidadeMedidaService unidadeMedidaService;
 
     private final String adminEmail;
     private final String adminPassword;
@@ -73,6 +76,7 @@ public class DevAdminBootstrap implements ApplicationRunner {
             EmpresaRepository empresaRepository,
             UsuarioRepository usuarioRepository,
             PasswordEncoder passwordEncoder,
+            UnidadeMedidaService unidadeMedidaService,
             @Value("${GEITUS_DEV_ADMIN_EMAIL:}") String adminEmail,
             @Value("${GEITUS_DEV_ADMIN_PASSWORD:}") String adminPassword,
             @Value("${GEITUS_DEV_ADMIN_NAME:Administrador}") String adminName,
@@ -80,6 +84,7 @@ public class DevAdminBootstrap implements ApplicationRunner {
         this.empresaRepository = empresaRepository;
         this.usuarioRepository = usuarioRepository;
         this.passwordEncoder = passwordEncoder;
+        this.unidadeMedidaService = unidadeMedidaService;
         this.adminEmail = adminEmail;
         this.adminPassword = adminPassword;
         this.adminName = adminName;
@@ -104,7 +109,10 @@ public class DevAdminBootstrap implements ApplicationRunner {
         Empresa empresa = empresaRepository.findByNome(companyName)
                 .orElseGet(() -> {
                     log.info("Bootstrap dev-admin: criando empresa '{}' com cadastro completo.", companyName);
-                    return empresaRepository.save(criarEmpresaDeDesenvolvimento(companyName));
+                    Empresa nova = empresaRepository.save(criarEmpresaDeDesenvolvimento(companyName));
+                    // Empresa nova nasce com as unidades padrao (a V6 so cobre as existentes).
+                    unidadeMedidaService.criarPadroes(nova);
+                    return nova;
                 });
 
         Usuario admin = new Usuario(

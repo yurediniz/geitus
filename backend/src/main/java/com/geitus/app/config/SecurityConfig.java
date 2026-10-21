@@ -51,6 +51,14 @@ public class SecurityConfig {
             "/v3/api-docs.yaml"
     };
 
+    /** Cadastros auxiliares do catalogo: unidades de medida e categorias (DEC-031). */
+    private static final String[] CAMINHOS_CADASTROS_DO_CATALOGO = {
+            "/api/unidades",
+            "/api/unidades/**",
+            "/api/categorias",
+            "/api/categorias/**"
+    };
+
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final RestAccessDeniedHandler accessDeniedHandler;
@@ -101,6 +109,12 @@ public class SecurityConfig {
                         // vale para qualquer metodo HTTP nessas rotas.
                         .requestMatchers("/api/clientes/*/inativar", "/api/clientes/*/reativar").hasRole("ADMIN")
                         .requestMatchers("/api/clientes", "/api/clientes/**").authenticated()
+                        // Unidades de medida e categorias (DEC-031): leitura (GET) liberada a
+                        // qualquer autenticado (o formulario de produto e o PDV as consultam);
+                        // qualquer outro metodo exige ADMIN. O matcher de ADMIN e SEM metodo,
+                        // como em Clientes: cobre POST/PATCH/PUT/DELETE e /{id}/inativar|reativar.
+                        .requestMatchers(HttpMethod.GET, CAMINHOS_CADASTROS_DO_CATALOGO).authenticated()
+                        .requestMatchers(CAMINHOS_CADASTROS_DO_CATALOGO).hasRole("ADMIN")
                         // Todo o restante exige autenticacao (JWT valido)
                         .anyRequest().authenticated())
                 // Respostas de erro padronizadas (sem vazar detalhes internos)

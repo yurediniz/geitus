@@ -17,6 +17,8 @@ import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.ConflitoDeUsuarioException;
 import com.geitus.app.iam.DadosUsuarioInvalidosException;
 import com.geitus.app.iam.UsuarioNaoEncontradoException;
+import com.geitus.app.catalog.CatalogoConflitoException;
+import com.geitus.app.catalog.CatalogoNaoEncontradoException;
 import com.geitus.app.catalog.ProdutoConflitoException;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
 import com.geitus.app.catalog.RegraDeNegocioException;
@@ -150,8 +152,9 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Violacao de regra de negocio do modulo Produtos com dado invalido (por
-     * exemplo, nome vazio ou preco/custo/estoque negativo) -> 400. Conflitos de
+     * Violacao de regra de negocio do catalogo com dado invalido (por exemplo,
+     * nome vazio, preco/custo/estoque negativo ou ciclo na arvore de
+     * categorias) -> 400. Conflitos de
      * unicidade (SKU/codigo de barras duplicado) usam {@code ProdutoConflitoException}
      * e retornam 409.
      */
@@ -172,6 +175,39 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(ProdutoConflitoException.class)
     public ResponseEntity<ApiError> tratarConflitoDeProduto(ProdutoConflitoException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(corpo);
+    }
+
+    /**
+     * Unidade de medida ou categoria nao encontrada para a empresa do usuario
+     * (inclui registro de outra empresa — DEC-016). A mensagem e fixa e nao
+     * carrega o identificador consultado.
+     */
+    @ExceptionHandler(CatalogoNaoEncontradoException.class)
+    public ResponseEntity<ApiError> tratarCatalogoNaoEncontrado(CatalogoNaoEncontradoException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.NOT_FOUND.value(),
+                HttpStatus.NOT_FOUND.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(corpo);
+    }
+
+    /**
+     * Conflito em unidade de medida ou categoria: sigla/nome entre irmaos
+     * repetido, ou exclusao de registro em uso. Mensagens fixas da spec.
+     */
+    @ExceptionHandler(CatalogoConflitoException.class)
+    public ResponseEntity<ApiError> tratarConflitoDeCatalogo(CatalogoConflitoException ex,
             HttpServletRequest request) {
         ApiError corpo = ApiError.de(
                 HttpStatus.CONFLICT.value(),
