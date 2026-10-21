@@ -25,6 +25,7 @@ import {
   PRODUTOS_QUERY_KEY,
   TODAS_CATEGORIAS_QUERY_KEY,
   TODAS_UNIDADES_QUERY_KEY,
+  ehMensagemGenerica,
 } from '@/features/catalog/catalogoQuery'
 import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { SeletorCategoria } from '@/features/products/SeletorCategoria'
@@ -89,7 +90,7 @@ const produtoSchema = z.object({
   if (temUnidadeCompra !== temFator) {
     ctx.addIssue({
       path: [temUnidadeCompra ? 'fatorConversao' : 'unidadeCompraId'],
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       message: 'Informe a unidade de compra e o fator de conversão juntos.',
     })
   }
@@ -101,7 +102,7 @@ const produtoSchema = z.object({
   ) {
     ctx.addIssue({
       path: ['fatorConversao'],
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       message: 'Quando a unidade de compra é a mesma de venda, o fator deve ser 1.',
     })
   }
@@ -112,7 +113,7 @@ const produtoSchema = z.object({
   ) {
     ctx.addIssue({
       path: ['precoMinimo'],
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       message: 'Preço mínimo não pode ser maior que o preço de venda.',
     })
   }
@@ -123,7 +124,7 @@ const produtoSchema = z.object({
   ) {
     ctx.addIssue({
       path: ['estoqueMaximo'],
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       message: 'Estoque máximo não pode ser menor que o estoque mínimo.',
     })
   }
@@ -180,12 +181,14 @@ function montarRequest(valores: ProdutoFormValues): ProdutoRequest {
 }
 
 function valoresDoProduto(produto: Produto): ProdutoFormValues {
+  // Compra igual a venda (fator 1) e o mesmo que "Mesma da venda": o form mostra assim.
+  const compraPropria = produto.unidadeCompra !== null && produto.unidadeCompra.id !== produto.unidade.id
   return {
     nome: produto.nome,
     unidadeId: produto.unidade.id,
     categoriaId: produto.categoria?.id ?? null,
-    unidadeCompraId: produto.unidadeCompra?.id ?? '',
-    fatorConversao: produto.fatorConversao === null ? '' : String(produto.fatorConversao),
+    unidadeCompraId: compraPropria ? (produto.unidadeCompra?.id ?? '') : '',
+    fatorConversao: compraPropria && produto.fatorConversao !== null ? String(produto.fatorConversao) : '',
     marca: produto.marca ?? '',
     descricao: produto.descricao ?? '',
     precoVenda: String(produto.precoVenda),
@@ -238,6 +241,14 @@ function opcoesDeUnidade(unidades: UnidadeMedida[], atual: UnidadeResumo | null)
   return [...ativas, { id: atual.id, rotulo: conhecida ? `${rotulo} (inativa)` : rotulo }]
 }
 
+/** Sigla que o cadastro de produto novo ja traz escolhida, se existir e estiver ativa. */
+const SIGLA_UNIDADE_PADRAO = 'UN'
+
+/** Id da unidade padrao (UN ativa) ou '' se nao houver. */
+function idUnidadePadrao(unidades: UnidadeMedida[]): string {
+  return unidades.find((unidade) => unidade.ativo && unidade.sigla === SIGLA_UNIDADE_PADRAO)?.id ?? ''
+}
+
 /** Fator em pt-BR sem zeros a direita (12 -> "12", 1.5 -> "1,5"), como o `conversaoTexto` do backend. */
 function formatarFator(valor: number): string {
   return valor.toLocaleString('pt-BR', { maximumFractionDigits: 4, useGrouping: false })
@@ -269,9 +280,9 @@ function formatarPercentual(valor: number | null): string | null {
 function mensagemErroSalvar(erro: unknown): string {
   if (erro instanceof HttpError) {
     if (erro.status === 409) {
-      // Duplicidade de SKU ou código de barras: usa a mensagem do backend
-      // quando houver, com fallback amigável.
-      if (erro.message && erro.message.trim() !== '') {
+      // Duplicidade de SKU ou código de barras: usa a mensagem curada do
+      // backend; sem ela, um texto fixo (nunca o generico tecnico do httpClient).
+      if (!ehMensagemGenerica(erro.message)) {
         return erro.message
       }
       return 'Já existe um produto com este SKU ou código de barras nesta empresa.'
@@ -281,7 +292,7 @@ function mensagemErroSalvar(erro: unknown): string {
       if (mensagensCampos.length > 0) {
         return mensagensCampos.join(' ')
       }
-      if (erro.message && erro.message !== 'Dados invalidos.') {
+      if (!ehMensagemGenerica(erro.message)) {
         return erro.message
       }
       return 'Revise os dados do produto e tente novamente.'
@@ -344,6 +355,8 @@ export function ProdutosPage() {
     handleSubmit,
     reset,
     watch,
+    getValues,
+    setValue,
     formState: { errors },
   } = useForm<ProdutoFormValues>({
     resolver: zodResolver(produtoSchema),
@@ -354,9 +367,15 @@ export function ProdutosPage() {
     () => opcoesDeUnidade(unidades, produtoEmEdicao?.unidade ?? null),
     [unidades, produtoEmEdicao],
   )
+  const [unidadeIdAtual, unidadeCompraIdAtual, fatorAtual] = watch(['unidadeId', 'unidadeCompraId', 'fatorConversao'])
+
+  // A unidade de venda nao e oferecida como compra: "Mesma da venda" ja cobre esse caso.
   const opcoesUnidadeCompra = useMemo(
-    () => opcoesDeUnidade(unidades, produtoEmEdicao?.unidadeCompra ?? null),
-    [unidades, produtoEmEdicao],
+    () =>
+      opcoesDeUnidade(unidades, produtoEmEdicao?.unidadeCompra ?? null).filter(
+        (opcao) => opcao.id !== unidadeIdAtual,
+      ),
+    [unidades, produtoEmEdicao, unidadeIdAtual],
   )
 
   // Siglas conhecidas (lista + unidades do produto em edicao) para o texto "1 CX = 12 UN".
@@ -370,12 +389,10 @@ export function ProdutosPage() {
     return mapa
   }, [unidades, produtoEmEdicao])
 
-  const [unidadeIdAtual, unidadeCompraIdAtual, fatorAtual] = watch(['unidadeId', 'unidadeCompraId', 'fatorConversao'])
-  const ajudaConversao = textoConversao(
-    siglaPorId.get(unidadeCompraIdAtual),
-    siglaPorId.get(unidadeIdAtual),
-    fatorAtual,
-  )
+  const siglaVenda = siglaPorId.get(unidadeIdAtual)
+  const siglaCompra = siglaPorId.get(unidadeCompraIdAtual)
+  const temUnidadeCompra = unidadeCompraIdAtual !== ''
+  const ajudaConversao = textoConversao(siglaCompra, siglaVenda, fatorAtual)
 
   useEffect(() => {
     if (produtoEmEdicao) {
@@ -384,6 +401,40 @@ export function ProdutosPage() {
     }
     reset(valoresIniciais)
   }, [produtoEmEdicao, reset])
+
+  // Produto novo ja vem com UN (a unidade mais comum), se existir e estiver ativa.
+  // Depende do reset acima: por isso vem depois dele.
+  useEffect(() => {
+    if (!formularioAberto || produtoEmEdicao || getValues('unidadeId') !== '') {
+      return
+    }
+    const padrao = idUnidadePadrao(unidades)
+    if (padrao) {
+      setValue('unidadeId', padrao)
+    }
+  }, [formularioAberto, produtoEmEdicao, unidades, getValues, setValue])
+
+  const aoAlterarCampo = () => {
+    setMensagemSucesso(null)
+    setErroGeral(null)
+  }
+
+  /** Venda igual a compra deixa a compra sem sentido: limpa compra e fator. */
+  const aoAlterarUnidadeVenda = (event: { target: { value: string } }) => {
+    if (event.target.value !== '' && event.target.value === getValues('unidadeCompraId')) {
+      setValue('unidadeCompraId', '')
+      setValue('fatorConversao', '')
+    }
+    aoAlterarCampo()
+  }
+
+  /** Sem unidade de compra, o fator fica oculto e e descartado. */
+  const aoAlterarUnidadeCompra = (event: { target: { value: string } }) => {
+    if (event.target.value === '') {
+      setValue('fatorConversao', '')
+    }
+    aoAlterarCampo()
+  }
 
   const salvarMutation = useMutation<Produto, unknown, ProdutoFormValues>({
     mutationFn: (valores) => {
@@ -401,9 +452,17 @@ export function ProdutosPage() {
       setProdutoEmEdicao(null)
       reset(valoresIniciais)
     },
-    onError: (erro) => {
+    onError: async (erro) => {
       setMensagemSucesso(null)
       setErroSalvar(mensagemErroSalvar(erro))
+      // 400/404: a unidade ou a categoria escolhida pode ter sido inativada ou
+      // removida; recarrega as listas para o select e o seletor saírem dela.
+      if (erro instanceof HttpError && (erro.status === 400 || erro.status === 404)) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: TODAS_UNIDADES_QUERY_KEY }),
+          queryClient.invalidateQueries({ queryKey: TODAS_CATEGORIAS_QUERY_KEY }),
+        ])
+      }
     },
   })
 
@@ -433,7 +492,7 @@ export function ProdutosPage() {
     setMensagemSucesso(null)
     setErroSalvar(null)
     setErroGeral(null)
-    reset(valoresIniciais)
+    reset({ ...valoresIniciais, unidadeId: idUnidadePadrao(unidades) })
   }
 
   const abrirEdicao = (produto: Produto) => {
@@ -454,11 +513,6 @@ export function ProdutosPage() {
   const aplicarBusca = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setBuscaAplicada(busca.trim())
-  }
-
-  const aoAlterarCampo = () => {
-    setMensagemSucesso(null)
-    setErroGeral(null)
   }
 
   const aoSubmeter = (valores: ProdutoFormValues) => {
@@ -565,7 +619,8 @@ export function ProdutosPage() {
           <CardHeader>
             <CardTitle>{produtoEmEdicao ? 'Editar produto' : 'Novo produto'}</CardTitle>
             <CardDescription>
-              Preencha os campos essenciais. SKU e código de barras são opcionais.
+              Campos com <span aria-hidden="true">*</span>
+              <span className="sr-only">asterisco</span> são obrigatórios; os demais são opcionais.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -584,13 +639,15 @@ export function ProdutosPage() {
                 <CampoTexto
                   id="nome"
                   label="Nome"
+                  obrigatorio
                   erro={errors.nome?.message}
                   inputProps={register('nome', { onChange: aoAlterarCampo })}
                   disabled={salvando}
                 />
                 <CampoTexto
                   id="precoVenda"
-                  label="Preço de venda"
+                  label={siglaVenda ? `Preço de venda (por ${siglaVenda})` : 'Preço de venda'}
+                  obrigatorio
                   erro={errors.precoVenda?.message}
                   inputProps={register('precoVenda', { onChange: aoAlterarCampo })}
                   disabled={salvando}
@@ -604,7 +661,7 @@ export function ProdutosPage() {
                     label="Unidade de venda"
                     obrigatorio
                     erro={errors.unidadeId?.message}
-                    selectProps={register('unidadeId', { onChange: aoAlterarCampo })}
+                    selectProps={register('unidadeId', { onChange: aoAlterarUnidadeVenda })}
                     disabled={salvando || unidadesQuery.isPending}
                     opcaoVazia={unidadesQuery.isPending ? 'Carregando unidades...' : 'Selecione a unidade'}
                     opcoes={opcoesUnidadeVenda}
@@ -666,27 +723,6 @@ export function ProdutosPage() {
                   </p>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <CampoSelect
-                    id="unidadeCompraId"
-                    label="Unidade de compra (opcional)"
-                    erro={errors.unidadeCompraId?.message}
-                    selectProps={register('unidadeCompraId', { onChange: aoAlterarCampo })}
-                    disabled={salvando || unidadesQuery.isPending}
-                    opcaoVazia="Mesma da venda"
-                    opcoes={opcoesUnidadeCompra}
-                  />
-                  <CampoTexto
-                    id="fatorConversao"
-                    label="Fator de conversão"
-                    erro={errors.fatorConversao?.message}
-                    ajuda={ajudaConversao ?? 'Quantas unidades de venda vêm em 1 unidade de compra.'}
-                    inputProps={register('fatorConversao', { onChange: aoAlterarCampo })}
-                    disabled={salvando}
-                    type="number"
-                    step="0.0001"
-                    min="0"
-                    placeholder="Ex.: 12"
-                  />
                   <CampoTexto
                     id="custo"
                     label="Custo (opcional)"
@@ -707,6 +743,33 @@ export function ProdutosPage() {
                     step="0.01"
                     min="0"
                   />
+                  {/* Linha propria: com o fator oculto, os campos seguintes nao sobem para o lado da compra. */}
+                  <div className="grid gap-4 md:col-span-2 md:grid-cols-2">
+                    <CampoSelect
+                      id="unidadeCompraId"
+                      label="Unidade de compra (opcional)"
+                      erro={errors.unidadeCompraId?.message}
+                      selectProps={register('unidadeCompraId', { onChange: aoAlterarUnidadeCompra })}
+                      disabled={salvando || unidadesQuery.isPending}
+                      opcaoVazia="Mesma da venda"
+                      opcoes={opcoesUnidadeCompra}
+                    />
+                    {/* So faz sentido com unidade de compra: ate la fica oculto. */}
+                    {temUnidadeCompra && (
+                      <CampoTexto
+                        id="fatorConversao"
+                        label={`Quantas ${siglaVenda ?? 'unidades de venda'} vêm em 1 ${siglaCompra ?? 'unidade de compra'}?`}
+                        erro={errors.fatorConversao?.message}
+                        ajuda={ajudaConversao ?? undefined}
+                        inputProps={register('fatorConversao', { onChange: aoAlterarCampo })}
+                        disabled={salvando}
+                        type="number"
+                        step="0.0001"
+                        min="0"
+                        placeholder="Ex.: 12"
+                      />
+                    )}
+                  </div>
                   <CampoTexto
                     id="estoqueMinimo"
                     label="Estoque mínimo (opcional)"
@@ -855,6 +918,21 @@ export function ProdutosPage() {
   )
 }
 
+/**
+ * Asterisco dos campos obrigatorios. O "*" e so visual; leitores de tela ouvem
+ * "obrigatório" no nome do campo (sem `aria-required`, para nao anunciar duas vezes).
+ */
+function MarcaObrigatorio() {
+  return (
+    <>
+      <span className="ml-0.5 text-destructive" aria-hidden="true">
+        *
+      </span>
+      <span className="sr-only"> (obrigatório)</span>
+    </>
+  )
+}
+
 /** Junta os ids de ajuda/erro presentes para o `aria-describedby`. */
 function idsDescricao(...ids: (string | false | undefined)[]): string | undefined {
   const presentes = ids.filter((id): id is string => Boolean(id))
@@ -864,6 +942,7 @@ function idsDescricao(...ids: (string | false | undefined)[]): string | undefine
 interface CampoTextoProps {
   id: keyof ProdutoFormValues
   label: string
+  obrigatorio?: boolean
   erro?: string
   /** Texto de apoio sob o campo (ex.: "1 CX = 12 UN"). */
   ajuda?: string
@@ -878,6 +957,7 @@ interface CampoTextoProps {
 function CampoTexto({
   id,
   label,
+  obrigatorio = false,
   erro,
   ajuda,
   disabled,
@@ -893,6 +973,7 @@ function CampoTexto({
     <div className="space-y-1.5">
       <label htmlFor={id} className="text-sm font-medium">
         {label}
+        {obrigatorio && <MarcaObrigatorio />}
       </label>
       <Input
         id={id}
@@ -946,16 +1027,11 @@ function CampoSelect({
     <div className="space-y-1.5">
       <label htmlFor={id} className="text-sm font-medium">
         {label}
-        {obrigatorio && (
-          <span className="ml-0.5 text-destructive" aria-hidden="true">
-            *
-          </span>
-        )}
+        {obrigatorio && <MarcaObrigatorio />}
       </label>
       <select
         id={id}
         disabled={disabled}
-        aria-required={obrigatorio || undefined}
         aria-invalid={erro ? true : undefined}
         aria-describedby={erro ? erroId : undefined}
         className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive"

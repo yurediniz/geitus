@@ -186,7 +186,7 @@ function renderComProviders(ui: ReactElement) {
 
 async function abrirFormularioNovo() {
   fireEvent.click(screen.getByRole('button', { name: /novo produto/i }))
-  return screen.findByLabelText(/^nome$/i)
+  return screen.findByLabelText(/^nome/i)
 }
 
 /** Espera as unidades carregarem e escolhe a unidade de venda. */
@@ -194,6 +194,11 @@ async function selecionarUnidadeVenda(id = 'un') {
   const select = screen.getByLabelText(/unidade de venda/i)
   await waitFor(() => expect(select).toBeEnabled())
   fireEvent.change(select, { target: { value: id } })
+}
+
+/** Campo do fator: o rotulo e dinamico ("Quantas UN vêm em 1 CX?"). */
+function campoFator(): HTMLElement {
+  return screen.getByLabelText(/^quantas .* vêm em 1 /i)
 }
 
 function rotulosDasOpcoes(select: HTMLElement): string[] {
@@ -287,7 +292,7 @@ describe('ProdutosPage', () => {
 
     await abrirFormularioNovo()
 
-    expect(screen.getByLabelText(/^nome$/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^nome/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/preço de venda/i)).toBeInTheDocument()
   })
 
@@ -310,7 +315,7 @@ describe('ProdutosPage', () => {
     renderComProviders(<ProdutosPage />)
 
     await abrirFormularioNovo()
-    fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Produto' } })
+    fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Produto' } })
     fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
 
     expect(await screen.findByText(/informe o preço de venda/i)).toBeInTheDocument()
@@ -327,7 +332,7 @@ describe('ProdutosPage', () => {
     renderComProviders(<ProdutosPage />)
 
     await abrirFormularioNovo()
-    fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Produto' } })
+    fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Produto' } })
     fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10' } })
     fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '-1' } })
     fireEvent.change(screen.getByLabelText(/estoque mínimo/i), { target: { value: '-2' } })
@@ -348,7 +353,7 @@ describe('ProdutosPage', () => {
     renderComProviders(<ProdutosPage />)
 
     await abrirFormularioNovo()
-    fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Café 500g' } })
+    fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Café 500g' } })
     fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '12.5' } })
     await selecionarUnidadeVenda()
     fireEvent.change(screen.getByLabelText(/sku/i), { target: { value: 'SKU-CAFE' } })
@@ -388,7 +393,7 @@ describe('ProdutosPage', () => {
     expect(card).not.toBeNull()
     fireEvent.click(within(card as HTMLElement).getByRole('button', { name: /editar/i }))
 
-    fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Arroz Tipo 1' } })
+    fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Arroz Tipo 1' } })
     fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
 
     await waitFor(() => {
@@ -408,7 +413,7 @@ describe('ProdutosPage', () => {
     expect(card).not.toBeNull()
     fireEvent.click(within(card as HTMLElement).getByRole('button', { name: /editar/i }))
 
-    fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Arroz Tipo 1' } })
+    fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Arroz Tipo 1' } })
     fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
 
     expect(await screen.findByText(/não foi possível salvar o produto/i)).toBeInTheDocument()
@@ -477,7 +482,7 @@ describe('ProdutosPage', () => {
     renderComProviders(<ProdutosPage />)
 
     await abrirFormularioNovo()
-    fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Produto' } })
+    fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Produto' } })
     fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10' } })
     await selecionarUnidadeVenda()
     fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
@@ -497,7 +502,7 @@ describe('ProdutosPage', () => {
     renderComProviders(<ProdutosPage />)
 
     await abrirFormularioNovo()
-    fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Produto' } })
+    fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Produto' } })
     fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10' } })
     await selecionarUnidadeVenda()
     fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
@@ -516,7 +521,7 @@ describe('ProdutosPage', () => {
     renderComProviders(<ProdutosPage />)
 
     await abrirFormularioNovo()
-    fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Produto' } })
+    fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Produto' } })
     fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10' } })
     await selecionarUnidadeVenda()
     fireEvent.change(screen.getByLabelText(/sku/i), { target: { value: 'SKU-DUP' } })
@@ -533,7 +538,7 @@ describe('ProdutosPage', () => {
     renderComProviders(<ProdutosPage />)
 
     await abrirFormularioNovo()
-    fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Produto' } })
+    fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Produto' } })
     fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10' } })
     fireEvent.change(screen.getByLabelText(/preço mínimo/i), { target: { value: '15' } })
     fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
@@ -550,7 +555,7 @@ describe('ProdutosPage', () => {
     renderComProviders(<ProdutosPage />)
 
     await abrirFormularioNovo()
-    fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Produto' } })
+    fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Produto' } })
     fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10' } })
     fireEvent.change(screen.getByLabelText(/estoque mínimo/i), { target: { value: '20' } })
     fireEvent.change(screen.getByLabelText(/estoque máximo/i), { target: { value: '5' } })
@@ -570,7 +575,7 @@ describe('ProdutosPage', () => {
     renderComProviders(<ProdutosPage />)
 
     await abrirFormularioNovo()
-    fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Ração Premium' } })
+    fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Ração Premium' } })
     fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '90' } })
     await selecionarUnidadeVenda('kg')
     fireEvent.change(screen.getByLabelText(/marca/i), { target: { value: 'GoldPet' } })
@@ -733,7 +738,47 @@ describe('ProdutosPage', () => {
         'KG — Quilograma',
         'UN — Unidade',
       ])
-      expect(select).toHaveAttribute('aria-required', 'true')
+      expect(select).toHaveAccessibleName(/^Unidade de venda\s*\(obrigatório\)$/)
+    })
+
+    it('marca Nome, Preço de venda e Unidade de venda como obrigatórios, com texto acessível', async () => {
+      listarProdutosMock.mockResolvedValue([])
+
+      renderComProviders(<ProdutosPage />)
+
+      await abrirFormularioNovo()
+      expect(screen.getByLabelText(/^nome/i)).toHaveAccessibleName(/^Nome\s*\(obrigatório\)$/)
+      expect(screen.getByLabelText(/preço de venda/i)).toHaveAccessibleName(/\(obrigatório\)$/)
+      expect(screen.getByLabelText(/^marca/i)).toHaveAccessibleName('Marca (opcional)')
+    })
+
+    it('produto novo já vem com UN e o rótulo do preço acompanha a unidade', async () => {
+      listarProdutosMock.mockResolvedValue([])
+
+      renderComProviders(<ProdutosPage />)
+
+      await abrirFormularioNovo()
+      const select = screen.getByLabelText(/unidade de venda/i)
+      await waitFor(() => expect(select).toHaveValue('un'))
+      expect(screen.getByLabelText(/^preço de venda \(por UN\)/i)).toBeInTheDocument()
+
+      fireEvent.change(select, { target: { value: 'kg' } })
+      expect(screen.getByLabelText(/^preço de venda \(por KG\)/i)).toBeInTheDocument()
+
+      fireEvent.change(select, { target: { value: '' } })
+      expect(screen.getByLabelText(/^preço de venda\*/i)).toBeInTheDocument()
+    })
+
+    it('sem UN ativa, a unidade de venda começa vazia', async () => {
+      listarProdutosMock.mockResolvedValue([])
+      listarUnidadesMock.mockResolvedValue([CX, KG, unidade('un', 'UN', 'Unidade', false)])
+
+      renderComProviders(<ProdutosPage />)
+
+      await abrirFormularioNovo()
+      const select = screen.getByLabelText(/unidade de venda/i)
+      await waitFor(() => expect(select).toBeEnabled())
+      expect(select).toHaveValue('')
     })
 
     it('na edição, mantém a unidade atual inativa como opção marcada "(inativa)" e a envia ao salvar', async () => {
@@ -773,8 +818,11 @@ describe('ProdutosPage', () => {
       renderComProviders(<ProdutosPage />)
 
       await abrirFormularioNovo()
-      fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Café 500g' } })
+      fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Café 500g' } })
       fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '12' } })
+      // Desfaz a UN pre-selecionada.
+      await waitFor(() => expect(screen.getByLabelText(/unidade de venda/i)).toHaveValue('un'))
+      fireEvent.change(screen.getByLabelText(/unidade de venda/i), { target: { value: '' } })
       fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
 
       expect(await screen.findByText('Selecione a unidade de venda.')).toBeInTheDocument()
@@ -789,7 +837,7 @@ describe('ProdutosPage', () => {
       renderComProviders(<ProdutosPage />)
 
       await abrirFormularioNovo()
-      fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Sachê frango' } })
+      fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Sachê frango' } })
       fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '3.5' } })
       await selecionarUnidadeVenda('un')
 
@@ -816,7 +864,7 @@ describe('ProdutosPage', () => {
       renderComProviders(<ProdutosPage />)
 
       await abrirFormularioNovo()
-      fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Bifinho' } })
+      fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Bifinho' } })
       fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '8' } })
       await selecionarUnidadeVenda('un')
 
@@ -846,7 +894,7 @@ describe('ProdutosPage', () => {
       renderComProviders(<ProdutosPage />)
 
       await abrirFormularioNovo()
-      fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Refrigerante' } })
+      fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Refrigerante' } })
       fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '6' } })
       await selecionarUnidadeVenda('un')
       fireEvent.change(screen.getByLabelText(/unidade de compra/i), { target: { value: 'cx' } })
@@ -858,22 +906,31 @@ describe('ProdutosPage', () => {
       expect(cadastrarProdutoMock).not.toHaveBeenCalled()
     })
 
-    it('fator sem unidade de compra bloqueia o envio', async () => {
+    it('o fator fica oculto sem unidade de compra e é descartado ao limpar a compra', async () => {
       listarProdutosMock.mockResolvedValue([])
+      cadastrarProdutoMock.mockResolvedValue(produtoAtivo)
 
       renderComProviders(<ProdutosPage />)
 
       await abrirFormularioNovo()
-      fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Refrigerante' } })
+      fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Refrigerante' } })
       fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '6' } })
       await selecionarUnidadeVenda('un')
-      fireEvent.change(screen.getByLabelText(/fator de conversão/i), { target: { value: '12' } })
+      expect(screen.queryByLabelText(/^quantas/i)).not.toBeInTheDocument()
+
+      fireEvent.change(screen.getByLabelText(/unidade de compra/i), { target: { value: 'cx' } })
+      expect(screen.getByLabelText('Quantas UN vêm em 1 CX?')).toBeInTheDocument()
+      fireEvent.change(campoFator(), { target: { value: '12' } })
+
+      fireEvent.change(screen.getByLabelText(/unidade de compra/i), { target: { value: '' } })
+      expect(screen.queryByLabelText(/^quantas/i)).not.toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
 
-      expect(
-        await screen.findByText('Informe a unidade de compra e o fator de conversão juntos.'),
-      ).toBeInTheDocument()
-      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
+      await waitFor(() => {
+        expect(cadastrarProdutoMock).toHaveBeenCalledWith(
+          expect.objectContaining({ unidadeCompraId: null, fatorConversao: null }),
+        )
+      })
     })
 
     it('fator precisa ser maior que zero', async () => {
@@ -882,34 +939,34 @@ describe('ProdutosPage', () => {
       renderComProviders(<ProdutosPage />)
 
       await abrirFormularioNovo()
-      fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Refrigerante' } })
+      fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Refrigerante' } })
       fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '6' } })
       await selecionarUnidadeVenda('un')
       fireEvent.change(screen.getByLabelText(/unidade de compra/i), { target: { value: 'cx' } })
-      fireEvent.change(screen.getByLabelText(/fator de conversão/i), { target: { value: '0' } })
+      fireEvent.change(campoFator(), { target: { value: '0' } })
       fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
 
       expect(await screen.findByText('O fator de conversão deve ser maior que zero.')).toBeInTheDocument()
       expect(cadastrarProdutoMock).not.toHaveBeenCalled()
     })
 
-    it('mesma unidade de compra e venda exige fator 1', async () => {
+    it('a unidade de venda não aparece como compra e trocar a venda para a da compra limpa a compra', async () => {
       listarProdutosMock.mockResolvedValue([])
 
       renderComProviders(<ProdutosPage />)
 
       await abrirFormularioNovo()
-      fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Refrigerante' } })
-      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '6' } })
       await selecionarUnidadeVenda('un')
-      fireEvent.change(screen.getByLabelText(/unidade de compra/i), { target: { value: 'un' } })
-      fireEvent.change(screen.getByLabelText(/fator de conversão/i), { target: { value: '6' } })
-      fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
+      const compra = screen.getByLabelText(/unidade de compra/i)
+      expect(rotulosDasOpcoes(compra)).toEqual(['Mesma da venda', 'CX — Caixa', 'KG — Quilograma'])
 
-      expect(
-        await screen.findByText('Quando a unidade de compra é a mesma de venda, o fator deve ser 1.'),
-      ).toBeInTheDocument()
-      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
+      fireEvent.change(compra, { target: { value: 'cx' } })
+      fireEvent.change(campoFator(), { target: { value: '12' } })
+      await selecionarUnidadeVenda('cx')
+
+      expect(compra).toHaveValue('')
+      expect(rotulosDasOpcoes(compra)).toEqual(['Mesma da venda', 'KG — Quilograma', 'UN — Unidade'])
+      expect(screen.queryByLabelText(/^quantas/i)).not.toBeInTheDocument()
     })
 
     it('mostra o texto de ajuda "1 CX = 12 UN" e envia a conversão de compra', async () => {
@@ -919,19 +976,20 @@ describe('ProdutosPage', () => {
       renderComProviders(<ProdutosPage />)
 
       await abrirFormularioNovo()
-      fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Refrigerante lata' } })
+      fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Refrigerante lata' } })
       fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '6' } })
       await selecionarUnidadeVenda('un')
       fireEvent.change(screen.getByLabelText(/unidade de compra/i), { target: { value: 'cx' } })
-      fireEvent.change(screen.getByLabelText(/fator de conversão/i), { target: { value: '12' } })
+      fireEvent.change(campoFator(), { target: { value: '12' } })
 
       expect(screen.getByText('1 CX = 12 UN')).toBeInTheDocument()
-      expect(screen.getByLabelText(/fator de conversão/i)).toHaveAccessibleDescription('1 CX = 12 UN')
+      expect(campoFator()).toHaveAccessibleName('Quantas UN vêm em 1 CX?')
+      expect(campoFator()).toHaveAccessibleDescription('1 CX = 12 UN')
 
-      fireEvent.change(screen.getByLabelText(/fator de conversão/i), { target: { value: '1.5000' } })
+      fireEvent.change(campoFator(), { target: { value: '1.5000' } })
       expect(screen.getByText('1 CX = 1,5 UN')).toBeInTheDocument()
 
-      fireEvent.change(screen.getByLabelText(/fator de conversão/i), { target: { value: '12' } })
+      fireEvent.change(campoFator(), { target: { value: '12' } })
       fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
 
       await waitFor(() => {
@@ -956,7 +1014,7 @@ describe('ProdutosPage', () => {
       fireEvent.click(within(card).getByRole('button', { name: /editar/i }))
 
       await waitFor(() => expect(screen.getByLabelText(/unidade de compra/i)).toHaveValue('cx'))
-      expect(screen.getByLabelText(/fator de conversão/i)).toHaveValue(12)
+      expect(campoFator()).toHaveValue(12)
       expect(screen.getByLabelText(/unidade de venda/i)).toHaveValue('un')
       expect(screen.getByRole('button', { name: /^categoria/i })).toHaveTextContent('Mercearia')
       expect(screen.getAllByText('1 CX = 12 UN').length).toBeGreaterThan(0)
@@ -971,7 +1029,7 @@ describe('ProdutosPage', () => {
       renderComProviders(<ProdutosPage />)
 
       await abrirFormularioNovo()
-      fireEvent.change(screen.getByLabelText(/^nome$/i), { target: { value: 'Produto' } })
+      fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Produto' } })
       fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10' } })
       await selecionarUnidadeVenda('un')
       fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
@@ -979,6 +1037,97 @@ describe('ProdutosPage', () => {
       expect(
         await screen.findByText('Esta unidade está inativa. Escolha uma unidade ativa.'),
       ).toBeInTheDocument()
+    })
+
+    it('após 400 ao salvar, recarrega unidades e categorias para sair da opção obsoleta', async () => {
+      listarProdutosMock.mockResolvedValue([])
+      cadastrarProdutoMock.mockRejectedValue(
+        new HttpError(400, 'Esta unidade está inativa. Escolha uma unidade ativa.'),
+      )
+
+      renderComProviders(<ProdutosPage />)
+
+      await abrirFormularioNovo()
+      fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Produto' } })
+      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10' } })
+      await selecionarUnidadeVenda('kg')
+      expect(listarUnidadesMock).toHaveBeenCalledTimes(1)
+      expect(listarCategoriasMock).toHaveBeenCalledTimes(1)
+      // KG foi inativada por outra pessoa: a lista recarregada ja nao a oferece.
+      listarUnidadesMock.mockResolvedValue([CX, { ...KG, ativo: false }, PCT_INATIVA, UN])
+      fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
+
+      expect(await screen.findByText('Esta unidade está inativa. Escolha uma unidade ativa.')).toBeInTheDocument()
+      await waitFor(() => expect(listarUnidadesMock).toHaveBeenCalledTimes(2))
+      expect(listarCategoriasMock).toHaveBeenCalledTimes(2)
+      await waitFor(() =>
+        expect(rotulosDasOpcoes(screen.getByLabelText(/unidade de venda/i))).not.toContain('KG — Quilograma'),
+      )
+    })
+
+    it('409 sem mensagem do backend mostra texto amigável, nunca o técnico', async () => {
+      listarProdutosMock.mockResolvedValue([])
+      cadastrarProdutoMock.mockRejectedValue(new HttpError(409, 'Requisicao falhou (HTTP 409).'))
+
+      renderComProviders(<ProdutosPage />)
+
+      await abrirFormularioNovo()
+      fireEvent.change(screen.getByLabelText(/^nome/i), { target: { value: 'Produto' } })
+      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '10' } })
+      await selecionarUnidadeVenda('un')
+      fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
+
+      expect(
+        await screen.findByText('Já existe um produto com este SKU ou código de barras nesta empresa.'),
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/requisicao falhou/i)).not.toBeInTheDocument()
+    })
+
+    it('na edição, mantém a categoria atual inativa e a envia ao salvar', async () => {
+      const brinquedos: Categoria = { ...categoria('brinq', 'Brinquedos', null, 'Brinquedos'), ativo: false, selecionavel: false }
+      listarCategoriasMock.mockResolvedValue([...CATEGORIAS, brinquedos])
+      const produto: Produto = { ...produtoAtivo, categoria: { id: 'brinq', nome: 'Brinquedos', caminho: 'Brinquedos' } }
+      listarProdutosMock.mockResolvedValue([produto])
+      atualizarProdutoMock.mockResolvedValue(produto)
+
+      renderComProviders(<ProdutosPage />)
+
+      fireEvent.click(within(await cardDoProduto('Arroz 5kg')).getByRole('button', { name: /editar/i }))
+      const seletor = screen.getByRole('button', { name: /^categoria/i })
+      await waitFor(() => expect(seletor).toHaveTextContent('Brinquedos (inativa)'))
+      fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
+
+      await waitFor(() => {
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(1, expect.objectContaining({ categoriaId: 'brinq' }))
+      })
+    })
+
+    it('na edição, mantém a unidade de compra atual inativa e a envia ao salvar', async () => {
+      const produto: Produto = {
+        ...produtoAtivo,
+        unidadeCompra: resumo(PCT_INATIVA),
+        fatorConversao: 6,
+        conversaoTexto: '1 PCT = 6 UN',
+      }
+      listarProdutosMock.mockResolvedValue([produto])
+      atualizarProdutoMock.mockResolvedValue(produto)
+
+      renderComProviders(<ProdutosPage />)
+
+      fireEvent.click(within(await cardDoProduto('Arroz 5kg')).getByRole('button', { name: /editar/i }))
+      const compra = screen.getByLabelText(/unidade de compra/i)
+      await waitFor(() => expect(compra).toBeEnabled())
+      expect(rotulosDasOpcoes(compra)).toEqual(['Mesma da venda', 'CX — Caixa', 'KG — Quilograma', 'PCT — Pacote (inativa)'])
+      expect(compra).toHaveValue('pct')
+      expect(screen.getByLabelText('Quantas UN vêm em 1 PCT?')).toHaveValue(6)
+      fireEvent.click(screen.getByRole('button', { name: /salvar produto/i }))
+
+      await waitFor(() => {
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(
+          1,
+          expect.objectContaining({ unidadeId: 'un', unidadeCompraId: 'pct', fatorConversao: 6 }),
+        )
+      })
     })
 
     it('mostra erro com nova tentativa quando as unidades não carregam', async () => {
