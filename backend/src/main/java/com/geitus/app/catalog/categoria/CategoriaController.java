@@ -69,7 +69,10 @@ public class CategoriaController {
         return ResponseEntity.status(HttpStatus.CREATED).body(categoriaService.cadastrarParaUsuario(idUsuario, request));
     }
 
-    @Operation(summary = "Renomeia e/ou move uma categoria; parentId nulo leva para a raiz (apenas ADMIN)",
+    @Operation(summary = "Renomeia e/ou move uma categoria (apenas ADMIN)",
+            description = "Substitui nome E pai de uma vez (nao e merge parcial): envie sempre o nome e o "
+                    + "parentId desejados. parentId ausente ou nulo move a categoria para a raiz "
+                    + "(categoria principal). Para so renomear, reenvie o parentId atual.",
             security = @SecurityRequirement(name = "bearer-jwt"))
     @PatchMapping("/{id}")
     public ResponseEntity<CategoriaResponse> atualizar(

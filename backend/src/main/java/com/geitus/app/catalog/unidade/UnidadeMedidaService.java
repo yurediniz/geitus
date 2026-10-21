@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.geitus.app.catalog.CatalogoConflitoException;
 import com.geitus.app.catalog.CatalogoNaoEncontradoException;
 import com.geitus.app.catalog.ContagensPorId;
+import com.geitus.app.catalog.RegraDeNegocioException;
 import com.geitus.app.catalog.unidade.UnidadesPadrao.UnidadePadrao;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaRequest;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaResponse;
@@ -36,6 +37,9 @@ public class UnidadeMedidaService {
 
     static final String MENSAGEM_NAO_ENCONTRADA = "Unidade de medida não encontrada.";
     static final String MENSAGEM_SIGLA_REPETIDA = "Já existe uma unidade com esta sigla.";
+    static final String MENSAGEM_SIGLA_LONGA = "A sigla deve ter no máximo 20 caracteres.";
+    /** Espelha {@code sigla VARCHAR(20)} da V6 e o {@code @Size} do request. */
+    private static final int TAMANHO_MAXIMO_SIGLA = 20;
     private static final String MENSAGEM_EM_USO =
             "Esta unidade está em uso por %d produto(s). Inative-a para que não apareça em novos cadastros.";
 
@@ -152,9 +156,18 @@ public class UnidadeMedidaService {
         return UnidadeMedidaResponse.de(unidade, contarUso(unidade));
     }
 
-    /** Sigla sem espacos nas pontas e em maiusculas (spec 3.1). */
+    /**
+     * Sigla sem espacos nas pontas e em maiusculas (spec 3.1). O tamanho e
+     * conferido de novo DEPOIS de normalizar: a caixa alta pode aumentar o
+     * texto (ex.: "ß" vira "SS"), e o {@code @Size} do request so viu o valor
+     * original — sem isto, o banco recusaria com erro generico.
+     */
     private static String normalizarSigla(String sigla) {
-        return sigla.trim().toUpperCase(Locale.ROOT);
+        String normalizada = sigla.trim().toUpperCase(Locale.ROOT);
+        if (normalizada.length() > TAMANHO_MAXIMO_SIGLA) {
+            throw new RegraDeNegocioException(MENSAGEM_SIGLA_LONGA);
+        }
+        return normalizada;
     }
 
     private Long resolverEmpresaId(Long idUsuario) {

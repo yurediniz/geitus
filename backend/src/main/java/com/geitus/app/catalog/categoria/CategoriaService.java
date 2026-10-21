@@ -35,6 +35,11 @@ import com.geitus.app.iam.UsuarioRepository;
  * caminho da resposta). O nome repetido entre irmaos e checado antes de
  * salvar (409 com mensagem clara); o indice {@code uq_categoria_irmaos} e a
  * rede de seguranca contra corrida (409 generico no handler).
+ *
+ * <p>Mover e excluir decidem com base no estado da arvore inteira, o que
+ * nenhuma constraint do banco protege; por isso essas escritas sao
+ * serializadas por empresa com {@link #travarArvoreDaEmpresa} (ver o Javadoc
+ * dele).
  */
 @Service
 public class CategoriaService {
@@ -91,6 +96,7 @@ public class CategoriaService {
     @Transactional
     public CategoriaResponse atualizarParaUsuario(Long idUsuario, UUID id, CategoriaRequest request) {
         Long empresaId = resolverEmpresaId(idUsuario);
+        travarArvoreDaEmpresa(empresaId);
         List<Categoria> todas = categoriaRepository.findByEmpresa_Id(empresaId);
         Categoria categoria = categoriaNaLista(todas, id);
         Categoria novoPai = paiNaLista(todas, request.parentId());
@@ -134,7 +140,9 @@ public class CategoriaService {
      */
     @Transactional
     public void excluirParaUsuario(Long idUsuario, UUID id) {
-        Categoria categoria = buscarDaEmpresa(resolverEmpresaId(idUsuario), id);
+        Long empresaId = resolverEmpresaId(idUsuario);
+        travarArvoreDaEmpresa(empresaId);
+        Categoria categoria = buscarDaEmpresa(empresaId, id);
         long subcategorias = categoriaRepository.countByPai_Id(categoria.getId());
         long produtos = categoriaRepository.contarProdutos(categoria.getId());
         if (subcategorias > 0 || produtos > 0) {
@@ -159,6 +167,26 @@ public class CategoriaService {
     }
 
     // ---------- Apoio ----------
+
+    /**
+     * Serializa, por empresa, as escritas que dependem do retrato da arvore,
+     * bloqueando a linha da empresa ({@code PESSIMISTIC_WRITE}) ate o fim da
+     * transacao. Deve ser chamada ANTES de carregar as categorias.
+     *
+     * <p>Corrida evitada: com A e B na raiz, "mover A para dentro de B" e
+     * "mover B para dentro de A" em paralelo leem a mesma arvore (ambas sem
+     * ciclo), as duas passam na checagem e as duas gravam — A fica sob B e B
+     * sob A, um ciclo que nenhuma constraint detecta e que quebra a montagem
+     * da arvore ({@code IllegalStateException}). Com a trava, a segunda espera
+     * a primeira confirmar e, em READ COMMITTED, carrega a arvore ja alterada:
+     * a checagem de ciclo a rejeita. Na exclusao, evita que uma subcategoria
+     * seja movida para dentro da categoria entre a contagem e o delete (filho
+     * ou produto cadastrado em paralelo continua barrado pelas FKs da V6).
+     * Escopo por empresa: tenants diferentes nao se bloqueiam.
+     */
+    private void travarArvoreDaEmpresa(Long empresaId) {
+        empresaRepository.travarPorId(empresaId).orElseThrow(CredenciaisInvalidasException::new);
+    }
 
     private CategoriaResponse responder(Categoria categoria, List<Categoria> todas) {
         // Arvore remontada: reflete o novo pai/nome/status da categoria alterada.

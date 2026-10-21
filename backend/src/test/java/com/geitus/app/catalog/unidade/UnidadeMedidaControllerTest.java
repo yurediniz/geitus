@@ -258,6 +258,19 @@ class UnidadeMedidaControllerTest {
     }
 
     @Test
+    void fracionadaAusenteRetorna400() throws Exception {
+        mockMvc.perform(comoAdmin(comCorpo(post("/api/unidades"), """
+                { "sigla": "KG", "descricao": "Quilograma" }
+                """)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[*].campo").value(hasItem("fracionada")))
+                .andExpect(jsonPath("$.campos[*].mensagem")
+                        .value(hasItem("Informe se a unidade aceita quantidade fracionada.")));
+
+        verifyNoInteractions(unidadeService);
+    }
+
+    @Test
     void uuidMalformadoRetorna400() throws Exception {
         mockMvc.perform(comoAdmin(delete("/api/unidades/abc")))
                 .andExpect(status().isBadRequest())

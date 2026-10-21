@@ -616,6 +616,24 @@ class ProdutoServiceTest {
     }
 
     @Test
+    void fatorZeroOuNegativoLanca400MesmoSemBeanValidation() {
+        UUID caixa = UUID.randomUUID();
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().compra(caixa, "0").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("O fator de conversão deve ser maior que zero.");
+        assertThatThrownBy(() -> cadastrar(requestComUN().compra(caixa, "-2.5").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("O fator de conversão deve ser maior que zero.");
+        // Mesma unidade com fator 0: o fator invalido e apontado primeiro.
+        assertThatThrownBy(() -> cadastrar(requestComUN().compra(un.getUuid(), "0").build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("O fator de conversão deve ser maior que zero.");
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
     void mesmaUnidadeComFatorDiferenteDeUmLanca400() {
         assertThatThrownBy(() -> cadastrar(requestComUN().compra(un.getUuid(), "12").build()))
                 .isInstanceOf(RegraDeNegocioException.class)
@@ -683,7 +701,7 @@ class ProdutoServiceTest {
 
         assertThatThrownBy(() -> cadastrar(requestComUN().compra(caixaInativa.getUuid(), "12").build()))
                 .isInstanceOf(RegraDeNegocioException.class)
-                .hasMessage("Esta unidade está inativa. Escolha uma unidade ativa.");
+                .hasMessage("Esta unidade de compra está inativa. Escolha uma unidade ativa.");
 
         Produto existente = produtoExistente(null, null);
         existente.atualizarDadosBasicos("Produto Existente", un, null, caixaInativa, new BigDecimal("12"),

@@ -19,6 +19,7 @@ public record CategoriaRequest(
         @Size(max = 100, message = "Nome deve ter no máximo 100 caracteres.")
         String nome,
 
-        @Schema(description = "UUID da categoria pai; nulo = raiz")
+        @Schema(description = "UUID da categoria pai. Ausente ou nulo = raiz (categoria principal), "
+                + "inclusive no PATCH, que substitui nome e pai juntos.")
         UUID parentId) {
 }

@@ -51,7 +51,10 @@ public class ProdutoService {
     static final String MENSAGEM_COMPRA_E_FATOR_JUNTOS = "Informe a unidade de compra e o fator de conversão juntos.";
     static final String MENSAGEM_FATOR_DA_MESMA_UNIDADE =
             "Quando a unidade de compra é a mesma de venda, o fator deve ser 1.";
+    static final String MENSAGEM_FATOR_NAO_POSITIVO = "O fator de conversão deve ser maior que zero.";
     static final String MENSAGEM_UNIDADE_INATIVA = "Esta unidade está inativa. Escolha uma unidade ativa.";
+    static final String MENSAGEM_UNIDADE_COMPRA_INATIVA =
+            "Esta unidade de compra está inativa. Escolha uma unidade ativa.";
     static final String MENSAGEM_CATEGORIA_INATIVA = "Esta categoria está inativa. Escolha uma categoria ativa.";
 
     private final ProdutoRepository produtoRepository;
@@ -186,9 +189,11 @@ public class ProdutoService {
     private Vinculos resolverVinculos(Long empresaId, ProdutoRequest request, Produto produtoAtual) {
         validarConversaoDeCompra(request);
         UnidadeMedida unidade = unidadeService.buscarDaEmpresa(empresaId, request.unidadeId());
-        exigirUnidadeAtivaOuAtual(unidade, produtoAtual == null ? null : produtoAtual.getUnidade());
+        exigirUnidadeAtivaOuAtual(unidade, produtoAtual == null ? null : produtoAtual.getUnidade(),
+                MENSAGEM_UNIDADE_INATIVA);
         UnidadeMedida unidadeCompra = buscarUnidadeOpcional(empresaId, request.unidadeCompraId());
-        exigirUnidadeAtivaOuAtual(unidadeCompra, produtoAtual == null ? null : produtoAtual.getUnidadeCompra());
+        exigirUnidadeAtivaOuAtual(unidadeCompra, produtoAtual == null ? null : produtoAtual.getUnidadeCompra(),
+                MENSAGEM_UNIDADE_COMPRA_INATIVA);
         Categoria categoria = buscarCategoriaOpcional(empresaId, request.categoriaId());
         exigirCategoriaSelecionavelOuAtual(empresaId, categoria,
                 produtoAtual == null ? null : produtoAtual.getCategoria());
@@ -197,7 +202,9 @@ public class ProdutoService {
 
     /**
      * Regras que so dependem do request (antes de qualquer consulta): unidade
-     * obrigatoria; unidade de compra e fator juntos; mesma unidade so com fator 1.
+     * obrigatoria; unidade de compra e fator juntos; fator maior que zero
+     * (defesa alem do Bean Validation, para chamadas sem {@code @Valid});
+     * mesma unidade so com fator 1.
      */
     private static void validarConversaoDeCompra(ProdutoRequest request) {
         if (request.unidadeId() == null) {
@@ -205,6 +212,9 @@ public class ProdutoService {
         }
         if ((request.unidadeCompraId() == null) != (request.fatorConversao() == null)) {
             throw new RegraDeNegocioException(MENSAGEM_COMPRA_E_FATOR_JUNTOS);
+        }
+        if (request.fatorConversao() != null && request.fatorConversao().signum() <= 0) {
+            throw new RegraDeNegocioException(MENSAGEM_FATOR_NAO_POSITIVO);
         }
         if (request.unidadeId().equals(request.unidadeCompraId())
                 && request.fatorConversao().compareTo(BigDecimal.ONE) != 0) {
@@ -220,10 +230,14 @@ public class ProdutoService {
         return categoriaId == null ? null : categoriaService.buscarDaEmpresa(empresaId, categoriaId);
     }
 
-    /** Unidade inativa so e aceita se ja for a do produto (edicao sem trocar). */
-    private static void exigirUnidadeAtivaOuAtual(UnidadeMedida escolhida, UnidadeMedida atual) {
+    /**
+     * Unidade inativa so e aceita se ja for a do produto (edicao sem trocar);
+     * {@code mensagemSeInativa} diferencia unidade de venda e de compra.
+     */
+    private static void exigirUnidadeAtivaOuAtual(UnidadeMedida escolhida, UnidadeMedida atual,
+            String mensagemSeInativa) {
         if (escolhida != null && !escolhida.isAtivo() && !mesmoRegistro(escolhida.getId(), atual)) {
-            throw new RegraDeNegocioException(MENSAGEM_UNIDADE_INATIVA);
+            throw new RegraDeNegocioException(mensagemSeInativa);
         }
     }
 

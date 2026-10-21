@@ -3,6 +3,7 @@ package com.geitus.app.catalog.categoria;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -17,6 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -71,6 +73,7 @@ class CategoriaServiceTest {
         lenient().when(usuarioRepository.findById(ID_USUARIO)).thenReturn(Optional.of(usuario));
         lenient().when(categoriaRepository.findByEmpresa_Id(ID_EMPRESA)).thenReturn(daEmpresa);
         lenient().when(empresaRepository.findById(ID_EMPRESA)).thenReturn(Optional.of(empresa));
+        lenient().when(empresaRepository.travarPorId(ID_EMPRESA)).thenReturn(Optional.of(empresa));
         lenient().when(categoriaRepository.save(any(Categoria.class))).thenAnswer(invocacao -> {
             Categoria salva = invocacao.getArgument(0);
             if (salva.getId() == null) {
@@ -233,6 +236,20 @@ class CategoriaServiceTest {
     }
 
     @Test
+    void moverTravaAEmpresaAntesDeCarregarAArvore() {
+        // Serializa mover/renomear por empresa (corrida de ciclo cruzado).
+        Categoria racao = existente(null, "Ração");
+        Categoria bebidas = existente(null, "Bebidas");
+
+        categoriaService.atualizarParaUsuario(ID_USUARIO, racao.getUuid(),
+                new CategoriaRequest("Ração", bebidas.getUuid()));
+
+        InOrder ordem = inOrder(empresaRepository, categoriaRepository);
+        ordem.verify(empresaRepository).travarPorId(ID_EMPRESA);
+        ordem.verify(categoriaRepository).findByEmpresa_Id(ID_EMPRESA);
+    }
+
+    @Test
     void atualizarCategoriaDeOutraEmpresaLanca404() {
         Categoria daOutraEmpresa = new Categoria(empresaComId(ID_OUTRA_EMPRESA), null, "Ração");
 
@@ -290,6 +307,18 @@ class CategoriaServiceTest {
         categoriaService.excluirParaUsuario(ID_USUARIO, racao.getUuid());
 
         verify(categoriaRepository).delete(racao);
+    }
+
+    @Test
+    void excluirTravaAEmpresaAntesDeContarOsVinculos() {
+        Categoria racao = existente(null, "Ração");
+
+        categoriaService.excluirParaUsuario(ID_USUARIO, racao.getUuid());
+
+        InOrder ordem = inOrder(empresaRepository, categoriaRepository);
+        ordem.verify(empresaRepository).travarPorId(ID_EMPRESA);
+        ordem.verify(categoriaRepository).countByPai_Id(racao.getId());
+        ordem.verify(categoriaRepository).delete(racao);
     }
 
     @Test

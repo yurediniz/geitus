@@ -29,6 +29,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.geitus.app.catalog.CatalogoConflitoException;
 import com.geitus.app.catalog.CatalogoNaoEncontradoException;
+import com.geitus.app.catalog.RegraDeNegocioException;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaRequest;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaResponse;
 import com.geitus.app.company.Empresa;
@@ -96,6 +97,26 @@ class UnidadeMedidaServiceTest {
         assertThat(resposta.ativo()).isTrue();
         assertThat(resposta.emUso()).isZero();
         verify(unidadeRepository).existsBySiglaAndEmpresa_Id("KG", ID_EMPRESA);
+    }
+
+    @Test
+    void siglaQueCresceAoNormalizarAlemDe20CaracteresLanca400() {
+        // 11 "ß" passam no @Size(max = 20), mas viram 22 caracteres ("SS" cada).
+        String sigla = "ß".repeat(11);
+
+        assertThatThrownBy(() -> unidadeService.cadastrarParaUsuario(ID_USUARIO,
+                new UnidadeMedidaRequest(sigla, "Unidade", false)))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("A sigla deve ter no máximo 20 caracteres.");
+        verify(unidadeRepository, never()).save(any());
+    }
+
+    @Test
+    void siglaNormalizadaComExatos20CaracteresEAceita() {
+        UnidadeMedidaResponse resposta = unidadeService.cadastrarParaUsuario(ID_USUARIO,
+                new UnidadeMedidaRequest("ß".repeat(10), "Unidade", false));
+
+        assertThat(resposta.sigla()).isEqualTo("SS".repeat(10));
     }
 
     @Test

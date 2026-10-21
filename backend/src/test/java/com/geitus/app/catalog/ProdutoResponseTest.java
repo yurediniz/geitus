@@ -141,6 +141,15 @@ class ProdutoResponseTest {
     }
 
     @Test
+    void conversaoTextoComFatorDeMilOuMaisNaoUsaSeparadorDeMilhar() {
+        ProdutoResponse fracionado = ProdutoResponse.de(produtoComCompra(un, cx, "1500.5000"), SEM_CATEGORIAS);
+        ProdutoResponse mil = ProdutoResponse.de(produtoComCompra(un, cx, "1000.0000"), SEM_CATEGORIAS);
+
+        assertThat(fracionado.conversaoTexto()).isEqualTo("1 CX = 1500,5 UN");
+        assertThat(mil.conversaoTexto()).isEqualTo("1 CX = 1000 UN");
+    }
+
+    @Test
     void categoriaCaminhoVemDaArvore() {
         Categoria racao = categoria(1L, empresa, null, "Ração");
         Categoria umida = categoria(2L, empresa, racao, "Úmida");

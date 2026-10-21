@@ -110,8 +110,11 @@ public final class CategoriaArvore {
 
     /**
      * Todas as categorias ordenadas pelo caminho, comparando segmento a
-     * segmento (pai antes dos filhos; irmaos em ordem alfabetica pt-BR, sem
-     * diferenciar maiusculas/acentos). Desempate pelo id.
+     * segmento (pai antes dos filhos; irmaos em ordem alfabetica pt-BR).
+     * O {@link Collator} em {@code SECONDARY} ignora maiusculas/minusculas,
+     * mas NAO ignora acentos: a letra base decide primeiro ("Agua" e "Água"
+     * ficam juntas, antes de "Arroz") e o acento so desempata nomes iguais na
+     * letra base ("Agua" antes de "Água"). Desempate final pelo id.
      */
     public List<Categoria> ordenadasPorCaminho() {
         Collator collator = Collator.getInstance(PORTUGUES_BRASIL);

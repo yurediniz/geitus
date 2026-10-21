@@ -47,7 +47,7 @@ public class Produto {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "empresa_id", nullable = false)
+    @JoinColumn(name = "empresa_id", nullable = false, updatable = false)
     private Empresa empresa;
 
     @Column(nullable = false, length = 150)
