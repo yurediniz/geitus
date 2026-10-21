@@ -526,7 +526,8 @@ export function textoConversao(
 
 // --- Precos ------------------------------------------------------------------
 
-function numeroValido(valor: string): number | null {
+/** Numero de um texto do formulario; null se vazio ou invalido. */
+export function numeroValido(valor: string): number | null {
   const texto = valor.trim()
   if (texto === '') {
     return null
@@ -559,11 +560,24 @@ export function calcularMargemMarkup(
   }
 }
 
-/** Preco abaixo do custo (aviso que nao bloqueia o salvamento); falso sem os dois valores. */
-export function precoAbaixoDoCusto(preco: string, custo: string): boolean {
+/**
+ * Aviso de preco abaixo do custo, que nao bloqueia o salvamento: "R$ 0,50
+ * abaixo do custo (R$ 5,00). Vender por este preço dá prejuízo.". Null com
+ * preco igual ou acima do custo, ou sem um dos dois valores.
+ */
+export function textoAbaixoDoCusto(preco: string, custo: string): string | null {
   const valorPreco = numeroValido(preco)
   const valorCusto = numeroValido(custo)
-  return valorPreco !== null && valorCusto !== null && valorPreco < valorCusto
+  if (valorPreco === null || valorCusto === null || valorPreco >= valorCusto) {
+    return null
+  }
+  const diferenca = arredondar2(valorCusto - valorPreco)
+  return `${formatarMoeda(diferenca)} abaixo do custo (${formatarMoeda(valorCusto)}). Vender por este preço dá prejuízo.`
+}
+
+/** Margem desejada com virgula ou ponto e ate 2 casas: de 0 a 99,99. */
+export function margemDesejadaValida(margem: string): boolean {
+  return margemEmCentesimos(margem) !== null
 }
 
 /** Margem desejada com virgula ou ponto e ate 2 casas, de 0 a 99,99, em centesimos de ponto percentual. */
@@ -634,16 +648,27 @@ export function interruptorDoCampo(campo: keyof ProdutoFormValues): 'promocaoAti
   return (CAMPOS_ATACADO as readonly string[]).includes(campo) ? 'atacadoAtivo' : null
 }
 
-/** Hoje no fuso do navegador, em yyyy-mm-dd (o mesmo formato do `<input type="date">`). */
-export function dataLocalHoje(agora: Date = new Date()): string {
-  const doisDigitos = (valor: number) => String(valor).padStart(2, '0')
-  return `${agora.getFullYear()}-${doisDigitos(agora.getMonth() + 1)}-${doisDigitos(agora.getDate())}`
+/** Formata a data no fuso fixo do MVP; o `en-CA` ja sai em yyyy-mm-dd. */
+const DATA_EM_SAO_PAULO = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+/**
+ * Hoje em `America/Sao_Paulo` (o mesmo fuso do backend), em yyyy-mm-dd, o
+ * formato do `<input type="date">`. Um navegador em outro fuso ve o mesmo dia
+ * que o servidor.
+ */
+export function dataHojeSaoPaulo(agora: Date = new Date()): string {
+  return DATA_EM_SAO_PAULO.format(agora)
 }
 
 /**
- * Situacao da promocao enquanto o usuario edita, pela data local do navegador
- * (a gravada vem do backend, no fuso de Sao Paulo). Null sem as duas datas ou
- * com o fim antes do inicio.
+ * Situacao da promocao enquanto o usuario edita, com o `hoje` de
+ * `dataHojeSaoPaulo` (a mesma regra do backend). Null sem as duas datas ou com
+ * o fim antes do inicio.
  */
 export function situacaoPromocaoLocal(inicio: string, fim: string, hoje: string): SituacaoPromocao | null {
   if (inicio === '' || fim === '' || fim < inicio) {
@@ -655,22 +680,29 @@ export function situacaoPromocaoLocal(inicio: string, fim: string, hoje: string)
   return hoje > fim ? 'ENCERRADA' : 'VIGENTE'
 }
 
-/** "dd/mm" de uma data yyyy-mm-dd. */
-function diaEMes(data: string): string {
-  return `${data.slice(8, 10)}/${data.slice(5, 7)}`
-}
-
-/** Texto do selo: "Vigente até 15/11", "Agendada para 01/11" ou "Encerrada em 15/10". */
-export function textoSeloPromocao(situacao: SituacaoPromocao, inicio: string, fim: string): string {
-  if (situacao === 'AGENDADA') {
-    return `Agendada para ${diaEMes(inicio)}`
-  }
-  return situacao === 'VIGENTE' ? `Vigente até ${diaEMes(fim)}` : `Encerrada em ${diaEMes(fim)}`
+/** "dd/mm" de uma data yyyy-mm-dd, com "/aaaa" quando o ano nao e o de `hoje`. */
+function diaEMes(data: string, hoje: string): string {
+  const diaMes = `${data.slice(8, 10)}/${data.slice(5, 7)}`
+  return data.slice(0, 4) === hoje.slice(0, 4) ? diaMes : `${diaMes}/${data.slice(0, 4)}`
 }
 
 /**
- * Ajuda "A partir de 12 UN, cada unidade sai por R$ 4,20." (sem a sigla
- * enquanto a unidade nao e conhecida); null enquanto faltar quantidade ou preco.
+ * Texto do selo: "Vigente até 15/11", "Agendada para 01/11" ou "Encerrada em
+ * 15/10. O produto voltou ao preço normal." (com o ano quando nao e o atual).
+ */
+export function textoSeloPromocao(situacao: SituacaoPromocao, inicio: string, fim: string, hoje: string): string {
+  if (situacao === 'AGENDADA') {
+    return `Agendada para ${diaEMes(inicio, hoje)}`
+  }
+  return situacao === 'VIGENTE'
+    ? `Vigente até ${diaEMes(fim, hoje)}`
+    : `Encerrada em ${diaEMes(fim, hoje)}. O produto voltou ao preço normal.`
+}
+
+/**
+ * Ajuda "A partir de 12 UN, o preço passa a ser R$ 4,20 por unidade." ("por KG"
+ * nas outras siglas; sem a sigla enquanto a unidade nao e conhecida). Null
+ * enquanto faltar quantidade ou preco.
  */
 export function textoAjudaAtacado(quantidade: string, preco: string, sigla: string | undefined): string | null {
   const valorQuantidade = numeroValido(quantidade)
@@ -680,8 +712,8 @@ export function textoAjudaAtacado(quantidade: string, preco: string, sigla: stri
   }
   const quantidadeTexto = valorQuantidade.toLocaleString('pt-BR', { maximumFractionDigits: 3 })
   const aPartirDe = sigla ? `${quantidadeTexto} ${sigla}` : quantidadeTexto
-  const cada = !sigla || sigla === 'UN' ? 'cada unidade' : `cada ${sigla}`
-  return `A partir de ${aPartirDe}, ${cada} sai por ${formatarMoeda(valorPreco)}.`
+  const porUnidade = !sigla || sigla === 'UN' ? 'unidade' : sigla
+  return `A partir de ${aPartirDe}, o preço passa a ser ${formatarMoeda(valorPreco)} por ${porUnidade}.`
 }
 
 /**

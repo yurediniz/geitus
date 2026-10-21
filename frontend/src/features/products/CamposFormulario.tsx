@@ -1,13 +1,16 @@
 import type { ReactNode } from 'react'
-import { Controller, useFormContext, type UseFormRegisterReturn } from 'react-hook-form'
+import { Controller, useFormContext, useWatch, type UseFormRegisterReturn } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { AlertCircle, TriangleAlert } from 'lucide-react'
 
 import { CampoMoeda } from '@/components/ui/campo-moeda'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
-import { formatarMoeda } from '@/features/products/formatacaoProduto'
-import type { OpcaoUnidade, ProdutoFormValues } from '@/features/products/produtoFormulario'
+import {
+  textoAbaixoDoCusto,
+  type OpcaoUnidade,
+  type ProdutoFormValues,
+} from '@/features/products/produtoFormulario'
 
 /**
  * Asterisco dos campos obrigatorios. O "*" e so visual; leitores de tela ouvem
@@ -134,6 +137,11 @@ interface CampoMoedaFormularioProps {
   erro?: string
   ajuda?: ReactNode
   disabled?: boolean
+  /**
+   * Custo para comparar: com o valor abaixo dele, a ajuda vira o aviso de
+   * preco abaixo do custo (o mesmo nos precos de venda, promocional e atacado).
+   */
+  custo?: string
   /** Chamado a cada mudanca do valor (limpa feedbacks da pagina). */
   aoAlterar?: () => void
 }
@@ -146,11 +154,20 @@ export function CampoMoedaFormulario({
   erro,
   ajuda,
   disabled,
+  custo,
   aoAlterar,
 }: CampoMoedaFormularioProps) {
   const { control } = useFormContext<ProdutoFormValues>()
+  const valor = useWatch({ control, name: id })
+  const aviso = custo === undefined ? null : textoAbaixoDoCusto(valor, custo)
   return (
-    <EstruturaCampo id={id} label={label} obrigatorio={obrigatorio} erro={erro} ajuda={ajuda}>
+    <EstruturaCampo
+      id={id}
+      label={label}
+      obrigatorio={obrigatorio}
+      erro={erro}
+      ajuda={aviso ? <AvisoAbaixoDoCusto texto={aviso} /> : ajuda}
+    >
       {(ariaDescribedby) => (
         <Controller
           control={control}
@@ -274,20 +291,31 @@ export function AvisoCatalogo({
 }
 
 /** Grupo de campos com titulo e descricao curta (separado por fundo, sem borda). */
-export function GrupoCampos({
-  titulo,
-  descricao,
-  children,
-}: {
-  titulo: string
+interface GrupoCamposProps {
+  titulo: ReactNode
   descricao?: string
-  children: ReactNode
-}) {
+  /** Id do titulo: nomeia a secao; a descricao ganha `${idTitulo}-descricao`. */
+  idTitulo?: string
+  /** Controle a direita do titulo (ex.: o interruptor de um bloco opcional). */
+  acao?: ReactNode
+  children?: ReactNode
+}
+
+export function GrupoCampos({ titulo, descricao, idTitulo, acao, children }: GrupoCamposProps) {
   return (
-    <section className="space-y-4 rounded-md bg-muted/40 p-4">
-      <div>
-        <h3 className="text-sm font-medium">{titulo}</h3>
-        {descricao && <p className="text-xs text-muted-foreground">{descricao}</p>}
+    <section aria-labelledby={idTitulo} className="space-y-4 rounded-md bg-muted/40 p-4">
+      <div className={acao ? 'flex min-h-11 items-center justify-between gap-4' : undefined}>
+        <div>
+          <h3 id={idTitulo} className="text-sm font-medium">
+            {titulo}
+          </h3>
+          {descricao && (
+            <p id={idTitulo ? `${idTitulo}-descricao` : undefined} className="text-xs text-muted-foreground">
+              {descricao}
+            </p>
+          )}
+        </div>
+        {acao}
       </div>
       {children}
     </section>
@@ -298,11 +326,11 @@ export function GrupoCampos({
  * Aviso de preco abaixo do custo: so informa (nao bloqueia o salvamento). Vai
  * na ajuda do campo, ligado a ele pelo `aria-describedby`; icone + texto, nunca so a cor.
  */
-export function AvisoAbaixoDoCusto({ custo }: { custo: number }) {
+export function AvisoAbaixoDoCusto({ texto }: { texto: string }) {
   return (
     <span className="inline-flex items-start gap-1 font-medium text-warning-soft-foreground">
       <TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-      <span>Abaixo do custo ({formatarMoeda(custo)}). A venda neste preço dá prejuízo.</span>
+      <span>{texto}</span>
     </span>
   )
 }

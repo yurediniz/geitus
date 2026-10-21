@@ -11,7 +11,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   PRODUTOS_QUERY_KEY,
   TODAS_CATEGORIAS_QUERY_KEY,
-  chaveDoHistoricoDePrecos,
   TODAS_UNIDADES_QUERY_KEY,
   ehMensagemGenerica,
 } from '@/features/catalog/catalogoQuery'
@@ -533,9 +532,8 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     onSuccess: (salvo, { valores, acao }) => {
       queryClient.setQueryData(chaveDoProduto(salvo.id), salvo)
       // Listas ficam desatualizadas e recarregam ao montar; nada a refazer nesta pagina.
+      // O prefixo cobre tambem o historico de precos do produto (o save pode ter gravado linhas novas).
       void queryClient.invalidateQueries({ queryKey: PRODUTOS_QUERY_KEY, refetchType: 'none' })
-      // O save pode ter gravado custo/preco novos no historico.
-      void queryClient.invalidateQueries({ queryKey: chaveDoHistoricoDePrecos(salvo.id) })
       setErroSalvar(null)
       if (acao === 'cadastrarOutro') {
         reset(valoresParaCadastrarOutro(valores))

@@ -9,6 +9,7 @@ import {
   AvisoAbaixoDoCusto,
   CampoMoedaFormulario,
   CampoTexto,
+  GrupoCampos,
 } from '@/features/products/CamposFormulario'
 import { formatarMoeda, formatarPercentual } from '@/features/products/formatacaoProduto'
 import {
@@ -17,9 +18,11 @@ import {
   type CampoDeBloco,
   calcularMargemMarkup,
   calcularPrecoPelaMargem,
-  dataLocalHoje,
-  precoAbaixoDoCusto,
+  dataHojeSaoPaulo,
+  margemDesejadaValida,
+  numeroValido,
   situacaoPromocaoLocal,
+  textoAbaixoDoCusto,
   textoAjudaAtacado,
   textoSeloPromocao,
   type ProdutoFormValues,
@@ -28,22 +31,25 @@ import { cn } from '@/lib/utils'
 import type { SituacaoPromocao } from '@/types/produto'
 
 export interface AbaPrecosProps {
-  /** Sigla por id de unidade, para "A partir de 12 UN". */
+  /** Sigla por id de unidade, para "Quantidade mínima (UN)". */
   siglaPorId: ReadonlyMap<string, string>
   desabilitado: boolean
   aoAlterarCampo: () => void
 }
 
-/** Cor do selo por situacao; o texto diz a situacao (nunca so a cor). */
+/**
+ * Cor do selo por situacao; o texto diz a situacao (nunca so a cor). Vigente
+ * usa o mesmo destaque do selo "Promoção" da listagem.
+ */
 const CLASSE_SELO: Readonly<Record<SituacaoPromocao, string>> = {
-  VIGENTE: 'bg-success-soft text-success-soft-foreground',
+  VIGENTE: 'bg-accent text-accent-foreground',
   AGENDADA: 'bg-info-soft text-info-soft-foreground',
   ENCERRADA: 'bg-muted text-muted-foreground',
 }
 
-/** Aviso de abaixo do custo para a ajuda de um campo de preco; undefined quando nao se aplica. */
-function avisoDeCusto(preco: string, custo: string): ReactNode {
-  return precoAbaixoDoCusto(preco, custo) ? <AvisoAbaixoDoCusto custo={Number(custo)} /> : undefined
+/** Foca um campo que acabou de aparecer (monta no render seguinte). */
+function focarAoAparecer(id: string) {
+  window.setTimeout(() => document.getElementById(id)?.focus(), 0)
 }
 
 interface BlocoComInterruptorProps {
@@ -61,18 +67,18 @@ interface BlocoComInterruptorProps {
 function BlocoComInterruptor({ id, rotulo, descricao, desabilitado, aoAlternar, children }: BlocoComInterruptorProps) {
   const { control, watch } = useFormContext<ProdutoFormValues>()
   const ligado = watch(id)
+  const idTitulo = `${id}-titulo`
   return (
-    <section aria-labelledby={`${id}-rotulo`} className="space-y-4 rounded-md bg-muted/40 p-4">
-      <div className="flex min-h-11 items-center justify-between gap-4">
-        <div>
-          {/* O rotulo tambem alterna o interruptor: alvo de toque maior que o trilho. */}
-          <label id={`${id}-rotulo`} htmlFor={id} className="cursor-pointer text-sm font-medium">
-            {rotulo}
-          </label>
-          <p id={`${id}-descricao`} className="text-xs text-muted-foreground">
-            {descricao}
-          </p>
-        </div>
+    <GrupoCampos
+      idTitulo={idTitulo}
+      // O rotulo tambem alterna o interruptor.
+      titulo={
+        <label id={`${id}-rotulo`} htmlFor={id} className="cursor-pointer">
+          {rotulo}
+        </label>
+      }
+      descricao={descricao}
+      acao={
         <Controller
           control={control}
           name={id}
@@ -80,6 +86,7 @@ function BlocoComInterruptor({ id, rotulo, descricao, desabilitado, aoAlternar, 
             <Switch
               id={id}
               aria-labelledby={`${id}-rotulo`}
+              aria-describedby={`${idTitulo}-descricao`}
               ref={field.ref}
               checked={field.value}
               onCheckedChange={(valor) => {
@@ -88,14 +95,21 @@ function BlocoComInterruptor({ id, rotulo, descricao, desabilitado, aoAlternar, 
               }}
               onBlur={field.onBlur}
               disabled={desabilitado}
-              aria-describedby={`${id}-descricao`}
             />
           )}
         />
-      </div>
+      }
+    >
       {ligado && children}
-    </section>
+    </GrupoCampos>
   )
+}
+
+/** Texto quando a margem nao pode ser calculada: o que falta informar. */
+function textoSemMargem(precoVenda: string): string {
+  return numeroValido(precoVenda) === null
+    ? 'Informe o preço de venda na aba Geral para ver a margem.'
+    : 'Informe o custo para ver a margem.'
 }
 
 /**
@@ -108,28 +122,41 @@ export function AbaPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: AbaPreco
   const {
     register,
     watch,
+    getValues,
     setValue,
     clearErrors,
     formState: { errors },
   } = useFormContext<ProdutoFormValues>()
-  const [precoVenda, custo, unidadeId, precoPromocional, promocaoInicio, promocaoFim, precoAtacado, quantidadeMinima] =
-    watch([
-      'precoVenda',
-      'custo',
-      'unidadeId',
-      'precoPromocional',
-      'promocaoInicio',
-      'promocaoFim',
-      'precoAtacado',
-      'quantidadeMinimaAtacado',
-    ])
+  const [
+    precoVenda,
+    custo,
+    unidadeId,
+    promocaoAtiva,
+    promocaoInicio,
+    promocaoFim,
+    atacadoAtivo,
+    precoAtacado,
+    quantidadeMinima,
+  ] = watch([
+    'precoVenda',
+    'custo',
+    'unidadeId',
+    'promocaoAtiva',
+    'promocaoInicio',
+    'promocaoFim',
+    'atacadoAtivo',
+    'precoAtacado',
+    'quantidadeMinimaAtacado',
+  ])
   const { margem, markup } = calcularMargemMarkup(precoVenda, custo)
   const margemTexto = formatarPercentual(margem)
   const markupTexto = formatarPercentual(markup)
-  const precoInformado = precoVenda.trim() !== '' && Number.isFinite(Number(precoVenda))
+  const valorPrecoVenda = numeroValido(precoVenda)
+  const avisoPrecoVenda = textoAbaixoDoCusto(precoVenda, custo)
   const siglaVenda = siglaPorId.get(unidadeId)
 
-  const situacao = situacaoPromocaoLocal(promocaoInicio, promocaoFim, dataLocalHoje())
+  const hoje = dataHojeSaoPaulo()
+  const situacao = situacaoPromocaoLocal(promocaoInicio, promocaoFim, hoje)
   const ajudaAtacado = textoAjudaAtacado(quantidadeMinima, precoAtacado, siglaVenda)
 
   /** Desligar um bloco limpa os campos dele (o produto fica sem promocao ou sem atacado ao salvar). */
@@ -140,9 +167,15 @@ export function AbaPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: AbaPreco
     clearErrors([...campos])
   }
 
+  // Ligar a promocao ja sugere o inicio hoje e leva ao preco promocional.
   const alternarPromocao = (ligado: boolean) => {
     if (!ligado) {
       limparBloco(CAMPOS_PROMOCAO)
+    } else {
+      if (getValues('promocaoInicio') === '') {
+        setValue('promocaoInicio', hoje, { shouldDirty: true })
+      }
+      focarAoAparecer('precoPromocional')
     }
     aoAlterarCampo()
   }
@@ -150,6 +183,8 @@ export function AbaPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: AbaPreco
   const alternarAtacado = (ligado: boolean) => {
     if (!ligado) {
       limparBloco(CAMPOS_ATACADO)
+    } else {
+      focarAoAparecer('precoAtacado')
     }
     aoAlterarCampo()
   }
@@ -182,36 +217,34 @@ export function AbaPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: AbaPreco
       </div>
 
       {/* Derivados: calculados a partir do preco e do custo, nunca digitados. */}
-      <section aria-labelledby="derivados-titulo" className="space-y-2 rounded-md bg-muted/40 p-4">
-        <h3 id="derivados-titulo" className="text-sm font-medium">
-          Margem e markup
-        </h3>
-        {margemTexto || markupTexto ? (
-          <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
-            {precoInformado && (
+      <GrupoCampos titulo="Margem e markup" idTitulo="derivados-titulo">
+        <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
+          <div>
+            <dt className="text-muted-foreground">Preço de venda</dt>
+            <dd className="font-semibold tabular-nums">{formatarMoeda(valorPrecoVenda)}</dd>
+          </div>
+          {(margemTexto || markupTexto) && (
+            <>
               <div>
-                <dt className="text-muted-foreground">Preço de venda</dt>
-                <dd className="font-semibold tabular-nums">{formatarMoeda(Number(precoVenda))}</dd>
+                <dt className="text-muted-foreground">Margem</dt>
+                <dd className="font-semibold tabular-nums">{margemTexto ?? '—'}</dd>
               </div>
-            )}
-            <div>
-              <dt className="text-muted-foreground">Margem</dt>
-              <dd className="font-semibold tabular-nums">{margemTexto ?? '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Markup</dt>
-              <dd className="font-semibold tabular-nums">{markupTexto ?? '—'}</dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="text-sm text-muted-foreground">Informe o preço de venda (aba Geral) e o custo para ver a margem.</p>
+              <div>
+                <dt className="text-muted-foreground">Markup</dt>
+                <dd className="font-semibold tabular-nums">{markupTexto ?? '—'}</dd>
+              </div>
+            </>
+          )}
+        </dl>
+        {!margemTexto && !markupTexto && (
+          <p className="text-sm text-muted-foreground">{textoSemMargem(precoVenda)}</p>
         )}
-        {precoAbaixoDoCusto(precoVenda, custo) && (
+        {avisoPrecoVenda && (
           <p className="text-sm">
-            <AvisoAbaixoDoCusto custo={Number(custo)} />
+            <AvisoAbaixoDoCusto texto={avisoPrecoVenda} />
           </p>
         )}
-      </section>
+      </GrupoCampos>
 
       <CalculoPelaMargem custo={custo} desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
 
@@ -227,7 +260,7 @@ export function AbaPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: AbaPreco
             id="precoPromocional"
             label="Preço promocional"
             erro={errors.precoPromocional?.message}
-            ajuda={avisoDeCusto(precoPromocional, custo)}
+            custo={custo}
             aoAlterar={aoAlterarCampo}
             disabled={desabilitado}
           />
@@ -243,31 +276,33 @@ export function AbaPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: AbaPreco
             id="promocaoFim"
             label="Fim"
             type="date"
+            min={promocaoInicio || undefined}
             erro={errors.promocaoFim?.message}
             inputProps={register('promocaoFim', { onChange: aoAlterarCampo })}
             disabled={desabilitado}
           />
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          {situacao ? (
+        {situacao && (
+          <div className="flex flex-wrap items-center gap-2">
             <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', CLASSE_SELO[situacao])}>
-              {textoSeloPromocao(situacao, promocaoInicio, promocaoFim)}
+              {textoSeloPromocao(situacao, promocaoInicio, promocaoFim, hoje)}
             </span>
-          ) : (
-            <span />
-          )}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="min-h-11 text-muted-foreground"
-            onClick={removerPromocao}
-            disabled={desabilitado}
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-            Remover promoção
-          </Button>
-        </div>
+            {/* Encerrada continua gravada (so deixa de valer): aqui a saida e remove-la. */}
+            {situacao === 'ENCERRADA' && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="min-h-11 text-muted-foreground"
+                onClick={removerPromocao}
+                disabled={desabilitado}
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+                Remover promoção
+              </Button>
+            )}
+          </div>
+        )}
       </BlocoComInterruptor>
 
       <BlocoComInterruptor
@@ -282,13 +317,13 @@ export function AbaPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: AbaPreco
             id="precoAtacado"
             label="Preço de atacado"
             erro={errors.precoAtacado?.message}
-            ajuda={avisoDeCusto(precoAtacado, custo)}
+            custo={custo}
             aoAlterar={aoAlterarCampo}
             disabled={desabilitado}
           />
           <CampoTexto
             id="quantidadeMinimaAtacado"
-            label={siglaVenda ? `A partir de (quantidade em ${siglaVenda})` : 'A partir de (quantidade)'}
+            label={siglaVenda ? `Quantidade mínima (${siglaVenda})` : 'Quantidade mínima'}
             erro={errors.quantidadeMinimaAtacado?.message}
             inputProps={register('quantidadeMinimaAtacado', { onChange: aoAlterarCampo })}
             disabled={desabilitado}
@@ -300,6 +335,13 @@ export function AbaPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: AbaPreco
         </div>
         {ajudaAtacado && <p className="text-sm text-muted-foreground">{ajudaAtacado}</p>}
       </BlocoComInterruptor>
+
+      {/* Regra do PDV (spec 4.5): entre os precos que valem, o menor. */}
+      {promocaoAtiva && atacadoAtivo && (
+        <p className="text-sm text-muted-foreground">
+          Se a promoção e o atacado valerem juntos, a venda usa o menor preço.
+        </p>
+      )}
     </div>
   )
 }
@@ -318,7 +360,10 @@ function motivoSemCalculo(custo: string, margem: string): string | null {
   if (margem.trim() === '') {
     return 'Informe a margem desejada.'
   }
-  return calcularPrecoPelaMargem(custo, margem) === null ? 'Use uma margem de 0 a 99,99%, com até 2 casas.' : null
+  if (!margemDesejadaValida(margem)) {
+    return 'Use uma margem entre 0 e 99,99% (até 2 casas decimais).'
+  }
+  return calcularPrecoPelaMargem(custo, margem) === null ? 'O preço calculado passa do limite permitido.' : null
 }
 
 /**
@@ -329,9 +374,11 @@ function motivoSemCalculo(custo: string, margem: string): string | null {
 function CalculoPelaMargem({ custo, desabilitado, aoAlterarCampo }: CalculoPelaMargemProps) {
   const { setValue } = useFormContext<ProdutoFormValues>()
   const [margem, setMargem] = useState('')
-  const [confirmacao, setConfirmacao] = useState<string | null>(null)
+  // A confirmacao guarda o custo usado: mudar o custo a esconde (o preco ja nao corresponde).
+  const [confirmacao, setConfirmacao] = useState<{ texto: string; custo: string } | null>(null)
   const preco = calcularPrecoPelaMargem(custo, margem)
   const motivo = motivoSemCalculo(custo, margem)
+  const margemInvalida = margem.trim() !== '' && !margemDesejadaValida(margem)
 
   const calcular = () => {
     if (preco === null) {
@@ -339,17 +386,19 @@ function CalculoPelaMargem({ custo, desabilitado, aoAlterarCampo }: CalculoPelaM
     }
     setValue('precoVenda', preco, { shouldDirty: true, shouldValidate: true })
     aoAlterarCampo()
-    setConfirmacao(`Preço de venda atualizado para ${formatarMoeda(Number(preco))}.`)
+    const margemTexto = margem.trim().replace('.', ',')
+    setConfirmacao({
+      texto: `Preço de venda atualizado para ${formatarMoeda(Number(preco))} (margem de ${margemTexto}%).`,
+      custo,
+    })
   }
 
   return (
-    <section aria-labelledby="margem-desejada-titulo" className="space-y-3 rounded-md bg-muted/40 p-4">
-      <div>
-        <h3 id="margem-desejada-titulo" className="text-sm font-medium">
-          Calcular preço pela margem
-        </h3>
-        <p className="text-xs text-muted-foreground">O preço de venda é calculado a partir do custo e substitui o atual.</p>
-      </div>
+    <GrupoCampos
+      titulo="Calcular preço pela margem"
+      idTitulo="margem-desejada-titulo"
+      descricao="O preço de venda é calculado a partir do custo e substitui o atual."
+    >
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-40 space-y-1.5">
           <label htmlFor="margemDesejada" className="text-sm font-medium">
@@ -373,6 +422,7 @@ function CalculoPelaMargem({ custo, desabilitado, aoAlterarCampo }: CalculoPelaM
               }
             }}
             disabled={desabilitado}
+            aria-invalid={margemInvalida ? true : undefined}
             aria-describedby={motivo ? 'margemDesejada-ajuda' : undefined}
           />
         </div>
@@ -393,13 +443,13 @@ function CalculoPelaMargem({ custo, desabilitado, aoAlterarCampo }: CalculoPelaM
         </p>
       )}
       <p role="status" className="text-sm">
-        {confirmacao && (
+        {confirmacao && confirmacao.custo === custo && (
           <span className="inline-flex items-center gap-1.5 text-success-soft-foreground">
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            {confirmacao}
+            {confirmacao.texto}
           </span>
         )}
       </p>
-    </section>
+    </GrupoCampos>
   )
 }

@@ -63,8 +63,10 @@ export function AbaHistorico({ produtoId }: AbaHistoricoProps) {
     return (
       <div className="flex flex-col items-center gap-2 py-8 text-center">
         <History className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-        <p className="text-sm font-medium">Nenhuma alteração de preço registrada.</p>
-        <p className="text-sm text-muted-foreground">As alterações de custo e preço de venda aparecem aqui.</p>
+        <p className="text-sm font-medium">Nenhuma alteração de preço registrada ainda.</p>
+        <p className="text-sm text-muted-foreground">
+          As próximas mudanças de custo e preço de venda aparecem aqui, com data e quem alterou.
+        </p>
       </div>
     )
   }
@@ -96,6 +98,24 @@ export function AbaHistorico({ produtoId }: AbaHistoricoProps) {
   )
 }
 
+/**
+ * Valores da alteracao: "R$ 10,00 → R$ 11,50" (leitor de tela ouve "de X para
+ * Y"), "R$ 10,00 (valor inicial)" no cadastro e "R$ 5,00 → sem custo" quando o
+ * custo foi removido.
+ */
+function ValoresDaAlteracao({ anterior, novo }: { anterior: number | null; novo: number | null }) {
+  if (anterior === null) {
+    return <span>{`${formatarMoeda(novo)} (valor inicial)`}</span>
+  }
+  const textoNovo = novo === null ? 'sem custo' : formatarMoeda(novo)
+  return (
+    <span>
+      <span aria-hidden="true">{`${formatarMoeda(anterior)} → ${textoNovo}`}</span>
+      <span className="sr-only">{`de ${formatarMoeda(anterior)} para ${textoNovo}`}</span>
+    </span>
+  )
+}
+
 /** Uma alteracao: campo e valores em destaque; quando e quem, como apoio. */
 function LinhaHistorico({ item }: { item: HistoricoPreco }) {
   const variacao = formatarVariacao(item.valorAnterior, item.valorNovo)
@@ -111,10 +131,9 @@ function LinhaHistorico({ item }: { item: HistoricoPreco }) {
         </p>
       </div>
       <div className="flex items-baseline gap-3 text-sm tabular-nums">
-        <span>
-          {formatarMoeda(item.valorAnterior)} → {formatarMoeda(item.valorNovo)}
-        </span>
-        {variacao && <span className="w-20 text-right font-medium">{variacao}</span>}
+        <ValoresDaAlteracao anterior={item.valorAnterior} novo={item.valorNovo} />
+        {/* Coluna sempre presente, para os valores ficarem alinhados entre as linhas. */}
+        <span className="w-20 text-right font-medium">{variacao}</span>
       </div>
     </li>
   )

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 
 import { PRODUTOS_QUERY_KEY } from '@/features/catalog/catalogoQuery'
+import { dataHojeSaoPaulo } from '@/features/products/produtoFormulario'
 import { ProdutoPage } from '@/features/products/ProdutoPage'
 import { HttpError } from '@/services/httpClient'
 import { useAuth } from '@/hooks/useAuth'
@@ -298,11 +299,14 @@ describe('ProdutoPage', () => {
       renderNovo()
       await esperarFormulario()
       abrirAba(/preços/i)
-      expect(screen.getByText(/informe o preço de venda \(aba geral\) e o custo/i)).toBeInTheDocument()
+      expect(screen.getByText('Informe o preço de venda na aba Geral para ver a margem.')).toBeInTheDocument()
 
       abrirAba(/geral/i)
       fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '25,90' } })
       abrirAba(/preços/i)
+      // O preco de venda aparece sempre no topo do bloco; falta so o custo.
+      expect(screen.getByText('R$ 25,90')).toBeInTheDocument()
+      expect(screen.getByText('Informe o custo para ver a margem.')).toBeInTheDocument()
       fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '18,00' } })
 
       expect(screen.getByText('30,50%')).toBeInTheDocument()
@@ -1954,13 +1958,15 @@ describe('ProdutoPage', () => {
       abrirAba(/preços/i)
       fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '12,00' } })
 
-      expect(screen.getByText(/abaixo do custo \(R\$\s12,00\)/i)).toBeInTheDocument()
+      expect(
+        screen.getByText(/^R\$\s2,00 abaixo do custo \(R\$\s12,00\)\. Vender por este preço dá prejuízo\.$/),
+      ).toBeInTheDocument()
       fireEvent.click(interruptorPromocao())
       preencherPromocao('8,00', '2026-11-01', '2026-11-15')
       expect(screen.getByLabelText('Preço promocional')).toHaveAccessibleDescription(/abaixo do custo/i)
       fireEvent.click(interruptorAtacado())
       fireEvent.change(screen.getByLabelText('Preço de atacado'), { target: { value: '9,00' } })
-      fireEvent.change(screen.getByLabelText(/^a partir de/i), { target: { value: '6' } })
+      fireEvent.change(screen.getByLabelText(/^quantidade mínima/i), { target: { value: '6' } })
       expect(screen.getByLabelText('Preço de atacado')).toHaveAccessibleDescription(/abaixo do custo/i)
       abrirAba(/geral/i)
       expect(screen.getByLabelText(/preço de venda/i)).toHaveAccessibleDescription(/abaixo do custo/i)
@@ -1991,16 +1997,45 @@ describe('ProdutoPage', () => {
       expect(botao).toHaveAccessibleDescription('Informe a margem desejada.')
       fireEvent.change(screen.getByLabelText('Margem desejada (%)'), { target: { value: '100' } })
       expect(botao).toBeDisabled()
-      expect(botao).toHaveAccessibleDescription('Use uma margem de 0 a 99,99%, com até 2 casas.')
+      expect(botao).toHaveAccessibleDescription('Use uma margem entre 0 e 99,99% (até 2 casas decimais).')
+      expect(screen.getByLabelText('Margem desejada (%)')).toHaveAttribute('aria-invalid', 'true')
       fireEvent.change(screen.getByLabelText('Margem desejada (%)'), { target: { value: '50' } })
+      expect(screen.getByLabelText('Margem desejada (%)')).not.toHaveAttribute('aria-invalid')
       expect(botao).toBeEnabled()
 
       fireEvent.click(botao)
 
-      expect(screen.getByText(/preço de venda atualizado para R\$\s20,00\./i)).toBeInTheDocument()
+      expect(screen.getByText(/^preço de venda atualizado para R\$\s20,00 \(margem de 50%\)\.$/i)).toBeInTheDocument()
       expect(screen.getByText('50,00%')).toBeInTheDocument()
+      // Mudar o custo tira a confirmacao (o preco ja nao corresponde a ele).
+      fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '10,001' } })
+      expect(screen.queryByText(/preço de venda atualizado/i)).not.toBeInTheDocument()
       abrirAba(/geral/i)
       expect(screen.getByLabelText(/preço de venda/i)).toHaveValue('20,00')
+    })
+
+    it('preço calculado acima do limite tem dica própria', async () => {
+      renderNovo()
+      await esperarFormulario()
+      abrirAba(/preços/i)
+      fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '99.999.999,99' } })
+      fireEvent.change(screen.getByLabelText('Margem desejada (%)'), { target: { value: '99,99' } })
+
+      const botao = screen.getByRole('button', { name: 'Calcular preço' })
+      expect(botao).toBeDisabled()
+      expect(botao).toHaveAccessibleDescription('O preço calculado passa do limite permitido.')
+    })
+
+    it('"Calcular preço" deixa o produto como alterado: sair pede confirmação', async () => {
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/preços/i)
+      fireEvent.change(screen.getByLabelText('Margem desejada (%)'), { target: { value: '50' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Calcular preço' }))
+
+      fireEvent.click(screen.getByRole('link', { name: /voltar para produtos/i }))
+
+      expect(await screen.findByRole('dialog', { name: 'Descartar alterações?' })).toBeInTheDocument()
     })
 
     it('desligar a promoção esconde e limpa os campos, e o PATCH vai com promocao: null', async () => {
@@ -2016,7 +2051,12 @@ describe('ProdutoPage', () => {
       expect(screen.queryByLabelText('Preço promocional')).not.toBeInTheDocument()
       fireEvent.click(interruptorPromocao())
       expect(screen.getByLabelText('Preço promocional')).toHaveValue('')
-      expect(screen.getByLabelText('Início')).toHaveValue('')
+      // Religar sugere o inicio hoje (Sao Paulo) e leva ao preco promocional.
+      expect(screen.getByLabelText('Início')).toHaveValue(dataHojeSaoPaulo())
+      expect(screen.getByLabelText('Fim')).toHaveValue('')
+      await waitFor(() => expect(screen.getByLabelText('Preço promocional')).toHaveFocus())
+      fireEvent.change(screen.getByLabelText('Início'), { target: { value: '2026-11-10' } })
+      expect(screen.getByLabelText('Fim')).toHaveAttribute('min', '2026-11-10')
       fireEvent.click(interruptorPromocao())
 
       fireEvent.click(botaoSalvar())
@@ -2054,13 +2094,17 @@ describe('ProdutoPage', () => {
         renderEdicao(produtoComPromocao)
         await esperarFormulario()
         abrirAba(/preços/i)
-        expect(screen.getByText('Vigente até 15/11')).toBeInTheDocument()
+        expect(screen.getByText('Vigente até 15/11')).toHaveClass('bg-accent')
+        expect(screen.queryByRole('button', { name: 'Remover promoção' })).not.toBeInTheDocument()
 
         fireEvent.change(screen.getByLabelText('Início'), { target: { value: '2026-11-10' } })
         expect(screen.getByText('Agendada para 10/11')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Remover promoção' })).not.toBeInTheDocument()
+        fireEvent.change(screen.getByLabelText('Fim'), { target: { value: '2027-01-10' } })
+        expect(screen.getByText('Agendada para 10/11')).toBeInTheDocument()
         fireEvent.change(screen.getByLabelText('Início'), { target: { value: '2026-10-01' } })
         fireEvent.change(screen.getByLabelText('Fim'), { target: { value: '2026-10-15' } })
-        expect(screen.getByText('Encerrada em 15/10')).toBeInTheDocument()
+        expect(screen.getByText('Encerrada em 15/10. O produto voltou ao preço normal.')).toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('button', { name: 'Remover promoção' }))
         expect(interruptorPromocao()).toHaveAttribute('aria-checked', 'false')
@@ -2097,7 +2141,7 @@ describe('ProdutoPage', () => {
 
       expect(await screen.findByText(mensagem)).toBeInTheDocument()
       expect(interruptorAtacado()).toHaveAttribute('aria-checked', 'true')
-      expect(screen.getByLabelText(/^a partir de/i)).toHaveAccessibleDescription(mensagem)
+      expect(screen.getByLabelText(/^quantidade mínima/i)).toHaveAccessibleDescription(mensagem)
     })
 
     it('atacado mostra a ajuda com a sigla e o preço', async () => {
@@ -2106,8 +2150,12 @@ describe('ProdutoPage', () => {
       abrirAba(/preços/i)
 
       expect(interruptorAtacado()).toHaveAttribute('aria-checked', 'true')
-      expect(screen.getByLabelText('A partir de (quantidade em UN)')).toHaveValue(12)
-      expect(screen.getByText(/^A partir de 12 UN, cada unidade sai por R\$\s21,50\.$/)).toBeInTheDocument()
+      expect(screen.getByLabelText('Quantidade mínima (UN)')).toHaveValue(12)
+      expect(screen.getByText(/^A partir de 12 UN, o preço passa a ser R\$\s21,50 por unidade\.$/)).toBeInTheDocument()
+      // Com promocao e atacado ligados, a regra do menor preco.
+      expect(screen.getByText('Se a promoção e o atacado valerem juntos, a venda usa o menor preço.')).toBeInTheDocument()
+      fireEvent.click(interruptorPromocao())
+      expect(screen.queryByText(/a venda usa o menor preço/)).not.toBeInTheDocument()
     })
 
     it('quantidade fracionada no atacado com unidade não fracionada é barrada antes de enviar', async () => {
@@ -2117,13 +2165,13 @@ describe('ProdutoPage', () => {
       abrirAba(/preços/i)
       fireEvent.click(interruptorAtacado())
       fireEvent.change(screen.getByLabelText('Preço de atacado'), { target: { value: '9,00' } })
-      fireEvent.change(screen.getByLabelText(/^a partir de/i), { target: { value: '2.5' } })
+      fireEvent.change(screen.getByLabelText(/^quantidade mínima/i), { target: { value: '2.5' } })
       abrirAba(/geral/i)
 
       fireEvent.click(botaoSalvar())
 
       await waitFor(() => expect(aba(/preços/i)).toHaveAttribute('aria-selected', 'true'))
-      expect(screen.getByLabelText(/^a partir de/i)).toHaveAccessibleDescription(
+      expect(screen.getByLabelText(/^quantidade mínima/i)).toHaveAccessibleDescription(
         'A unidade UN não aceita quantidade fracionada.',
       )
       expect(cadastrarProdutoMock).not.toHaveBeenCalled()
@@ -2199,12 +2247,14 @@ describe('ProdutoPage', () => {
       expect(listarHistoricoDePrecosMock).toHaveBeenCalledWith(ID_ARROZ, 0)
       const [linha] = linhas()
       expect(within(linha).getByText('Preço de venda')).toBeInTheDocument()
-      expect(within(linha).getByText(/^R\$\s10,00 → R\$\s11,50$/)).toBeInTheDocument()
+      expect(within(linha).getByText(/^R\$\s10,00 → R\$\s11,50$/)).toHaveAttribute('aria-hidden', 'true')
+      // Leitor de tela ouve "de X para Y" no lugar da seta.
+      expect(within(linha).getByText(/^de R\$\s10,00 para R\$\s11,50$/)).toHaveClass('sr-only')
       expect(within(linha).getByText('+15,00%')).toBeInTheDocument()
       expect(within(linha).getByText('21/10/2026 14:03')).toBeInTheDocument()
     })
 
-    it('sem valor anterior (cadastro), mostra "Não informado" e nenhuma variação', async () => {
+    it('sem valor anterior (cadastro), mostra "(valor inicial)" e a coluna de variação vazia', async () => {
       listarHistoricoDePrecosMock.mockResolvedValue(pagina([cadastroCusto], 0, 1))
       renderEdicao()
       await esperarFormulario()
@@ -2213,7 +2263,7 @@ describe('ProdutoPage', () => {
       expect(await screen.findByText('Bruno Lima')).toBeInTheDocument()
       const [linha] = linhas()
       expect(within(linha).getByText('Custo')).toBeInTheDocument()
-      expect(within(linha).getByText(/^Não informado → R\$\s8,00$/)).toBeInTheDocument()
+      expect(within(linha).getByText(/^R\$\s8,00 \(valor inicial\)$/)).toBeInTheDocument()
       expect(within(linha).queryByText(/%$/)).not.toBeInTheDocument()
     })
 
@@ -2244,8 +2294,10 @@ describe('ProdutoPage', () => {
       expect(screen.getByText('Carregando histórico...')).toBeInTheDocument()
       await act(async () => responder(pagina([], 0, 0)))
 
-      expect(await screen.findByText('Nenhuma alteração de preço registrada.')).toBeInTheDocument()
-      expect(screen.getByText('As alterações de custo e preço de venda aparecem aqui.')).toBeInTheDocument()
+      expect(await screen.findByText('Nenhuma alteração de preço registrada ainda.')).toBeInTheDocument()
+      expect(
+        screen.getByText('As próximas mudanças de custo e preço de venda aparecem aqui, com data e quem alterou.'),
+      ).toBeInTheDocument()
     })
 
     it('falha ao carregar mostra erro amigável e "Tentar de novo"', async () => {
@@ -2266,19 +2318,30 @@ describe('ProdutoPage', () => {
       expect(atualizarProdutoMock).not.toHaveBeenCalled()
     })
 
-    it('salvar invalida o histórico do produto no cache', async () => {
+    it('salvar invalida o histórico do produto no cache (pelo prefixo de produtos)', async () => {
       atualizarProdutoMock.mockResolvedValue(produtoAtivo)
       const queryClient = novoQueryClient()
-      const invalidar = vi.spyOn(queryClient, 'invalidateQueries')
+      const chave = [...PRODUTOS_QUERY_KEY, ID_ARROZ, 'historico-precos']
+      queryClient.setQueryData(chave, { pages: [pagina([alteracaoPreco], 0, 1)], pageParams: [0] })
       buscarProdutoMock.mockResolvedValue(produtoAtivo)
       renderPagina(`/produtos/${ID_ARROZ}`, undefined, queryClient)
       await esperarFormulario()
+      expect(queryClient.getQueryState(chave)?.isInvalidated).toBe(false)
 
       fireEvent.click(botaoSalvar())
 
-      await waitFor(() =>
-        expect(invalidar).toHaveBeenCalledWith({ queryKey: [...PRODUTOS_QUERY_KEY, ID_ARROZ, 'historico-precos'] }),
+      await waitFor(() => expect(queryClient.getQueryState(chave)?.isInvalidated).toBe(true))
+    })
+
+    it('valor novo nulo (custo removido) mostra "sem custo"', async () => {
+      listarHistoricoDePrecosMock.mockResolvedValue(
+        pagina([{ ...cadastroCusto, valorAnterior: 5, valorNovo: null }], 0, 1),
       )
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/histórico/i)
+
+      expect(await screen.findByText(/^R\$\s5,00 → sem custo$/)).toBeInTheDocument()
     })
   })
 
@@ -2339,7 +2402,7 @@ describe('ProdutoPage', () => {
       abrirAba(/preços/i)
       fireEvent.click(screen.getByRole('switch', { name: 'Ativar preço de atacado' }))
       fireEvent.change(screen.getByLabelText('Preço de atacado'), { target: { value: '9,00' } })
-      fireEvent.change(screen.getByLabelText(/^quantidade mínima|^a partir de/i), { target: { value: '2.5' } })
+      fireEvent.change(screen.getByLabelText(/^quantidade mínima/i), { target: { value: '2.5' } })
       fireEvent.click(botaoSalvar())
       await waitFor(() => expect(aba(/preços/i)).toHaveAccessibleName('Preços (1 erro)'))
 

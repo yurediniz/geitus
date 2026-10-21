@@ -9,10 +9,13 @@ import {
   avaliarNovoCodigo,
   calcularMargemMarkup,
   calcularPrecoPelaMargem,
-  dataLocalHoje,
+  campoDaChaveDoServidor,
+  dataHojeSaoPaulo,
   erroFracaoAtacado,
-  precoAbaixoDoCusto,
+  interruptorDoCampo,
+  margemDesejadaValida,
   situacaoPromocaoLocal,
+  textoAbaixoDoCusto,
   textoAjudaAtacado,
   textoSeloPromocao,
   formatosDoProduto,
@@ -246,6 +249,10 @@ describe('produtoFormulario', () => {
     expect(nomeCurtoEfetivo('Biscoito Recheado Chocolate 1 Pacote', '')).toBe('Biscoito Recheado Chocolate 1')
     expect(nomeCurtoEfetivo('', '')).toBe('')
   })
+
+  /** O "R$" sai com espaco inseparavel (Intl), como no resto da tela. */
+  const comEspacoSimples = (texto: string | null) => texto?.replace(/ /g, ' ') ?? null
+
   describe('preco pela margem desejada', () => {
     it.each([
       ['10', '50', '20.00'],
@@ -267,8 +274,24 @@ describe('produtoFormulario', () => {
       ['10', '-5'],
       ['10', 'abc'],
       ['10', '30,555'],
+      // Resultado acima de 12 digitos.
+      ['99999999.99', '99,99'],
     ])('custo "%s" e margem "%s" nao calculam (null)', (custo, margem) => {
       expect(calcularPrecoPelaMargem(custo, margem)).toBeNull()
+    })
+
+    it.each([
+      ['30', true],
+      ['0', true],
+      ['99,99', true],
+      ['33.3', true],
+      ['100', false],
+      ['30,555', false],
+      ['-5', false],
+      ['abc', false],
+      ['', false],
+    ])('margem "%s" valida: %s', (margem, valida) => {
+      expect(margemDesejadaValida(margem)).toBe(valida)
     })
   })
 
@@ -286,33 +309,86 @@ describe('produtoFormulario', () => {
       expect(situacaoPromocaoLocal('2026-11-15', '2026-11-01', '2026-11-05')).toBeNull()
     })
 
-    it('textos do selo', () => {
-      expect(textoSeloPromocao('VIGENTE', '2026-11-01', '2026-11-15')).toBe('Vigente até 15/11')
-      expect(textoSeloPromocao('AGENDADA', '2026-11-01', '2026-11-15')).toBe('Agendada para 01/11')
-      expect(textoSeloPromocao('ENCERRADA', '2026-10-01', '2026-10-15')).toBe('Encerrada em 15/10')
+    it('textos do selo, com o ano so quando nao e o de hoje', () => {
+      const hoje = '2026-11-05'
+      expect(textoSeloPromocao('VIGENTE', '2026-11-01', '2026-11-15', hoje)).toBe('Vigente até 15/11')
+      expect(textoSeloPromocao('AGENDADA', '2026-11-10', '2026-11-15', hoje)).toBe('Agendada para 10/11')
+      expect(textoSeloPromocao('ENCERRADA', '2026-10-01', '2026-10-15', hoje)).toBe(
+        'Encerrada em 15/10. O produto voltou ao preço normal.',
+      )
+      expect(textoSeloPromocao('VIGENTE', '2026-12-20', '2027-01-10', '2026-12-25')).toBe('Vigente até 10/01/2027')
+      expect(textoSeloPromocao('ENCERRADA', '2025-12-01', '2025-12-31', hoje)).toBe(
+        'Encerrada em 31/12/2025. O produto voltou ao preço normal.',
+      )
     })
 
-    it('data de hoje no fuso do navegador, em yyyy-mm-dd', () => {
-      expect(dataLocalHoje(new Date(2026, 10, 5, 23, 59))).toBe('2026-11-05')
-      expect(dataLocalHoje(new Date(2026, 0, 9, 0, 1))).toBe('2026-01-09')
+    it('hoje e o dia de Sao Paulo, nao o do navegador nem o UTC (Review Focus 1)', () => {
+      // 01:30 UTC de 16/11 = 22:30 de 15/11 em Sao Paulo.
+      expect(dataHojeSaoPaulo(new Date('2026-11-16T01:30:00Z'))).toBe('2026-11-15')
+      expect(dataHojeSaoPaulo(new Date('2026-01-09T12:00:00Z'))).toBe('2026-01-09')
     })
   })
 
-  it('preco abaixo do custo so com os dois valores informados', () => {
-    expect(precoAbaixoDoCusto('10', '12')).toBe(true)
-    expect(precoAbaixoDoCusto('12', '12')).toBe(false)
-    expect(precoAbaixoDoCusto('', '12')).toBe(false)
-    expect(precoAbaixoDoCusto('10', '')).toBe(false)
+  describe('aviso de preco abaixo do custo', () => {
+    it('diz a diferenca e o custo', () => {
+      expect(comEspacoSimples(textoAbaixoDoCusto('4.5', '5'))).toBe(
+        'R$ 0,50 abaixo do custo (R$ 5,00). Vender por este preço dá prejuízo.',
+      )
+      expect(comEspacoSimples(textoAbaixoDoCusto('0.1', '0.3'))).toBe(
+        'R$ 0,20 abaixo do custo (R$ 0,30). Vender por este preço dá prejuízo.',
+      )
+    })
+
+    it('sem aviso com preco igual ou acima do custo, ou sem um dos valores', () => {
+      expect(textoAbaixoDoCusto('12', '12')).toBeNull()
+      expect(textoAbaixoDoCusto('13', '12')).toBeNull()
+      expect(textoAbaixoDoCusto('', '12')).toBeNull()
+      expect(textoAbaixoDoCusto('10', '')).toBeNull()
+    })
   })
 
   it('ajuda do atacado com a quantidade e o preco em pt-BR', () => {
-    // O "R$" sai com espaco inseparavel (Intl), como no resto da tela.
-    const comEspacoSimples = (texto: string | null) => texto?.replace(/ /g, ' ')
-    expect(comEspacoSimples(textoAjudaAtacado('12', '4.2', 'UN'))).toBe('A partir de 12 UN, cada unidade sai por R$ 4,20.')
-    expect(comEspacoSimples(textoAjudaAtacado('2.5', '30', 'KG'))).toBe('A partir de 2,5 KG, cada KG sai por R$ 30,00.')
-    expect(comEspacoSimples(textoAjudaAtacado('12', '4.2', undefined))).toBe('A partir de 12, cada unidade sai por R$ 4,20.')
+    expect(comEspacoSimples(textoAjudaAtacado('12', '4.2', 'UN'))).toBe(
+      'A partir de 12 UN, o preço passa a ser R$ 4,20 por unidade.',
+    )
+    expect(comEspacoSimples(textoAjudaAtacado('2.5', '4.2', 'KG'))).toBe(
+      'A partir de 2,5 KG, o preço passa a ser R$ 4,20 por KG.',
+    )
+    expect(comEspacoSimples(textoAjudaAtacado('12', '4.2', undefined))).toBe(
+      'A partir de 12, o preço passa a ser R$ 4,20 por unidade.',
+    )
     expect(textoAjudaAtacado('', '4.2', 'UN')).toBeNull()
     expect(textoAjudaAtacado('12', '', 'UN')).toBeNull()
+  })
+
+  describe('erros do servidor nos blocos de promocao e atacado', () => {
+    it.each([
+      ['promocao.preco', 'precoPromocional'],
+      ['promocao.inicio', 'promocaoInicio'],
+      ['promocao.fim', 'promocaoFim'],
+      ['atacado.preco', 'precoAtacado'],
+      ['atacado.quantidadeMinima', 'quantidadeMinimaAtacado'],
+      ['promocao', 'precoPromocional'],
+      ['atacado', 'precoAtacado'],
+    ])('chave %s -> campo %s', (chave, campo) => {
+      expect(campoDaChaveDoServidor(chave)).toBe(campo)
+    })
+
+    it('demais chaves: o nome sem indice, e "constructor" nao casa com o prototipo', () => {
+      expect(campoDaChaveDoServidor('codigosBarras[2]')).toBe('codigosBarras')
+      expect(campoDaChaveDoServidor('constructor')).toBe('constructor')
+    })
+
+    it.each([
+      ['precoPromocional', 'promocaoAtiva'],
+      ['promocaoInicio', 'promocaoAtiva'],
+      ['promocaoFim', 'promocaoAtiva'],
+      ['precoAtacado', 'atacadoAtivo'],
+      ['quantidadeMinimaAtacado', 'atacadoAtivo'],
+      ['custo', null],
+    ] as const)('campo %s -> interruptor %s', (campo, interruptor) => {
+      expect(interruptorDoCampo(campo)).toBe(interruptor)
+    })
   })
 
   it('quantidade fracionada do atacado so em unidade fracionada', () => {
