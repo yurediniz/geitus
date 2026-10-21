@@ -15,7 +15,7 @@ Conforme o escopo definido no [CLAUDE.md](../../CLAUDE.md):
 - [Empresa](empresa.md) ✔
 - [Usuários](usuarios.md) ✔
 - [Produtos](produtos.md) ✔
-- [Clientes](clientes.md) — especificado
+- [Clientes](clientes.md) ✔
 - PDV
 - Caixa
 - Estoque básico

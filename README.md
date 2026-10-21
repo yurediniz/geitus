@@ -10,7 +10,7 @@ Público-alvo inicial:
 - Pet shops
 - Lojas de roupas
 
-> **Status:** MVP em desenvolvimento — etapas 1 a 8 concluídas (fundação, autenticação, layout, empresa, usuários e produtos); próximo módulo: **Clientes** (etapa 9).
+> **Status:** MVP em desenvolvimento — etapas 1 a 9 concluídas (fundação, autenticação, layout, empresa, usuários, produtos e clientes); próximo módulo: **Caixa** (etapa 10).
 
 Estado atual do repositório:
 
@@ -19,6 +19,7 @@ Estado atual do repositório:
 - **Empresa**: cadastro da empresa do usuário autenticado (`/api/empresas/minha`) — representante legal, fluxo "Já possui CNPJ?" (PF/PJ) e endereço com autofill por CEP. Edição exige ADMIN.
 - **Usuários**: gestão dos usuários da empresa (`/api/usuarios`, apenas ADMIN), perfis `ADMIN`/`OPERADOR` e troca/redefinição de senha.
 - **Produtos**: cadastro com busca e filtro de status (`/api/produtos`), escrita restrita a ADMIN, unicidade de SKU/código de barras por empresa (409) e margem/markup calculados.
+- **Clientes**: cadastro rápido de pessoa física (`/api/clientes`, por UUID público) — telefone com indicador de WhatsApp, CPF opcional e único por empresa, busca por nome/CPF/telefone; qualquer usuário cadastra e edita, só ADMIN inativa/reativa.
 - Documentação operacional em `docs/` (diretrizes de engenharia, registro de decisões, dívidas técnicas, visão de domínio e especificações por módulo).
 
 ---

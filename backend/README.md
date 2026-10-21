@@ -1,6 +1,6 @@
 # Geitus — Backend
 
-Backend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Contém a aplicação Spring Boot com **autenticação por JWT**, o cadastro da **Empresa** do usuário autenticado, a gestão de **Usuários** e o módulo de **Produtos**, além dos health checks. Os demais módulos de negócio (clientes, PDV, caixa, estoque, financeiro) ainda não foram implementados.
+Backend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Contém a aplicação Spring Boot com **autenticação por JWT**, o cadastro da **Empresa** do usuário autenticado, a gestão de **Usuários** e os módulos de **Produtos** e **Clientes**, além dos health checks. Os demais módulos de negócio (PDV, caixa, estoque, financeiro) ainda não foram implementados.
 
 ---
 
@@ -22,13 +22,14 @@ Backend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Con
 - Maven Wrapper (`mvnw` / `mvnw.cmd`) fixado no Maven 3.9.16.
 - Estrutura de pacotes por domínio (ver abaixo).
 - `application.yml` lendo configurações de variáveis de ambiente.
-- Flyway habilitado, com as migrations `V1__baseline.sql` a `V4__produtos_incremento_cadastral.sql` (empresa, usuário, produtos e seus incrementos).
+- Flyway habilitado, com as migrations `V1__baseline.sql` a `V5__clientes.sql` (empresa, usuário, produtos e seus incrementos, clientes).
 - Health check da aplicação em `GET /api/health` e health check padrão do Actuator em `GET /actuator/health`.
 - CORS básico liberado para o frontend local (Vite).
 - **Autenticação:** login por e-mail/senha (BCrypt) com emissão de JWT (HS256), filtro de autenticação por Bearer token e endpoint de dados do usuário autenticado (`GET /api/auth/me`, com a empresa aninhada).
 - **Empresa:** `GET/PATCH /api/empresas/minha` — cadastro com representante legal, tipo de pessoa (PF/PJ, CNPJ único) e endereço; sempre derivada do usuário autenticado, nunca de parâmetro externo. Edição exige `ADMIN`.
 - **Usuários:** `GET/POST /api/usuarios`, `GET/PATCH /api/usuarios/{id}`, `PATCH /api/usuarios/{id}/inativar`, `/reativar` e `/senha` (apenas `ADMIN`), além de `PATCH /api/usuarios/me/senha` (troca da própria senha). Perfis `ADMIN` e `OPERADOR`.
 - **Produtos:** `GET/POST /api/produtos`, `GET/PATCH /api/produtos/{id}`, `PATCH /api/produtos/{id}/inativar` e `/reativar`, com filtros opcionais `busca` e `ativo`; escrita exige `ADMIN` (DEC-025); isolamento por empresa, unicidade de SKU/código de barras por empresa (`409`, DEC-026) e margem/markup calculados na resposta.
+- **Clientes:** `GET/POST /api/clientes`, `GET/PATCH /api/clientes/{id}`, `PATCH /api/clientes/{id}/inativar` e `/reativar`, com filtros opcionais `busca` (nome, CPF ou telefone, com ou sem máscara) e `ativo`. O `{id}` é o **UUID público** (o id interno nunca é exposto). Cadastrar/editar: qualquer autenticado; inativar/reativar: `ADMIN` (DEC-029). CPF único por empresa (`409`); identificador malformado → `400`.
 - Segurança liberando os health checks (`/api/health`, `/actuator/health`), o `POST /api/auth/login` e a documentação Swagger; qualquer outra rota exige um JWT válido (responde `401` sem token/token inválido e `403` sem permissão).
 - Documentação da API via Swagger UI (apenas para desenvolvimento).
 
@@ -36,7 +37,7 @@ Backend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Con
 
 - Vínculo M:N usuário↔empresa e seleção de empresa ativa (DEC-024 — norte futuro).
 - Refresh token, recuperação de senha, MFA, OAuth/SSO, RBAC granular (fora do escopo do MVP).
-- Clientes, PDV, caixa, estoque e financeiro.
+- PDV, caixa, estoque e financeiro.
 
 ---
 
@@ -48,8 +49,11 @@ com.geitus.app
 ├── shared/     # Health check, ApiError e tratamento global de erros
 ├── iam/        # Identidade e acesso: login, JWT, usuário, bootstrap dev
 ├── company/    # Empresa (cadastro da empresa autenticada)
-└── catalog/    # Produtos
+├── catalog/    # Produtos
+└── customer/   # Clientes
 ```
+
+Validadores compartilhados de CPF, CNPJ e telefone ficam em `shared/validation`.
 
 Organização **por domínio de negócio**. Domínios futuros (`pricing`, `customer`, `inventory`, `cashier`, `sales`, `finance`, `fiscal`, `commission`) nascem quando o módulo entrar em desenvolvimento — ver o mapa completo no `CLAUDE.md`.
 
@@ -110,7 +114,7 @@ Não precisa de banco nem de Docker (fatias web e mocks):
 
 ### Build completo (compila, testa e empacota)
 
-Inclui os testes de integração (`*IT`, ex.: `ProdutoRepositoryIT`), que sobem um PostgreSQL real via Testcontainers — **requer Docker em execução**:
+Inclui os testes de integração (`*IT`, ex.: `ProdutoRepositoryIT`, `ClienteRepositoryIT`), que sobem um PostgreSQL real via Testcontainers — **requer Docker em execução**:
 
 ```bash
 ./mvnw verify

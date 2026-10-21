@@ -1,6 +1,6 @@
 # Módulo: Clientes
 
-> **Status:** especificado (etapa 9) — ainda não implementado. Design aprovado em 2026-10-20; registro do brainstorming em [`docs/superpowers/specs/2026-10-20-modulo-clientes-design.md`](../superpowers/specs/2026-10-20-modulo-clientes-design.md). Decisões em **DEC-029**.
+> **Status:** implementado (etapa 9) em 2026-10-20 — backend (`com.geitus.app.customer`, migration V5) e frontend (`/clientes`). Design: [`docs/superpowers/specs/2026-10-20-modulo-clientes-design.md`](../superpowers/specs/2026-10-20-modulo-clientes-design.md); plano: [`docs/superpowers/plans/2026-10-20-modulo-clientes.md`](../superpowers/plans/2026-10-20-modulo-clientes.md). Decisões em **DEC-029**.
 
 ## 1. Visão geral
 
@@ -48,9 +48,11 @@ Tabela `clientes`:
 | `ativo` | `BOOLEAN` NOT NULL DEFAULT `true` | Status. |
 | `criado_em` / `atualizado_em` | `TIMESTAMP` | Mesmo padrão de empresa/usuário/produtos. |
 
+**Constraints e índice (implementados na V5):** `fk_cliente_empresa`, `uq_cliente_uuid`, `uq_cliente_empresa_cpf`, `ck_cliente_whatsapp_coerente` e CHECKs de formato só-dígitos (`ck_cliente_cpf_digitos` `^[0-9]{11}$`; `ck_cliente_telefone_digitos` e `ck_cliente_whatsapp_digitos` `^[0-9]{10,11}$`) como defesa além da normalização do service. Índice `idx_cliente_empresa_nome (empresa_id, nome)` — serve a FK, o filtro por empresa e o `ORDER BY nome` da listagem (ordenação final `nome, id`, determinística).
+
 **WhatsApp derivado (sem duplicar dado):** o número não é gravado duas vezes. A resposta expõe `whatsapp` **resolvido**: `telefone` quando `telefone_e_whatsapp = true`; a coluna `whatsapp` quando `false`. Editar o telefone, portanto, nunca deixa o WhatsApp desatualizado. Com `telefone_e_whatsapp = true` e sem telefone, o WhatsApp resolvido é `null`.
 
-**Normalização (no service):** `trim`; string vazia → `NULL`; CPF/telefone/WhatsApp gravados **só com dígitos** (máscara aceita na entrada). Ao receber `telefoneEWhatsapp = true`, qualquer `whatsapp` enviado é descartado (gravado `NULL`).
+**Normalização (no service):** `trim`; string vazia → `NULL`; CPF/telefone/WhatsApp gravados **só com dígitos** (máscara aceita na entrada). Ao receber `telefoneEWhatsapp = true`, qualquer `whatsapp` enviado é descartado (gravado `NULL`) **sem ser validado**; com `false`, o `whatsapp` é validado (restrição `@WhatsappCoerente` no request, erro no campo `whatsapp`). Se o `whatsapp` informado for igual ao telefone, o cadastro é tratado como `telefoneEWhatsapp = true` (não grava o mesmo número duas vezes).
 
 ## 5. Regras de negócio
 
@@ -78,7 +80,9 @@ Todos os endpoints derivam a empresa do JWT; nenhum aceita `empresaId`. O `{id}`
 
 - **RBAC (DEC-029):** cadastrar e editar são liberados a qualquer autenticado (o OPERADOR cadastra no balcão/PDV); **inativar/reativar exige ADMIN** (backend → 403). Difere de Produtos (DEC-025) de propósito: cliente não carrega dado sensível de gestão (preço/custo), e travar o cadastro atrapalharia a operação.
 - Cliente inexistente **ou de outra empresa** → **404** (mesma resposta). Sem token → **401**. Não há `DELETE`.
-- **UUID malformado → 400.** Hoje o `GlobalExceptionHandler` não trata `MethodArgumentTypeMismatchException` (cairia no handler genérico → 500); a implementação deve mapeá-la para **400** com mensagem genérica (sem eco do valor recebido).
+- **UUID malformado → 400** "Identificador inválido." (handler global de `MethodArgumentTypeMismatchException`, sem ecoar o valor; query param de tipo inválido → "Parâmetro inválido."). Vale para toda a API: `/api/produtos/abc` e `/api/usuarios/abc` também passaram de 500 para 400. O campo `caminho` do erro mantém a URI (sem query string) — por isso **nunca colocar dado pessoal em segmento de rota** (ex.: `/clientes/cpf/{cpf}`).
+- **Limites de entrada:** `nome` 150, `observacoes` 500, `cpf`/`telefone`/`whatsapp` 20 caracteres brutos (com máscara), `busca` 100 — acima disso, 400.
+- **Regra de ADMIN independe do método HTTP** nas rotas `/{id}/inativar` e `/{id}/reativar` (qualquer método de OPERADOR → 403).
 - **`PATCH /api/clientes/{id}` substitui todos os dados cadastrais** (mesma semântica de Produtos): campos opcionais omitidos ou vazios passam a `NULL`. `ativo` só muda pelos endpoints de inativar/reativar.
 - **Busca (`busca`):** nome contém o termo (sem diferenciar maiúsculas/minúsculas); **ou**, se o termo tiver dígitos, CPF/telefone/WhatsApp contêm os dígitos do termo (máscara ignorada). Os caracteres `%` e `_` do termo são **escapados** (não agem como curinga — evita no módulo a DT-017).
 - **Request (`POST`/`PATCH`):** `nome`, `cpf`, `telefone`, `telefoneEWhatsapp` (padrão `true`), `whatsapp`, `observacoes`.
@@ -136,8 +140,9 @@ Os validadores de **CPF e telefone** (`Cpf`, `CpfValidator`, `Telefone`, `Telefo
 - Validadores de CPF/telefone movidos para `shared.validation`.
 
 **Deixar para depois:**
-- Paginação da listagem (**DT-020**).
-- Índice para busca textual se o volume crescer (análogo à DT-009).
-- Histórico de alterações do cadastro.
+- Paginação da listagem (**DT-020**) e minimização do CPF na listagem (**DT-023**).
+- Índice para busca textual / busca sem acento se o volume crescer (análogo à DT-009).
+- Histórico de alterações do cadastro (autor da edição).
+- Dicas de UX registradas nas revisões: pré-preencher o formulário com o termo buscado, Esc/foco após salvar, selo "Ativo" neutro, aviso ao descartar edição — avaliar junto com Produtos.
 
 **Fora do escopo:** ver §3.

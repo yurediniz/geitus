@@ -296,7 +296,7 @@ backend/
 │   ├── company/       # empresa (contexto da empresa autenticada)
 │   ├── catalog/       # produtos (e, futuramente, variações, categorias, marcas)
 │   ├── pricing/       # (futuro) tabelas de preço e promoções
-│   ├── customer/      # (futuro) clientes
+│   ├── customer/      # clientes
 │   ├── inventory/     # (futuro) estoque, locais, lote/série, movimentos
 │   ├── cashier/       # (futuro) caixa e movimentos de caixa
 │   ├── sales/         # (futuro) venda, item, pagamento (PDV)

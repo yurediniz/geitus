@@ -7,6 +7,7 @@ componentes e testes específicos daquele domínio:
 - `company/` — cadastro da empresa (`/empresa`).
 - `usuarios/` — gestão de usuários (`/usuarios`) e troca de senha.
 - `products/` — cadastro de produtos (`/produtos`).
+- `customers/` — cadastro de clientes (`/clientes`).
 
-Os próximos módulos (ex.: `customers/`, `pdv/`, `cash-register/`, `finance/`)
+Os próximos módulos (ex.: `pdv/`, `cash-register/`, `finance/`)
 ganham a sua pasta quando entrarem em desenvolvimento, conforme o CLAUDE.md.

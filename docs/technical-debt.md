@@ -208,7 +208,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Descricao:** Nas buscas por termo (`ProdutoRepository` e `UsuarioRepository`), os caracteres `%` e `_` no termo agem como curinga (LIKE injection — nao e SQL injection). Padrao herdado do `ProdutoRepository`.
 - **Impacto:** Resultados de busca podem ser mais amplos que o esperado quando o usuario digita `%`/`_`. Sem risco de seguranca de dados.
 - **Quando revisar:** Tratar nos dois repositorios juntos numa proxima manutencao de busca.
-- **Observacoes:** Escapar `%`/`_` no termo (ex.: `ESCAPE`) ou sanear na aplicacao.
+- **Observacoes:** Escapar `%`/`_` no termo (ex.: `ESCAPE`) ou sanear na aplicacao. O modulo Clientes (DEC-029) ja nasceu com o escape (`ClienteService` + `ESCAPE` nas queries do `ClienteRepository`) — usar como referencia ao corrigir Produtos e Usuarios.
 
 ## DT-018 — Revogacao de token na inativacao de usuario
 
@@ -245,3 +245,63 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Impacto:** Em empresas com milhares de clientes/produtos, a listagem pode ficar lenta e pesada para a tela.
 - **Quando revisar:** Quando uma empresa real passar de alguns milhares de registros ou quando o PDV exigir busca incremental com limite.
 - **Observacoes:** Avaliar `Pageable`/limite na API e paginacao ou rolagem infinita na tela, junto com o indice de busca textual (analogo a DT-009).
+
+## DT-021 — Excecoes do Spring MVC caem no handler generico (500)
+
+- **ID:** DT-021
+- **Modulo:** Backend (transversal — `GlobalExceptionHandler`)
+- **Origem:** Revisoes (back-end-reviewer e security-reviewer) do modulo Clientes
+- **Prioridade:** media
+- **Status:** aberto
+- **Descricao:** O handler `@ExceptionHandler(Exception.class)` captura `HttpRequestMethodNotSupportedException` (405), `HttpMediaTypeNotSupportedException` (415) e `NoResourceFoundException` (404) antes do resolver padrao do Spring, respondendo 500. Ex.: `DELETE /api/clientes/{id}` (nao existe DELETE) deveria ser 405. O handler generico tambem nao registra a excecao em log.
+- **Impacto:** Status HTTP incorretos, ruido em monitoramento e erros/ataques invisiveis (sem log). Nao vaza detalhe interno (mensagem generica).
+- **Quando revisar:** Proxima manutencao do tratamento de erros, antes do primeiro deploy.
+- **Observacoes:** Handlers especificos (404/405/415) no formato `ApiError`, ou estender `ResponseEntityExceptionHandler`; logar o 500 com stack trace e sem dados pessoais/corpo da requisicao. Comecar por um teste MockMvc `delete(...)` esperando 405.
+
+## DT-022 — Desligar o UserDetailsService gerado pelo Spring Boot
+
+- **ID:** DT-022
+- **Modulo:** Backend (seguranca)
+- **Origem:** Revisao (security-reviewer) do modulo Clientes
+- **Prioridade:** baixa
+- **Status:** aberto
+- **Descricao:** Na subida aparece o WARN "Using generated security password" (`UserDetailsServiceAutoConfiguration`): o Boot cria um usuario `user` em memoria e escreve a senha no log. Hoje nao e utilizavel (httpBasic/formLogin desligados; autenticacao so por JWT).
+- **Impacto:** Credencial em log e risco latente se `httpBasic` ou outra cadeia de filtros for reativada.
+- **Quando revisar:** Junto com a DT-021 ou no endurecimento pre-deploy.
+- **Observacoes:** `@SpringBootApplication(exclude = UserDetailsServiceAutoConfiguration.class)` ou um bean `UserDetailsService` que sempre lanca `UsernameNotFoundException`. Requer `security-reviewer`.
+
+## DT-023 — Minimizacao do CPF na listagem de clientes (LGPD)
+
+- **ID:** DT-023
+- **Modulo:** Backend/Frontend (Clientes)
+- **Origem:** Revisoes (security-reviewer e product-ux-reviewer) do modulo Clientes
+- **Prioridade:** media
+- **Status:** aberto
+- **Descricao:** `GET /api/clientes` devolve o CPF completo de toda a base da empresa para qualquer autenticado (inclusive OPERADOR), sem paginacao (DT-020); a tela de balcao exibe o CPF completo, visivel ao comprador.
+- **Impacto:** Vetor de extracao em massa de dado pessoal e exposicao no balcao.
+- **Quando revisar:** Junto com a DT-020 (paginacao) ou antes de usuarios reais com volume.
+- **Observacoes:** Mascarar o CPF na listagem (ex.: `***.444.777-**`), completo apenas no detalhe/edicao; avaliar com `security-reviewer`. Decisao de produto (a DEC-029 libera leitura a autenticados).
+
+## DT-024 — Repositorios herdam delete/findById sem filtro de empresa
+
+- **ID:** DT-024
+- **Modulo:** Backend (Clientes e Produtos)
+- **Origem:** Revisao (data-reviewer) do modulo Clientes
+- **Prioridade:** baixa
+- **Status:** aberto
+- **Descricao:** `ClienteRepository` e `ProdutoRepository` estendem `JpaRepository`, expondo `delete*`, `findById` e `findAll` sem isolamento por empresa, contra "sem exclusao fisica" e a DEC-016. Nenhum codigo de producao usa esses metodos hoje.
+- **Impacto:** Risco de uso acidental futuro (exclusao fisica ou leitura cross-tenant).
+- **Quando revisar:** Antes de Vendas/Estoque, quando houver mais repositorios.
+- **Observacoes:** Estender `Repository<T, Long>` declarando so os metodos usados, ou regra ArchUnit proibindo `delete*`/`findById` fora de teste.
+
+## DT-025 — Extrair resolucao da empresa do usuario autenticado
+
+- **ID:** DT-025
+- **Modulo:** Backend (transversal)
+- **Origem:** Revisao (back-end-reviewer) do modulo Clientes
+- **Prioridade:** baixa
+- **Status:** aberto
+- **Descricao:** `resolverEmpresaId(idUsuario)` esta duplicado em `ProdutoService` e `ClienteService` (com diferenca de excecao quando a empresa nao existe).
+- **Impacto:** Duplicacao de regra de isolamento (DEC-016) que tende a divergir a cada modulo novo.
+- **Quando revisar:** Antes do terceiro modulo de negocio (Caixa).
+- **Observacoes:** Componente em `iam` (ex.: resolvedor da empresa do usuario autenticado) reutilizado pelos services; relaciona-se com a futura empresa ativa da DEC-024.
