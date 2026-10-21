@@ -249,6 +249,18 @@ class ProdutoControllerTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void idMalformadoRetorna400() throws Exception {
+        // Antes do handler de MethodArgumentTypeMismatchException caia no generico (500).
+        String token = tokenParaUsuario(1L);
+
+        mockMvc.perform(get("/api/produtos/abc").header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Identificador inválido."));
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
+    }
+
     // ---------- Cadastro ----------
 
     @Test

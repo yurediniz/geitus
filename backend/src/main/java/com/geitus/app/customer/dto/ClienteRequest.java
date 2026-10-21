@@ -1,0 +1,53 @@
+package com.geitus.app.customer.dto;
+
+import com.geitus.app.customer.DadosCliente;
+import com.geitus.app.shared.validation.Cpf;
+import com.geitus.app.shared.validation.Telefone;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+/**
+ * Dados de entrada para cadastro ou atualizacao de um cliente
+ * (docs/modules/clientes.md, secao 6).
+ *
+ * <p>Nao inclui {@code empresaId} nem {@code ativo}: a empresa e sempre
+ * derivada do usuario autenticado (DEC-016) e o status so muda pelos endpoints
+ * de inativar/reativar. CPF, telefone e WhatsApp aceitam mascara; a
+ * normalizacao (so digitos, vazio como {@code null}) e a revalidacao ficam no
+ * {@code ClienteService}. {@code telefoneEWhatsapp} ausente significa
+ * {@code true}.
+ */
+@Schema(description = "Dados para cadastro ou atualizacao de um cliente")
+public record ClienteRequest(
+
+        @Schema(example = "Ana Souza")
+        @NotBlank(message = "Nome é obrigatório.")
+        @Size(max = 150, message = "Nome deve ter no máximo 150 caracteres.")
+        String nome,
+
+        @Schema(example = "111.444.777-35")
+        @Cpf
+        String cpf,
+
+        @Schema(example = "(11) 98765-4321")
+        @Telefone
+        String telefone,
+
+        @Schema(description = "O telefone principal e WhatsApp (padrao: true)", example = "true")
+        Boolean telefoneEWhatsapp,
+
+        @Schema(description = "WhatsApp, apenas quando diferente do telefone", example = "(11) 91234-5678")
+        @Telefone(message = "WhatsApp inválido.")
+        String whatsapp,
+
+        @Schema(example = "Prefere contato a tarde.")
+        @Size(max = 500, message = "Observações devem ter no máximo 500 caracteres.")
+        String observacoes) {
+
+    /** Converte para a entrada crua do service (sem normalizar). */
+    public DadosCliente paraDados() {
+        return new DadosCliente(nome, cpf, telefone, telefoneEWhatsapp, whatsapp, observacoes);
+    }
+}

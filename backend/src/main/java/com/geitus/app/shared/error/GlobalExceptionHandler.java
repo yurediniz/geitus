@@ -9,7 +9,9 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.ConflitoDeUsuarioException;
@@ -20,6 +22,9 @@ import com.geitus.app.catalog.ProdutoNaoEncontradoException;
 import com.geitus.app.catalog.RegraDeNegocioException;
 import com.geitus.app.company.ConflitoDeEmpresaException;
 import com.geitus.app.company.DadosEmpresaInvalidosException;
+import com.geitus.app.customer.ClienteConflitoException;
+import com.geitus.app.customer.ClienteNaoEncontradoException;
+import com.geitus.app.customer.DadosClienteInvalidosException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -86,6 +91,25 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 "Requisicao invalida: nao foi possivel ler o corpo enviado.",
+                request.getRequestURI());
+
+        return ResponseEntity.badRequest().body(corpo);
+    }
+
+    /**
+     * Parametro de rota ou de query com tipo incompativel (por exemplo,
+     * {@code /api/clientes/abc} com UUID esperado, {@code /api/produtos/abc} com
+     * id numerico ou {@code ?ativo=talvez}). Responde 400 com mensagem generica:
+     * nunca ecoa o valor recebido nem a mensagem tecnica da conversao.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> tratarTipoDeParametroInvalido(MethodArgumentTypeMismatchException ex,
+            HttpServletRequest request) {
+        boolean identificadorDaRota = ex.getParameter().hasParameterAnnotation(PathVariable.class);
+        ApiError corpo = ApiError.de(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                identificadorDaRota ? "Identificador inválido." : "Parâmetro inválido.",
                 request.getRequestURI());
 
         return ResponseEntity.badRequest().body(corpo);
@@ -237,6 +261,55 @@ public class GlobalExceptionHandler {
                 request.getRequestURI());
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(corpo);
+    }
+
+    /**
+     * Cliente nao encontrado para a empresa do usuario autenticado (inclui
+     * cliente de outra empresa: resposta identica, para nunca vazar dados entre
+     * empresas — DEC-016).
+     */
+    @ExceptionHandler(ClienteNaoEncontradoException.class)
+    public ResponseEntity<ApiError> tratarClienteNaoEncontrado(ClienteNaoEncontradoException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.NOT_FOUND.value(),
+                HttpStatus.NOT_FOUND.getReasonPhrase(),
+                "Cliente não encontrado.",
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(corpo);
+    }
+
+    /**
+     * Conflito no cadastro de clientes: CPF ja usado por outro cliente da mesma
+     * empresa (DEC-026). A mensagem do service nunca inclui o CPF.
+     */
+    @ExceptionHandler(ClienteConflitoException.class)
+    public ResponseEntity<ApiError> tratarConflitoDeCliente(ClienteConflitoException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.CONFLICT.value(),
+                HttpStatus.CONFLICT.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(corpo);
+    }
+
+    /**
+     * Dados de cliente invalidos verificados no service (nome ausente,
+     * CPF/telefone/WhatsApp invalidos). Mensagens fixas, sem eco do valor.
+     */
+    @ExceptionHandler(DadosClienteInvalidosException.class)
+    public ResponseEntity<ApiError> tratarDadosClienteInvalidos(DadosClienteInvalidosException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+
+        return ResponseEntity.badRequest().body(corpo);
     }
 
     /**
