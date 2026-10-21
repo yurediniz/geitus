@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -32,6 +33,8 @@ import com.geitus.app.catalog.categoria.CategoriaService;
 import com.geitus.app.catalog.categoria.dto.CategoriaRequest;
 import com.geitus.app.catalog.categoria.dto.CategoriaResponse;
 import com.geitus.app.catalog.dto.CodigoBarrasResponse;
+import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
+import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.catalog.unidade.UnidadesPadrao;
@@ -484,6 +487,121 @@ class CatalogoServiceIT {
                  WHERE id = ? AND preco_promocional IS NULL AND promocao_inicio IS NULL AND promocao_fim IS NULL
                    AND preco_atacado IS NULL AND quantidade_minima_atacado IS NULL
                 """, Long.class, idInternoDoProduto(cadastrado.id()))).isEqualTo(1);
+    }
+
+    // ---------- Fase C: historico de precos ----------
+
+    /** Produto com preco 10,00 e custo 7,00, editado depois no preco (11,50) e depois no custo (7,50). */
+    private UUID produtoComTresAlteracoes(Long idUsuario, UUID un) {
+        UUID produto = produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder.comUnidade(un)
+                .nome("Arroz").precoVenda("10.00").custo("7.00").build()).id();
+        produtoService.atualizarDadosBasicosParaUsuario(idUsuario, produto, ProdutoRequestBuilder.comUnidade(un)
+                .nome("Arroz").precoVenda("11.50").custo("7.00").build());
+        produtoService.atualizarDadosBasicosParaUsuario(idUsuario, produto, ProdutoRequestBuilder.comUnidade(un)
+                .nome("Arroz").precoVenda("11.50").custo("7.50").build());
+        return produto;
+    }
+
+    private static org.assertj.core.groups.Tuple linha(CampoHistoricoPreco campo, String anterior, String novo) {
+        return org.assertj.core.groups.Tuple.tuple(campo, anterior == null ? null : new BigDecimal(anterior),
+                new BigDecimal(novo));
+    }
+
+    /** Review Focus 5 + spec 4.6: cadastro e edicoes gravam so o que mudou, com o usuario, na ordem certa. */
+    @Test
+    void historicoGravadoNoBancoDoMaisRecenteParaOMaisAntigo() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        UUID produto = produtoComTresAlteracoes(idUsuario, un);
+        // Mudar so nome, promocao e atacado nao gera linha.
+        produtoService.atualizarDadosBasicosParaUsuario(idUsuario, produto, ProdutoRequestBuilder.comUnidade(un)
+                .nome("Arroz 5kg").precoVenda("11.5").custo("7.5")
+                .promocao("9.90", LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 15)).atacado("9.50", "12")
+                .build());
+
+        PaginaResponse<HistoricoPrecoResponse> pagina = produtoService.historicoDePrecosParaUsuario(idUsuario,
+                produto, 0, 20);
+
+        assertThat(pagina.totalItens()).isEqualTo(4);
+        assertThat(pagina.itens())
+                .extracting(HistoricoPrecoResponse::campo, HistoricoPrecoResponse::valorAnterior,
+                        HistoricoPrecoResponse::valorNovo)
+                .containsExactly(
+                        linha(CampoHistoricoPreco.CUSTO, "7.00", "7.50"),
+                        linha(CampoHistoricoPreco.PRECO_VENDA, "10.00", "11.50"),
+                        linha(CampoHistoricoPreco.CUSTO, null, "7.00"),
+                        linha(CampoHistoricoPreco.PRECO_VENDA, null, "10.00"));
+        assertThat(pagina.itens()).allSatisfy(item -> {
+            assertThat(item.usuarioNome()).isEqualTo("Admin");
+            assertThat(item.alteradoEm()).isNotNull();
+        });
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM produto_historico_precos WHERE produto_id = ? AND usuario_id = ?",
+                Long.class, idInternoDoProduto(produto), idUsuario)).isEqualTo(4);
+    }
+
+    @Test
+    void historicoPaginado() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID produto = produtoComTresAlteracoes(idUsuario, unidadePadrao(empresa, idUsuario, "UN"));
+
+        PaginaResponse<HistoricoPrecoResponse> segunda = produtoService.historicoDePrecosParaUsuario(idUsuario,
+                produto, 1, 2);
+
+        assertThat(segunda.pagina()).isEqualTo(1);
+        assertThat(segunda.tamanho()).isEqualTo(2);
+        assertThat(segunda.totalItens()).isEqualTo(4);
+        assertThat(segunda.itens()).extracting(HistoricoPrecoResponse::valorNovo)
+                .usingElementComparator(BigDecimal::compareTo)
+                .containsExactly(new BigDecimal("7.00"), new BigDecimal("10.00"));
+        assertThat(produtoService.historicoDePrecosParaUsuario(idUsuario, produto, 2, 2).itens()).isEmpty();
+    }
+
+    @Test
+    void saveQueFalhaPor409_naoGravaHistorico() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder.comUnidade(un).nome("A").sku("SKU-A")
+                .build());
+        UUID produtoB = produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder.comUnidade(un)
+                .nome("B").precoVenda("10.00").build()).id();
+
+        assertThatThrownBy(() -> produtoService.atualizarDadosBasicosParaUsuario(idUsuario, produtoB,
+                ProdutoRequestBuilder.comUnidade(un).nome("B").precoVenda("12.00").sku("SKU-A").build()))
+                .isInstanceOf(ProdutoConflitoException.class);
+
+        assertThat(produtoService.historicoDePrecosParaUsuario(idUsuario, produtoB, 0, 20).itens())
+                .extracting(HistoricoPrecoResponse::valorNovo)
+                .usingElementComparator(BigDecimal::compareTo)
+                .containsExactly(new BigDecimal("10.00"));
+    }
+
+    @Test
+    void historicoDeProdutoDeOutraEmpresa_404() {
+        Empresa empresaA = novaEmpresa();
+        Long adminA = novoAdmin(empresaA);
+        Long adminB = novoAdmin(novaEmpresa());
+        UUID produtoDaA = produtoService.cadastrarParaUsuario(adminA,
+                ProdutoRequestBuilder.comUnidade(unidadePadrao(empresaA, adminA, "UN")).nome("Da A").build()).id();
+
+        assertThatThrownBy(() -> produtoService.historicoDePrecosParaUsuario(adminB, produtoDaA, 0, 20))
+                .isInstanceOf(ProdutoNaoEncontradoException.class);
+    }
+
+    @Test
+    void excluirProdutoComHistoricoApagaAsLinhas() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID produto = produtoComTresAlteracoes(idUsuario, unidadePadrao(empresa, idUsuario, "UN"));
+        Long idInterno = idInternoDoProduto(produto);
+
+        produtoService.excluirParaUsuario(idUsuario, produto);
+
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM produto_historico_precos WHERE produto_id = ?",
+                Long.class, idInterno)).isZero();
     }
 
     private UUID unidadePadrao(Empresa empresa, Long idUsuario, String sigla) {

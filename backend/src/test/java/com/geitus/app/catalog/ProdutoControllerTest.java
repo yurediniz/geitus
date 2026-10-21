@@ -11,7 +11,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,6 +29,8 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
+import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
+import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
@@ -889,5 +893,88 @@ class ProdutoControllerTest {
                 .isEqualTo(LocalDate.of(2026, 11, 1));
         org.assertj.core.api.Assertions.assertThat(request.getValue().atacado().quantidadeMinima())
                 .isEqualByComparingTo("12");
+    }
+
+    // ---------- Fase C: historico de precos ----------
+
+    private static final String HISTORICO = "/api/produtos/" + PRODUTO_ID + "/historico-precos";
+
+    @Test
+    void historicoSemToken_401() throws Exception {
+        mockMvc.perform(get(HISTORICO))
+                .andExpect(status().isUnauthorized());
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void historicoComOperador_200ComPaginaPadrao() throws Exception {
+        HistoricoPrecoResponse item = new HistoricoPrecoResponse(CampoHistoricoPreco.PRECO_VENDA,
+                new BigDecimal("10.00"), new BigDecimal("11.50"), "Ana Souza", LocalDateTime.of(2026, 10, 21, 14, 3, 12));
+        when(produtoService.historicoDePrecosParaUsuario(2L, PRODUTO_ID, 0, 20))
+                .thenReturn(new PaginaResponse<>(List.of(item), 0, 20, 1));
+
+        mockMvc.perform(get(HISTORICO).header("Authorization", "Bearer " + tokenParaUsuarioComPerfil(2L, "OPERADOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.itens[0].campo").value("PRECO_VENDA"))
+                .andExpect(jsonPath("$.itens[0].valorAnterior").value(10.00))
+                .andExpect(jsonPath("$.itens[0].valorNovo").value(11.50))
+                .andExpect(jsonPath("$.itens[0].usuarioNome").value("Ana Souza"))
+                .andExpect(jsonPath("$.itens[0].alteradoEm").value("2026-10-21T14:03:12"))
+                .andExpect(jsonPath("$.pagina").value(0))
+                .andExpect(jsonPath("$.tamanho").value(20))
+                .andExpect(jsonPath("$.totalItens").value(1));
+    }
+
+    @Test
+    void historicoRepassaPaginaETamanho() throws Exception {
+        when(produtoService.historicoDePrecosParaUsuario(1L, PRODUTO_ID, 1, 2))
+                .thenReturn(new PaginaResponse<>(List.of(), 1, 2, 2));
+
+        mockMvc.perform(get(HISTORICO).param("pagina", "1").param("tamanho", "2")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.itens").isEmpty())
+                .andExpect(jsonPath("$.totalItens").value(2));
+    }
+
+    @Test
+    void historicoTamanho101_400() throws Exception {
+        when(produtoService.historicoDePrecosParaUsuario(1L, PRODUTO_ID, 0, 101))
+                .thenThrow(new RegraDeNegocioException("O tamanho da página deve ser entre 1 e 100."));
+
+        mockMvc.perform(get(HISTORICO).param("tamanho", "101").header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("O tamanho da página deve ser entre 1 e 100."));
+    }
+
+    @Test
+    void historicoComPaginaNaoNumerica_400() throws Exception {
+        mockMvc.perform(get(HISTORICO).param("pagina", "abc").header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Parâmetro inválido."));
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void historicoUuidMalformado_400() throws Exception {
+        mockMvc.perform(get("/api/produtos/abc/historico-precos")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Identificador inválido."));
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void historicoDeProdutoDeOutraEmpresa_404() throws Exception {
+        when(produtoService.historicoDePrecosParaUsuario(1L, OUTRO_PRODUTO_ID, 0, 20))
+                .thenThrow(new ProdutoNaoEncontradoException());
+
+        mockMvc.perform(get("/api/produtos/" + OUTRO_PRODUTO_ID + "/historico-precos")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensagem").value("Produto não encontrado."));
     }
 }

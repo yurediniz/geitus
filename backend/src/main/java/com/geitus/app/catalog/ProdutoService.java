@@ -18,6 +18,7 @@ import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -26,6 +27,8 @@ import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
 import com.geitus.app.catalog.categoria.CategoriaService;
 import com.geitus.app.catalog.dto.AtacadoRequest;
+import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
+import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.dto.PromocaoRequest;
@@ -67,7 +70,9 @@ import com.geitus.app.shared.busca.PadraoLike;
  * <p>Fase C (docs/modules/produtos-precos.md, 4.3 e 4.4): promocao e atacado
  * validados contra o preco de venda, o preco minimo e a unidade de venda; a
  * situacao da promocao usa a data do {@link Clock} da aplicacao
- * ({@code America/Sao_Paulo}), lida uma vez por requisicao.
+ * ({@code America/Sao_Paulo}), lida uma vez por requisicao. O historico de
+ * custo e preco de venda (4.6) e gravado na mesma transacao do produto, com o
+ * usuario autenticado, so para o que realmente mudou.
  */
 @Service
 public class ProdutoService {
@@ -103,6 +108,8 @@ public class ProdutoService {
     static final String MENSAGEM_QUANTIDADE_ATACADO_CASAS =
             "A quantidade mínima do atacado deve ter no máximo 3 casas decimais.";
     static final String MENSAGEM_UNIDADE_NAO_FRACIONADA = "A unidade %s não aceita quantidade fracionada.";
+    static final String MENSAGEM_PAGINA_NEGATIVA = "A página deve ser maior ou igual a zero.";
+    static final String MENSAGEM_TAMANHO_DE_PAGINA_INVALIDO = "O tamanho da página deve ser entre 1 e 100.";
 
     /** Campos do {@code ProdutoRequest} devolvidos em {@code campos} nos erros de regra (contrato aditivo). */
     static final String CAMPO_SKU = "sku";
@@ -119,6 +126,7 @@ public class ProdutoService {
     static final int TAMANHO_MAXIMO_TERMO_DE_SUGESTAO = 50;
     /** Casas decimais da quantidade minima do atacado ({@code NUMERIC(12,3)}, V8). */
     static final int CASAS_QUANTIDADE_ATACADO = 3;
+    static final int TAMANHO_MAXIMO_PAGINA_HISTORICO = 100;
 
     /** SKU no padrao da sugestao automatica: {@code P} + 6 ou mais digitos (spec 4.2). */
     private static final Pattern SKU_NO_PADRAO = Pattern.compile("P([0-9]{6,})");
@@ -132,20 +140,26 @@ public class ProdutoService {
     private final UsuarioRepository usuarioRepository;
     private final UnidadeMedidaService unidadeService;
     private final CategoriaService categoriaService;
+    private final HistoricoPrecoRepository historicoPrecoRepository;
     private final Clock relogio;
 
     public ProdutoService(ProdutoRepository produtoRepository, EmpresaRepository empresaRepository,
             UsuarioRepository usuarioRepository, UnidadeMedidaService unidadeService,
-            CategoriaService categoriaService, Clock relogio) {
+            CategoriaService categoriaService, HistoricoPrecoRepository historicoPrecoRepository, Clock relogio) {
         this.produtoRepository = produtoRepository;
         this.empresaRepository = empresaRepository;
         this.usuarioRepository = usuarioRepository;
         this.unidadeService = unidadeService;
         this.categoriaService = categoriaService;
+        this.historicoPrecoRepository = historicoPrecoRepository;
         this.relogio = relogio;
     }
 
-    Produto cadastrar(Long empresaId, ProdutoRequest request) {
+    /**
+     * Cadastra o produto e registra no historico o preco de venda e o custo
+     * iniciais (valor anterior nulo), atribuidos a {@code idUsuario}.
+     */
+    Produto cadastrar(Long idUsuario, Long empresaId, ProdutoRequest request) {
         validarCampos(request);
         List<CodigoBarrasValidado> codigos = validarCodigos(empresaId, request.codigosBarras(), null);
         String sku = normalizarOuNulo(request.sku());
@@ -158,15 +172,18 @@ public class ProdutoService {
 
         Produto produto = new Produto(empresa, dadosDoProduto(request, vinculos, sku));
         produto.substituirCodigos(codigos);
-        return produtoRepository.save(produto);
+        Produto gravado = produtoRepository.save(produto);
+        registrarHistorico(gravado, idUsuario, null, null);
+        return gravado;
     }
 
     /**
      * Atualiza o cadastro. {@code codigosBarras} {@code null} (campo ausente no
      * PATCH) mantem os codigos atuais, sem validar nem tocar na lista; uma
      * lista — inclusive {@code []}, que remove todos — substitui a lista inteira.
+     * Mudancas de custo e preco de venda vao para o historico com {@code idUsuario}.
      */
-    Produto atualizarDadosBasicos(Long empresaId, UUID produtoId, ProdutoRequest request) {
+    Produto atualizarDadosBasicos(Long idUsuario, Long empresaId, UUID produtoId, ProdutoRequest request) {
         Produto produto = buscarPorId(empresaId, produtoId);
 
         validarCampos(request);
@@ -177,9 +194,13 @@ public class ProdutoService {
         Vinculos vinculos = resolverVinculos(empresaId, request, produto);
         validarPromocaoEAtacado(request, vinculos.unidade());
 
+        BigDecimal custoAnterior = produto.getCusto();
+        BigDecimal precoAnterior = produto.getPrecoVenda();
         produto.atualizarDadosBasicos(dadosDoProduto(request, vinculos, sku));
         codigos.ifPresent(produto::substituirCodigos);
-        return produtoRepository.save(produto);
+        Produto gravado = produtoRepository.save(produto);
+        registrarHistorico(gravado, idUsuario, custoAnterior, precoAnterior);
+        return gravado;
     }
 
     Produto inativar(Long empresaId, UUID produtoId) {
@@ -292,12 +313,13 @@ public class ProdutoService {
 
     @Transactional
     public ProdutoResponse cadastrarParaUsuario(Long idUsuario, ProdutoRequest request) {
-        return responder(cadastrar(resolverEmpresaId(idUsuario), request));
+        return responder(cadastrar(idUsuario, resolverEmpresaId(idUsuario), request));
     }
 
     @Transactional
     public ProdutoResponse atualizarDadosBasicosParaUsuario(Long idUsuario, UUID produtoId, ProdutoRequest request) {
-        return responderAposGravar(atualizarDadosBasicos(resolverEmpresaId(idUsuario), produtoId, request));
+        return responderAposGravar(atualizarDadosBasicos(idUsuario, resolverEmpresaId(idUsuario), produtoId,
+                request));
     }
 
     @Transactional
@@ -330,6 +352,22 @@ public class ProdutoService {
         return produtos.stream()
                 .map(produto -> ProdutoResponse.de(produto, arvore, podeExcluir(produto), hoje))
                 .toList();
+    }
+
+    /**
+     * Historico de custo e preco de venda do produto, do mais recente para o
+     * mais antigo (spec 5). Leitura para qualquer autenticado; produto de
+     * outra empresa responde 404 (DEC-016); pagina ou tamanho fora dos
+     * limites, 400.
+     */
+    @Transactional(readOnly = true)
+    public PaginaResponse<HistoricoPrecoResponse> historicoDePrecosParaUsuario(Long idUsuario, UUID produtoId,
+            int pagina, int tamanho) {
+        validarPaginacao(pagina, tamanho);
+        Long empresaId = resolverEmpresaId(idUsuario);
+        Produto produto = buscarPorId(empresaId, produtoId);
+        return PaginaResponse.de(historicoPrecoRepository.historicoDoProduto(empresaId, produto.getId(),
+                PageRequest.of(pagina, tamanho)));
     }
 
     @Transactional(readOnly = true)
@@ -625,6 +663,43 @@ public class ProdutoService {
     private static void exigirInformado(Object valor, String mensagem, String campo) {
         if (valor == null) {
             throw new RegraDeNegocioException(mensagem, campo);
+        }
+    }
+
+    // ---------- Historico de precos (docs/modules/produtos-precos.md, 4.6) ----------
+
+    /**
+     * Uma linha por campo que mudou, comparando numericamente (10,00 = 10,0)
+     * e tratando nulo. No cadastro os anteriores sao nulos. Chamado depois do
+     * {@code save} (o produto novo ja tem id), na mesma transacao: se o produto
+     * nao for gravado, nada e registrado.
+     */
+    private void registrarHistorico(Produto produto, Long usuarioId, BigDecimal custoAnterior,
+            BigDecimal precoAnterior) {
+        registrarSeMudou(produto, usuarioId, CampoHistoricoPreco.PRECO_VENDA, precoAnterior, produto.getPrecoVenda());
+        registrarSeMudou(produto, usuarioId, CampoHistoricoPreco.CUSTO, custoAnterior, produto.getCusto());
+    }
+
+    private void registrarSeMudou(Produto produto, Long usuarioId, CampoHistoricoPreco campo, BigDecimal anterior,
+            BigDecimal novo) {
+        if (!mesmoValor(anterior, novo)) {
+            historicoPrecoRepository.save(new HistoricoPreco(produto, campo, anterior, novo, usuarioId));
+        }
+    }
+
+    private static boolean mesmoValor(BigDecimal anterior, BigDecimal novo) {
+        if (anterior == null || novo == null) {
+            return anterior == novo;
+        }
+        return anterior.compareTo(novo) == 0;
+    }
+
+    private static void validarPaginacao(int pagina, int tamanho) {
+        if (pagina < 0) {
+            throw new RegraDeNegocioException(MENSAGEM_PAGINA_NEGATIVA);
+        }
+        if (tamanho < 1 || tamanho > TAMANHO_MAXIMO_PAGINA_HISTORICO) {
+            throw new RegraDeNegocioException(MENSAGEM_TAMANHO_DE_PAGINA_INVALIDO);
         }
     }
 

@@ -33,6 +33,7 @@ import org.assertj.core.api.ThrowingConsumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -43,6 +44,8 @@ import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
 import com.geitus.app.catalog.categoria.CategoriaService;
 import com.geitus.app.catalog.dto.CodigoBarrasResponse;
+import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
+import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
@@ -91,6 +94,9 @@ class ProdutoServiceTest {
     @Mock
     private CategoriaService categoriaService;
 
+    @Mock
+    private HistoricoPrecoRepository historicoPrecoRepository;
+
     private ProdutoService produtoService;
 
     private Empresa empresa;
@@ -100,7 +106,7 @@ class ProdutoServiceTest {
     @BeforeEach
     void setUp() {
         produtoService = new ProdutoService(produtoRepository, empresaRepository, usuarioRepository,
-                unidadeService, categoriaService, RELOGIO);
+                unidadeService, categoriaService, historicoPrecoRepository, RELOGIO);
         empresa = empresaComId(EMPRESA_ID);
         un = unidade(10L, empresa, "UN");
     }
@@ -173,11 +179,11 @@ class ProdutoServiceTest {
     }
 
     private Produto cadastrar(ProdutoRequest request) {
-        return produtoService.cadastrar(EMPRESA_ID, request);
+        return produtoService.cadastrar(ID_USUARIO, EMPRESA_ID, request);
     }
 
     private Produto atualizar(ProdutoRequest request) {
-        return produtoService.atualizarDadosBasicos(EMPRESA_ID, produtoUuid, request);
+        return produtoService.atualizarDadosBasicos(ID_USUARIO, EMPRESA_ID, produtoUuid, request);
     }
 
     private static List<String> codigosDe(Produto produto) {
@@ -281,7 +287,8 @@ class ProdutoServiceTest {
         when(empresaRepository.findById(2L)).thenReturn(Optional.of(empresa2));
         salvamentoDevolveOProduto();
 
-        Produto produto = produtoService.cadastrar(2L, comUnidade(unDaEmpresa2.getUuid()).sku("SKU-1").build());
+        Produto produto = produtoService.cadastrar(ID_USUARIO, 2L,
+                comUnidade(unDaEmpresa2.getUuid()).sku("SKU-1").build());
 
         assertThat(produto.getSku()).isEqualTo("SKU-1");
         assertThat(produto.getEmpresaId()).isEqualTo(2L);
@@ -755,7 +762,7 @@ class ProdutoServiceTest {
     @Test
     void excluirBloqueadoLanca409ComMensagemFixa() {
         ProdutoService comMovimentacao = new ProdutoService(produtoRepository, empresaRepository,
-                usuarioRepository, unidadeService, categoriaService, RELOGIO) {
+                usuarioRepository, unidadeService, categoriaService, historicoPrecoRepository, RELOGIO) {
             @Override
             boolean podeExcluir(Produto produto) {
                 return false;
@@ -1431,6 +1438,218 @@ class ProdutoServiceTest {
         assertThat(resposta.emPromocao()).isTrue();
     }
 
+
+    // ---------- Historico de precos (spec 4.6) ----------
+
+    /** Linhas de historico gravadas, na ordem em que o service as salvou. */
+    private List<HistoricoPreco> historicoGravado() {
+        ArgumentCaptor<HistoricoPreco> linhas = ArgumentCaptor.forClass(HistoricoPreco.class);
+        verify(historicoPrecoRepository, org.mockito.Mockito.atLeast(0)).save(linhas.capture());
+        return linhas.getAllValues();
+    }
+
+    private static org.assertj.core.groups.Tuple linha(CampoHistoricoPreco campo, String anterior, String novo) {
+        return org.assertj.core.groups.Tuple.tuple(campo, anterior == null ? null : new java.math.BigDecimal(anterior),
+                novo == null ? null : new java.math.BigDecimal(novo));
+    }
+
+    private static org.assertj.core.api.ListAssert<org.assertj.core.groups.Tuple> assertLinhas(
+            List<HistoricoPreco> linhas) {
+        return assertThat(linhas.stream()
+                .map(linha -> org.assertj.core.groups.Tuple.tuple(linha.getCampo(), linha.getValorAnterior(),
+                        linha.getValorNovo()))
+                .toList());
+    }
+
+    @Test
+    void cadastroComCusto_registraPrecoECusto() {
+        cadastroPermitido();
+
+        Produto produto = cadastrar(requestComUN().precoVenda("25.90").custo("18.00").build());
+
+        List<HistoricoPreco> linhas = historicoGravado();
+        assertLinhas(linhas).containsExactly(
+                linha(CampoHistoricoPreco.PRECO_VENDA, null, "25.90"),
+                linha(CampoHistoricoPreco.CUSTO, null, "18.00"));
+        assertThat(linhas).allSatisfy(linha -> {
+            assertThat(linha.getProduto()).isSameAs(produto);
+            assertThat(linha.getEmpresaId()).isEqualTo(EMPRESA_ID);
+            assertThat(linha.getUsuarioId()).isEqualTo(ID_USUARIO);
+        });
+    }
+
+    @Test
+    void cadastroSemCusto_registraSoPreco() {
+        cadastroPermitido();
+
+        cadastrar(requestComUN().precoVenda("10.00").build());
+
+        assertLinhas(historicoGravado()).containsExactly(linha(CampoHistoricoPreco.PRECO_VENDA, null, "10.00"));
+    }
+
+    @Test
+    void historicoSoEGravadoDepoisDoProduto() {
+        cadastroPermitido();
+
+        cadastrar(requestComUN().build());
+
+        InOrder ordem = inOrder(produtoRepository, historicoPrecoRepository);
+        ordem.verify(produtoRepository).save(any(Produto.class));
+        ordem.verify(historicoPrecoRepository).save(any(HistoricoPreco.class));
+    }
+
+    @Test
+    void edicaoMudaSoPreco_umaLinha() {
+        produtoExistente(existente().precoVenda("10.00").custo("7.00"));
+        edicaoPermitida();
+
+        atualizar(requestComUN().precoVenda("11.50").custo("7.00").build());
+
+        assertLinhas(historicoGravado()).containsExactly(linha(CampoHistoricoPreco.PRECO_VENDA, "10.00", "11.50"));
+    }
+
+    @Test
+    void edicaoMudaSoCusto_umaLinha() {
+        produtoExistente(existente().precoVenda("10.00").custo("7.00"));
+        edicaoPermitida();
+
+        atualizar(requestComUN().precoVenda("10.00").custo("7.50").build());
+
+        assertLinhas(historicoGravado()).containsExactly(linha(CampoHistoricoPreco.CUSTO, "7.00", "7.50"));
+    }
+
+    @Test
+    void custoRemovido_valorNovoNulo() {
+        produtoExistente(existente().precoVenda("10.00").custo("7.00"));
+        edicaoPermitida();
+
+        atualizar(requestComUN().precoVenda("10.00").custoRemovido().build());
+
+        assertLinhas(historicoGravado()).containsExactly(linha(CampoHistoricoPreco.CUSTO, "7.00", null));
+    }
+
+    @Test
+    void custoInformadoPelaPrimeiraVez_valorAnteriorNulo() {
+        produtoExistente(existente().precoVenda("10.00"));
+        edicaoPermitida();
+
+        atualizar(requestComUN().precoVenda("10.00").custo("6.00").build());
+
+        assertLinhas(historicoGravado()).containsExactly(linha(CampoHistoricoPreco.CUSTO, null, "6.00"));
+    }
+
+    @Test
+    void edicaoSemMudancaDePrecoOuCusto_nenhumaLinha() {
+        produtoExistente(existente().precoVenda("10.00").custo("7.00"));
+        edicaoPermitida();
+
+        atualizar(requestComUN().nome("Outro nome").precoVenda("10.00").custo("7.00")
+                .promocao("8.90", INICIO_PROMOCAO, FIM_PROMOCAO).atacado("8.50", "12").build());
+
+        verify(historicoPrecoRepository, never()).save(any());
+    }
+
+    @Test
+    void dezVsDezZeroZero_nenhumaLinha() {
+        produtoExistente(existente().precoVenda("10.00").custo("7.00"));
+        edicaoPermitida();
+
+        atualizar(requestComUN().precoVenda("10.0").custo("7").build());
+
+        verify(historicoPrecoRepository, never()).save(any());
+    }
+
+    @Test
+    void inativarEReativarNaoGeramHistorico() {
+        produtoExistente();
+        salvamentoDevolveOProduto();
+
+        produtoService.inativar(EMPRESA_ID, produtoUuid);
+        produtoService.reativar(EMPRESA_ID, produtoUuid);
+
+        verify(historicoPrecoRepository, never()).save(any());
+    }
+
+    @Test
+    void usuarioDaLinhaEhOAutenticado() {
+        usuarioAtivoDaEmpresa(42L);
+        cadastroPermitido();
+
+        produtoService.cadastrarParaUsuario(42L, requestComUN().build());
+
+        assertThat(historicoGravado()).extracting(HistoricoPreco::getUsuarioId).containsExactly(42L);
+    }
+
+    @Test
+    void falhaDeValidacaoNaoGravaHistorico() {
+        produtoExistente(existente().precoVenda("10.00"));
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> atualizar(requestComUN().precoVenda("12.00").atacado("13.00", "12").build()))
+                .isInstanceOf(RegraDeNegocioException.class);
+
+        verify(historicoPrecoRepository, never()).save(any());
+    }
+
+    @Test
+    void produtoAntigoEditadoComPromocaoEAtacadoNulos_soOQueMudou() {
+        // Review Focus 5: produto da Fase B (sem promocao nem atacado) editado pelo formulario novo.
+        produtoExistente(existente().precoVenda("10.00").custo("7.00"));
+        edicaoPermitida();
+
+        Produto atualizado = atualizar(requestComUN().precoVenda("10.00").custo("7.20").build());
+
+        assertThat(atualizado.getPrecoPromocional()).isNull();
+        assertThat(atualizado.getPrecoAtacado()).isNull();
+        assertLinhas(historicoGravado()).containsExactly(linha(CampoHistoricoPreco.CUSTO, "7.00", "7.20"));
+    }
+
+    // ---------- Consulta do historico ----------
+
+    @Test
+    void historicoConsultaAPaginaDoProdutoDaEmpresa() {
+        usuarioAtivoDaEmpresa(9L);
+        produtoExistente();
+        HistoricoPrecoResponse item = new HistoricoPrecoResponse(CampoHistoricoPreco.PRECO_VENDA,
+                new java.math.BigDecimal("10.00"), new java.math.BigDecimal("11.50"), "Ana Souza",
+                java.time.LocalDateTime.of(2026, 10, 21, 14, 3, 12));
+        when(historicoPrecoRepository.historicoDoProduto(EMPRESA_ID, PRODUTO_ID,
+                org.springframework.data.domain.PageRequest.of(1, 2)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(item),
+                        org.springframework.data.domain.PageRequest.of(1, 2), 3));
+
+        PaginaResponse<HistoricoPrecoResponse> pagina = produtoService.historicoDePrecosParaUsuario(9L, produtoUuid,
+                1, 2);
+
+        assertThat(pagina).isEqualTo(new PaginaResponse<>(List.of(item), 1, 2, 3));
+    }
+
+    @Test
+    void historicoComPaginacaoForaDosLimites_400() {
+        assertThatThrownBy(() -> produtoService.historicoDePrecosParaUsuario(9L, UUID.randomUUID(), -1, 20))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("A página deve ser maior ou igual a zero.");
+        assertThatThrownBy(() -> produtoService.historicoDePrecosParaUsuario(9L, UUID.randomUUID(), 0, 101))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("O tamanho da página deve ser entre 1 e 100.");
+        assertThatThrownBy(() -> produtoService.historicoDePrecosParaUsuario(9L, UUID.randomUUID(), 0, 0))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("O tamanho da página deve ser entre 1 e 100.");
+
+        org.mockito.Mockito.verifyNoInteractions(historicoPrecoRepository);
+    }
+
+    @Test
+    void historicoDeProdutoDeOutraEmpresa_404() {
+        usuarioAtivoDaEmpresa(9L);
+        UUID deOutraEmpresa = UUID.randomUUID();
+        when(produtoRepository.findByUuidAndEmpresa_Id(deOutraEmpresa, EMPRESA_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> produtoService.historicoDePrecosParaUsuario(9L, deOutraEmpresa, 0, 20))
+                .isInstanceOf(ProdutoNaoEncontradoException.class);
+
+        org.mockito.Mockito.verifyNoInteractions(historicoPrecoRepository);
+    }
 
     // ---------- Resolucao da empresa a partir do usuario autenticado ----------
 

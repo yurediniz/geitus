@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
+import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.dto.SkuSugestaoResponse;
@@ -40,12 +42,16 @@ import jakarta.validation.Valid;
  * <p>O {@code {id}} das rotas e o UUID publico do produto (DEC-019); UUID
  * malformado responde 400 pelo handler global. RBAC (DEC-025) no
  * {@code SecurityConfig}: escrita, exclusao e sugestao de SKU exigem ADMIN;
- * leitura e sugestoes de marca/fornecedor ficam com qualquer autenticado.
+ * leitura (inclusive o historico de precos) e sugestoes de marca/fornecedor
+ * ficam com qualquer autenticado.
  */
 @RestController
 @RequestMapping("/api/produtos")
 @Tag(name = "Produtos", description = "Cadastro e consulta de produtos da empresa do usuario autenticado")
 public class ProdutoController {
+
+    private static final String PAGINA_PADRAO = "0";
+    private static final String TAMANHO_PADRAO_HISTORICO = "20";
 
     private final ProdutoService produtoService;
 
@@ -95,6 +101,21 @@ public class ProdutoController {
             @AuthenticationPrincipal Long idUsuario,
             @PathVariable UUID id) {
         return ResponseEntity.ok(produtoService.buscarPorIdParaUsuario(idUsuario, id));
+    }
+
+    @Operation(summary = "Historico de custo e preco de venda do produto, do mais recente para o mais antigo",
+            description = "Paginado: pagina a partir de 0; tamanho de 1 a 100 (padrao 20). Produto de outra "
+                    + "empresa responde 404.",
+            security = @SecurityRequirement(name = "bearer-jwt"))
+    @GetMapping("/{id}/historico-precos")
+    public ResponseEntity<PaginaResponse<HistoricoPrecoResponse>> historicoDePrecos(
+            @AuthenticationPrincipal Long idUsuario,
+            @PathVariable UUID id,
+            @Parameter(description = "Pagina, a partir de 0")
+            @RequestParam(defaultValue = PAGINA_PADRAO) int pagina,
+            @Parameter(description = "Itens por pagina, de 1 a 100")
+            @RequestParam(defaultValue = TAMANHO_PADRAO_HISTORICO) int tamanho) {
+        return ResponseEntity.ok(produtoService.historicoDePrecosParaUsuario(idUsuario, id, pagina, tamanho));
     }
 
     @Operation(summary = "Cadastra um novo produto na empresa do usuario autenticado",
