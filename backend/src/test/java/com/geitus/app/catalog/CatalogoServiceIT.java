@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -449,6 +450,40 @@ class CatalogoServiceIT {
         assertThat(produtoService.sugestoesParaUsuario(idUsuario, "marca", "GOL")).containsExactly("Golden");
         assertThat(produtoService.sugestoesParaUsuario(idUsuario, "fornecedor", null))
                 .containsExactly("Distribuidora X");
+    }
+
+    // ---------- Fase C: promocao e atacado ----------
+
+    /** Colunas da V8 gravadas e lidas pelo JPA; PATCH com promocao e atacado nulos limpa as cinco. */
+    @Test
+    void promocaoEAtacadoGravadosNoBancoEPatchNuloRemove() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        LocalDate inicio = LocalDate.of(2026, 11, 1);
+        LocalDate fim = LocalDate.of(2026, 11, 15);
+        ProdutoResponse cadastrado = produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder
+                .comUnidade(un).nome("Ração").promocao("8.90", inicio, fim).atacado("8.50", "12").build());
+
+        ProdutoResponse lido = produtoService.buscarPorIdParaUsuario(idUsuario, cadastrado.id());
+
+        assertThat(lido.promocao().preco()).isEqualByComparingTo("8.90");
+        assertThat(lido.promocao().inicio()).isEqualTo(inicio);
+        assertThat(lido.promocao().fim()).isEqualTo(fim);
+        assertThat(lido.atacado().preco()).isEqualByComparingTo("8.50");
+        assertThat(lido.atacado().quantidadeMinima()).isEqualByComparingTo("12");
+
+        ProdutoResponse semBlocos = produtoService.atualizarDadosBasicosParaUsuario(idUsuario, cadastrado.id(),
+                ProdutoRequestBuilder.comUnidade(un).nome("Ração").build());
+
+        assertThat(semBlocos.promocao()).isNull();
+        assertThat(semBlocos.atacado()).isNull();
+        assertThat(semBlocos.emPromocao()).isFalse();
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM produtos
+                 WHERE id = ? AND preco_promocional IS NULL AND promocao_inicio IS NULL AND promocao_fim IS NULL
+                   AND preco_atacado IS NULL AND quantidade_minima_atacado IS NULL
+                """, Long.class, idInternoDoProduto(cadastrado.id()))).isEqualTo(1);
     }
 
     private UUID unidadePadrao(Empresa empresa, Long idUsuario, String sigla) {

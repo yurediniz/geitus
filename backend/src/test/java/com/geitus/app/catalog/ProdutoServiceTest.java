@@ -13,6 +13,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -66,6 +70,11 @@ class ProdutoServiceTest {
     private static final String EAN13_VALIDO = "7891000315507";
     private static final String EAN13_DIGITO_INVALIDO = "7891000315508";
     private static final String EAN8_VALIDO = "96385074";
+    /** 08/11/2026 12:00 em Sao Paulo. */
+    private static final Clock RELOGIO = Clock.fixed(Instant.parse("2026-11-08T15:00:00Z"),
+            ZoneId.of("America/Sao_Paulo"));
+    private static final LocalDate INICIO_PROMOCAO = LocalDate.of(2026, 11, 1);
+    private static final LocalDate FIM_PROMOCAO = LocalDate.of(2026, 11, 15);
 
     @Mock
     private ProdutoRepository produtoRepository;
@@ -91,7 +100,7 @@ class ProdutoServiceTest {
     @BeforeEach
     void setUp() {
         produtoService = new ProdutoService(produtoRepository, empresaRepository, usuarioRepository,
-                unidadeService, categoriaService);
+                unidadeService, categoriaService, RELOGIO);
         empresa = empresaComId(EMPRESA_ID);
         un = unidade(10L, empresa, "UN");
     }
@@ -746,7 +755,7 @@ class ProdutoServiceTest {
     @Test
     void excluirBloqueadoLanca409ComMensagemFixa() {
         ProdutoService comMovimentacao = new ProdutoService(produtoRepository, empresaRepository,
-                usuarioRepository, unidadeService, categoriaService) {
+                usuarioRepository, unidadeService, categoriaService, RELOGIO) {
             @Override
             boolean podeExcluir(Produto produto) {
                 return false;
@@ -1184,6 +1193,244 @@ class ProdutoServiceTest {
 
         assertThat(produto.getCategoria()).isSameAs(bebidas);
     }
+
+    // ---------- Promocao e atacado (spec 4.3 e 4.4) ----------
+
+    private ProdutoRequestBuilder comPromocao(String preco) {
+        return requestComUN().promocao(preco, INICIO_PROMOCAO, FIM_PROMOCAO);
+    }
+
+    private static ThrowingConsumer<Throwable> regraNoCampo(String campo, String mensagem) {
+        return erro -> {
+            assertThat(erro).isInstanceOf(RegraDeNegocioException.class).hasMessage(mensagem);
+            assertThat(((RegraDeNegocioException) erro).campo()).contains(campo);
+        };
+    }
+
+    private static UnidadeMedida unidadeFracionada(Long id, Empresa empresa, String sigla) {
+        UnidadeMedida unidade = new UnidadeMedida(empresa, sigla, "Unidade " + sigla, true);
+        ReflectionTestUtils.setField(unidade, "id", id);
+        return unidade;
+    }
+
+    @Test
+    void promocaoEAtacadoValidosSaoGravados() {
+        cadastroPermitido();
+
+        Produto produto = cadastrar(comPromocao("8.90").atacado("8.50", "12").build());
+
+        assertThat(produto.getPrecoPromocional()).isEqualByComparingTo("8.90");
+        assertThat(produto.getPromocaoInicio()).isEqualTo(INICIO_PROMOCAO);
+        assertThat(produto.getPromocaoFim()).isEqualTo(FIM_PROMOCAO);
+        assertThat(produto.getPrecoAtacado()).isEqualByComparingTo("8.50");
+        assertThat(produto.getQuantidadeMinimaAtacado()).isEqualByComparingTo("12");
+    }
+
+    @Test
+    void promocaoIncompletaLanca400NoCampoQueFalta() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().promocao(null, INICIO_PROMOCAO, FIM_PROMOCAO).build()))
+                .satisfies(regraNoCampo("promocao.preco", "Informe o preço promocional."));
+        assertThatThrownBy(() -> cadastrar(requestComUN().promocao("8.90", null, FIM_PROMOCAO).build()))
+                .satisfies(regraNoCampo("promocao.inicio", "Informe o início da promoção."));
+        assertThatThrownBy(() -> cadastrar(requestComUN().promocao("8.90", INICIO_PROMOCAO, null).build()))
+                .satisfies(regraNoCampo("promocao.fim", "Informe o fim da promoção."));
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void promocaoFimAntesDoInicio() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().promocao("8.90", FIM_PROMOCAO, INICIO_PROMOCAO).build()))
+                .satisfies(regraNoCampo("promocao.fim", "O fim da promoção não pode ser antes do início."));
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void promocaoPrecoZero() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(comPromocao("0.00").build()))
+                .satisfies(regraNoCampo("promocao.preco", "Preço promocional deve ser maior que zero."));
+        assertThatThrownBy(() -> cadastrar(comPromocao("-1").build()))
+                .satisfies(regraNoCampo("promocao.preco", "Preço promocional deve ser maior que zero."));
+    }
+
+    @Test
+    void promocaoIgualAoPrecoDeVenda() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(comPromocao("10.0").precoVenda("10.00").build()))
+                .satisfies(regraNoCampo("promocao.preco", "Preço promocional deve ser menor que o preço de venda."));
+    }
+
+    @Test
+    void promocaoAbaixoDoPrecoMinimo() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(comPromocao("7.99").precoMinimo("8.00").build()))
+                .satisfies(regraNoCampo("promocao.preco",
+                        "Preço promocional não pode ser menor que o preço mínimo."));
+    }
+
+    @Test
+    void promocaoIgualAoPrecoMinimoEPermitida() {
+        cadastroPermitido();
+
+        Produto produto = cadastrar(comPromocao("8.00").precoMinimo("8.00").build());
+
+        assertThat(produto.getPrecoPromocional()).isEqualByComparingTo("8.00");
+    }
+
+    @Test
+    void precoVendaReduzidoAbaixoDaPromocaoGravada() {
+        // Review Focus 2: o formulario reenvia a promocao gravada (8,90) com o preco de venda novo.
+        produtoExistente(existente().promocao("8.90", INICIO_PROMOCAO, FIM_PROMOCAO));
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> atualizar(comPromocao("8.90").precoVenda("8.90").build()))
+                .satisfies(regraNoCampo("promocao.preco", "Preço promocional deve ser menor que o preço de venda."));
+        assertThatThrownBy(() -> atualizar(comPromocao("8.90").precoVenda("8.00").build()))
+                .satisfies(regraNoCampo("promocao.preco", "Preço promocional deve ser menor que o preço de venda."));
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void atacadoPrecoZero() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().atacado("0", "12").build()))
+                .satisfies(regraNoCampo("atacado.preco", "Preço de atacado deve ser maior que zero."));
+    }
+
+    @Test
+    void atacadoIncompletoLanca400NoCampoQueFalta() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().atacado(null, "12").build()))
+                .satisfies(regraNoCampo("atacado.preco", "Informe o preço de atacado."));
+        assertThatThrownBy(() -> cadastrar(requestComUN().atacado("8.50", null).build()))
+                .satisfies(regraNoCampo("atacado.quantidadeMinima", "Informe a quantidade mínima do atacado."));
+    }
+
+    @Test
+    void atacadoIgualAoPrecoDeVenda() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().precoVenda("10.00").atacado("10", "12").build()))
+                .satisfies(regraNoCampo("atacado.preco", "Preço de atacado deve ser menor que o preço de venda."));
+    }
+
+    @Test
+    void atacadoAbaixoDoMinimo() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().precoMinimo("8.00").atacado("7.99", "12").build()))
+                .satisfies(regraNoCampo("atacado.preco", "Preço de atacado não pode ser menor que o preço mínimo."));
+    }
+
+    @Test
+    void quantidadeMinimaUm() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().atacado("8.50", "1.000").build()))
+                .satisfies(regraNoCampo("atacado.quantidadeMinima",
+                        "A quantidade mínima do atacado deve ser maior que 1."));
+        assertThatThrownBy(() -> cadastrar(requestComUN().atacado("8.50", "0.5").build()))
+                .satisfies(regraNoCampo("atacado.quantidadeMinima",
+                        "A quantidade mínima do atacado deve ser maior que 1."));
+    }
+
+    @Test
+    void quantidadeMinimaComMaisDeTresCasasLanca400MesmoSemBeanValidation() {
+        UnidadeMedida kg = unidadeFracionada(11L, empresa, "KG");
+        unidadeDaEmpresa(kg);
+
+        assertThatThrownBy(() -> cadastrar(comUnidade(kg.getUuid()).atacado("8.50", "2.5001").build()))
+                .satisfies(regraNoCampo("atacado.quantidadeMinima",
+                        "A quantidade mínima do atacado deve ter no máximo 3 casas decimais."));
+    }
+
+    @Test
+    void quantidadeFracionadaEmUnidadeNaoFracionada() {
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().atacado("8.50", "2.5").build()))
+                .satisfies(regraNoCampo("atacado.quantidadeMinima", "A unidade UN não aceita quantidade fracionada."));
+    }
+
+    @Test
+    void quantidadeInteiraComZerosDecimaisEmUnidadeNaoFracionadaEPermitida() {
+        cadastroPermitido();
+
+        Produto produto = cadastrar(requestComUN().atacado("8.50", "12.000").build());
+
+        assertThat(produto.getQuantidadeMinimaAtacado()).isEqualByComparingTo("12");
+    }
+
+    @Test
+    void mesmaQuantidadeEmUnidadeFracionada_ok() {
+        UnidadeMedida kg = unidadeFracionada(11L, empresa, "KG");
+        unidadeDaEmpresa(kg);
+        when(empresaRepository.findById(EMPRESA_ID)).thenReturn(Optional.of(empresa));
+        salvamentoDevolveOProduto();
+
+        Produto produto = cadastrar(comUnidade(kg.getUuid()).atacado("8.50", "2.5").build());
+
+        assertThat(produto.getQuantidadeMinimaAtacado()).isEqualByComparingTo("2.5");
+    }
+
+    @Test
+    void unidadeTrocadaParaNaoFracionadaComAtacadoFracionado() {
+        // Review Focus 3: o atacado de 2,5 foi gravado em KG; trocar a unidade para UN invalida a quantidade.
+        UnidadeMedida kg = unidadeFracionada(11L, empresa, "KG");
+        produtoExistente(ProdutoTesteBuilder.produto(empresa, kg).id(PRODUTO_ID).atacado("8.50", "2.5"));
+        unidadeDaEmpresa(un);
+
+        assertThatThrownBy(() -> atualizar(requestComUN().atacado("8.50", "2.5").build()))
+                .satisfies(regraNoCampo("atacado.quantidadeMinima", "A unidade UN não aceita quantidade fracionada."));
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void promocaoEncerradaPodeSerSalva() {
+        produtoExistente(existente().promocao("8.90", LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 15)));
+        edicaoPermitida();
+
+        Produto atualizado = atualizar(requestComUN().nome("Outro nome")
+                .promocao("8.90", LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 15)).build());
+
+        assertThat(atualizado.getNome()).isEqualTo("Outro nome");
+        assertThat(atualizado.getPromocaoFim()).isEqualTo(LocalDate.of(2026, 10, 15));
+    }
+
+    @Test
+    void patchComPromocaoEAtacadoNulosRemove() {
+        produtoExistente(existente().promocao("8.90", INICIO_PROMOCAO, FIM_PROMOCAO).atacado("8.50", "12"));
+        edicaoPermitida();
+
+        Produto atualizado = atualizar(requestComUN().build());
+
+        assertThat(atualizado.getPrecoPromocional()).isNull();
+        assertThat(atualizado.getPromocaoInicio()).isNull();
+        assertThat(atualizado.getPromocaoFim()).isNull();
+        assertThat(atualizado.getPrecoAtacado()).isNull();
+        assertThat(atualizado.getQuantidadeMinimaAtacado()).isNull();
+    }
+
+    @Test
+    void respostaUsaADataDoRelogioParaASituacaoDaPromocao() {
+        usuarioAtivoDaEmpresa(9L);
+        produtoExistente(existente().promocao("8.90", INICIO_PROMOCAO, FIM_PROMOCAO));
+
+        ProdutoResponse resposta = produtoService.buscarPorIdParaUsuario(9L, produtoUuid);
+
+        assertThat(resposta.promocao().situacao()).isEqualTo(SituacaoPromocao.VIGENTE);
+        assertThat(resposta.emPromocao()).isTrue();
+    }
+
 
     // ---------- Resolucao da empresa a partir do usuario autenticado ----------
 

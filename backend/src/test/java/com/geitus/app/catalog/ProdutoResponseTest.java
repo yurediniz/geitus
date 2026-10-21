@@ -3,6 +3,10 @@ package com.geitus.app.catalog;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -10,8 +14,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
+import com.geitus.app.catalog.dto.AtacadoResponse;
 import com.geitus.app.catalog.dto.CodigoBarrasResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
+import com.geitus.app.catalog.dto.PromocaoResponse;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.company.Empresa;
 
@@ -26,6 +32,7 @@ import com.geitus.app.company.Empresa;
 class ProdutoResponseTest {
 
     private static final CategoriaArvore SEM_CATEGORIAS = CategoriaArvore.de(List.of());
+    private static final LocalDate HOJE = LocalDate.of(2026, 11, 8);
 
     private final Empresa empresa = new Empresa("Empresa");
     private final UnidadeMedida un = new UnidadeMedida(empresa, "UN", "Unidade", false);
@@ -43,7 +50,7 @@ class ProdutoResponseTest {
     }
 
     private static ProdutoResponse responder(Produto produto) {
-        return ProdutoResponse.de(produto, SEM_CATEGORIAS, true);
+        return ProdutoResponse.de(produto, SEM_CATEGORIAS, true, HOJE);
     }
 
     private static Categoria categoria(Long id, Empresa empresa, Categoria pai, String nome) {
@@ -157,7 +164,8 @@ class ProdutoResponseTest {
         Produto produto = ProdutoTesteBuilder.produto(empresa, un).nome("Sachê de frango").categoria(sache)
                 .precoVenda("3.50").build();
 
-        ProdutoResponse response = ProdutoResponse.de(produto, CategoriaArvore.de(List.of(racao, umida, sache)), true);
+        ProdutoResponse response = ProdutoResponse.de(produto, CategoriaArvore.de(List.of(racao, umida, sache)), true,
+                HOJE);
 
         assertThat(response.categoria().id()).isEqualTo(sache.getUuid());
         assertThat(response.categoria().nome()).isEqualTo("Sachê");
@@ -185,12 +193,51 @@ class ProdutoResponseTest {
                 .fornecedor("Distribuidora X").build();
 
         ProdutoResponse podeExcluir = responder(produto);
-        ProdutoResponse bloqueado = ProdutoResponse.de(produto, SEM_CATEGORIAS, false);
+        ProdutoResponse bloqueado = ProdutoResponse.de(produto, SEM_CATEGORIAS, false, HOJE);
 
         assertThat(podeExcluir.nomeCurto()).isNull();
         assertThat(podeExcluir.nomeCurtoEfetivo()).isEqualTo("Ração Golden Adulto Frango e A");
         assertThat(podeExcluir.fornecedor()).isEqualTo("Distribuidora X");
         assertThat(podeExcluir.podeExcluir()).isTrue();
         assertThat(bloqueado.podeExcluir()).isFalse();
+    }
+
+    // ---------- Fase C: promocao e atacado ----------
+
+    @Test
+    void situacaoEEmPromocaoComClockFixo() {
+        LocalDate inicio = LocalDate.of(2026, 11, 1);
+        LocalDate fim = LocalDate.of(2026, 11, 15);
+        Produto comPromocao = ProdutoTesteBuilder.produto(empresa, un).promocao("8.90", inicio, fim).build();
+        Clock relogioVigente = Clock.fixed(Instant.parse("2026-11-16T01:30:00Z"), ZoneId.of("America/Sao_Paulo"));
+
+        ProdutoResponse vigente = ProdutoResponse.de(comPromocao, SEM_CATEGORIAS, true,
+                SituacaoPromocao.hoje(relogioVigente));
+        ProdutoResponse agendada = ProdutoResponse.de(comPromocao, SEM_CATEGORIAS, true, inicio.minusDays(1));
+        ProdutoResponse encerrada = ProdutoResponse.de(comPromocao, SEM_CATEGORIAS, true, fim.plusDays(1));
+
+        assertThat(vigente.promocao())
+                .isEqualTo(new PromocaoResponse(new BigDecimal("8.90"), inicio, fim, SituacaoPromocao.VIGENTE));
+        assertThat(vigente.emPromocao()).isTrue();
+        assertThat(agendada.promocao().situacao()).isEqualTo(SituacaoPromocao.AGENDADA);
+        assertThat(agendada.emPromocao()).isFalse();
+        assertThat(encerrada.promocao().situacao()).isEqualTo(SituacaoPromocao.ENCERRADA);
+        assertThat(encerrada.emPromocao()).isFalse();
+    }
+
+    @Test
+    void semPromocaoNemAtacadoSaemNulos() {
+        ProdutoResponse response = responder(ProdutoTesteBuilder.produto(empresa, un).build());
+
+        assertThat(response.promocao()).isNull();
+        assertThat(response.emPromocao()).isFalse();
+        assertThat(response.atacado()).isNull();
+    }
+
+    @Test
+    void atacadoEMapeado() {
+        ProdutoResponse response = responder(ProdutoTesteBuilder.produto(empresa, kg).atacado("4.20", "12.000").build());
+
+        assertThat(response.atacado()).isEqualTo(new AtacadoResponse(new BigDecimal("4.20"), new BigDecimal("12.000")));
     }
 }

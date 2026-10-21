@@ -12,7 +12,7 @@ import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.company.Empresa;
 
 /**
- * Monta entidades {@link Produto} nos testes sem repetir os 16 componentes de
+ * Monta entidades {@link Produto} nos testes sem repetir os componentes de
  * {@link DadosProduto}. Parte de um produto minimo valido (nome, preco e
  * unidade de venda) e cada teste ajusta so o que importa para ele.
  */
@@ -161,13 +161,9 @@ final class ProdutoTesteBuilder {
     Produto build() {
         Produto produto = new Produto(empresa, new DadosProduto(nome, nomeCurto, marca, fornecedor, descricao,
                 unidade, categoria, unidadeCompra, fatorConversao, precoVenda, custo, precoMinimo, estoqueMinimo,
-                estoqueMaximo, pontoReposicao, sku));
+                estoqueMaximo, pontoReposicao, sku, precoPromocional, promocaoInicio, promocaoFim, precoAtacado,
+                quantidadeMinimaAtacado));
         produto.substituirCodigos(codigos);
-        ReflectionTestUtils.setField(produto, "precoPromocional", precoPromocional);
-        ReflectionTestUtils.setField(produto, "promocaoInicio", promocaoInicio);
-        ReflectionTestUtils.setField(produto, "promocaoFim", promocaoFim);
-        ReflectionTestUtils.setField(produto, "precoAtacado", precoAtacado);
-        ReflectionTestUtils.setField(produto, "quantidadeMinimaAtacado", quantidadeMinimaAtacado);
         if (!ativo) {
             produto.inativar();
         }

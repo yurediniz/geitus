@@ -1,12 +1,15 @@
 package com.geitus.app.catalog;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
+import com.geitus.app.catalog.dto.AtacadoRequest;
 import com.geitus.app.catalog.dto.ProdutoRequest;
+import com.geitus.app.catalog.dto.PromocaoRequest;
 
 /**
  * Monta {@link ProdutoRequest} nos testes sem repetir os argumentos do
@@ -32,6 +35,8 @@ final class ProdutoRequestBuilder {
     private BigDecimal precoMinimo;
     private List<String> codigosBarras = new ArrayList<>();
     private String sku;
+    private PromocaoRequest promocao;
+    private AtacadoRequest atacado;
 
     private ProdutoRequestBuilder(UUID unidadeId) {
         this.unidadeId = unidadeId;
@@ -127,9 +132,26 @@ final class ProdutoRequestBuilder {
         return this;
     }
 
+    ProdutoRequestBuilder custoRemovido() {
+        this.custo = null;
+        return this;
+    }
+
+    /** Promocao com o preco informado (ou {@code null}, para testar a promocao incompleta). */
+    ProdutoRequestBuilder promocao(String preco, LocalDate inicio, LocalDate fim) {
+        this.promocao = new PromocaoRequest(preco == null ? null : new BigDecimal(preco), inicio, fim);
+        return this;
+    }
+
+    ProdutoRequestBuilder atacado(String preco, String quantidadeMinima) {
+        this.atacado = new AtacadoRequest(preco == null ? null : new BigDecimal(preco),
+                quantidadeMinima == null ? null : new BigDecimal(quantidadeMinima));
+        return this;
+    }
+
     ProdutoRequest build() {
         return new ProdutoRequest(nome, nomeCurto, marca, fornecedor, descricao, unidadeId, categoriaId,
                 unidadeCompraId, fatorConversao, precoVenda, custo, estoqueMinimo, estoqueMaximo, pontoReposicao,
-                precoMinimo, codigosBarras, sku);
+                precoMinimo, codigosBarras, sku, promocao, atacado);
     }
 }

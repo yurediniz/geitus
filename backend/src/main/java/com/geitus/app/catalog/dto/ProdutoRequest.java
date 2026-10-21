@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
@@ -37,6 +38,12 @@ import jakarta.validation.constraints.Size;
  * {@code null} MANTEM os codigos atuais; no cadastro, {@code null} e "sem
  * codigos". Normalizacao, formato, repeticao e unicidade na empresa ficam no
  * service (spec 4.3).
+ *
+ * <p>Fase C (docs/modules/produtos-precos.md, 5): {@code promocao} e
+ * {@code atacado} nulos ou ausentes significam "sem promocao" e "sem atacado",
+ * como os demais opcionais (a excecao de {@code codigosBarras} nao vale aqui).
+ * Os blocos sao validados em cascata ({@code @Valid}), com os erros nas chaves
+ * aninhadas ({@code promocao.preco}, {@code atacado.quantidadeMinima}...).
  */
 @Schema(description = "Dados para cadastro ou atualizacao de um produto")
 public record ProdutoRequest(
@@ -119,5 +126,13 @@ public record ProdutoRequest(
 
         @Schema(example = "SKU-001")
         @Size(max = 50, message = "SKU deve ter no máximo 50 caracteres.")
-        String sku) {
+        String sku,
+
+        @Schema(description = "Promocao (preco, inicio e fim); null ou ausente = sem promocao")
+        @Valid
+        PromocaoRequest promocao,
+
+        @Schema(description = "Atacado (preco e quantidade minima); null ou ausente = sem atacado")
+        @Valid
+        AtacadoRequest atacado) {
 }

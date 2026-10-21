@@ -2,6 +2,8 @@ package com.geitus.app.catalog;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -23,8 +25,10 @@ import org.springframework.util.StringUtils;
 import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
 import com.geitus.app.catalog.categoria.CategoriaService;
+import com.geitus.app.catalog.dto.AtacadoRequest;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
+import com.geitus.app.catalog.dto.PromocaoRequest;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.company.Empresa;
@@ -59,6 +63,11 @@ import com.geitus.app.shared.busca.PadraoLike;
  * <p>Fase B (docs/modules/produtos-identificacao-e-formulario.md, secao 4):
  * codigos de barras multiplos, nome curto, fornecedor, SKU sugerido, sugestoes
  * de marca/fornecedor e exclusao fisica condicionada a {@link #podeExcluir}.
+ *
+ * <p>Fase C (docs/modules/produtos-precos.md, 4.3 e 4.4): promocao e atacado
+ * validados contra o preco de venda, o preco minimo e a unidade de venda; a
+ * situacao da promocao usa a data do {@link Clock} da aplicacao
+ * ({@code America/Sao_Paulo}), lida uma vez por requisicao.
  */
 @Service
 public class ProdutoService {
@@ -84,14 +93,32 @@ public class ProdutoService {
             + "Inative-o para que não apareça na venda.";
     static final String MENSAGEM_CAMPO_DE_SUGESTAO_INVALIDO = "Campo de sugestão inválido.";
 
+    static final String MENSAGEM_PRECO_PROMOCIONAL_OBRIGATORIO = "Informe o preço promocional.";
+    static final String MENSAGEM_INICIO_PROMOCAO_OBRIGATORIO = "Informe o início da promoção.";
+    static final String MENSAGEM_FIM_PROMOCAO_OBRIGATORIO = "Informe o fim da promoção.";
+    static final String MENSAGEM_FIM_ANTES_DO_INICIO = "O fim da promoção não pode ser antes do início.";
+    static final String MENSAGEM_PRECO_ATACADO_OBRIGATORIO = "Informe o preço de atacado.";
+    static final String MENSAGEM_QUANTIDADE_ATACADO_OBRIGATORIA = "Informe a quantidade mínima do atacado.";
+    static final String MENSAGEM_QUANTIDADE_ATACADO_ATE_UM = "A quantidade mínima do atacado deve ser maior que 1.";
+    static final String MENSAGEM_QUANTIDADE_ATACADO_CASAS =
+            "A quantidade mínima do atacado deve ter no máximo 3 casas decimais.";
+    static final String MENSAGEM_UNIDADE_NAO_FRACIONADA = "A unidade %s não aceita quantidade fracionada.";
+
     /** Campos do {@code ProdutoRequest} devolvidos em {@code campos} nos erros de regra (contrato aditivo). */
     static final String CAMPO_SKU = "sku";
     static final String CAMPO_CODIGOS_BARRAS = "codigosBarras";
+    static final String CAMPO_PROMOCAO_PRECO = "promocao.preco";
+    static final String CAMPO_PROMOCAO_INICIO = "promocao.inicio";
+    static final String CAMPO_PROMOCAO_FIM = "promocao.fim";
+    static final String CAMPO_ATACADO_PRECO = "atacado.preco";
+    static final String CAMPO_ATACADO_QUANTIDADE_MINIMA = "atacado.quantidadeMinima";
 
     static final int MAXIMO_CODIGOS_POR_PRODUTO = 20;
     static final int TAMANHO_MAXIMO_CODIGO = 50;
     static final int LIMITE_DE_SUGESTOES = 10;
     static final int TAMANHO_MAXIMO_TERMO_DE_SUGESTAO = 50;
+    /** Casas decimais da quantidade minima do atacado ({@code NUMERIC(12,3)}, V8). */
+    static final int CASAS_QUANTIDADE_ATACADO = 3;
 
     /** SKU no padrao da sugestao automatica: {@code P} + 6 ou mais digitos (spec 4.2). */
     private static final Pattern SKU_NO_PADRAO = Pattern.compile("P([0-9]{6,})");
@@ -105,15 +132,17 @@ public class ProdutoService {
     private final UsuarioRepository usuarioRepository;
     private final UnidadeMedidaService unidadeService;
     private final CategoriaService categoriaService;
+    private final Clock relogio;
 
     public ProdutoService(ProdutoRepository produtoRepository, EmpresaRepository empresaRepository,
             UsuarioRepository usuarioRepository, UnidadeMedidaService unidadeService,
-            CategoriaService categoriaService) {
+            CategoriaService categoriaService, Clock relogio) {
         this.produtoRepository = produtoRepository;
         this.empresaRepository = empresaRepository;
         this.usuarioRepository = usuarioRepository;
         this.unidadeService = unidadeService;
         this.categoriaService = categoriaService;
+        this.relogio = relogio;
     }
 
     Produto cadastrar(Long empresaId, ProdutoRequest request) {
@@ -122,6 +151,7 @@ public class ProdutoService {
         String sku = normalizarOuNulo(request.sku());
         garantirSkuDisponivelParaNovoProduto(empresaId, sku);
         Vinculos vinculos = resolverVinculos(empresaId, request, null);
+        validarPromocaoEAtacado(request, vinculos.unidade());
 
         Empresa empresa = empresaRepository.findById(empresaId)
                 .orElseThrow(() -> new RegraDeNegocioException("Empresa informada não encontrada."));
@@ -145,6 +175,7 @@ public class ProdutoService {
         String sku = normalizarOuNulo(request.sku());
         garantirSkuDisponivelParaProdutoExistente(empresaId, produto.getId(), sku);
         Vinculos vinculos = resolverVinculos(empresaId, request, produto);
+        validarPromocaoEAtacado(request, vinculos.unidade());
 
         produto.atualizarDadosBasicos(dadosDoProduto(request, vinculos, sku));
         codigos.ifPresent(produto::substituirCodigos);
@@ -295,8 +326,9 @@ public class ProdutoService {
         Long empresaId = resolverEmpresaId(idUsuario);
         List<Produto> produtos = listarPorEmpresaComFiltros(empresaId, busca, ativo);
         CategoriaArvore arvore = categoriaService.arvoreDaEmpresa(empresaId);
+        LocalDate hoje = SituacaoPromocao.hoje(relogio);
         return produtos.stream()
-                .map(produto -> ProdutoResponse.de(produto, arvore, podeExcluir(produto)))
+                .map(produto -> ProdutoResponse.de(produto, arvore, podeExcluir(produto), hoje))
                 .toList();
     }
 
@@ -504,16 +536,118 @@ public class ProdutoService {
         return atual != null && Objects.equals(atual.getId(), idEscolhido);
     }
 
+    // ---------- Promocao e atacado (docs/modules/produtos-precos.md, 4.3 e 4.4) ----------
+
+    /**
+     * Preco especial (promocional ou de atacado) e as mensagens dele: maior que
+     * zero, menor que o preco de venda e nao abaixo do preco minimo.
+     */
+    private enum PrecoEspecial {
+        PROMOCIONAL("Preço promocional", CAMPO_PROMOCAO_PRECO),
+        ATACADO("Preço de atacado", CAMPO_ATACADO_PRECO);
+
+        private final String nome;
+        private final String campo;
+
+        PrecoEspecial(String nome, String campo) {
+            this.nome = nome;
+            this.campo = campo;
+        }
+
+        void validar(BigDecimal preco, BigDecimal precoVenda, BigDecimal precoMinimo) {
+            if (preco.signum() <= 0) {
+                throw new RegraDeNegocioException(nome + " deve ser maior que zero.", campo);
+            }
+            if (preco.compareTo(precoVenda) >= 0) {
+                throw new RegraDeNegocioException(nome + " deve ser menor que o preço de venda.", campo);
+            }
+            if (precoMinimo != null && preco.compareTo(precoMinimo) < 0) {
+                throw new RegraDeNegocioException(nome + " não pode ser menor que o preço mínimo.", campo);
+            }
+        }
+    }
+
+    /**
+     * Valida os blocos opcionais de promocao e atacado (nulo = sem o bloco).
+     * Roda depois de {@code resolverVinculos}, porque a fracao da quantidade
+     * minima depende da unidade de venda resolvida. As comparacoes sao com o
+     * preco de venda DO REQUEST: baixar o preco de venda ate a promocao gravada
+     * (que o formulario reenvia) da 400 em {@code promocao.preco}.
+     *
+     * <p>Promocao encerrada ou com datas no passado e aceita: nao se valida
+     * "fim >= hoje", para nao bloquear a edicao de outros campos (spec 4.3).
+     */
+    private static void validarPromocaoEAtacado(ProdutoRequest request, UnidadeMedida unidade) {
+        if (request.promocao() != null) {
+            validarPromocao(request.promocao(), request.precoVenda(), request.precoMinimo());
+        }
+        if (request.atacado() != null) {
+            validarAtacado(request.atacado(), request.precoVenda(), request.precoMinimo(), unidade);
+        }
+    }
+
+    /** Ordem: completa -> periodo -> preco > 0 -> menor que a venda -> nao abaixo do minimo. */
+    private static void validarPromocao(PromocaoRequest promocao, BigDecimal precoVenda, BigDecimal precoMinimo) {
+        exigirInformado(promocao.preco(), MENSAGEM_PRECO_PROMOCIONAL_OBRIGATORIO, CAMPO_PROMOCAO_PRECO);
+        exigirInformado(promocao.inicio(), MENSAGEM_INICIO_PROMOCAO_OBRIGATORIO, CAMPO_PROMOCAO_INICIO);
+        exigirInformado(promocao.fim(), MENSAGEM_FIM_PROMOCAO_OBRIGATORIO, CAMPO_PROMOCAO_FIM);
+        if (promocao.fim().isBefore(promocao.inicio())) {
+            throw new RegraDeNegocioException(MENSAGEM_FIM_ANTES_DO_INICIO, CAMPO_PROMOCAO_FIM);
+        }
+        PrecoEspecial.PROMOCIONAL.validar(promocao.preco(), precoVenda, precoMinimo);
+    }
+
+    /**
+     * Ordem: completo -> preco (> 0, menor que a venda, nao abaixo do minimo)
+     * -> quantidade > 1 -> fracao conforme a unidade de venda -> ate 3 casas
+     * (defesa alem do Bean Validation, para chamadas sem {@code @Valid}).
+     */
+    private static void validarAtacado(AtacadoRequest atacado, BigDecimal precoVenda, BigDecimal precoMinimo,
+            UnidadeMedida unidade) {
+        exigirInformado(atacado.preco(), MENSAGEM_PRECO_ATACADO_OBRIGATORIO, CAMPO_ATACADO_PRECO);
+        exigirInformado(atacado.quantidadeMinima(), MENSAGEM_QUANTIDADE_ATACADO_OBRIGATORIA,
+                CAMPO_ATACADO_QUANTIDADE_MINIMA);
+        PrecoEspecial.ATACADO.validar(atacado.preco(), precoVenda, precoMinimo);
+        BigDecimal quantidadeMinima = atacado.quantidadeMinima();
+        if (quantidadeMinima.compareTo(BigDecimal.ONE) <= 0) {
+            throw new RegraDeNegocioException(MENSAGEM_QUANTIDADE_ATACADO_ATE_UM, CAMPO_ATACADO_QUANTIDADE_MINIMA);
+        }
+        if (!UnidadeMedida.quantidadeValida(unidade.isFracionada(), quantidadeMinima)) {
+            throw new RegraDeNegocioException(MENSAGEM_UNIDADE_NAO_FRACIONADA.formatted(unidade.getSigla()),
+                    CAMPO_ATACADO_QUANTIDADE_MINIMA);
+        }
+        if (quantidadeMinima.stripTrailingZeros().scale() > CASAS_QUANTIDADE_ATACADO) {
+            throw new RegraDeNegocioException(MENSAGEM_QUANTIDADE_ATACADO_CASAS, CAMPO_ATACADO_QUANTIDADE_MINIMA);
+        }
+    }
+
+    /** Campo obrigatorio do bloco (defesa alem do Bean Validation, para chamadas sem {@code @Valid}). */
+    private static void exigirInformado(Object valor, String mensagem, String campo) {
+        if (valor == null) {
+            throw new RegraDeNegocioException(mensagem, campo);
+        }
+    }
+
     // ---------- Apoio ----------
 
-    /** Dados do cadastro a partir do request: textos aparados (vazio vira {@code null}) e vinculos resolvidos. */
+    /**
+     * Dados do cadastro a partir do request: textos aparados (vazio vira
+     * {@code null}), vinculos resolvidos e promocao/atacado ausentes como nulos.
+     */
     private static DadosProduto dadosDoProduto(ProdutoRequest request, Vinculos vinculos, String sku) {
+        Optional<PromocaoRequest> promocao = Optional.ofNullable(request.promocao());
+        Optional<AtacadoRequest> atacado = Optional.ofNullable(request.atacado());
         return new DadosProduto(request.nome().trim(), normalizarOuNulo(request.nomeCurto()),
                 normalizarOuNulo(request.marca()), normalizarOuNulo(request.fornecedor()),
                 normalizarOuNulo(request.descricao()), vinculos.unidade(), vinculos.categoria(),
                 vinculos.unidadeCompra(), request.fatorConversao(), request.precoVenda(), request.custo(),
                 request.precoMinimo(), request.estoqueMinimo(), request.estoqueMaximo(), request.pontoReposicao(),
-                sku);
+                sku,
+                promocao.map(PromocaoRequest::preco).orElse(null),
+                promocao.map(PromocaoRequest::inicio).orElse(null),
+                promocao.map(PromocaoRequest::fim).orElse(null),
+                atacado.map(AtacadoRequest::preco).orElse(null),
+                atacado.map(AtacadoRequest::quantidadeMinima).orElse(null));
     }
 
     /** Resposta de um produto; a arvore so e carregada se o produto tiver categoria. */
@@ -521,7 +655,7 @@ public class ProdutoService {
         CategoriaArvore arvore = produto.getCategoria() == null
                 ? CategoriaArvore.de(List.of())
                 : categoriaService.arvoreDaEmpresa(produto.getEmpresaId());
-        return ProdutoResponse.de(produto, arvore, podeExcluir(produto));
+        return ProdutoResponse.de(produto, arvore, podeExcluir(produto), SituacaoPromocao.hoje(relogio));
     }
 
     /**

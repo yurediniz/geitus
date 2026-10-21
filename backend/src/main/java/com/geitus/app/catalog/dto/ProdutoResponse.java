@@ -2,6 +2,7 @@ package com.geitus.app.catalog.dto;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -34,6 +35,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * custo (ou o preco, para a margem) nao permite o calculo. {@code conversaoTexto}
  * tambem e derivado: {@code "1 CX = 12 UN"} (fator sem zeros a direita, virgula
  * decimal pt-BR), ou {@code null} sem unidade de compra.
+ *
+ * <p>Fase C: {@code promocao} (com a situacao calculada para {@code hoje}) e
+ * {@code atacado} saem {@code null} quando nao existem; {@code emPromocao} e
+ * {@code true} so com a promocao vigente.
  */
 @Schema(description = "Dados publicos de um produto")
 public record ProdutoResponse(
@@ -62,6 +67,12 @@ public record ProdutoResponse(
         BigDecimal precoVenda,
         BigDecimal custo,
         BigDecimal precoMinimo,
+        @Schema(description = "Promocao com a situacao na data de hoje; null se nao houver")
+        PromocaoResponse promocao,
+        @Schema(description = "Se a promocao esta vigente hoje")
+        boolean emPromocao,
+        @Schema(description = "Preco de atacado; null se nao houver")
+        AtacadoResponse atacado,
         BigDecimal estoqueMinimo,
         BigDecimal estoqueMaximo,
         BigDecimal pontoReposicao,
@@ -84,11 +95,15 @@ public record ProdutoResponse(
     /**
      * Monta a resposta do produto. {@code arvore} e a arvore de categorias da
      * empresa do produto (so e consultada quando o produto tem categoria);
-     * {@code podeExcluir} vem da regra centralizada no {@code ProdutoService}.
+     * {@code podeExcluir} vem da regra centralizada no {@code ProdutoService};
+     * {@code hoje} e a data do relogio da aplicacao (fuso de Sao Paulo), calculada
+     * uma vez por requisicao, que decide a situacao da promocao.
      */
-    public static ProdutoResponse de(Produto produto, CategoriaArvore arvore, boolean podeExcluir) {
+    public static ProdutoResponse de(Produto produto, CategoriaArvore arvore, boolean podeExcluir,
+            LocalDate hoje) {
         BigDecimal preco = produto.getPrecoVenda();
         BigDecimal custo = produto.getCusto();
+        PromocaoResponse promocao = PromocaoResponse.deOuNulo(produto, hoje);
         return new ProdutoResponse(
                 produto.getUuid(),
                 produto.getNome(),
@@ -105,6 +120,9 @@ public record ProdutoResponse(
                 preco,
                 custo,
                 produto.getPrecoMinimo(),
+                promocao,
+                promocao != null && promocao.vigente(),
+                AtacadoResponse.deOuNulo(produto),
                 produto.getEstoqueMinimo(),
                 produto.getEstoqueMaximo(),
                 produto.getPontoReposicao(),

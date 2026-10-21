@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -66,6 +67,7 @@ class ProdutoControllerTest {
     @MockBean
     private ProdutoService produtoService;
 
+    private static final LocalDate HOJE = LocalDate.of(2026, 11, 8);
     private static final String NOME_151_CARACTERES = "A".repeat(151);
     private static final UUID PRODUTO_ID = UUID.fromString("00000000-0000-0000-0000-000000000005");
     private static final UUID OUTRO_PRODUTO_ID = UUID.fromString("00000000-0000-0000-0000-000000000099");
@@ -83,7 +85,7 @@ class ProdutoControllerTest {
     }
 
     private ProdutoResponse respostaComId(UUID id, String nome, String sku) {
-        return ProdutoResponse.de(produtoComId(id, nome, sku), CategoriaArvore.de(List.of()), true);
+        return ProdutoResponse.de(produtoComId(id, nome, sku), CategoriaArvore.de(List.of()), true, HOJE);
     }
 
     /** Produto com id interno numerico preenchido, para provar que ele nunca sai na resposta. */
@@ -474,7 +476,7 @@ class ProdutoControllerTest {
         Produto produto = ProdutoTesteBuilder.produto(empresa, un).id(5L).nome("Sachê").categoria(umida)
                 .compra(cx, "12.0000").precoVenda("3.50").build();
         when(produtoService.buscarPorIdParaUsuario(1L, produto.getUuid()))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of(racao, umida)), true));
+                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of(racao, umida)), true, HOJE));
 
         String token = tokenParaUsuario(1L);
 
@@ -575,7 +577,7 @@ class ProdutoControllerTest {
         Produto produto = produtoComId(PRODUTO_ID, "Produto", null);
         produto.inativar();
         when(produtoService.inativarParaUsuario(1L, PRODUTO_ID))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true));
+                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE));
 
         String token = tokenParaUsuario(1L);
 
@@ -639,7 +641,7 @@ class ProdutoControllerTest {
                 .codigo("7891000315507").codigo("ABC-1").build();
         ReflectionTestUtils.setField(produto.getCodigosBarras().get(0), "id", 77L);
         when(produtoService.buscarPorIdParaUsuario(1L, produto.getUuid()))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true));
+                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE));
 
         String token = tokenParaUsuario(1L);
 
@@ -824,5 +826,68 @@ class ProdutoControllerTest {
     void sugestoesSemTokenRetorna401() throws Exception {
         mockMvc.perform(get("/api/produtos/sugestoes").param("campo", "marca"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ---------- Fase C: promocao e atacado (Bean Validation aninhada) ----------
+
+    @Test
+    void promocaoSemInicio_400ComCampoPromocaoInicio() throws Exception {
+        String token = tokenParaUsuario(1L);
+
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corpo("Produto", "10.00",
+                                "\"promocao\": { \"preco\": 8.90, \"fim\": \"2026-11-15\" }")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[?(@.campo=='promocao.inicio')].mensagem")
+                        .value("Informe o início da promoção."));
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void atacadoComCasasDemais_400NosCamposDoAtacado() throws Exception {
+        String token = tokenParaUsuario(1L);
+
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corpo("Produto", "10.00",
+                                "\"atacado\": { \"preco\": 4.205, \"quantidadeMinima\": 2.5005 }")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[?(@.campo=='atacado.preco')]").exists())
+                .andExpect(jsonPath("$.campos[?(@.campo=='atacado.quantidadeMinima')]").exists());
+
+        org.mockito.Mockito.verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void promocaoEAtacadoChegamAoServiceERespostaTrazOsBlocos() throws Exception {
+        Produto produto = ProdutoTesteBuilder.produto(new Empresa("Empresa 7"),
+                        new UnidadeMedida(new Empresa("Empresa 7"), "UN", "Unidade", false))
+                .promocao("8.90", LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 15)).atacado("4.20", "12").build();
+        when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
+                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE));
+
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corpo("Produto", "10.00",
+                                "\"promocao\": { \"preco\": 8.90, \"inicio\": \"2026-11-01\", \"fim\": \"2026-11-15\" }",
+                                "\"atacado\": { \"preco\": 4.20, \"quantidadeMinima\": 12 }")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.promocao.preco").value(8.90))
+                .andExpect(jsonPath("$.promocao.inicio").value("2026-11-01"))
+                .andExpect(jsonPath("$.promocao.situacao").value("VIGENTE"))
+                .andExpect(jsonPath("$.emPromocao").value(true))
+                .andExpect(jsonPath("$.atacado.quantidadeMinima").value(12));
+
+        ArgumentCaptor<ProdutoRequest> request = ArgumentCaptor.forClass(ProdutoRequest.class);
+        org.mockito.Mockito.verify(produtoService).cadastrarParaUsuario(eq(1L), request.capture());
+        org.assertj.core.api.Assertions.assertThat(request.getValue().promocao().inicio())
+                .isEqualTo(LocalDate.of(2026, 11, 1));
+        org.assertj.core.api.Assertions.assertThat(request.getValue().atacado().quantidadeMinima())
+                .isEqualByComparingTo("12");
     }
 }

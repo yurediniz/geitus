@@ -1,6 +1,7 @@
 package com.geitus.app.catalog;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
@@ -14,6 +15,11 @@ import com.geitus.app.catalog.unidade.UnidadeMedida;
  * e na edicao, em vez de uma lista longa de parametros posicionais. Os codigos
  * de barras ficam fora: sao uma colecao propria, trocada por
  * {@link Produto#substituirCodigos}.
+ *
+ * <p>Fase C: promocao ({@code precoPromocional}, {@code promocaoInicio},
+ * {@code promocaoFim}) e atacado ({@code precoAtacado},
+ * {@code quantidadeMinimaAtacado}) vem todos preenchidos ou todos nulos em
+ * cada bloco.
  */
 public record DadosProduto(
         String nome,
@@ -31,5 +37,10 @@ public record DadosProduto(
         BigDecimal estoqueMinimo,
         BigDecimal estoqueMaximo,
         BigDecimal pontoReposicao,
-        String sku) {
+        String sku,
+        BigDecimal precoPromocional,
+        LocalDate promocaoInicio,
+        LocalDate promocaoFim,
+        BigDecimal precoAtacado,
+        BigDecimal quantidadeMinimaAtacado) {
 }

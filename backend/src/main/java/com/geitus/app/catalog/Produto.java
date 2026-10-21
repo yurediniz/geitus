@@ -181,7 +181,8 @@ public class Produto {
     /**
      * Atualiza os dados do cadastro. Chamado pelo service apos as validacoes de
      * regra de negocio (nome, preco, unicidade de SKU, unidade/categoria da
-     * empresa, coerencia da conversao de compra) ja terem sido feitas.
+     * empresa, coerencia da conversao de compra, promocao e atacado) ja terem
+     * sido feitas. Promocao ou atacado ausente grava nulo nos campos do bloco.
      */
     public void atualizarDadosBasicos(DadosProduto dados) {
         this.nome = dados.nome();
@@ -200,6 +201,11 @@ public class Produto {
         this.estoqueMaximo = dados.estoqueMaximo();
         this.pontoReposicao = dados.pontoReposicao();
         this.sku = dados.sku();
+        this.precoPromocional = dados.precoPromocional();
+        this.promocaoInicio = dados.promocaoInicio();
+        this.promocaoFim = dados.promocaoFim();
+        this.precoAtacado = dados.precoAtacado();
+        this.quantidadeMinimaAtacado = dados.quantidadeMinimaAtacado();
     }
 
     /**
