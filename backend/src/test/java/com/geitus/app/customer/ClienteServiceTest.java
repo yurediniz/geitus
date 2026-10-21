@@ -3,8 +3,6 @@ package com.geitus.app.customer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,6 +13,9 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -135,7 +136,7 @@ class ClienteServiceTest {
         Cliente cliente = clienteService.cadastrarParaUsuario(ID_USUARIO, dados("Ana", "", null, null, null));
 
         assertThat(cliente.getCpf()).isNull();
-        verify(clienteRepository, never()).existsByCpfAndEmpresa_Id(anyString(), anyLong());
+        verify(clienteRepository, never()).existsByCpfAndEmpresa_Id(any(), any());
     }
 
     @Test
@@ -209,6 +210,22 @@ class ClienteServiceTest {
         assertThat(cliente.getWhatsappResolvido()).isEqualTo("11987654321");
     }
 
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(booleans = true)
+    void cadastrarComTelefoneEWhatsappSemTelefoneResolveWhatsappNulo(Boolean telefoneEWhatsapp) {
+        // Sem telefone, "o telefone e WhatsApp" nao produz numero algum: nada
+        // e inventado e o WhatsApp informado continua descartado.
+        prepararCadastro();
+
+        Cliente cliente = clienteService.cadastrarParaUsuario(ID_USUARIO,
+                dados("Ana", null, null, telefoneEWhatsapp, "(11) 91234-5678"));
+
+        assertThat(cliente.getTelefone()).isNull();
+        assertThat(cliente.getWhatsapp()).isNull();
+        assertThat(cliente.getWhatsappResolvido()).isNull();
+    }
+
     @Test
     void whatsappIgualAoTelefoneViraTelefoneEWhatsapp() {
         // "Cadastrar uma vez": o mesmo numero nao e gravado duas vezes, mesmo
@@ -247,7 +264,7 @@ class ClienteServiceTest {
                 dados("Ana", "", "11987654321", true, null));
 
         assertThat(atualizado.getCpf()).isNull();
-        verify(clienteRepository, never()).existsByCpfAndEmpresa_IdAndIdNot(anyString(), anyLong(), anyLong());
+        verify(clienteRepository, never()).existsByCpfAndEmpresa_IdAndIdNot(any(), any(), any());
     }
 
     @Test
@@ -262,7 +279,7 @@ class ClienteServiceTest {
                 .hasMessage(MENSAGEM_CPF_DUPLICADO);
 
         verify(clienteRepository, never()).save(any());
-        verify(clienteRepository, never()).existsByCpfAndEmpresa_Id(anyString(), anyLong());
+        verify(clienteRepository, never()).existsByCpfAndEmpresa_Id(any(), any());
     }
 
     @Test

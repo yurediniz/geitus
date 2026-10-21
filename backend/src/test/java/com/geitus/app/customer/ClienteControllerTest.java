@@ -29,6 +29,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
@@ -70,6 +71,8 @@ class ClienteControllerTest {
     private static final Long ID_OPERADOR = 2L;
     private static final Long ID_EMPRESA = 7L;
     private static final String TELEFONE = "11987654321";
+    private static final int LIMITE_NOME = 150;
+    private static final int LIMITE_OBSERVACOES = 500;
     private static final String CORPO_VALIDO = """
             { "nome": "Ana", "cpf": "111.444.777-35", "telefone": "(11) 98765-4321" }
             """;
@@ -113,6 +116,14 @@ class ClienteControllerTest {
 
     private MockHttpServletRequestBuilder comCorpo(MockHttpServletRequestBuilder requisicao, String corpo) {
         return requisicao.contentType(MediaType.APPLICATION_JSON).content(corpo);
+    }
+
+    private static String corpoComNome(String nome) {
+        return "{ \"nome\": \"" + nome + "\" }";
+    }
+
+    private static String corpoComObservacoes(String observacoes) {
+        return "{ \"nome\": \"Ana\", \"observacoes\": \"" + observacoes + "\" }";
     }
 
     // ---------- Autenticacao ----------
@@ -347,6 +358,48 @@ class ClienteControllerTest {
     }
 
     @Test
+    void nomeCom151CaracteresRetorna400() throws Exception {
+        mockMvc.perform(comoOperador(comCorpo(post("/api/clientes"),
+                        corpoComNome("a".repeat(LIMITE_NOME + 1)))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[?(@.campo=='nome')].mensagem")
+                        .value(hasItem("Nome deve ter no máximo 150 caracteres.")));
+
+        verifyNoInteractions(clienteService);
+    }
+
+    @Test
+    void nomeCom150CaracteresEAceito() throws Exception {
+        when(clienteService.cadastrarParaUsuario(eq(ID_OPERADOR), any(DadosCliente.class)))
+                .thenReturn(cliente("Ana"));
+
+        mockMvc.perform(comoOperador(comCorpo(post("/api/clientes"),
+                        corpoComNome("a".repeat(LIMITE_NOME)))))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void observacoesCom501CaracteresRetorna400() throws Exception {
+        mockMvc.perform(comoOperador(comCorpo(post("/api/clientes"),
+                        corpoComObservacoes("a".repeat(LIMITE_OBSERVACOES + 1)))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[?(@.campo=='observacoes')].mensagem")
+                        .value(hasItem("Observações devem ter no máximo 500 caracteres.")));
+
+        verifyNoInteractions(clienteService);
+    }
+
+    @Test
+    void observacoesCom500CaracteresSaoAceitas() throws Exception {
+        when(clienteService.cadastrarParaUsuario(eq(ID_OPERADOR), any(DadosCliente.class)))
+                .thenReturn(cliente("Ana"));
+
+        mockMvc.perform(comoOperador(comCorpo(post("/api/clientes"),
+                        corpoComObservacoes("a".repeat(LIMITE_OBSERVACOES)))))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
     void whatsappInvalidoEIgnoradoQuandoTelefoneEWhatsapp() throws Exception {
         DadosCliente dados = new DadosCliente("Ana", null, "(11) 98765-4321", true, "123", null);
         when(clienteService.cadastrarParaUsuario(ID_OPERADOR, dados)).thenReturn(cliente("Ana"));
@@ -392,6 +445,19 @@ class ClienteControllerTest {
         mockMvc.perform(comoOperador(comCorpo(post("/api/clientes"), CORPO_VALIDO)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.mensagem").value(mensagem));
+    }
+
+    @Test
+    void violacaoDeIntegridadeRetorna409Generico() throws Exception {
+        // Corrida TOCTOU: a UNIQUE do banco barra o CPF que passou pela checagem do service.
+        String constraint = "uq_cliente_empresa_cpf";
+        when(clienteService.cadastrarParaUsuario(ID_OPERADOR, DADOS_DO_CORPO_VALIDO))
+                .thenThrow(new DataIntegrityViolationException(constraint));
+
+        mockMvc.perform(comoOperador(comCorpo(post("/api/clientes"), CORPO_VALIDO)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value("Registro em conflito com dados já existentes."))
+                .andExpect(content().string(not(containsString(constraint))));
     }
 
     @Test

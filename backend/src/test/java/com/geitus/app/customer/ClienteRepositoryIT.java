@@ -30,8 +30,9 @@ import com.geitus.app.company.TipoPessoa;
  * busca de verdade — o {@code @WebMvcTest} com mock nao faz isso (licao do bug
  * {@code lower(bytea)} no {@code ProdutoRepository}). Cobre isolamento por
  * empresa (DEC-016), UUID publico (DEC-019/029), unicidade do CPF por empresa,
- * os CHECKs de coerencia do WhatsApp e de formato (so digitos), filtro de
- * status, ordenacao, busca por nome/digitos e o tratamento de {@code %}/{@code _}
+ * CPF de cliente inativo continua reservado (DEC-029), os CHECKs de coerencia
+ * do WhatsApp e de formato (so digitos), filtro de status (inclusive nas
+ * buscas), ordenacao, busca por nome/digitos e o tratamento de {@code %}/{@code _}
  * como literais.
  *
  * <p>Usa o banco do container via {@code @AutoConfigureTestDatabase(replace =
@@ -167,6 +168,18 @@ class ClienteRepositoryIT {
     }
 
     @Test
+    void cpfDeClienteInativoContinuaReservado() {
+        // DEC-029: inativar nao libera o CPF; a checagem do service continua
+        // encontrando-o (e a UNIQUE do banco nao filtra por status).
+        Empresa empresa = novaEmpresa("Empresa CPF Inativo");
+        Cliente inativo = novoCliente(empresa, "Ana", CPF_VALIDO, null);
+        inativo.inativar();
+        clienteRepository.saveAndFlush(inativo);
+
+        assertThat(clienteRepository.existsByCpfAndEmpresa_Id(CPF_VALIDO, empresa.getId())).isTrue();
+    }
+
+    @Test
     void variosClientesSemCpfNaoConflitam() {
         Empresa empresa = novaEmpresa("Empresa Sem CPF");
         novoCliente(empresa, "Sem CPF 1", null, null);
@@ -220,6 +233,25 @@ class ClienteRepositoryIT {
                 .extracting(Cliente::getNome).containsExactly("Ana", "Bruno", "Carla");
         assertThat(clienteRepository.buscarPorEmpresa(empresa.getId(), false))
                 .extracting(Cliente::getNome).containsExactly("Bruno");
+    }
+
+    @Test
+    void buscasRespeitamFiltroDeStatus() {
+        Empresa empresa = novaEmpresa("Empresa Filtro Busca");
+        Cliente ativo = novoCliente(empresa, "Ana Ativa", null, TELEFONE_VALIDO);
+        Cliente inativo = novoCliente(empresa, "Ana Inativa", null, TELEFONE_VALIDO);
+        inativo.inativar();
+        clienteRepository.saveAndFlush(inativo);
+        Long idEmpresa = empresa.getId();
+
+        assertThat(clienteRepository.buscarPorNomeOuDigitos(idEmpresa, "%ana%", "%98765%", true))
+                .extracting(Cliente::getId).containsExactly(ativo.getId());
+        assertThat(clienteRepository.buscarPorNomeOuDigitos(idEmpresa, "%ana%", "%98765%", false))
+                .extracting(Cliente::getId).containsExactly(inativo.getId());
+        assertThat(clienteRepository.buscarPorNome(idEmpresa, "%ana%", true))
+                .extracting(Cliente::getId).containsExactly(ativo.getId());
+        assertThat(clienteRepository.buscarPorNome(idEmpresa, "%ana%", false))
+                .extracting(Cliente::getId).containsExactly(inativo.getId());
     }
 
     @Test
