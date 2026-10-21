@@ -13,6 +13,7 @@ import {
   cadastrarProduto,
   excluirProduto,
   inativarProduto,
+  listarHistoricoDePrecos,
   listarSugestoes,
   reativarProduto,
   sugerirSku,
@@ -33,7 +34,7 @@ import {
   unidade,
 } from '@/test/fixturesProduto'
 import type { Categoria } from '@/types/catalogo'
-import type { Produto, ProdutoRequest } from '@/types/produto'
+import type { HistoricoPreco, PaginaResponse, Produto, ProdutoRequest } from '@/types/produto'
 
 vi.mock('@/services/produtoService', () => ({
   buscarProduto: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock('@/services/produtoService', () => ({
   excluirProduto: vi.fn(),
   sugerirSku: vi.fn(),
   listarSugestoes: vi.fn(),
+  listarHistoricoDePrecos: vi.fn(),
 }))
 
 vi.mock('@/services/unidadeService', () => ({
@@ -67,6 +69,7 @@ const reativarProdutoMock = vi.mocked(reativarProduto)
 const excluirProdutoMock = vi.mocked(excluirProduto)
 const sugerirSkuMock = vi.mocked(sugerirSku)
 const listarSugestoesMock = vi.mocked(listarSugestoes)
+const listarHistoricoDePrecosMock = vi.mocked(listarHistoricoDePrecos)
 const listarUnidadesMock = vi.mocked(listarUnidades)
 const listarCategoriasMock = vi.mocked(listarCategorias)
 const cadastrarCategoriaMock = vi.mocked(cadastrarCategoria)
@@ -2139,6 +2142,142 @@ describe('ProdutoPage', () => {
           ID_ARROZ,
           expect.objectContaining({ nome: 'Arroz 5kg Tipo 1', promocao: null, atacado: null }),
         ),
+      )
+    })
+  })
+
+  describe('aba Histórico (preços)', () => {
+    const alteracaoPreco: HistoricoPreco = {
+      campo: 'PRECO_VENDA',
+      valorAnterior: 10,
+      valorNovo: 11.5,
+      usuarioNome: 'Ana Souza',
+      alteradoEm: '2026-10-21T14:03:12',
+    }
+    const cadastroCusto: HistoricoPreco = {
+      campo: 'CUSTO',
+      valorAnterior: null,
+      valorNovo: 8,
+      usuarioNome: 'Bruno Lima',
+      alteradoEm: '2026-10-20T09:05:00',
+    }
+
+    function pagina(itens: HistoricoPreco[], numero: number, totalItens: number): PaginaResponse<HistoricoPreco> {
+      return { itens, pagina: numero, tamanho: 20, totalItens }
+    }
+
+    function linhas(): HTMLElement[] {
+      return within(screen.getByRole('list', { name: 'Alterações de preço' })).getAllByRole('listitem')
+    }
+
+    it('não existe no cadastro de produto novo', async () => {
+      renderNovo()
+      await esperarFormulario()
+
+      expect(screen.queryByRole('tab', { name: /histórico/i })).not.toBeInTheDocument()
+      expect(listarHistoricoDePrecosMock).not.toHaveBeenCalled()
+    })
+
+    it('na edição é a última aba e só busca ao ser aberta', async () => {
+      listarHistoricoDePrecosMock.mockResolvedValue(pagina([alteracaoPreco], 0, 1))
+      renderEdicao()
+      await esperarFormulario()
+
+      const lista = screen.getByRole('tablist', { name: /seções do produto/i })
+      expect(within(lista).getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+        'Geral',
+        'Preços',
+        'Estoque',
+        'Códigos',
+        'Histórico',
+      ])
+      expect(listarHistoricoDePrecosMock).not.toHaveBeenCalled()
+
+      abrirAba(/histórico/i)
+
+      expect(await screen.findByText('Ana Souza')).toBeInTheDocument()
+      expect(listarHistoricoDePrecosMock).toHaveBeenCalledWith(ID_ARROZ, 0)
+      const [linha] = linhas()
+      expect(within(linha).getByText('Preço de venda')).toBeInTheDocument()
+      expect(within(linha).getByText(/^R\$\s10,00 → R\$\s11,50$/)).toBeInTheDocument()
+      expect(within(linha).getByText('+15,00%')).toBeInTheDocument()
+      expect(within(linha).getByText('21/10/2026 14:03')).toBeInTheDocument()
+    })
+
+    it('sem valor anterior (cadastro), mostra "Não informado" e nenhuma variação', async () => {
+      listarHistoricoDePrecosMock.mockResolvedValue(pagina([cadastroCusto], 0, 1))
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/histórico/i)
+
+      expect(await screen.findByText('Bruno Lima')).toBeInTheDocument()
+      const [linha] = linhas()
+      expect(within(linha).getByText('Custo')).toBeInTheDocument()
+      expect(within(linha).getByText(/^Não informado → R\$\s8,00$/)).toBeInTheDocument()
+      expect(within(linha).queryByText(/%$/)).not.toBeInTheDocument()
+    })
+
+    it('"Carregar mais" busca a próxima página enquanto houver itens', async () => {
+      listarHistoricoDePrecosMock
+        .mockResolvedValueOnce(pagina([alteracaoPreco], 0, 2))
+        .mockResolvedValueOnce(pagina([cadastroCusto], 1, 2))
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/histórico/i)
+      expect(await screen.findByText('Ana Souza')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Carregar mais' }))
+
+      expect(await screen.findByText('Bruno Lima')).toBeInTheDocument()
+      expect(listarHistoricoDePrecosMock).toHaveBeenLastCalledWith(ID_ARROZ, 1)
+      expect(linhas()).toHaveLength(2)
+      expect(screen.queryByRole('button', { name: 'Carregar mais' })).not.toBeInTheDocument()
+    })
+
+    it('mostra carregando e, sem alterações, o estado vazio', async () => {
+      let responder: (valor: PaginaResponse<HistoricoPreco>) => void = () => {}
+      listarHistoricoDePrecosMock.mockReturnValue(new Promise((resolve) => (responder = resolve)))
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/histórico/i)
+
+      expect(screen.getByText('Carregando histórico...')).toBeInTheDocument()
+      await act(async () => responder(pagina([], 0, 0)))
+
+      expect(await screen.findByText('Nenhuma alteração de preço registrada.')).toBeInTheDocument()
+      expect(screen.getByText('As alterações de custo e preço de venda aparecem aqui.')).toBeInTheDocument()
+    })
+
+    it('falha ao carregar mostra erro amigável e "Tentar de novo"', async () => {
+      listarHistoricoDePrecosMock
+        .mockRejectedValueOnce(new HttpError(500, 'NullPointerException em HistoricoService'))
+        .mockResolvedValueOnce(pagina([alteracaoPreco], 0, 1))
+      renderEdicao()
+      await esperarFormulario()
+      abrirAba(/histórico/i)
+
+      expect(await screen.findByText('Não foi possível carregar o histórico de preços.')).toBeInTheDocument()
+      expect(screen.queryByText(/NullPointer/)).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }))
+
+      expect(await screen.findByText('Ana Souza')).toBeInTheDocument()
+      // O botao fica dentro do formulario do produto: tentar de novo nao salva.
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('salvar invalida o histórico do produto no cache', async () => {
+      atualizarProdutoMock.mockResolvedValue(produtoAtivo)
+      const queryClient = novoQueryClient()
+      const invalidar = vi.spyOn(queryClient, 'invalidateQueries')
+      buscarProdutoMock.mockResolvedValue(produtoAtivo)
+      renderPagina(`/produtos/${ID_ARROZ}`, undefined, queryClient)
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(invalidar).toHaveBeenCalledWith({ queryKey: [...PRODUTOS_QUERY_KEY, ID_ARROZ, 'historico-precos'] }),
       )
     })
   })

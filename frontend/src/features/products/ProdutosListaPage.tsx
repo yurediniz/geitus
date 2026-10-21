@@ -267,6 +267,31 @@ function textoCodigos(produto: Produto): string | null {
   return demais.length > 0 ? `${primeiro.codigo} (+${demais.length})` : primeiro.codigo
 }
 
+/**
+ * Preco da lista: com promocao vigente, o promocional em destaque, o normal
+ * riscado e o selo "Promoção" (leitores de tela ouvem "de R$ X por R$ Y").
+ * Promocao agendada ou encerrada nao muda nada (Fase E traz o filtro).
+ */
+function PrecoDoProduto({ produto }: { produto: Produto }) {
+  if (!produto.emPromocao || produto.promocao === null) {
+    return <>{formatarMoeda(produto.precoVenda)}</>
+  }
+  const normal = formatarMoeda(produto.precoVenda)
+  const promocional = formatarMoeda(produto.promocao.preco)
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="sr-only">{`de ${normal} por ${promocional}`}</span>
+      <span aria-hidden="true" className="font-semibold text-foreground tabular-nums">
+        {promocional}
+      </span>
+      <s aria-hidden="true" className="tabular-nums">
+        {normal}
+      </s>
+      <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">Promoção</span>
+    </span>
+  )
+}
+
 function ProdutoItem({ produto, somenteLeitura, estadoParaProduto, onAlterarStatus, alterandoStatus }: ProdutoItemProps) {
   const margem = formatarPercentual(produto.margem)
   const markup = formatarPercentual(produto.markup)
@@ -285,7 +310,9 @@ function ProdutoItem({ produto, somenteLeitura, estadoParaProduto, onAlterarStat
           <dl className="grid gap-x-4 gap-y-1 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
             <div>
               <dt className="font-medium text-foreground">Preço</dt>
-              <dd>{formatarMoeda(produto.precoVenda)}</dd>
+              <dd>
+                <PrecoDoProduto produto={produto} />
+              </dd>
             </div>
             {produto.custo !== null && (
               <div>

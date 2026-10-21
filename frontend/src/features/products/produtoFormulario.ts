@@ -219,8 +219,8 @@ export const produtoSchema = z.object({
 
 export type ProdutoFormValues = z.infer<typeof produtoSchema>
 
-/** Abas da pagina do produto, na ordem de exibicao. */
-export const ABAS_PRODUTO = ['geral', 'precos', 'estoque', 'codigos'] as const
+/** Abas da pagina do produto, na ordem de exibicao. Historico so existe na edicao. */
+export const ABAS_PRODUTO = ['geral', 'precos', 'estoque', 'codigos', 'historico'] as const
 export type AbaProduto = (typeof ABAS_PRODUTO)[number]
 
 export const ROTULO_ABA: Readonly<Record<AbaProduto, string>> = {
@@ -228,13 +228,15 @@ export const ROTULO_ABA: Readonly<Record<AbaProduto, string>> = {
   precos: 'Preços',
   estoque: 'Estoque',
   codigos: 'Códigos',
+  historico: 'Histórico',
 }
 
 /**
  * Campos de cada aba, na ordem da tela: alimenta o indicador de erro da aba e
  * diz qual campo focar ao salvar com erro. Todo campo do formulario aparece em
  * alguma aba; so os codigos de barras aparecem em duas (cadastro rapido na
- * Geral e a lista completa em Codigos), garantido por teste.
+ * Geral e a lista completa em Codigos), garantido por teste. Historico e so
+ * leitura: nenhum campo.
  */
 export const CAMPOS_POR_ABA: Readonly<Record<AbaProduto, readonly (keyof ProdutoFormValues)[]>> = {
   geral: [
@@ -264,6 +266,7 @@ export const CAMPOS_POR_ABA: Readonly<Record<AbaProduto, readonly (keyof Produto
   ],
   estoque: ['estoqueMinimo', 'pontoReposicao', 'estoqueMaximo'],
   codigos: ['sku', 'codigoPendente', 'codigosBarras'],
+  historico: [],
 }
 
 /**

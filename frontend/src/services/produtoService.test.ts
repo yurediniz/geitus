@@ -6,6 +6,7 @@ import {
   cadastrarProduto,
   excluirProduto,
   inativarProduto,
+  listarHistoricoDePrecos,
   listarProdutos,
   listarSugestoes,
   reativarProduto,
@@ -158,5 +159,16 @@ describe('produtoService', () => {
     await listarSugestoes('fornecedor', '  ')
 
     expect(apiGetMock).toHaveBeenCalledWith('/produtos/sugestoes?campo=fornecedor', { autenticada: true })
+  })
+
+  it('lista o historico de precos paginado do produto (pagina e tamanho na URL)', async () => {
+    const pagina = { itens: [], pagina: 1, tamanho: 20, totalItens: 0 }
+    apiGetMock.mockResolvedValue(pagina)
+
+    await expect(listarHistoricoDePrecos(ID, 1)).resolves.toBe(pagina)
+
+    expect(apiGetMock).toHaveBeenCalledWith(`/produtos/${ID}/historico-precos?pagina=1&tamanho=20`, {
+      autenticada: true,
+    })
   })
 })

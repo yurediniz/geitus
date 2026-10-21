@@ -135,3 +135,26 @@ export interface ListarProdutosParams {
   busca?: string
   status?: ProdutoStatusFiltro
 }
+
+/** Campo cujo valor gerou a linha do historico de precos. */
+export type CampoHistoricoPreco = 'CUSTO' | 'PRECO_VENDA'
+
+/** Uma alteracao de custo ou de preco de venda (gravada pelo backend ao salvar o produto). */
+export interface HistoricoPreco {
+  campo: CampoHistoricoPreco
+  /** null no cadastro ou quando o custo estava vazio. */
+  valorAnterior: number | null
+  /** null quando o custo foi removido. */
+  valorNovo: number | null
+  usuarioNome: string
+  /** Momento da gravacao (yyyy-mm-ddThh:mm:ss, horario do servidor). */
+  alteradoEm: string
+}
+
+/** Pagina de uma consulta paginada do backend (`pagina` comeca em 0). */
+export interface PaginaResponse<T> {
+  itens: T[]
+  pagina: number
+  tamanho: number
+  totalItens: number
+}

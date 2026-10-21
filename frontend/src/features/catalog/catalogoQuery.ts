@@ -11,6 +11,10 @@ export const TODAS_UNIDADES_QUERY_KEY = [...UNIDADES_QUERY_KEY, 'todas'] as cons
 export const TODAS_CATEGORIAS_QUERY_KEY = [...CATEGORIAS_QUERY_KEY, 'todas'] as const
 /** Produtos exibem unidade/categoria: alteracoes no catalogo os deixam desatualizados. */
 export const PRODUTOS_QUERY_KEY = ['produtos'] as const
+/** Historico de precos de um produto (sob o prefixo de produtos; salvar o produto o invalida). */
+export function chaveDoHistoricoDePrecos(produtoId: string) {
+  return [...PRODUTOS_QUERY_KEY, produtoId, 'historico-precos'] as const
+}
 
 interface TextosErroCatalogo {
   /** Mensagem usada quando nao ha nada mais especifico a dizer. */

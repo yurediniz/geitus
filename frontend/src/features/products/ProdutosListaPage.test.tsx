@@ -453,4 +453,41 @@ describe('ProdutosListaPage', () => {
       expect(screen.queryByText(/somente administradores podem gerenciar produtos/i)).not.toBeInTheDocument()
     })
   })
+
+  describe('promoção vigente', () => {
+    it('mostra o selo Promoção, o preço promocional e o normal riscado', async () => {
+      const emPromocao: Produto = {
+        ...produtoAtivo,
+        precoVenda: 10,
+        promocao: { preco: 8.9, inicio: '2026-11-01', fim: '2026-11-15', situacao: 'VIGENTE' },
+        emPromocao: true,
+      }
+      listarProdutosMock.mockResolvedValue([emPromocao])
+
+      renderLista()
+
+      const card = await cardDoProduto('Arroz 5kg')
+      expect(within(card).getByText('Promoção')).toBeInTheDocument()
+      expect(within(card).getByText(/^de R\$\s10,00 por R\$\s8,90$/)).toHaveClass('sr-only')
+      const riscado = within(card).getByText(/^R\$\s10,00$/)
+      expect(riscado.tagName).toBe('S')
+      expect(within(card).getByText(/^R\$\s8,90$/)).toBeInTheDocument()
+    })
+
+    it('promoção agendada ou encerrada não muda o preço da lista', async () => {
+      const agendada: Produto = {
+        ...produtoAtivo,
+        promocao: { preco: 20.9, inicio: '2026-12-01', fim: '2026-12-15', situacao: 'AGENDADA' },
+        emPromocao: false,
+      }
+      listarProdutosMock.mockResolvedValue([agendada])
+
+      renderLista()
+
+      const card = await cardDoProduto('Arroz 5kg')
+      expect(within(card).queryByText('Promoção')).not.toBeInTheDocument()
+      expect(within(card).queryByText(/R\$\s20,90/)).not.toBeInTheDocument()
+      expect(within(card).getByText(/^R\$\s25,90$/).tagName).not.toBe('S')
+    })
+  })
 })

@@ -1,7 +1,9 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/services/httpClient'
 import type {
   CampoSugestaoProduto,
+  HistoricoPreco,
   ListarProdutosParams,
+  PaginaResponse,
   Produto,
   ProdutoRequest,
 } from '@/types/produto'
@@ -84,4 +86,19 @@ export function listarSugestoes(campo: CampoSugestaoProduto, termo: string): Pro
     searchParams.set('termo', termoAparado)
   }
   return apiGet<string[]>(`/produtos/sugestoes?${searchParams.toString()}`, { autenticada: true })
+}
+
+/** Tamanho padrao da pagina do historico de precos (o backend aceita ate 100). */
+export const TAMANHO_PAGINA_HISTORICO = 20
+
+/** Historico de custo e preco de venda do produto, do mais recente para o mais antigo. */
+export function listarHistoricoDePrecos(
+  id: string,
+  pagina: number,
+  tamanho = TAMANHO_PAGINA_HISTORICO,
+): Promise<PaginaResponse<HistoricoPreco>> {
+  const searchParams = new URLSearchParams({ pagina: String(pagina), tamanho: String(tamanho) })
+  return apiGet<PaginaResponse<HistoricoPreco>>(`${caminhoDoProduto(id)}/historico-precos?${searchParams.toString()}`, {
+    autenticada: true,
+  })
 }

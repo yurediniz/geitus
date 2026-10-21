@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   PRODUTOS_QUERY_KEY,
   TODAS_CATEGORIAS_QUERY_KEY,
+  chaveDoHistoricoDePrecos,
   TODAS_UNIDADES_QUERY_KEY,
   ehMensagemGenerica,
 } from '@/features/catalog/catalogoQuery'
@@ -19,6 +20,7 @@ import { AvisoSomenteLeitura, ErroInline, FeedbackCatalogo } from '@/features/ca
 import { AbaCodigos } from '@/features/products/abas/AbaCodigos'
 import { AbaEstoque } from '@/features/products/abas/AbaEstoque'
 import { AbaGeral } from '@/features/products/abas/AbaGeral'
+import { AbaHistorico } from '@/features/products/abas/AbaHistorico'
 import { AbaPrecos } from '@/features/products/abas/AbaPrecos'
 import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { destinoDaLista, type EstadoParaLista } from '@/features/products/navegacaoProdutos'
@@ -512,6 +514,8 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
       queryClient.setQueryData(chaveDoProduto(salvo.id), salvo)
       // Listas ficam desatualizadas e recarregam ao montar; nada a refazer nesta pagina.
       void queryClient.invalidateQueries({ queryKey: PRODUTOS_QUERY_KEY, refetchType: 'none' })
+      // O save pode ter gravado custo/preco novos no historico.
+      void queryClient.invalidateQueries({ queryKey: chaveDoHistoricoDePrecos(salvo.id) })
       setErroSalvar(null)
       if (acao === 'cadastrarOutro') {
         reset(valoresParaCadastrarOutro(valores))
@@ -700,6 +704,8 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   const desabilitado = salvando || somenteLeitura
 
   const errosPorAba = (alvo: AbaProduto) => CAMPOS_POR_ABA[alvo].filter((campo) => errors[campo] !== undefined).length
+  // Historico so existe para um produto ja gravado.
+  const abasVisiveis = modoNovo ? ABAS_PRODUTO.filter((alvo) => alvo !== 'historico') : ABAS_PRODUTO
 
   const podeExcluir = produto !== null && !somenteLeitura && produto.podeExcluir
   // 409: o produto teve movimentacao; inativar e a saida que a mensagem indica.
@@ -774,7 +780,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
 
           <Tabs value={aba} onValueChange={(valor) => ehAba(valor) && setAba(valor)}>
             <TabsList aria-label="Seções do produto">
-              {ABAS_PRODUTO.map((alvo) => {
+              {abasVisiveis.map((alvo) => {
                 const quantidadeErros = errosPorAba(alvo)
                 return (
                   <TabsTrigger key={alvo} value={alvo} data-aba={alvo}>
@@ -819,6 +825,11 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
                     aoAlterarCampo={aoAlterarCampo}
                   />
                 </TabsContent>
+                {produto && (
+                  <TabsContent value="historico">
+                    <AbaHistorico produtoId={produto.id} />
+                  </TabsContent>
+                )}
               </CardContent>
             </Card>
           </Tabs>
