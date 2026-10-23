@@ -13,12 +13,16 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * <p>O {@code id} e o UUID publico (DEC-019/029); a PK numerica e o
  * {@code empresaId} nunca saem na API, e a entidade JPA nao e exposta.
  * {@code whatsapp} e o numero resolvido: o proprio telefone quando
- * {@code telefoneEWhatsapp}, senao o WhatsApp proprio.
+ * {@code telefoneEWhatsapp}, senao o WhatsApp proprio. {@code numero} e o
+ * numero de registro na empresa (Fase B2), imutavel.
  */
 @Schema(description = "Dados publicos de um cliente")
 public record ClienteResponse(
         @Schema(description = "Identificador publico (UUID)")
         UUID id,
+        @Schema(description = "Numero de registro do cliente na empresa (1, 2, 3...), gerado na criacao e imutavel",
+                example = "12")
+        Long numero,
         String nome,
         String cpf,
         String telefone,
@@ -33,6 +37,7 @@ public record ClienteResponse(
     public static ClienteResponse de(Cliente cliente) {
         return new ClienteResponse(
                 cliente.getUuid(),
+                cliente.getNumero(),
                 cliente.getNome(),
                 cliente.getCpf(),
                 cliente.getTelefone(),

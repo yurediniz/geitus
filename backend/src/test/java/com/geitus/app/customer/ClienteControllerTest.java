@@ -504,4 +504,30 @@ class ClienteControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().json("[]"));
     }
+
+    // ---------- Fase B2: numero de registro ----------
+
+    @Test
+    void clienteRespostaTrazNumero() throws Exception {
+        Cliente cliente = cliente("Ana");
+        when(clienteService.buscarParaUsuario(ID_OPERADOR, cliente.getUuid())).thenReturn(cliente);
+
+        mockMvc.perform(comoOperador(get("/api/clientes/" + cliente.getUuid())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.numero").value(12));
+    }
+
+    /** O {@code numero} nunca e aceito no request: nao existe em {@code DadosCliente}. */
+    @Test
+    void numeroNoJsonDoClienteEIgnorado() throws Exception {
+        when(clienteService.cadastrarParaUsuario(ID_ADMIN, DADOS_DO_CORPO_VALIDO)).thenReturn(cliente("Ana"));
+
+        mockMvc.perform(comCorpo(comoAdmin(post("/api/clientes")),
+                        "{ \"nome\": \"Ana\", \"cpf\": \"111.444.777-35\", \"telefone\": \"(11) 98765-4321\","
+                                + " \"numero\": 999 }"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.numero").value(12));
+
+        verify(clienteService).cadastrarParaUsuario(ID_ADMIN, DADOS_DO_CORPO_VALIDO);
+    }
 }

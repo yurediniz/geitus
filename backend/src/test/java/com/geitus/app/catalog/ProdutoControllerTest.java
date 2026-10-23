@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -1207,6 +1208,122 @@ class ProdutoControllerTest {
         verify(produtoService).cadastrarParaUsuario(eq(1L), request.capture());
         assertThat(request.getValue().controlaEstoque()).isTrue();
         assertThat(request.getValue().estoqueInicial()).isEqualByComparingTo("12");
+    }
+
+    // ---------- Fase B2: numero, codigo do produto e balanca ----------
+
+    @Test
+    void respostaTrazNumeroCodigoEBalanca() throws Exception {
+        Empresa empresa = new Empresa("Empresa 7");
+        Produto produto = ProdutoTesteBuilder.produto(empresa, new UnidadeMedida(empresa, "KG", "Quilo", true))
+                .numero(15).nome("Açúcar a granel").codigoDoProduto(542).vendidoBalanca().build();
+        when(produtoService.buscarPorIdParaUsuario(1L, produto.getUuid()))
+                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE,
+                        ResumoDeEstoque.VAZIO));
+
+        mockMvc.perform(get("/api/produtos/" + produto.getUuid())
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.numero").value(15))
+                .andExpect(jsonPath("$.codigo").value(542))
+                .andExpect(jsonPath("$.vendidoBalanca").value(true));
+    }
+
+    @Test
+    void produtoSemCodigoRespondeCodigoNuloEBalancaFalse() throws Exception {
+        when(produtoService.buscarPorIdParaUsuario(1L, PRODUTO_ID))
+                .thenReturn(respostaComId(PRODUTO_ID, "Arroz", null));
+
+        mockMvc.perform(get("/api/produtos/" + PRODUTO_ID).header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.numero").isNumber())
+                .andExpect(jsonPath("$.codigo").doesNotExist())
+                .andExpect(jsonPath("$.vendidoBalanca").value(false));
+    }
+
+    @Test
+    void codigoEBalancaChegamAoService() throws Exception {
+        when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
+                .thenReturn(respostaComId(PRODUTO_ID, "Açúcar a granel", null));
+
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corpo("Açúcar a granel", "5.00", "\"codigo\": 542", "\"vendidoBalanca\": true")))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<ProdutoRequest> request = ArgumentCaptor.forClass(ProdutoRequest.class);
+        verify(produtoService).cadastrarParaUsuario(eq(1L), request.capture());
+        assertThat(request.getValue().codigo()).isEqualTo(542);
+        assertThat(request.getValue().vendidoBalanca()).isTrue();
+    }
+
+    /** Spec 9: "000542" vira 542 (o frontend envia numero; texto com zeros tambem e aceito). */
+    @Test
+    void codigoComZerosEmTextoViraNumero() throws Exception {
+        when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
+                .thenReturn(respostaComId(PRODUTO_ID, "Açúcar a granel", null));
+
+        mockMvc.perform(post("/api/produtos")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corpo("Açúcar a granel", "5.00", "\"codigo\": \"000542\"")))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<ProdutoRequest> request = ArgumentCaptor.forClass(ProdutoRequest.class);
+        verify(produtoService).cadastrarParaUsuario(eq(1L), request.capture());
+        assertThat(request.getValue().codigo()).isEqualTo(542);
+    }
+
+    @Test
+    void codigoForaDoIntervalo_400ComCampoCodigo() throws Exception {
+        for (String foraDoIntervalo : List.of("0", "1000000", "-5")) {
+            mockMvc.perform(post("/api/produtos")
+                            .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(corpo("Produto", "10.00", "\"codigo\": " + foraDoIntervalo)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.campos[?(@.campo=='codigo')].mensagem")
+                            .value("O código do produto deve ter de 1 a 6 dígitos."));
+        }
+
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void codigoRepetido_409ComCampoCodigo() throws Exception {
+        when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(PRODUTO_ID), any(ProdutoRequest.class)))
+                .thenThrow(new ProdutoConflitoException("Este código já está em uso no produto Açúcar a granel.",
+                        "codigo"));
+
+        mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID)
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corpo("Feijão a granel", "8.00", "\"codigo\": 542")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value("Este código já está em uso no produto Açúcar a granel."))
+                .andExpect(jsonPath("$.campos[?(@.campo=='codigo')].mensagem")
+                        .value("Este código já está em uso no produto Açúcar a granel."));
+    }
+
+    /** O {@code numero} nunca e aceito no request: o mesmo corpo com e sem ele chega igual ao service. */
+    @Test
+    void numeroNoJsonEIgnorado() throws Exception {
+        when(produtoService.atualizarDadosBasicosParaUsuario(eq(1L), eq(PRODUTO_ID), any(ProdutoRequest.class)))
+                .thenReturn(respostaComId(PRODUTO_ID, "Arroz", null));
+
+        for (String corpo : List.of(corpo("Arroz", "10.00", "\"numero\": 999"), corpo("Arroz", "10.00"))) {
+            mockMvc.perform(patch("/api/produtos/" + PRODUTO_ID)
+                            .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(corpo))
+                    .andExpect(status().isOk());
+        }
+
+        ArgumentCaptor<ProdutoRequest> requests = ArgumentCaptor.forClass(ProdutoRequest.class);
+        verify(produtoService, times(2)).atualizarDadosBasicosParaUsuario(eq(1L), eq(PRODUTO_ID),
+                requests.capture());
+        assertThat(requests.getAllValues().get(0)).isEqualTo(requests.getAllValues().get(1));
     }
 
     // ---------- Fase C: historico de precos ----------

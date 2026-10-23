@@ -8,6 +8,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -49,6 +51,12 @@ import jakarta.validation.constraints.Size;
  * obrigatorio no POST e no PATCH. {@code estoqueInicial} so vale no POST (no
  * PATCH, 400): vira a primeira entrada de estoque. O saldo nunca e editado por
  * aqui; muda so por movimentos ({@code /api/produtos/{id}/estoque/ajustes}).
+ *
+ * <p>Fase B2 (docs/modules/produtos-codigo-e-balanca.md, 2 e 8): {@code codigo}
+ * e o codigo do produto (inteiro de 1 a 999999, opcional; no JSON, numero — o
+ * frontend remove os zeros a esquerda) e {@code vendidoBalanca} ({@code null} =
+ * {@code false}) exige o codigo. O {@code numero} de registro NUNCA e aceito:
+ * nao existe neste DTO, entao um {@code "numero"} no JSON e ignorado.
  */
 @Schema(description = "Dados para cadastro ou atualizacao de um produto")
 public record ProdutoRequest(
@@ -132,6 +140,16 @@ public record ProdutoRequest(
         @Schema(example = "SKU-001")
         @Size(max = 50, message = "SKU deve ter no máximo 50 caracteres.")
         String sku,
+
+        @Schema(description = "Codigo do produto (1 a 999999), unico na empresa; obrigatorio com vendidoBalanca. "
+                + "Exibido sem zeros a esquerda", example = "542")
+        @Min(value = 1, message = "O código do produto deve ter de 1 a 6 dígitos.")
+        @Max(value = 999999, message = "O código do produto deve ter de 1 a 6 dígitos.")
+        Integer codigo,
+
+        @Schema(description = "Se o produto e vendido na balanca (exige codigo); null ou ausente = false",
+                example = "false")
+        Boolean vendidoBalanca,
 
         @Schema(description = "Promocao (preco, inicio e fim); null ou ausente = sem promocao")
         @Valid

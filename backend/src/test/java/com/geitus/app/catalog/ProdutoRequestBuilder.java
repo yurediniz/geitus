@@ -35,6 +35,8 @@ final class ProdutoRequestBuilder {
     private BigDecimal precoMinimo;
     private List<String> codigosBarras = new ArrayList<>();
     private String sku;
+    private Integer codigo;
+    private Boolean vendidoBalanca;
     private PromocaoRequest promocao;
     private AtacadoRequest atacado;
     private Boolean controlaEstoque = true;
@@ -151,6 +153,18 @@ final class ProdutoRequestBuilder {
         return this;
     }
 
+    /** Codigo do produto (Fase B2); {@code null} = sem codigo. */
+    ProdutoRequestBuilder codigoDoProduto(Integer valor) {
+        this.codigo = valor;
+        return this;
+    }
+
+    /** {@code null} simula o campo ausente no JSON (vale {@code false}). */
+    ProdutoRequestBuilder vendidoBalanca(Boolean valor) {
+        this.vendidoBalanca = valor;
+        return this;
+    }
+
     /** {@code null} simula o campo ausente no JSON (o Bean Validation recusa). */
     ProdutoRequestBuilder controlaEstoque(Boolean valor) {
         this.controlaEstoque = valor;
@@ -165,6 +179,7 @@ final class ProdutoRequestBuilder {
     ProdutoRequest build() {
         return new ProdutoRequest(nome, nomeCurto, marca, fornecedor, descricao, unidadeId, categoriaId,
                 unidadeCompraId, fatorConversao, precoVenda, custo, estoqueMinimo, estoqueMaximo, pontoReposicao,
-                precoMinimo, codigosBarras, sku, promocao, atacado, controlaEstoque, estoqueInicial);
+                precoMinimo, codigosBarras, sku, codigo, vendidoBalanca, promocao, atacado, controlaEstoque,
+                estoqueInicial);
     }
 }

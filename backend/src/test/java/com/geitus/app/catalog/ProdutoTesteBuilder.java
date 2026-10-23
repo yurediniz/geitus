@@ -51,6 +51,8 @@ final class ProdutoTesteBuilder {
     private long numero = PROXIMO_NUMERO.incrementAndGet();
     private boolean ativo = true;
     private boolean controlaEstoque = true;
+    private Integer codigoDoProduto;
+    private boolean vendidoBalanca;
     private final List<CodigoBarrasValidado> codigos = new ArrayList<>();
 
     private ProdutoTesteBuilder(Empresa empresa, UnidadeMedida unidade) {
@@ -156,6 +158,17 @@ final class ProdutoTesteBuilder {
         return this;
     }
 
+    /** Codigo do produto (Fase B2); os codigos de barras usam {@link #codigo(String)}. */
+    ProdutoTesteBuilder codigoDoProduto(Integer valor) {
+        this.codigoDoProduto = valor;
+        return this;
+    }
+
+    ProdutoTesteBuilder vendidoBalanca() {
+        this.vendidoBalanca = true;
+        return this;
+    }
+
     ProdutoTesteBuilder semControleDeEstoque() {
         this.controlaEstoque = false;
         return this;
@@ -181,7 +194,7 @@ final class ProdutoTesteBuilder {
         Produto produto = new Produto(empresa, numero, new DadosProduto(nome, nomeCurto, marca, fornecedor, descricao,
                 unidade, categoria, unidadeCompra, fatorConversao, precoVenda, custo, precoMinimo, estoqueMinimo,
                 estoqueMaximo, pontoReposicao, sku, precoPromocional, promocaoInicio, promocaoFim, precoAtacado,
-                quantidadeMinimaAtacado, controlaEstoque));
+                quantidadeMinimaAtacado, controlaEstoque, codigoDoProduto, vendidoBalanca));
         produto.substituirCodigos(codigos);
         if (!ativo) {
             produto.inativar();

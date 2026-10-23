@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.LockModeType;
 
@@ -87,6 +89,37 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
             """)
     Optional<String> produtoComCodigo(@Param("empresaId") Long empresaId, @Param("codigo") String codigo,
             @Param("ignorarProdutoId") Long ignorarProdutoId);
+
+    /**
+     * Fase B2: nome do produto da empresa que ja tem este codigo do produto,
+     * ignorando {@code ignorarProdutoId} (o proprio produto na edicao;
+     * {@code null} no cadastro). Restrito a empresa (DEC-016).
+     */
+    @Query("""
+            SELECT p.nome FROM Produto p
+            WHERE p.empresa.id = :empresaId
+              AND p.codigo = :codigo
+              AND (:ignorarProdutoId IS NULL OR p.id <> :ignorarProdutoId)
+            """)
+    Optional<String> nomeDoProdutoComCodigo(@Param("empresaId") Long empresaId, @Param("codigo") Integer codigo,
+            @Param("ignorarProdutoId") Long ignorarProdutoId);
+
+    /**
+     * A mesma consulta de {@link #nomeDoProdutoComCodigo}, numa transacao
+     * NOVA: usada so depois de o banco recusar o codigo por
+     * {@code uq_produto_empresa_codigo} (cadastro simultaneo com o mesmo
+     * codigo), quando a transacao do cadastro ja foi abortada pelo PostgreSQL
+     * e nao aceita mais comandos. Le o produto que gravou o codigo primeiro.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    @Query("""
+            SELECT p.nome FROM Produto p
+            WHERE p.empresa.id = :empresaId
+              AND p.codigo = :codigo
+              AND (:ignorarProdutoId IS NULL OR p.id <> :ignorarProdutoId)
+            """)
+    Optional<String> nomeDoProdutoComCodigoEmNovaTransacao(@Param("empresaId") Long empresaId,
+            @Param("codigo") Integer codigo, @Param("ignorarProdutoId") Long ignorarProdutoId);
 
     /**
      * SKUs da empresa no padrao da sugestao automatica ({@code P} + 6 ou mais

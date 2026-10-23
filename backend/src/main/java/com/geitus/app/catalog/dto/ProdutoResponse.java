@@ -45,11 +45,18 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * <p>Fase D (docs/modules/produtos-estoque.md, 5): {@code estoqueAtual} e o
  * saldo guardado, mesmo com o controle desligado; {@code situacaoEstoque} e
  * calculada e vem {@code null} sem controle.
+ *
+ * <p>Fase B2 (docs/modules/produtos-codigo-e-balanca.md, 8): {@code numero}
+ * (numero de registro na empresa), {@code codigo} (sem zeros a esquerda, ou
+ * {@code null}) e {@code vendidoBalanca}.
  */
 @Schema(description = "Dados publicos de um produto")
 public record ProdutoResponse(
         @Schema(description = "Identificador publico (UUID)")
         UUID id,
+        @Schema(description = "Numero de registro do produto na empresa (1, 2, 3...), gerado na criacao e imutavel",
+                example = "15")
+        Long numero,
         String nome,
         @Schema(description = "Nome curto informado; null se nao houver")
         String nomeCurto,
@@ -92,6 +99,10 @@ public record ProdutoResponse(
         @Schema(description = "Codigos de barras na ordem (o primeiro e o principal)")
         List<CodigoBarrasResponse> codigosBarras,
         String sku,
+        @Schema(description = "Codigo do produto (1 a 999999); null se nao houver", example = "542")
+        Integer codigo,
+        @Schema(description = "Se o produto e vendido na balanca")
+        boolean vendidoBalanca,
         boolean ativo,
         @Schema(description = "Se o produto pode ser excluido: sem movimentacao de estoque ou so com o estoque "
                 + "inicial do cadastro")
@@ -121,6 +132,7 @@ public record ProdutoResponse(
         PromocaoResponse promocao = PromocaoResponse.deOuNulo(produto, hoje);
         return new ProdutoResponse(
                 produto.getUuid(),
+                produto.getNumero(),
                 produto.getNome(),
                 produto.getNomeCurto(),
                 produto.nomeCurtoEfetivo(),
@@ -147,6 +159,8 @@ public record ProdutoResponse(
                         produto.getEstoqueMinimo()),
                 produto.getCodigosBarras().stream().map(CodigoBarrasResponse::de).toList(),
                 produto.getSku(),
+                produto.getCodigo(),
+                produto.isVendidoBalanca(),
                 produto.isAtivo(),
                 podeExcluir,
                 calcularMargem(preco, custo),

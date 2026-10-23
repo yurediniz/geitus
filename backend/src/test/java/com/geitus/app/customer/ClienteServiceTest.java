@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -28,6 +29,7 @@ import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.shared.numeracao.Numerador;
+import com.geitus.app.shared.numeracao.TipoNumeracao;
 
 /**
  * Testa as regras do {@link ClienteService}: normalizacao antes de validar e de
@@ -392,5 +394,42 @@ class ClienteServiceTest {
                 .isInstanceOf(CredenciaisInvalidasException.class);
 
         verify(clienteRepository, never()).save(any());
+    }
+
+    // ---------- Fase B2: numero de registro ----------
+
+    @Test
+    void clienteRecebeNumeroNaCriacao() {
+        prepararCadastro();
+        when(numerador.proximo(ID_EMPRESA, TipoNumeracao.CLIENTE)).thenReturn(12L);
+
+        Cliente cliente = clienteService.cadastrarParaUsuario(ID_USUARIO, dados("Ana", null, null, null, null));
+
+        assertThat(cliente.getNumero()).isEqualTo(12L);
+    }
+
+    /** O CPF repetido e recusado antes de reservar o numero: nenhum numero e consumido. */
+    @Test
+    void cadastroRecusadoNaoReservaNumero() {
+        usuarioAtivoDaEmpresa();
+        when(clienteRepository.existsByCpfAndEmpresa_Id(CPF_VALIDO, ID_EMPRESA)).thenReturn(true);
+
+        assertThatThrownBy(() -> clienteService.cadastrarParaUsuario(ID_USUARIO,
+                dados("Ana", CPF_VALIDO, null, null, null)))
+                .isInstanceOf(ClienteConflitoException.class);
+
+        verifyNoInteractions(numerador);
+    }
+
+    @Test
+    void edicaoNaoMudaONumeroDoCliente() {
+        Cliente cliente = clienteExistente(null, true, null);
+        salvarDevolveArgumento();
+
+        Cliente atualizado = clienteService.atualizarParaUsuario(ID_USUARIO, cliente.getUuid(),
+                dados("Ana Maria", null, null, null, null));
+
+        assertThat(atualizado.getNumero()).isEqualTo(12L);
+        verifyNoInteractions(numerador);
     }
 }

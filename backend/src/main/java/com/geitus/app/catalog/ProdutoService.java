@@ -20,6 +20,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -124,6 +125,15 @@ public class ProdutoService {
     static final String MENSAGEM_CATEGORIA_INATIVA = "Esta categoria está inativa. Escolha uma categoria ativa.";
     static final String MENSAGEM_SKU_DUPLICADO = "Já existe um produto com este SKU nesta empresa.";
 
+    static final String MENSAGEM_CODIGO_DO_PRODUTO_FORA_DO_INTERVALO =
+            "O código do produto deve ter de 1 a 6 dígitos.";
+    static final String MENSAGEM_BALANCA_SEM_CODIGO = "Informe o código do produto para vendê-lo na balança.";
+    static final String MENSAGEM_CODIGO_MAIOR_QUE_A_ETIQUETA =
+            "Este código tem mais dígitos do que a etiqueta da balança comporta (%d).";
+    static final String MENSAGEM_CODIGO_DO_PRODUTO_EM_USO = "Este código já está em uso no produto %s.";
+    /** So na corrida em que o outro produto mudou de codigo antes da releitura (o nome ja nao existe). */
+    static final String MENSAGEM_CODIGO_DO_PRODUTO_EM_USO_SEM_NOME = "Este código já está em uso em outro produto.";
+
     static final String MENSAGEM_CODIGO_REPETIDO = "Código de barras repetido na lista.";
     static final String MENSAGEM_LIMITE_DE_CODIGOS = "Informe no máximo 20 códigos de barras.";
     static final String MENSAGEM_CODIGO_LONGO = "Código de barras deve ter no máximo 50 caracteres.";
@@ -146,6 +156,7 @@ public class ProdutoService {
 
     /** Campos do {@code ProdutoRequest} devolvidos em {@code campos} nos erros de regra (contrato aditivo). */
     static final String CAMPO_SKU = "sku";
+    static final String CAMPO_CODIGO_DO_PRODUTO = "codigo";
     static final String CAMPO_CODIGOS_BARRAS = "codigosBarras";
     static final String CAMPO_PROMOCAO_PRECO = "promocao.preco";
     static final String CAMPO_PROMOCAO_INICIO = "promocao.inicio";
@@ -164,6 +175,11 @@ public class ProdutoService {
     static final int TAMANHO_MAXIMO_TERMO_DE_SUGESTAO = 50;
     /** Casas decimais da quantidade minima do atacado ({@code NUMERIC(12,3)}, V8). */
     static final int CASAS_QUANTIDADE_ATACADO = 3;
+    /** Intervalo do codigo do produto (V11, {@code ck_produto_codigo_intervalo}). */
+    static final int MENOR_CODIGO_DO_PRODUTO = 1;
+    static final int MAIOR_CODIGO_DO_PRODUTO = 999_999;
+    /** Indice unico parcial do codigo do produto por empresa (V11). */
+    static final String CONSTRAINT_CODIGO_DO_PRODUTO = "uq_produto_empresa_codigo";
 
     /** SKU no padrao da sugestao automatica: {@code P} + 6 ou mais digitos (spec 4.2). */
     private static final Pattern SKU_NO_PADRAO = Pattern.compile("P([0-9]{6,})");
@@ -182,13 +198,15 @@ public class ProdutoService {
     private final RegistroDeEstoqueInicial registroDeEstoqueInicial;
     private final ConsultaDeProdutos consultaDeProdutos;
     private final Numerador numerador;
+    private final TamanhoDoCodigoNaEtiqueta tamanhoDoCodigoNaEtiqueta;
     private final Clock relogio;
 
     public ProdutoService(ProdutoRepository produtoRepository, EmpresaRepository empresaRepository,
             UsuarioRepository usuarioRepository, UnidadeMedidaService unidadeService,
             CategoriaService categoriaService, HistoricoPrecoRepository historicoPrecoRepository,
             UsoDoProdutoNoEstoque usoNoEstoque, RegistroDeEstoqueInicial registroDeEstoqueInicial,
-            ConsultaDeProdutos consultaDeProdutos, Numerador numerador, Clock relogio) {
+            ConsultaDeProdutos consultaDeProdutos, Numerador numerador,
+            TamanhoDoCodigoNaEtiqueta tamanhoDoCodigoNaEtiqueta, Clock relogio) {
         this.produtoRepository = produtoRepository;
         this.empresaRepository = empresaRepository;
         this.usuarioRepository = usuarioRepository;
@@ -199,6 +217,7 @@ public class ProdutoService {
         this.registroDeEstoqueInicial = registroDeEstoqueInicial;
         this.consultaDeProdutos = consultaDeProdutos;
         this.numerador = numerador;
+        this.tamanhoDoCodigoNaEtiqueta = tamanhoDoCodigoNaEtiqueta;
         this.relogio = relogio;
     }
 
@@ -215,6 +234,7 @@ public class ProdutoService {
         List<CodigoBarrasValidado> codigos = validarCodigos(empresaId, request.codigosBarras(), null);
         String sku = normalizarOuNulo(request.sku());
         garantirSkuDisponivelParaNovoProduto(empresaId, sku);
+        validarCodigoDoProduto(empresaId, request, null);
         Vinculos vinculos = resolverVinculos(empresaId, request, null);
         validarPromocaoEAtacado(request, vinculos.unidade());
         validarEstoqueInicial(request, vinculos.unidade());
@@ -225,7 +245,7 @@ public class ProdutoService {
         long numero = numerador.proximo(empresaId, TipoNumeracao.PRODUTO);
         Produto produto = new Produto(empresa, numero, dadosDoProduto(request, vinculos, sku));
         produto.substituirCodigos(codigos);
-        Produto gravado = produtoRepository.save(produto);
+        Produto gravado = gravar(produto);
         registrarHistorico(gravado, idUsuario, null, null);
         if (request.estoqueInicial() != null) {
             registroDeEstoqueInicial.registrar(gravado, request.estoqueInicial(), idUsuario);
@@ -253,6 +273,7 @@ public class ProdutoService {
                 .map(informados -> validarCodigos(empresaId, informados, produto));
         String sku = normalizarOuNulo(request.sku());
         garantirSkuDisponivelParaProdutoExistente(empresaId, produto.getId(), sku);
+        validarCodigoDoProduto(empresaId, request, produto.getId());
         Vinculos vinculos = resolverVinculos(empresaId, request, produto);
         exigirUnidadeMantidaSeMovimentado(produto, vinculos.unidade());
         validarPromocaoEAtacado(request, vinculos.unidade());
@@ -261,7 +282,7 @@ public class ProdutoService {
         BigDecimal precoAnterior = produto.getPrecoVenda();
         produto.atualizarDadosBasicos(dadosDoProduto(request, vinculos, sku));
         codigos.ifPresent(produto::substituirCodigos);
-        Produto gravado = produtoRepository.save(produto);
+        Produto gravado = gravar(produto);
         registrarHistorico(gravado, idUsuario, custoAnterior, precoAnterior);
         return gravado;
     }
@@ -580,6 +601,82 @@ public class ProdutoService {
         return new CodigoBarrasValidado(codigo, CodigoBarras.detectarFormato(codigo));
     }
 
+    // ---------- Codigo do produto e balanca (docs/modules/produtos-codigo-e-balanca.md, 2) ----------
+
+    /**
+     * Regras do codigo do produto, nesta ordem: de 1 a 999999 (400); "Vendido
+     * na balanca" exige o codigo (400); na balanca, o codigo cabe nos digitos
+     * da etiqueta da empresa (400, mesmo sem mudar o codigo: Review Focus 3);
+     * unico na empresa, fora o proprio produto na edicao (409 com o nome).
+     * {@code produtoAtualId} e {@code null} no cadastro. Nada e consultado para
+     * o produto sem codigo e fora da balanca (Review Focus 5).
+     */
+    private void validarCodigoDoProduto(Long empresaId, ProdutoRequest request, Long produtoAtualId) {
+        Integer codigo = request.codigo();
+        if (codigo != null && (codigo < MENOR_CODIGO_DO_PRODUTO || codigo > MAIOR_CODIGO_DO_PRODUTO)) {
+            throw new RegraDeNegocioException(MENSAGEM_CODIGO_DO_PRODUTO_FORA_DO_INTERVALO, CAMPO_CODIGO_DO_PRODUTO);
+        }
+        if (vendidoNaBalanca(request)) {
+            exigirCodigoQueCabeNaEtiqueta(empresaId, codigo);
+        }
+        if (codigo != null) {
+            produtoRepository.nomeDoProdutoComCodigo(empresaId, codigo, produtoAtualId).ifPresent(nome -> {
+                throw codigoEmUso(nome);
+            });
+        }
+    }
+
+    private void exigirCodigoQueCabeNaEtiqueta(Long empresaId, Integer codigo) {
+        if (codigo == null) {
+            throw new RegraDeNegocioException(MENSAGEM_BALANCA_SEM_CODIGO, CAMPO_CODIGO_DO_PRODUTO);
+        }
+        int digitosNaEtiqueta = tamanhoDoCodigoNaEtiqueta.digitosCodigo(empresaId);
+        if (String.valueOf(codigo).length() > digitosNaEtiqueta) {
+            throw new RegraDeNegocioException(MENSAGEM_CODIGO_MAIOR_QUE_A_ETIQUETA.formatted(digitosNaEtiqueta),
+                    CAMPO_CODIGO_DO_PRODUTO);
+        }
+    }
+
+    private static ProdutoConflitoException codigoEmUso(String nomeDoOutroProduto) {
+        return new ProdutoConflitoException(MENSAGEM_CODIGO_DO_PRODUTO_EM_USO.formatted(nomeDoOutroProduto),
+                CAMPO_CODIGO_DO_PRODUTO);
+    }
+
+    /**
+     * Grava o produto e aplica no banco ja aqui ({@code flush}), para que a
+     * recusa de {@code uq_produto_empresa_codigo} (outro produto gravou o mesmo
+     * codigo depois da checagem) vire o mesmo 409 da checagem, com o nome do
+     * outro produto. A transacao atual foi abortada pelo PostgreSQL, entao o
+     * nome e lido numa transacao nova. Qualquer outra violacao segue como esta
+     * (409 generico do {@code GlobalExceptionHandler}).
+     */
+    private Produto gravar(Produto produto) {
+        try {
+            Produto gravado = produtoRepository.save(produto);
+            produtoRepository.flush();
+            return gravado;
+        } catch (DataIntegrityViolationException violacao) {
+            if (!violou(violacao, CONSTRAINT_CODIGO_DO_PRODUTO)) {
+                throw violacao;
+            }
+            throw produtoRepository.nomeDoProdutoComCodigoEmNovaTransacao(produto.getEmpresaId(),
+                            produto.getCodigo(), produto.getId())
+                    .map(ProdutoService::codigoEmUso)
+                    .orElseGet(() -> new ProdutoConflitoException(MENSAGEM_CODIGO_DO_PRODUTO_EM_USO_SEM_NOME,
+                            CAMPO_CODIGO_DO_PRODUTO));
+        }
+    }
+
+    /** Se a violacao veio da constraint informada (nome lido pelo Hibernate da mensagem do PostgreSQL). */
+    private static boolean violou(DataIntegrityViolationException violacao, String constraint) {
+        for (Throwable causa = violacao; causa != null; causa = causa.getCause()) {
+            if (causa instanceof ConstraintViolationException violacaoDeConstraint) {
+                return constraint.equalsIgnoreCase(violacaoDeConstraint.getConstraintName());
+            }
+        }
+        return false;
+    }
+
     // ---------- Sugestoes (spec 4.4) ----------
 
     /** Allow-list dos campos de sugestao: o nome vindo da API nunca chega ao SQL. */
@@ -877,7 +974,14 @@ public class ProdutoService {
                 promocao.map(PromocaoRequest::fim).orElse(null),
                 atacado.map(AtacadoRequest::preco).orElse(null),
                 atacado.map(AtacadoRequest::quantidadeMinima).orElse(null),
-                request.controlaEstoque());
+                request.controlaEstoque(),
+                request.codigo(),
+                vendidoNaBalanca(request));
+    }
+
+    /** {@code vendidoBalanca} ausente no request vale {@code false} (spec 8). */
+    private static boolean vendidoNaBalanca(ProdutoRequest request) {
+        return Boolean.TRUE.equals(request.vendidoBalanca());
     }
 
     /** Resposta de um produto; a arvore so e carregada se o produto tiver categoria. */

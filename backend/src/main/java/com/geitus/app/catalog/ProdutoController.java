@@ -147,7 +147,9 @@ public class ProdutoController {
 
     @Operation(summary = "Cadastra um novo produto na empresa do usuario autenticado",
             description = "Com estoqueInicial (exige controlaEstoque), registra a primeira entrada de estoque "
-                    + "na mesma transacao.",
+                    + "na mesma transacao. O numero de registro e gerado aqui (1, 2, 3... por empresa) e nunca "
+                    + "muda. codigo repetido na empresa responde 409 (campo codigo); vendidoBalanca sem codigo ou "
+                    + "com codigo maior que a etiqueta de balanca, 400.",
             security = @SecurityRequirement(name = "bearer-jwt"))
     @PostMapping
     public ResponseEntity<ProdutoResponse> cadastrar(
@@ -159,7 +161,8 @@ public class ProdutoController {
     @Operation(summary = "Atualiza um produto da empresa do usuario autenticado",
             description = "Substitui a lista inteira de codigos de barras pela informada. estoqueInicial nao e "
                     + "aceito (400: use o ajuste de estoque); produto com movimentacao de estoque nao troca a "
-                    + "unidade de venda (400).",
+                    + "unidade de venda (400). O numero de registro nunca muda (numero no corpo e ignorado); "
+                    + "as regras de codigo e vendidoBalanca sao as do cadastro.",
             security = @SecurityRequirement(name = "bearer-jwt"))
     @PatchMapping("/{id}")
     public ResponseEntity<ProdutoResponse> atualizar(

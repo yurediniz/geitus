@@ -18,6 +18,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -458,5 +459,60 @@ class ProdutoRepositoryIT {
 
         assertThat(produtoRepository.sugestoesDeMarca(empresa.getId(), PadraoLike.contem("100%"),
                 LIMITE_DE_SUGESTOES)).containsExactly("100% Natural");
+    }
+
+    // ---------- Fase B2: numero e codigo do produto ----------
+
+    /** {@code updatable = false}: mudar o numero na entidade nao chega ao banco, mesmo com outro UPDATE. */
+    @Test
+    void numeroNaoEAtualizadoDepoisDaCriacao() {
+        Empresa empresa = novaEmpresa("Empresa Numero Imutavel");
+        Produto produto = salvar(produtoDa(empresa).numero(41));
+
+        ReflectionTestUtils.setField(produto, "numero", 99L);
+        produto.inativar();
+        produtoRepository.saveAndFlush(produto);
+        entityManager.clear();
+
+        Produto relido = produtoRepository.findByUuidAndEmpresa_Id(produto.getUuid(), empresa.getId()).orElseThrow();
+        assertThat(relido.getNumero()).isEqualTo(41L);
+        assertThat(relido.isAtivo()).isFalse();
+    }
+
+    @Test
+    void codigoEBalancaGravadosERelidos() {
+        Empresa empresa = novaEmpresa("Empresa Codigo Gravado");
+        Produto produto = salvar(produtoDa(empresa).codigoDoProduto(542).vendidoBalanca());
+        entityManager.clear();
+
+        Produto relido = produtoRepository.findByUuidAndEmpresa_Id(produto.getUuid(), empresa.getId()).orElseThrow();
+        assertThat(relido.getCodigo()).isEqualTo(542);
+        assertThat(relido.isVendidoBalanca()).isTrue();
+    }
+
+    /** A consulta do codigo repetido isola por empresa (DEC-016) e ignora o proprio produto na edicao. */
+    @Test
+    void nomeDoProdutoComCodigoIsolaPorEmpresaEIgnoraOProprio() {
+        Empresa empresaA = novaEmpresa("Empresa Codigo A");
+        Empresa empresaB = novaEmpresa("Empresa Codigo B");
+        Produto acucar = salvar(produtoDa(empresaA).nome("Açúcar a granel").codigoDoProduto(542));
+        salvar(produtoDa(empresaA).nome("Sem codigo"));
+
+        assertThat(produtoRepository.nomeDoProdutoComCodigo(empresaA.getId(), 542, null))
+                .contains("Açúcar a granel");
+        assertThat(produtoRepository.nomeDoProdutoComCodigo(empresaA.getId(), 542, acucar.getId())).isEmpty();
+        assertThat(produtoRepository.nomeDoProdutoComCodigo(empresaB.getId(), 542, null)).isEmpty();
+        assertThat(produtoRepository.nomeDoProdutoComCodigo(empresaA.getId(), 543, null)).isEmpty();
+    }
+
+    @Test
+    void codigoRepetidoNaEmpresaEhRecusadoPeloBanco() {
+        Empresa empresaA = novaEmpresa("Empresa Codigo Unico A");
+        Empresa empresaB = novaEmpresa("Empresa Codigo Unico B");
+        salvar(produtoDa(empresaA).codigoDoProduto(542));
+        salvar(produtoDa(empresaB).codigoDoProduto(542));
+
+        assertThatThrownBy(() -> salvar(produtoDa(empresaA).codigoDoProduto(542)))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 }

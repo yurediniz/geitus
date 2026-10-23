@@ -20,6 +20,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -40,6 +41,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 
 import org.assertj.core.api.ListAssert;
+import org.hibernate.exception.ConstraintViolationException;
 import org.assertj.core.api.ThrowingConsumer;
 import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.BeforeEach;
@@ -78,6 +80,7 @@ import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.shared.numeracao.Numerador;
+import com.geitus.app.shared.numeracao.TipoNumeracao;
 
 /**
  * Testa as regras do {@link ProdutoService}: validacoes de cadastro/atualizacao
@@ -135,6 +138,9 @@ class ProdutoServiceTest {
     @Mock
     private Numerador numerador;
 
+    @Mock
+    private TamanhoDoCodigoNaEtiqueta tamanhoDoCodigoNaEtiqueta;
+
     private ProdutoService produtoService;
 
     private Empresa empresa;
@@ -145,7 +151,7 @@ class ProdutoServiceTest {
     void setUp() {
         produtoService = new ProdutoService(produtoRepository, empresaRepository, usuarioRepository,
                 unidadeService, categoriaService, historicoPrecoRepository, usoNoEstoque, registroDeEstoqueInicial,
-                consultaDeProdutos, numerador, RELOGIO);
+                consultaDeProdutos, numerador, tamanhoDoCodigoNaEtiqueta, RELOGIO);
         empresa = empresaComId(EMPRESA_ID);
         un = unidade(10L, empresa, "UN");
     }
@@ -2260,6 +2266,210 @@ class ProdutoServiceTest {
         assertThatThrownBy(() -> produtoService.excluir(ID_USUARIO, EMPRESA_ID, produtoUuid))
                 .isInstanceOf(ProdutoConflitoException.class)
                 .hasMessage(MENSAGEM_EXCLUSAO_COM_MOVIMENTO);
+    }
+
+    // ---------- Fase B2: numero, codigo do produto e balanca ----------
+
+    private static final String MENSAGEM_CODIGO_INTERVALO = "O código do produto deve ter de 1 a 6 dígitos.";
+    private static final String MENSAGEM_BALANCA_SEM_CODIGO = "Informe o código do produto para vendê-lo na balança.";
+
+    @Test
+    void cadastroGeraNumeroSequencial() {
+        cadastroPermitido();
+        when(numerador.proximo(EMPRESA_ID, TipoNumeracao.PRODUTO)).thenReturn(15L);
+
+        Produto produto = cadastrar(requestComUN().build());
+
+        assertThat(produto.getNumero()).isEqualTo(15L);
+        InOrder ordem = inOrder(numerador, produtoRepository);
+        ordem.verify(numerador).proximo(EMPRESA_ID, TipoNumeracao.PRODUTO);
+        ordem.verify(produtoRepository).save(produto);
+    }
+
+    /** Review Focus 1: a regra recusa antes de reservar o numero, entao nenhum numero e consumido. */
+    @Test
+    void cadastroRecusadoNaoReservaNumero() {
+        when(produtoRepository.existsBySkuAndEmpresa_Id("SKU-1", EMPRESA_ID)).thenReturn(true);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().sku("SKU-1").build()))
+                .isInstanceOf(ProdutoConflitoException.class);
+        assertThatThrownBy(() -> cadastrar(requestComUN().vendidoBalanca(true).build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage(MENSAGEM_BALANCA_SEM_CODIGO);
+
+        verifyNoInteractions(numerador);
+    }
+
+    @Test
+    void edicaoNaoMudaONumero() {
+        produtoExistente(existente().numero(7));
+        edicaoPermitida();
+
+        Produto atualizado = atualizar(requestComUN().nome("Outro nome").codigoDoProduto(542).build());
+
+        assertThat(atualizado.getNumero()).isEqualTo(7L);
+        verifyNoInteractions(numerador);
+    }
+
+    @Test
+    void cadastroGravaCodigoEBalanca() {
+        cadastroPermitido();
+        when(tamanhoDoCodigoNaEtiqueta.digitosCodigo(EMPRESA_ID)).thenReturn(6);
+
+        Produto produto = cadastrar(requestComUN().codigoDoProduto(542).vendidoBalanca(true).build());
+
+        assertThat(produto.getCodigo()).isEqualTo(542);
+        assertThat(produto.isVendidoBalanca()).isTrue();
+        verify(produtoRepository).nomeDoProdutoComCodigo(EMPRESA_ID, 542, null);
+    }
+
+    @Test
+    void codigoRepetido_409ComCampoENome() {
+        when(produtoRepository.nomeDoProdutoComCodigo(EMPRESA_ID, 542, null))
+                .thenReturn(Optional.of("Açúcar a granel"));
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().codigoDoProduto(542).build()))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("Este código já está em uso no produto Açúcar a granel.")
+                .satisfies(noCampo("codigo"));
+
+        verify(produtoRepository, never()).save(any());
+        verifyNoInteractions(numerador);
+    }
+
+    /** Na edicao, o proprio produto fica fora da checagem: manter o codigo nao conflita. */
+    @Test
+    void edicaoMantendoOProprioCodigoIgnoraOProduto() {
+        produtoExistente(existente().codigoDoProduto(542));
+        edicaoPermitida();
+
+        Produto atualizado = atualizar(requestComUN().codigoDoProduto(542).build());
+
+        assertThat(atualizado.getCodigo()).isEqualTo(542);
+        verify(produtoRepository).nomeDoProdutoComCodigo(EMPRESA_ID, 542, PRODUTO_ID);
+    }
+
+    @Test
+    void edicaoComCodigoDeOutroProduto_409() {
+        produtoExistente();
+        when(produtoRepository.nomeDoProdutoComCodigo(EMPRESA_ID, 542, PRODUTO_ID))
+                .thenReturn(Optional.of("Feijão a granel"));
+
+        assertThatThrownBy(() -> atualizar(requestComUN().codigoDoProduto(542).build()))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("Este código já está em uso no produto Feijão a granel.")
+                .satisfies(noCampo("codigo"));
+    }
+
+    /** Defesa alem do Bean Validation (chamadas sem {@code @Valid}). */
+    @Test
+    void codigoForaDoIntervalo_400() {
+        for (int foraDoIntervalo : List.of(0, -1, 1_000_000)) {
+            assertThatThrownBy(() -> cadastrar(requestComUN().codigoDoProduto(foraDoIntervalo).build()))
+                    .isInstanceOf(RegraDeNegocioException.class)
+                    .hasMessage(MENSAGEM_CODIGO_INTERVALO)
+                    .satisfies(noCampo("codigo"));
+        }
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    @Test
+    void balancaSemCodigo_400() {
+        assertThatThrownBy(() -> cadastrar(requestComUN().vendidoBalanca(true).build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage(MENSAGEM_BALANCA_SEM_CODIGO)
+                .satisfies(noCampo("codigo"));
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    /** Review Focus 3: etiqueta com 4 digitos de codigo nao comporta o codigo 12345 (mesmo sem mudar o codigo). */
+    @Test
+    void codigoGrandeDemaisParaEtiqueta_400() {
+        produtoExistente(existente().codigoDoProduto(12345).vendidoBalanca());
+        when(tamanhoDoCodigoNaEtiqueta.digitosCodigo(EMPRESA_ID)).thenReturn(4);
+
+        assertThatThrownBy(() -> atualizar(requestComUN().codigoDoProduto(12345).vendidoBalanca(true).build()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Este código tem mais dígitos do que a etiqueta da balança comporta (4).")
+                .satisfies(noCampo("codigo"));
+
+        verify(produtoRepository, never()).save(any());
+    }
+
+    /** O tamanho da etiqueta so vale para o produto vendido na balanca; o limite e inclusivo. */
+    @Test
+    void codigoQueCabeNaEtiquetaOuSemBalancaSalva() {
+        cadastroPermitido();
+        when(tamanhoDoCodigoNaEtiqueta.digitosCodigo(EMPRESA_ID)).thenReturn(4);
+
+        assertThat(cadastrar(requestComUN().codigoDoProduto(9999).vendidoBalanca(true).build()).getCodigo())
+                .isEqualTo(9999);
+        assertThat(cadastrar(requestComUN().codigoDoProduto(12345).vendidoBalanca(false).build()).getCodigo())
+                .isEqualTo(12345);
+        verify(tamanhoDoCodigoNaEtiqueta).digitosCodigo(EMPRESA_ID);
+    }
+
+    /** Review Focus 5: produto antigo (sem codigo) editado com codigo nulo e balanca false. */
+    @Test
+    void produtoAntigoSemCodigoSalva() {
+        produtoExistente(existente().numero(3));
+        edicaoPermitida();
+
+        Produto atualizado = atualizar(requestComUN().nome("Arroz").codigoDoProduto(null).vendidoBalanca(false)
+                .build());
+
+        assertThat(atualizado.getCodigo()).isNull();
+        assertThat(atualizado.isVendidoBalanca()).isFalse();
+        assertThat(atualizado.getNumero()).isEqualTo(3L);
+        verify(produtoRepository, never()).nomeDoProdutoComCodigo(any(), any(), any());
+        verifyNoInteractions(tamanhoDoCodigoNaEtiqueta);
+    }
+
+    @Test
+    void balancaAusenteValeFalse() {
+        cadastroPermitido();
+
+        assertThat(cadastrar(requestComUN().codigoDoProduto(10).vendidoBalanca(null).build()).isVendidoBalanca())
+                .isFalse();
+    }
+
+    /**
+     * Cadastro simultaneo com o mesmo codigo: o banco recusa por
+     * {@code uq_produto_empresa_codigo} e a resposta e o mesmo 409 com o nome,
+     * lido numa transacao nova (a do cadastro foi abortada).
+     */
+    @Test
+    void codigoGravadoAoMesmoTempoPorOutroProduto_409ComNome() {
+        unidadeDaEmpresa(un);
+        when(empresaRepository.findById(EMPRESA_ID)).thenReturn(Optional.of(empresa));
+        when(produtoRepository.save(any(Produto.class))).thenThrow(violacaoDe("uq_produto_empresa_codigo"));
+        when(produtoRepository.nomeDoProdutoComCodigoEmNovaTransacao(EMPRESA_ID, 542, null))
+                .thenReturn(Optional.of("Açúcar a granel"));
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().codigoDoProduto(542).build()))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("Este código já está em uso no produto Açúcar a granel.")
+                .satisfies(noCampo("codigo"));
+    }
+
+    /** Outra violacao (ex.: SKU gravado ao mesmo tempo) segue para o tratamento generico (409 sem campo). */
+    @Test
+    void outraViolacaoNaoViraConflitoDeCodigo() {
+        unidadeDaEmpresa(un);
+        when(empresaRepository.findById(EMPRESA_ID)).thenReturn(Optional.of(empresa));
+        DataIntegrityViolationException violacao = violacaoDe("uq_produto_empresa_sku");
+        when(produtoRepository.save(any(Produto.class))).thenThrow(violacao);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().codigoDoProduto(542).sku("SKU-1").build()))
+                .isSameAs(violacao);
+        verify(produtoRepository, never()).nomeDoProdutoComCodigoEmNovaTransacao(any(), any(), any());
+    }
+
+    private static DataIntegrityViolationException violacaoDe(String constraint) {
+        return new DataIntegrityViolationException("could not execute statement",
+                new ConstraintViolationException("duplicate key", new SQLException(), constraint));
     }
 
     private void usuarioAtivoDaEmpresa(Long idUsuario) {

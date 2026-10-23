@@ -252,6 +252,8 @@ public class Produto {
         this.precoAtacado = dados.precoAtacado();
         this.quantidadeMinimaAtacado = dados.quantidadeMinimaAtacado();
         this.controlaEstoque = dados.controlaEstoque();
+        this.codigo = dados.codigo();
+        this.vendidoBalanca = dados.vendidoBalanca();
         recalcularTextosDeBusca();
     }
 

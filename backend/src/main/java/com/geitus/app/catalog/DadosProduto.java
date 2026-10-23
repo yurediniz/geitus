@@ -23,6 +23,10 @@ import com.geitus.app.catalog.unidade.UnidadeMedida;
  *
  * <p>Fase D: {@code controlaEstoque} liga ou desliga o controle de estoque do
  * produto (o saldo em si nunca e um dado do cadastro).
+ *
+ * <p>Fase B2: {@code codigo} (1 a 999999, ou {@code null}) e
+ * {@code vendidoBalanca} (que exige o codigo). O numero de registro nao esta
+ * aqui: e dado na criacao e nunca muda.
  */
 public record DadosProduto(
         String nome,
@@ -46,5 +50,7 @@ public record DadosProduto(
         LocalDate promocaoFim,
         BigDecimal precoAtacado,
         BigDecimal quantidadeMinimaAtacado,
-        boolean controlaEstoque) {
+        boolean controlaEstoque,
+        Integer codigo,
+        boolean vendidoBalanca) {
 }

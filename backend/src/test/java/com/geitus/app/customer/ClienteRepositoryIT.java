@@ -15,6 +15,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -311,5 +312,23 @@ class ClienteRepositoryIT {
                 .extracting(Cliente::getNome).containsExactly("Pet_Shop Ana");
         assertThat(clienteRepository.buscarPorNomeOuDigitos(empresa.getId(), "%\\_%", "%\\_%", null))
                 .extracting(Cliente::getNome).containsExactly("Pet_Shop Ana");
+    }
+
+    // ---------- Fase B2: numero de registro ----------
+
+    /** {@code updatable = false}: mudar o numero na entidade nao chega ao banco, mesmo com outro UPDATE. */
+    @Test
+    void numeroDoClienteNaoEAtualizadoDepoisDaCriacao() {
+        Empresa empresa = novaEmpresa("Empresa Numero Cliente");
+        Cliente cliente = clienteRepository.saveAndFlush(new Cliente(empresa, 12, "Ana", null, null, true, null, null));
+
+        ReflectionTestUtils.setField(cliente, "numero", 99L);
+        cliente.inativar();
+        clienteRepository.saveAndFlush(cliente);
+        entityManager.clear();
+
+        Cliente relido = clienteRepository.findByUuidAndEmpresa_Id(cliente.getUuid(), empresa.getId()).orElseThrow();
+        assertThat(relido.getNumero()).isEqualTo(12L);
+        assertThat(relido.isAtivo()).isFalse();
     }
 }

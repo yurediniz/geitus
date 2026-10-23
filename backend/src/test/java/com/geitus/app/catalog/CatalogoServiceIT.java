@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -15,7 +16,9 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
@@ -24,6 +27,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.LongStream;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.stubbing.Answer;
@@ -117,6 +121,10 @@ class CatalogoServiceIT {
     /** Spy (chama o real por padrao) para simular falha ao gravar o historico; resetado apos cada teste. */
     @MockitoSpyBean
     private HistoricoPrecoRepository historicoPrecoRepository;
+
+    /** Spy (chama o real por padrao) para simular a checagem do codigo antes de um cadastro simultaneo. */
+    @MockitoSpyBean
+    private ProdutoRepository produtoRepository;
 
     // ---------- Fluxo completo ----------
 
@@ -713,6 +721,142 @@ class CatalogoServiceIT {
     private long codigosDoProduto(Long idInterno) {
         return jdbcTemplate.queryForObject("SELECT count(*) FROM produto_codigos_barras WHERE produto_id = ?",
                 Long.class, idInterno);
+    }
+
+    // ---------- Fase B2: numero e codigo do produto ----------
+
+    private static final int CADASTROS_SIMULTANEOS = 10;
+
+    @Test
+    void cadastroGeraNumeroSequencialEEdicaoNaoMuda() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+
+        ProdutoResponse primeiro = produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("Arroz").build());
+        ProdutoResponse segundo = produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("Feijão").build());
+        ProdutoResponse editado = produtoService.atualizarDadosBasicosParaUsuario(idUsuario, segundo.id(),
+                ProdutoRequestBuilder.comUnidade(un).nome("Feijão preto").build());
+
+        assertThat(primeiro.numero()).isEqualTo(1L);
+        assertThat(segundo.numero()).isEqualTo(2L);
+        assertThat(editado.numero()).isEqualTo(2L);
+        assertThat(numeroGravado(segundo.id())).isEqualTo(2L);
+    }
+
+    /** Review Focus 1: o SKU repetido falha e nao "queima" numero; o proximo cadastro e o 2. */
+    @Test
+    void cadastroQueFalhaNaoConsomeNumero() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder.comUnidade(un).sku("S-1").build());
+
+        assertThatThrownBy(() -> produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).sku("S-1").build()))
+                .isInstanceOf(ProdutoConflitoException.class);
+
+        assertThat(produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder.comUnidade(un).build())
+                .numero()).isEqualTo(2L);
+    }
+
+    /** Review Focus 1: cadastros simultaneos na mesma empresa recebem numeros distintos e consecutivos. */
+    @Test
+    void cadastrosSimultaneosRecebemNumerosDistintos() throws Exception {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        CyclicBarrier largada = new CyclicBarrier(CADASTROS_SIMULTANEOS);
+        ExecutorService executor = Executors.newFixedThreadPool(CADASTROS_SIMULTANEOS);
+        try {
+            List<Future<Long>> cadastros = new ArrayList<>();
+            for (int indice = 0; indice < CADASTROS_SIMULTANEOS; indice++) {
+                String nome = "Produto simultaneo " + indice;
+                cadastros.add(executor.submit(() -> {
+                    largada.await(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS);
+                    return produtoService.cadastrarParaUsuario(idUsuario,
+                            ProdutoRequestBuilder.comUnidade(un).nome(nome).build()).numero();
+                }));
+            }
+            List<Long> numeros = new ArrayList<>();
+            for (Future<Long> cadastro : cadastros) {
+                numeros.add(cadastro.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS));
+            }
+
+            assertThat(numeros).containsExactlyInAnyOrderElementsOf(
+                    LongStream.rangeClosed(1, CADASTROS_SIMULTANEOS).boxed().toList());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    /** Review Focus 2: o codigo e um numero, entao 542 repetido conflita (o front envia "000542" como 542). */
+    @Test
+    void codigoRepetidoNaEmpresa_409ComNomeMasLivreEmOutraEmpresa() {
+        Empresa empresaA = novaEmpresa();
+        Long adminA = novoAdmin(empresaA);
+        UUID unA = unidadePadrao(empresaA, adminA, "UN");
+        Empresa empresaB = novaEmpresa();
+        Long adminB = novoAdmin(empresaB);
+        UUID unB = unidadePadrao(empresaB, adminB, "UN");
+        produtoService.cadastrarParaUsuario(adminA,
+                ProdutoRequestBuilder.comUnidade(unA).nome("Açúcar a granel").codigoDoProduto(542).build());
+
+        assertThatThrownBy(() -> produtoService.cadastrarParaUsuario(adminA,
+                ProdutoRequestBuilder.comUnidade(unA).nome("Feijão a granel").codigoDoProduto(542).build()))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("Este código já está em uso no produto Açúcar a granel.");
+        assertThat(produtoService.cadastrarParaUsuario(adminB,
+                ProdutoRequestBuilder.comUnidade(unB).codigoDoProduto(542).build()).codigo()).isEqualTo(542);
+    }
+
+    /**
+     * Corrida no codigo: a checagem "passa" (simulada pelo spy, como se o outro
+     * cadastro ainda nao tivesse gravado) e o banco recusa por
+     * {@code uq_produto_empresa_codigo}. A resposta e o 409 com o nome, lido
+     * numa transacao nova, e o numero reservado volta (rollback).
+     */
+    @Test
+    void codigoGravadoAoMesmoTempo_409ComNomeSemConsumirNumero() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID kg = unidadePadrao(empresa, idUsuario, "KG");
+        produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(kg).nome("Açúcar a granel").codigoDoProduto(542).build());
+        doReturn(Optional.empty()).when(produtoRepository).nomeDoProdutoComCodigo(empresa.getId(), 542, null);
+
+        assertThatThrownBy(() -> produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(kg).nome("Feijão a granel").codigoDoProduto(542).build()))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("Este código já está em uso no produto Açúcar a granel.")
+                .extracting(erro -> ((ProdutoConflitoException) erro).campo()).isEqualTo(Optional.of("codigo"));
+
+        assertThat(produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder.comUnidade(kg).build())
+                .numero()).isEqualTo(2L);
+    }
+
+    /** Review Focus 5: produto sem codigo (como os migrados) editado com codigo nulo e balanca false. */
+    @Test
+    void produtoAntigoSemCodigoEditadoESalvo() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        ProdutoResponse antigo = produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("Arroz").build());
+
+        ProdutoResponse editado = produtoService.atualizarDadosBasicosParaUsuario(idUsuario, antigo.id(),
+                ProdutoRequestBuilder.comUnidade(un).nome("Arroz tipo 1").codigoDoProduto(null).vendidoBalanca(false)
+                        .build());
+
+        assertThat(editado.codigo()).isNull();
+        assertThat(editado.vendidoBalanca()).isFalse();
+        assertThat(editado.numero()).isEqualTo(antigo.numero());
+    }
+
+    private Long numeroGravado(UUID produtoId) {
+        return jdbcTemplate.queryForObject("SELECT numero FROM produtos WHERE uuid = ?", Long.class, produtoId);
     }
 
     // ---------- Apoio ----------
