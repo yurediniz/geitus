@@ -793,3 +793,25 @@ Contrato de produtos ganha `controlaEstoque`, `estoqueInicial`, `estoqueAtual` e
 
 **Observações futuras:**
 Baixa por venda, venda sem estoque e reserva entram com o PDV. Custo médio entra com Compras. Revisar a "Ordem recomendada de desenvolvimento" do `CLAUDE.md` ao concluir a fase (DEC-030).
+
+## DEC-035 — Listagem de produtos paginada, com busca sem acento e filtros (Fase E)
+
+**Data:** 2026-10-23
+**Status:** Aceita
+**Contexto:**
+Quinta fase da DEC-030. A lista carregava todos os produtos de uma vez (DT-020), a busca só rodava com botão, sem ignorar acentos nem procurar por marca, e não havia ordenação nem filtros por categoria, estoque ou promoção.
+
+**Decisão:**
+- `GET /api/produtos` passa a devolver `PaginaResponse` (25 por página, máximo 100), com `busca`, `status` (`ativos` padrão/`inativos`/`todos`), `categoria` (com descendentes), `estoque` (`baixo` inclui sem estoque/`sem`), `promocao` (vigente hoje) e `ordem` (nome, preço, margem, estoque, recentes, atualizados).
+- Consulta de leitura em SQL nativo (`ConsultaDeProdutos`, `NamedParameterJdbcTemplate`) em duas etapas: ids e total, depois os produtos com as relações na mesma ordem. SQL só com fragmentos fixos escolhidos por enums.
+- Colunas `busca_normalizada` e `nome_normalizado` mantidas pela aplicação (`TextoDeBusca.normalizar`). A migration V10 preenche os existentes e cria os índices. Sem extensão do PostgreSQL.
+- Tela com tabela (≥ 768 px) e cards no celular, busca enquanto se digita (300 ms, com cancelamento das requisições antigas), páginas numeradas e todo o estado na URL.
+
+**Motivo:**
+Decisões do usuário (páginas numeradas, tabela, filtro de estoque, Nome A–Z). A consulta em duas etapas é a forma mais simples de filtrar e ordenar no banco por dados de catálogo, estoque e promoção sem misturar os pacotes.
+
+**Impacto:**
+Contrato de `GET /api/produtos` muda de lista para página (o parâmetro `ativo` vira `status`). A `ProdutosListaPage` é reorganizada. Fecha a DT-020 para Produtos. Spec: `docs/modules/produtos-listagem.md`. Revisores obrigatórios: `data-reviewer` (V10, índices, SQL nativo) e `security-reviewer` (montagem do SQL, isolamento).
+
+**Observações futuras:**
+Índice de trigramas quando houver dezenas de milhares de produtos por empresa; paginação de Clientes reutilizando `PaginacaoLista`.
