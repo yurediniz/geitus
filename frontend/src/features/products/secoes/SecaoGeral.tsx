@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Controller, useFormContext } from 'react-hook-form'
+import { Controller, useFormContext, useWatch } from 'react-hook-form'
 import type { UseQueryResult } from '@tanstack/react-query'
 
 import {
@@ -94,7 +94,6 @@ export function SecaoGeral({
   const {
     control,
     register,
-    watch,
     getValues,
     setValue,
     formState: { errors },
@@ -102,7 +101,10 @@ export function SecaoGeral({
 
   const unidades = useMemo(() => unidadesQuery.data ?? [], [unidadesQuery.data])
   const categorias = useMemo(() => categoriasQuery.data ?? [], [categoriasQuery.data])
-  const [unidadeIdAtual, nomeAtual, nomeCurtoAtual, custoAtual] = watch(['unidadeId', 'nome', 'nomeCurto', 'custo'])
+  const [unidadeIdAtual, nomeAtual, nomeCurtoAtual, custoAtual] = useWatch({
+    control,
+    name: ['unidadeId', 'nome', 'nomeCurto', 'custo'],
+  })
 
   const opcoesUnidadeVenda = useMemo(
     () => opcoesDeUnidade(unidades, produto?.unidade ?? null),

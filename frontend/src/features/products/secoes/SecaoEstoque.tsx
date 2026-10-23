@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Controller, useFormContext } from 'react-hook-form'
+import { Controller, useFormContext, useWatch } from 'react-hook-form'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { Info, SlidersHorizontal } from 'lucide-react'
 
@@ -58,7 +58,6 @@ export function SecaoEstoque({
   const {
     control,
     register,
-    watch,
     clearErrors,
     formState: { errors, dirtyFields },
   } = useFormContext<ProdutoFormValues>()
@@ -67,7 +66,7 @@ export function SecaoEstoque({
   // formulario recomecar), para o campo em edicao nao sumir quando o erro e corrigido.
   const [manterNiveis, setManterNiveis] = useState(false)
   const botaoAjustarRef = useRef<HTMLButtonElement>(null)
-  const [controla, unidadeId] = watch(['controlaEstoque', 'unidadeId'])
+  const [controla, unidadeId] = useWatch({ control, name: ['controlaEstoque', 'unidadeId'] })
   const siglaVenda = siglaPorId.get(unidadeId)
   const erroNosNiveis = NIVEIS.some(({ id }) => errors[id] !== undefined)
   if (!controla && erroNosNiveis && !manterNiveis) {

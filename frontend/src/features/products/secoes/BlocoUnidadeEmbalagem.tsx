@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useFormContext } from 'react-hook-form'
+import { useFormContext, useWatch } from 'react-hook-form'
 import type { UseQueryResult } from '@tanstack/react-query'
 
 import { CampoSelect, CampoTexto, GrupoCampos } from '@/features/products/CamposFormulario'
@@ -30,12 +30,15 @@ export function BlocoUnidadeEmbalagem({
 }: BlocoUnidadeEmbalagemProps) {
   const {
     register,
-    watch,
+    control,
     setValue,
     formState: { errors },
   } = useFormContext<ProdutoFormValues>()
   const unidades = useMemo(() => unidadesQuery.data ?? [], [unidadesQuery.data])
-  const [unidadeIdAtual, unidadeCompraIdAtual, fatorAtual] = watch(['unidadeId', 'unidadeCompraId', 'fatorConversao'])
+  const [unidadeIdAtual, unidadeCompraIdAtual, fatorAtual] = useWatch({
+    control,
+    name: ['unidadeId', 'unidadeCompraId', 'fatorConversao'],
+  })
 
   // A unidade de venda nao e oferecida como compra: "Mesma da venda" ja cobre esse caso.
   const opcoesUnidadeCompra = useMemo(

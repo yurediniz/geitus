@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Controller, useFormContext } from 'react-hook-form'
+import { Controller, useFormContext, useWatch } from 'react-hook-form'
 import { CheckCircle2, ChevronDown, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -67,8 +67,8 @@ interface BlocoComInterruptorProps {
 
 /** Bloco opcional com interruptor no topo: os campos so aparecem com ele ligado. */
 function BlocoComInterruptor({ id, rotulo, descricao, desabilitado, aoAlternar, children }: BlocoComInterruptorProps) {
-  const { control, watch } = useFormContext<ProdutoFormValues>()
-  const ligado = watch(id)
+  const { control } = useFormContext<ProdutoFormValues>()
+  const ligado = useWatch({ control, name: id })
   const idTitulo = `${id}-titulo`
   return (
     <GrupoCampos
@@ -184,8 +184,8 @@ function textoSemMargem(precoVenda: string): string {
  */
 export function SecaoPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: SecaoPrecosProps) {
   const {
+    control,
     register,
-    watch,
     getValues,
     setValue,
     clearErrors,
@@ -202,18 +202,21 @@ export function SecaoPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: SecaoP
     atacadoAtivo,
     precoAtacado,
     quantidadeMinima,
-  ] = watch([
-    'precoVenda',
-    'custo',
-    'unidadeId',
-    'promocaoAtiva',
-    'precoPromocional',
-    'promocaoInicio',
-    'promocaoFim',
-    'atacadoAtivo',
-    'precoAtacado',
-    'quantidadeMinimaAtacado',
-  ])
+  ] = useWatch({
+    control,
+    name: [
+      'precoVenda',
+      'custo',
+      'unidadeId',
+      'promocaoAtiva',
+      'precoPromocional',
+      'promocaoInicio',
+      'promocaoFim',
+      'atacadoAtivo',
+      'precoAtacado',
+      'quantidadeMinimaAtacado',
+    ],
+  })
   const { margem, markup } = calcularMargemMarkup(precoVenda, custo)
   const margemTexto = formatarPercentual(margem)
   const markupTexto = formatarPercentual(markup)

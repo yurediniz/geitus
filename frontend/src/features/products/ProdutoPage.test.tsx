@@ -1670,13 +1670,10 @@ describe('ProdutoPage', () => {
     })
 
     it('com 20 códigos na lista, o pendente ao salvar é barrado pelo limite e nada é enviado', async () => {
-      renderNovo()
+      // Ja abre com os 20 (ler 20 codigos um a um deixa o teste lento sem provar nada a mais).
+      const vinte = Array.from({ length: 20 }, (_, indice) => ({ codigo: `INT-${indice + 1}`, formato: 'OUTRO' as const }))
+      renderEdicao({ ...produtoAtivo, codigosBarras: vinte })
       await esperarFormulario()
-      await preencherMinimo()
-      for (let indice = 1; indice <= 20; indice += 1) {
-        fireEvent.change(campoCodigoBarras(), { target: { value: `INT-${indice}` } })
-        fireEvent.keyDown(campoCodigoBarras(), { key: 'Enter' })
-      }
       const lista = screen.getByRole('list', { name: /códigos de barras do produto/i })
       expect(within(lista).getAllByRole('listitem')).toHaveLength(20)
       fireEvent.change(campoCodigoBarras(), { target: { value: 'INT-21' } })
@@ -1688,7 +1685,7 @@ describe('ProdutoPage', () => {
       await waitFor(() => expect(campoCodigoBarras()).toHaveFocus())
       expect(campoCodigoBarras()).toHaveValue('INT-21')
       expect(within(lista).getAllByRole('listitem')).toHaveLength(20)
-      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
     })
 
     it('Ctrl+Enter com código pendente de dígito inválido não salva e foca o campo de código', async () => {

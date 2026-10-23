@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Controller, useFormContext } from 'react-hook-form'
+import { Controller, useFormContext, useWatch } from 'react-hook-form'
 import { useMutation } from '@tanstack/react-query'
 import { Loader2, Scale, Sparkles } from 'lucide-react'
 
@@ -29,13 +29,12 @@ export function SecaoCodigos({ produto, desabilitado, somenteLeitura, aoAlterarC
   const {
     control,
     register,
-    watch,
     setValue,
     clearErrors,
     formState: { errors },
   } = useFormContext<ProdutoFormValues>()
   const [anuncioSku, setAnuncioSku] = useState('')
-  const [codigo, vendidoBalanca] = watch(['codigo', 'vendidoBalanca'])
+  const [codigo, vendidoBalanca] = useWatch({ control, name: ['codigo', 'vendidoBalanca'] })
   // Atalho so na edicao: no cadastro o numero ainda nao existe (spec B2 §2).
   const oferecerNumero = vendidoBalanca && codigo.trim() === '' && produto !== null && !somenteLeitura
 
