@@ -27,6 +27,7 @@ import com.geitus.app.company.EmpresaRepository;
 import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
+import com.geitus.app.shared.numeracao.Numerador;
 
 /**
  * Testa as regras do {@link ClienteService}: normalizacao antes de validar e de
@@ -52,6 +53,9 @@ class ClienteServiceTest {
 
     @Mock
     private UsuarioRepository usuarioRepository;
+
+    @Mock
+    private Numerador numerador;
 
     @InjectMocks
     private ClienteService clienteService;
@@ -79,7 +83,7 @@ class ClienteServiceTest {
 
     private Cliente clienteExistente(String cpf, boolean telefoneEWhatsapp, String whatsapp) {
         Empresa empresa = usuarioAtivoDaEmpresa();
-        Cliente cliente = new Cliente(empresa, "Ana", cpf, "11987654321", telefoneEWhatsapp, whatsapp, null);
+        Cliente cliente = new Cliente(empresa, 12L, "Ana", cpf, "11987654321", telefoneEWhatsapp, whatsapp, null);
         ReflectionTestUtils.setField(cliente, "id", ID_CLIENTE);
         when(clienteRepository.findByUuidAndEmpresa_Id(cliente.getUuid(), ID_EMPRESA))
                 .thenReturn(Optional.of(cliente));

@@ -50,6 +50,8 @@ import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.shared.busca.PadraoLike;
 import com.geitus.app.shared.busca.TextoDeBusca;
+import com.geitus.app.shared.numeracao.Numerador;
+import com.geitus.app.shared.numeracao.TipoNumeracao;
 
 /**
  * Regras de negocio do modulo Produtos.
@@ -179,13 +181,14 @@ public class ProdutoService {
     private final UsoDoProdutoNoEstoque usoNoEstoque;
     private final RegistroDeEstoqueInicial registroDeEstoqueInicial;
     private final ConsultaDeProdutos consultaDeProdutos;
+    private final Numerador numerador;
     private final Clock relogio;
 
     public ProdutoService(ProdutoRepository produtoRepository, EmpresaRepository empresaRepository,
             UsuarioRepository usuarioRepository, UnidadeMedidaService unidadeService,
             CategoriaService categoriaService, HistoricoPrecoRepository historicoPrecoRepository,
             UsoDoProdutoNoEstoque usoNoEstoque, RegistroDeEstoqueInicial registroDeEstoqueInicial,
-            ConsultaDeProdutos consultaDeProdutos, Clock relogio) {
+            ConsultaDeProdutos consultaDeProdutos, Numerador numerador, Clock relogio) {
         this.produtoRepository = produtoRepository;
         this.empresaRepository = empresaRepository;
         this.usuarioRepository = usuarioRepository;
@@ -195,6 +198,7 @@ public class ProdutoService {
         this.usoNoEstoque = usoNoEstoque;
         this.registroDeEstoqueInicial = registroDeEstoqueInicial;
         this.consultaDeProdutos = consultaDeProdutos;
+        this.numerador = numerador;
         this.relogio = relogio;
     }
 
@@ -202,7 +206,9 @@ public class ProdutoService {
      * Cadastra o produto e registra no historico o preco de venda e o custo
      * iniciais (valor anterior nulo), atribuidos a {@code idUsuario}. Com
      * {@code estoqueInicial}, registra tambem a primeira entrada de estoque, na
-     * mesma transacao: se o cadastro falhar, nada fica gravado.
+     * mesma transacao: se o cadastro falhar, nada fica gravado. O numero de
+     * registro (Fase B2) e reservado so depois das validacoes, na mesma
+     * transacao: um cadastro que falha nao consome numero.
      */
     Produto cadastrar(Long idUsuario, Long empresaId, ProdutoRequest request) {
         validarCampos(request);
@@ -216,7 +222,8 @@ public class ProdutoService {
         Empresa empresa = empresaRepository.findById(empresaId)
                 .orElseThrow(() -> new RegraDeNegocioException("Empresa informada não encontrada."));
 
-        Produto produto = new Produto(empresa, dadosDoProduto(request, vinculos, sku));
+        long numero = numerador.proximo(empresaId, TipoNumeracao.PRODUTO);
+        Produto produto = new Produto(empresa, numero, dadosDoProduto(request, vinculos, sku));
         produto.substituirCodigos(codigos);
         Produto gravado = produtoRepository.save(produto);
         registrarHistorico(gravado, idUsuario, null, null);

@@ -77,6 +77,7 @@ import com.geitus.app.company.EmpresaRepository;
 import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
+import com.geitus.app.shared.numeracao.Numerador;
 
 /**
  * Testa as regras do {@link ProdutoService}: validacoes de cadastro/atualizacao
@@ -131,6 +132,9 @@ class ProdutoServiceTest {
     @Mock
     private ConsultaDeProdutos consultaDeProdutos;
 
+    @Mock
+    private Numerador numerador;
+
     private ProdutoService produtoService;
 
     private Empresa empresa;
@@ -141,7 +145,7 @@ class ProdutoServiceTest {
     void setUp() {
         produtoService = new ProdutoService(produtoRepository, empresaRepository, usuarioRepository,
                 unidadeService, categoriaService, historicoPrecoRepository, usoNoEstoque, registroDeEstoqueInicial,
-                consultaDeProdutos, RELOGIO);
+                consultaDeProdutos, numerador, RELOGIO);
         empresa = empresaComId(EMPRESA_ID);
         un = unidade(10L, empresa, "UN");
     }

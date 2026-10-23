@@ -14,6 +14,8 @@ import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.shared.busca.PadraoLike;
+import com.geitus.app.shared.numeracao.Numerador;
+import com.geitus.app.shared.numeracao.TipoNumeracao;
 import com.geitus.app.shared.validation.Documentos;
 import com.geitus.app.shared.validation.Telefones;
 
@@ -45,12 +47,14 @@ public class ClienteService {
     private final ClienteRepository clienteRepository;
     private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
+    private final Numerador numerador;
 
     public ClienteService(ClienteRepository clienteRepository, EmpresaRepository empresaRepository,
-            UsuarioRepository usuarioRepository) {
+            UsuarioRepository usuarioRepository, Numerador numerador) {
         this.clienteRepository = clienteRepository;
         this.empresaRepository = empresaRepository;
         this.usuarioRepository = usuarioRepository;
+        this.numerador = numerador;
     }
 
     // ---------- API publica (empresa sempre resolvida do usuario do JWT) ----------
@@ -87,14 +91,20 @@ public class ClienteService {
 
     // ---------- Regras por empresa (uso interno) ----------
 
+    /**
+     * O numero de registro e reservado so depois das validacoes, na mesma
+     * transacao do INSERT: se o cadastro falhar, o rollback devolve o numero.
+     */
     Cliente cadastrar(Long empresaId, DadosCliente dados) {
         DadosNormalizados normalizados = normalizarEValidar(dados);
         garantirCpfDisponivelParaNovoCliente(empresaId, normalizados.cpf());
 
         Empresa empresa = empresaRepository.findById(empresaId)
                 .orElseThrow(CredenciaisInvalidasException::new);
-        Cliente cliente = new Cliente(empresa, normalizados.nome(), normalizados.cpf(), normalizados.telefone(),
-                normalizados.telefoneEWhatsapp(), normalizados.whatsapp(), normalizados.observacoes());
+        long numero = numerador.proximo(empresaId, TipoNumeracao.CLIENTE);
+        Cliente cliente = new Cliente(empresa, numero, normalizados.nome(), normalizados.cpf(),
+                normalizados.telefone(), normalizados.telefoneEWhatsapp(), normalizados.whatsapp(),
+                normalizados.observacoes());
         return clienteRepository.save(cliente);
     }
 

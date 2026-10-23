@@ -107,12 +107,15 @@ class CatalogoRepositoryIT {
             Categoria categoria) {
         // JdbcTemplate (mesma transacao do teste): binda nulos sem o problema de
         // inferencia de tipo dos parametros nulos em query nativa do Hibernate.
-        // As colunas da busca (V10) sao NOT NULL e mantidas pela aplicacao.
+        // As colunas da busca (V10) sao NOT NULL e mantidas pela aplicacao; o
+        // numero (V11) e o proximo livre da empresa.
         jdbcTemplate.update("""
-                INSERT INTO produtos (empresa_id, nome, preco_venda, unidade_id, unidade_compra_id,
+                INSERT INTO produtos (empresa_id, numero, nome, preco_venda, unidade_id, unidade_compra_id,
                                       fator_conversao, categoria_id, nome_normalizado, busca_normalizada)
-                VALUES (?, 'Produto', 10.00, ?, ?, ?, ?, 'produto', 'produto')
+                VALUES (?, (SELECT coalesce(max(numero), 0) + 1 FROM produtos WHERE empresa_id = ?), 'Produto',
+                        10.00, ?, ?, ?, ?, 'produto', 'produto')
                 """,
+                empresa.getId(),
                 empresa.getId(),
                 unidade.getId(),
                 unidadeCompra == null ? null : unidadeCompra.getId(),

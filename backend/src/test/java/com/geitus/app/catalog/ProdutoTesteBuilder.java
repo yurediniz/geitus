@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -15,8 +16,14 @@ import com.geitus.app.company.Empresa;
  * Monta entidades {@link Produto} nos testes sem repetir os componentes de
  * {@link DadosProduto}. Parte de um produto minimo valido (nome, preco e
  * unidade de venda) e cada teste ajusta so o que importa para ele.
+ *
+ * <p>O {@code numero} de registro (V11, unico por empresa) vem de uma sequencia
+ * global dos testes, entao produtos salvos no mesmo banco nunca colidem; quem
+ * precisa de um numero especifico usa {@link #numero(long)}.
  */
 final class ProdutoTesteBuilder {
+
+    private static final AtomicLong PROXIMO_NUMERO = new AtomicLong();
 
     private final Empresa empresa;
     private final UnidadeMedida unidade;
@@ -41,6 +48,7 @@ final class ProdutoTesteBuilder {
     private BigDecimal precoAtacado;
     private BigDecimal quantidadeMinimaAtacado;
     private Long id;
+    private long numero = PROXIMO_NUMERO.incrementAndGet();
     private boolean ativo = true;
     private boolean controlaEstoque = true;
     private final List<CodigoBarrasValidado> codigos = new ArrayList<>();
@@ -56,6 +64,11 @@ final class ProdutoTesteBuilder {
 
     ProdutoTesteBuilder id(Long valor) {
         this.id = valor;
+        return this;
+    }
+
+    ProdutoTesteBuilder numero(long valor) {
+        this.numero = valor;
         return this;
     }
 
@@ -165,7 +178,7 @@ final class ProdutoTesteBuilder {
     }
 
     Produto build() {
-        Produto produto = new Produto(empresa, new DadosProduto(nome, nomeCurto, marca, fornecedor, descricao,
+        Produto produto = new Produto(empresa, numero, new DadosProduto(nome, nomeCurto, marca, fornecedor, descricao,
                 unidade, categoria, unidadeCompra, fatorConversao, precoVenda, custo, precoMinimo, estoqueMinimo,
                 estoqueMaximo, pontoReposicao, sku, precoPromocional, promocaoInicio, promocaoFim, precoAtacado,
                 quantidadeMinimaAtacado, controlaEstoque));

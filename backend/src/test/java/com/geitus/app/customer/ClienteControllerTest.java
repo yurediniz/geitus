@@ -93,7 +93,7 @@ class ClienteControllerTest {
     private Cliente cliente(String nome) {
         Empresa empresa = new Empresa("Empresa " + ID_EMPRESA);
         ReflectionTestUtils.setField(empresa, "id", ID_EMPRESA);
-        Cliente cliente = new Cliente(empresa, nome, "11144477735", TELEFONE, true, null, null);
+        Cliente cliente = new Cliente(empresa, 12L, nome, "11144477735", TELEFONE, true, null, null);
         ReflectionTestUtils.setField(cliente, "id", 42L);
         return cliente;
     }

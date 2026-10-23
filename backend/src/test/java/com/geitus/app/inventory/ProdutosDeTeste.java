@@ -34,7 +34,7 @@ final class ProdutosDeTeste {
 
     /** Produto minimo (nome, preco e unidade) com o id interno e o controle de estoque informados. */
     static Produto produto(Empresa empresa, UnidadeMedida unidade, Long id, boolean controlaEstoque) {
-        Produto produto = new Produto(empresa, new DadosProduto("Arroz", null, null, null, null, unidade, null, null,
+        Produto produto = new Produto(empresa, id, new DadosProduto("Arroz", null, null, null, null, unidade, null, null,
                 null, new BigDecimal("10.00"), null, null, null, null, null, null, null, null, null, null, null,
                 controlaEstoque));
         ReflectionTestUtils.setField(produto, "id", id);

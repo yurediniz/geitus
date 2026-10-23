@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +46,8 @@ import com.geitus.app.company.TipoPessoa;
 @Testcontainers
 class ClienteRepositoryIT {
 
+    /** Numero de registro (V11, unico por empresa): sequencia global do teste, sem colisao. */
+    private static final AtomicLong PROXIMO_NUMERO = new AtomicLong();
     private static final String CPF_VALIDO = "11144477735";
     private static final String TELEFONE_VALIDO = "11987654321";
 
@@ -89,13 +92,19 @@ class ClienteRepositoryIT {
         return empresaRepository.saveAndFlush(empresa);
     }
 
+    private static long proximoNumero() {
+        return PROXIMO_NUMERO.incrementAndGet();
+    }
+
     private Cliente novoCliente(Empresa empresa, String nome, String cpf, String telefone) {
-        return clienteRepository.saveAndFlush(new Cliente(empresa, nome, cpf, telefone, true, null, null));
+        return clienteRepository.saveAndFlush(
+                new Cliente(empresa, proximoNumero(), nome, cpf, telefone, true, null, null));
     }
 
     private Cliente novoClienteComWhatsappProprio(Empresa empresa, String nome, String telefone,
             String whatsapp) {
-        return clienteRepository.saveAndFlush(new Cliente(empresa, nome, null, telefone, false, whatsapp, null));
+        return clienteRepository.saveAndFlush(
+                new Cliente(empresa, proximoNumero(), nome, null, telefone, false, whatsapp, null));
     }
 
     // ---------- Isolamento por empresa (DEC-016) e UUID publico ----------
@@ -129,7 +138,7 @@ class ClienteRepositoryIT {
     @Test
     void uuidEGeradoNaCriacaoEUnico() {
         Empresa empresa = novaEmpresa("Empresa UUID");
-        Cliente naoSalvo = new Cliente(empresa, "Ana", null, null, true, null, null);
+        Cliente naoSalvo = new Cliente(empresa, proximoNumero(), "Ana", null, null, true, null, null);
         // Gerado na aplicacao, antes de qualquer INSERT (o DEFAULT do banco e so rede de seguranca).
         UUID uuidGeradoNaAplicacao = naoSalvo.getUuid();
         assertThat(uuidGeradoNaAplicacao).isNotNull();
@@ -212,7 +221,8 @@ class ClienteRepositoryIT {
         Empresa empresa = novaEmpresa("Empresa Formato");
         // 11 caracteres (cabe no VARCHAR(11)), mas nao sao so digitos: o service
         // normaliza antes; o CHECK ck_cliente_cpf_digitos e a defesa no banco.
-        Cliente comMascara = new Cliente(empresa, "Ana", "111.444.777", null, true, null, null);
+        Cliente comMascara = new Cliente(empresa, proximoNumero(), "Ana", "111.444.777", null, true, null,
+                null);
 
         assertThatThrownBy(() -> clienteRepository.saveAndFlush(comMascara))
                 .isInstanceOf(DataIntegrityViolationException.class);

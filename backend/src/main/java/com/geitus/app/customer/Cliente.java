@@ -37,6 +37,10 @@ import jakarta.persistence.Table;
  * banco e a ultima barreira. Use {@link #getWhatsappResolvido()} para expor o
  * numero.
  *
+ * <p>Fase B2 (V11, docs/modules/produtos-codigo-e-balanca.md, 2.1): o
+ * {@code numero} e o numero de registro 1, 2, 3... por empresa, gerado pelo
+ * {@code Numerador} na criacao e imutavel ({@code updatable = false}; nao e a PK).
+ *
  * <p>Nao deve ser exposta diretamente na API: o controller usa DTOs.
  */
 @Entity
@@ -53,6 +57,10 @@ public class Cliente {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "empresa_id", nullable = false, updatable = false)
     private Empresa empresa;
+
+    /** Fase B2 (V11): numero de registro por empresa, imutavel depois da criacao. */
+    @Column(nullable = false, updatable = false)
+    private Long numero;
 
     @Column(nullable = false, length = 150)
     private String nome;
@@ -86,13 +94,16 @@ public class Cliente {
     }
 
     /**
-     * Cria um cliente ativo, ja com o identificador publico gerado. O service
-     * e responsavel por validar e normalizar os dados antes de instanciar.
+     * Cria um cliente ativo, ja com o identificador publico gerado e o
+     * {@code numero} de registro reservado pelo {@code Numerador} na mesma
+     * transacao. O service e responsavel por validar e normalizar os dados
+     * antes de instanciar.
      */
-    public Cliente(Empresa empresa, String nome, String cpf, String telefone, boolean telefoneEWhatsapp,
-            String whatsapp, String observacoes) {
+    public Cliente(Empresa empresa, long numero, String nome, String cpf, String telefone,
+            boolean telefoneEWhatsapp, String whatsapp, String observacoes) {
         this.uuid = UUID.randomUUID();
         this.empresa = empresa;
+        this.numero = numero;
         this.ativo = true;
         atualizarDados(nome, cpf, telefone, telefoneEWhatsapp, whatsapp, observacoes);
     }
@@ -140,6 +151,11 @@ public class Cliente {
 
     public Long getEmpresaId() {
         return empresa == null ? null : empresa.getId();
+    }
+
+    /** Numero de registro do cliente na empresa (1, 2, 3...), imutavel. */
+    public Long getNumero() {
+        return numero;
     }
 
     public String getNome() {

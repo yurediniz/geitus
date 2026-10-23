@@ -57,6 +57,12 @@ import jakarta.persistence.Table;
  * e {@code nomeNormalizado} sao derivadas do cadastro e recalculadas a cada
  * {@link #atualizarDadosBasicos}, para a busca sem acento e a ordenacao da lista.
  *
+ * <p>Fase B2 (V11, docs/modules/produtos-codigo-e-balanca.md): o {@code numero}
+ * e o numero de registro 1, 2, 3... por empresa, gerado pelo {@code Numerador}
+ * na criacao e imutavel ({@code updatable = false}; nao e a PK). O
+ * {@code codigo} (1 a 999999, opcional) e o "vendido na balanca" sao dados do
+ * cadastro.
+ *
  * <p>Nao deve ser exposta diretamente na API: o {@code ProdutoController} usa
  * DTOs ({@code ProdutoRequest}/{@code ProdutoResponse}).
  */
@@ -77,6 +83,10 @@ public class Produto {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "empresa_id", nullable = false, updatable = false)
     private Empresa empresa;
+
+    /** Fase B2 (V11): numero de registro por empresa, imutavel depois da criacao. */
+    @Column(nullable = false, updatable = false)
+    private Long numero;
 
     @Column(nullable = false, length = 150)
     private String nome;
@@ -129,6 +139,13 @@ public class Produto {
     @Column(length = 50)
     private String sku;
 
+    /** Fase B2 (V11): codigo do produto (1 a 999999), unico por empresa quando informado. */
+    private Integer codigo;
+
+    /** Fase B2 (V11): vendido na balanca (exige {@link #codigo}). */
+    @Column(name = "vendido_balanca", nullable = false)
+    private boolean vendidoBalanca;
+
     @Column(name = "preco_promocional", precision = 12, scale = 2)
     private BigDecimal precoPromocional;
 
@@ -178,11 +195,14 @@ public class Produto {
     }
 
     /**
-     * Cria um produto ja com os dados do cadastro e um {@code uuid} novo. O
-     * service e responsavel por validar as regras de negocio antes de instanciar.
+     * Cria um produto ja com os dados do cadastro, o {@code numero} de registro
+     * reservado pelo {@code Numerador} na mesma transacao e um {@code uuid}
+     * novo. O service e responsavel por validar as regras de negocio antes de
+     * instanciar.
      */
-    public Produto(Empresa empresa, DadosProduto dados) {
+    public Produto(Empresa empresa, long numero, DadosProduto dados) {
         this.empresa = empresa;
+        this.numero = numero;
         this.uuid = UUID.randomUUID();
         this.ativo = true;
         atualizarDadosBasicos(dados);
@@ -334,6 +354,11 @@ public class Produto {
         return empresa == null ? null : empresa.getId();
     }
 
+    /** Numero de registro do produto na empresa (1, 2, 3...), imutavel. */
+    public Long getNumero() {
+        return numero;
+    }
+
     public String getNome() {
         return nome;
     }
@@ -407,6 +432,16 @@ public class Produto {
 
     public String getSku() {
         return sku;
+    }
+
+    /** Codigo do produto (1 a 999999), ou {@code null}. */
+    public Integer getCodigo() {
+        return codigo;
+    }
+
+    /** Se o produto e vendido na balanca (entao sempre tem {@link #getCodigo()}). */
+    public boolean isVendidoBalanca() {
+        return vendidoBalanca;
     }
 
     /** Preco promocional, ou {@code null} sem promocao (V8: os tres campos da promocao vem juntos). */
