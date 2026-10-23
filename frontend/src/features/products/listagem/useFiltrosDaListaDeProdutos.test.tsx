@@ -137,6 +137,25 @@ describe('useFiltrosDaListaDeProdutos', () => {
     expect(hook().filtros).toMatchObject(esperado)
   })
 
+  it('pagina enorme na URL fica limitada (nao vira 400 no backend)', () => {
+    const { hook } = montar('/produtos?pagina=99999999999999999999')
+
+    expect(hook().filtros.pagina).toBe(1_000_000)
+  })
+
+  it('conta os filtros ativos fora a busca (botao Filtros do celular)', () => {
+    const { hook } = montar(`/produtos?busca=arroz&status=todos&categoria=${CATEGORIA}&promocao=1&ordem=-preco`)
+
+    expect(hook().quantidadeDeFiltros).toBe(3)
+  })
+
+  it('so a busca ja e filtro ativo, mas nao entra na contagem', () => {
+    const { hook } = montar('/produtos?busca=arroz')
+
+    expect(hook().temFiltroAtivo).toBe(true)
+    expect(hook().quantidadeDeFiltros).toBe(0)
+  })
+
   it('limpar restaura os filtros padrao e mantem a ordem', () => {
     const { router, hook } = montar(`/produtos?busca=arroz&status=todos&categoria=${CATEGORIA}&ordem=-preco&pagina=2`)
 

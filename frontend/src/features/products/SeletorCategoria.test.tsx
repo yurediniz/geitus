@@ -123,6 +123,25 @@ describe('SeletorCategoria', () => {
       fireEvent.click(within(lista).getByRole('option', { name: 'Brinquedos › Bolinhas (inativa)' }))
       expect(onChangeSpy).toHaveBeenCalledWith('bolinhas')
     })
+
+    it('com incluirInativas, "+ Nova categoria" nao oferece inativas como pai', async () => {
+      renderSeletor({ incluirInativas: true })
+
+      await abrir()
+      fireEvent.click(screen.getByRole('button', { name: 'Nova categoria' }))
+
+      const pai = screen.getByRole('combobox', { name: /dentro de/i })
+      const opcoes = within(pai).getAllByRole('option').map((opcao) => opcao.textContent)
+      expect(opcoes).toContain('Ração')
+      expect(opcoes).not.toContain('Brinquedos')
+      expect(opcoes).not.toContain('Brinquedos › Bolinhas')
+    })
+
+    it('aceita className no gatilho', () => {
+      renderSeletor({ className: 'h-11 md:h-9' })
+
+      expect(gatilho()).toHaveClass('h-11', 'md:h-9')
+    })
   })
 
   it('mostra "Sem categoria" quando nao ha valor e compoe o nome acessivel com o valor', () => {

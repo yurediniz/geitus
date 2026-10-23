@@ -1,7 +1,8 @@
 import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
-import type { EstoqueFiltro, FiltrosDaListaDeProdutos, OrdemProdutos, StatusFiltro } from '@/types/produto'
+import { umDe } from '@/lib/listas'
+import { ESTOQUE_FILTRO, ORDENS_PRODUTOS, STATUS_FILTRO, type FiltrosDaListaDeProdutos } from '@/types/produto'
 
 /** Valores padrao: nao aparecem na URL. */
 export const FILTROS_PADRAO: FiltrosDaListaDeProdutos = {
@@ -14,33 +15,17 @@ export const FILTROS_PADRAO: FiltrosDaListaDeProdutos = {
   pagina: 1,
 }
 
-const STATUS: readonly StatusFiltro[] = ['ativos', 'inativos', 'todos']
-const ESTOQUES: readonly EstoqueFiltro[] = ['baixo', 'sem']
-const ORDENS: readonly OrdemProdutos[] = [
-  'nome',
-  '-nome',
-  'preco',
-  '-preco',
-  'margem',
-  '-margem',
-  'estoque',
-  '-estoque',
-  'recentes',
-  'atualizados',
-]
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-function umDe<T extends string>(validos: readonly T[], valor: string | null): T | null {
-  return validos.find((item) => item === valor) ?? null
-}
+/** Maior pagina aceita na URL: acima disso, o backend responderia 400 em laco de "Tentar de novo". */
+export const PAGINA_MAXIMA = 1_000_000
 
 function lerPagina(valor: string | null): number {
   if (valor === null || !/^\d+$/.test(valor)) {
     return 1
   }
   const pagina = Number(valor)
-  return Number.isSafeInteger(pagina) && pagina >= 1 ? pagina : 1
+  return pagina >= 1 ? Math.min(pagina, PAGINA_MAXIMA) : 1
 }
 
 /** Le a URL; qualquer valor desconhecido ou malformado vira o padrao (a URL nao e confiavel). */
@@ -48,11 +33,11 @@ function lerFiltros(params: URLSearchParams): FiltrosDaListaDeProdutos {
   const categoria = params.get('categoria')
   return {
     busca: (params.get('busca') ?? '').trim(),
-    status: umDe(STATUS, params.get('status')) ?? FILTROS_PADRAO.status,
+    status: umDe(STATUS_FILTRO, params.get('status')) ?? FILTROS_PADRAO.status,
     categoria: categoria !== null && UUID.test(categoria) ? categoria : null,
-    estoque: umDe(ESTOQUES, params.get('estoque')),
+    estoque: umDe(ESTOQUE_FILTRO, params.get('estoque')),
     promocao: params.get('promocao') === '1',
-    ordem: umDe(ORDENS, params.get('ordem')) ?? FILTROS_PADRAO.ordem,
+    ordem: umDe(ORDENS_PRODUTOS, params.get('ordem')) ?? FILTROS_PADRAO.ordem,
     pagina: lerPagina(params.get('pagina')),
   }
 }
@@ -84,15 +69,14 @@ function escreverFiltros(filtros: FiltrosDaListaDeProdutos): URLSearchParams {
   return params
 }
 
-/** Filtros de verdade (a ordem e a pagina nao restringem a lista). */
-function temFiltro(filtros: FiltrosDaListaDeProdutos): boolean {
-  return (
-    filtros.busca !== FILTROS_PADRAO.busca ||
-    filtros.status !== FILTROS_PADRAO.status ||
-    filtros.categoria !== FILTROS_PADRAO.categoria ||
-    filtros.estoque !== FILTROS_PADRAO.estoque ||
-    filtros.promocao !== FILTROS_PADRAO.promocao
-  )
+/** Quantos filtros restringem a lista fora a busca (o botao "Filtros" do celular mostra o numero). */
+function contarFiltros(filtros: FiltrosDaListaDeProdutos): number {
+  return [
+    filtros.status !== FILTROS_PADRAO.status,
+    filtros.categoria !== FILTROS_PADRAO.categoria,
+    filtros.estoque !== FILTROS_PADRAO.estoque,
+    filtros.promocao !== FILTROS_PADRAO.promocao,
+  ].filter(Boolean).length
 }
 
 const CAMPOS = Object.keys(FILTROS_PADRAO) as (keyof FiltrosDaListaDeProdutos)[]
@@ -139,5 +123,8 @@ export function useFiltrosDaListaDeProdutos() {
     setSearchParams(escreverFiltros({ ...FILTROS_PADRAO, ordem: filtros.ordem }))
   }, [filtros.ordem, setSearchParams])
 
-  return { filtros, alterar, limpar, temFiltroAtivo: temFiltro(filtros) }
+  const quantidadeDeFiltros = contarFiltros(filtros)
+  // A ordem e a pagina nao restringem a lista: nao contam como filtro.
+  const temFiltroAtivo = filtros.busca !== '' || quantidadeDeFiltros > 0
+  return { filtros, alterar, limpar, temFiltroAtivo, quantidadeDeFiltros }
 }

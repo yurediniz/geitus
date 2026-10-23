@@ -50,6 +50,8 @@ export interface SeletorCategoriaProps {
    * continua existindo e precisa ser encontrado.
    */
   incluirInativas?: boolean
+  /** Classes extras do gatilho (ex.: altura maior no celular, no filtro da lista). */
+  className?: string
 }
 
 interface Opcao {
@@ -94,6 +96,7 @@ export function SeletorCategoria({
   invalido,
   rotuloSemValor = 'Sem categoria',
   incluirInativas = false,
+  className,
 }: SeletorCategoriaProps) {
   const idBase = useId()
   const idGatilho = id ?? `${idBase}-gatilho`
@@ -116,9 +119,12 @@ export function SeletorCategoria({
     return mapa
   }, [categorias, criadaAgora])
 
+  /** So as ativas (sem ramo inativo): as unicas que podem ser pai de uma categoria nova. */
+  const ativas = useMemo(() => [...porId.values()].filter((categoria) => categoria.selecionavel), [porId])
+  /** O que a lista oferece: as ativas ou, no filtro, tambem as inativas. */
   const selecionaveis = useMemo(
-    () => [...porId.values()].filter((categoria) => incluirInativas || categoria.selecionavel),
-    [porId, incluirInativas],
+    () => (incluirInativas ? [...porId.values()] : ativas),
+    [porId, incluirInativas, ativas],
   )
 
   /** Categoria atual nao selecionavel (inativa ou sob ramo inativo): mantida como opcao. */
@@ -167,9 +173,9 @@ export function SeletorCategoria({
     const alvo = chaveDeNome(termo)
     return (
       alvo !== '' &&
-      selecionaveis.some((categoria) => categoria.parentId === null && chaveDeNome(categoria.nome) === alvo)
+      ativas.some((categoria) => categoria.parentId === null && chaveDeNome(categoria.nome) === alvo)
     )
-  }, [termo, selecionaveis])
+  }, [termo, ativas])
 
   // Termo igual (sem acento/maiusculas) ao nome de uma categoria fora da lista
   // (inativa ou sob ramo inativo): explica por que ela nao aparece. Prefere a
@@ -292,6 +298,7 @@ export function SeletorCategoria({
             'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
             'disabled:cursor-not-allowed disabled:opacity-50',
             'aria-invalid:border-destructive aria-invalid:ring-destructive/20',
+            className,
           )}
         >
           <span id={idValor} className={cn('truncate', valor === null && 'text-muted-foreground')}>
@@ -318,7 +325,7 @@ export function SeletorCategoria({
         {criando ? (
           <FormularioNovaCategoria
             nomeInicial={termo.trim()}
-            categorias={selecionaveis}
+            categorias={ativas}
             onCriada={aoCriar}
             onCancelar={() => setCriando(false)}
           />

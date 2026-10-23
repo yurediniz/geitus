@@ -146,26 +146,31 @@ export interface ProdutoRequest {
 }
 
 /** Filtro de status da lista de produtos (`ativos` e o padrao). */
-export type StatusFiltro = 'ativos' | 'inativos' | 'todos'
+export const STATUS_FILTRO = ['ativos', 'inativos', 'todos'] as const
+export type StatusFiltro = (typeof STATUS_FILTRO)[number]
 
 /** Filtro de estoque da lista: `baixo` inclui os sem estoque; so produtos que controlam estoque. */
-export type EstoqueFiltro = 'baixo' | 'sem'
+export const ESTOQUE_FILTRO = ['baixo', 'sem'] as const
+export type EstoqueFiltro = (typeof ESTOQUE_FILTRO)[number]
 
 /**
- * Ordenacao da lista (parametro `ordem` da API); o `-` inverte a direcao.
- * `recentes` e `atualizados` sao sempre do mais novo para o mais antigo.
+ * Ordenacao da lista (parametro `ordem` da API), na ordem do select da tela;
+ * o `-` inverte a direcao. `recentes` e `atualizados` sao sempre do mais novo
+ * para o mais antigo.
  */
-export type OrdemProdutos =
-  | 'nome'
-  | '-nome'
-  | 'preco'
-  | '-preco'
-  | 'margem'
-  | '-margem'
-  | 'estoque'
-  | '-estoque'
-  | 'recentes'
-  | 'atualizados'
+export const ORDENS_PRODUTOS = [
+  'nome',
+  '-nome',
+  'preco',
+  '-preco',
+  '-margem',
+  'margem',
+  '-estoque',
+  'estoque',
+  'recentes',
+  'atualizados',
+] as const
+export type OrdemProdutos = (typeof ORDENS_PRODUTOS)[number]
 
 /** Estado da lista de produtos (o mesmo da URL da tela). */
 export interface FiltrosDaListaDeProdutos {
