@@ -1,93 +1,211 @@
-# Produtos: Código do produto e etiqueta de balança (Fase B2 da evolução de Produtos)
+# Produtos: Número, código do produto, etiqueta de balança e formulário em tela única (Fase B2)
 
-> **Status:** modelo dos códigos e da etiqueta aprovado em conversa em 2026-10-23. Ainda não é a spec final: o usuário vai trazer mais observações sobre Produtos, que entram aqui (ou em spec própria) antes do plano. Fase intermediária, antes da Fase F (imagem). Decisão a registrar como DEC-036 quando a spec fechar.
+> **Status:** spec final aprovada em conversa em 2026-10-23, com execução autorizada ("Podemos continuar com as implementações"). Fase intermediária da DEC-030, antes da Fase B3 ([produtos-embalagens.md](produtos-embalagens.md)) e da Fase F (imagem). Decisões na **DEC-036**.
 
 ## 1. Motivação
-- **Produto a granel:** a plataforma vai vender produtos a granel pesados na balança, que imprime uma **etiqueta com código de barras variável**.
-- **O que a etiqueta traz:** não o código de barras do fabricante, e sim o **código do produto (PLU)** programado na balança, mais o **peso ou o valor total**.
-- **Formato:** o formato depende da configuração da balança: dígito inicial, tamanho do código e tamanho e tipo da informação. A referência do usuário é a **Toledo Prix 4**.
-- **O que falta hoje:** o Geitus não tem um código numérico para a balança. O SKU é texto livre e opcional, e os códigos de barras são do fabricante. Também falta um **número de registro** sequencial por empresa (como o da venda).
+- **Produtos a granel:** a loja vende produtos a granel (KG) e itens por unidade (UN) pesados na balança **Toledo Prix 4**, que imprime uma **etiqueta com código de barras variável**. A etiqueta traz o **código do produto** programado na balança e o **valor total**, não o código de barras do fabricante.
+- **Número de registro:** falta um número sequencial e imutável por empresa (como o número da venda), também para clientes.
+- **Formulário:** com as seções que cresceram, as abas escondem informação e erros. A decisão é passar para uma tela única com atalhos.
+- **Margem e markup:** precisam aparecer também nos preços de promoção e de atacado, e a calculadora precisa calcular também pelo markup.
 
-## 2. Identificação do produto (modelo final, decisão do usuário em 2026-10-23)
+## 2. Identificação do produto
 
 | Campo | Obrigatório | Regra |
 |---|---|---|
-| **Número** (novo) | gerado | Registro de negócio: 1, 2, 3… **por empresa**, gerado na criação e **imutável**, nunca reaproveitado (um produto excluído deixa o número vago). Vem de um contador por empresa e tipo, travado na mesma transação: sem repetição e sem número consumido se a gravação falhar. **Não é a PK**, porque o banco é multiempresa e a PK não deve ter significado de negócio. A PK interna e o UUID público continuam (DEC-019). O mesmo mecanismo vale para **Cliente** (agora) e **Venda** (no PDV). |
-| **Código do produto** (novo) | não; **sim quando "Vendido na balança"** | Só números, até 6 dígitos (1 a 999999), único por empresa. **Vem vazio no cadastro manual.** Guardado como número: 000542 = 0542 = 542, exibido sem zeros. É o código da etiqueta de balança e o do `código*quantidade` no PDV. Ao marcar "Vendido na balança" com o código vazio, a tela oferece o atalho "Usar o número do produto". |
-| **SKU** | não | Como era antes: alfanumérico, único por empresa, com o botão "Gerar automaticamente" (`P000001`). **Não é usado na venda.** |
-| **Códigos de barras** | não | Lista como hoje (Fase B): EAN-13, EAN-8 e UPC-A com dígito verificador validado; outros formatos aceitos com aviso. Um produto pode ter **vários** códigos, e **cada código pertence a um único produto da empresa** (o 7898092030318 só pode estar no Açúcar Refinado 1kg). |
+| **Número** (novo) | gerado | 1, 2, 3… **por empresa**, gerado na criação, **imutável**, nunca reaproveitado (um produto excluído deixa o número vago). **Não é a PK** (banco multiempresa; PK BIGINT e UUID continuam, DEC-019). |
+| **Código do produto** (novo) | não; **sim com "Vendido na balança"** | Inteiro de 1 a 999999, **único por empresa**. Vem vazio no cadastro manual. Guardado como número (000542 = 0542 = 542) e exibido **sem zeros à esquerda**. Na digitação, os zeros à esquerda são aceitos e ignorados. |
+| **Vendido na balança** (novo) | — | Booleano, padrão `false`. Vale para KG e UN. Marcado, exige o código do produto, e o código precisa caber no tamanho da etiqueta configurada (§3). |
+| **SKU** | não | Como antes: alfanumérico, único por empresa, com o botão "Gerar automaticamente" (`P000001`). **Não é usado na venda.** |
+| **Códigos de barras** | não | Como antes (Fase B): lista, com EAN-13/EAN-8/UPC-A validados. Cada código pertence a **um único produto** da empresa. |
 
-- **Dados atuais:** os produtos e os clientes existentes recebem o **Número** na migration, em ordem de cadastro (`criado_em`, `id`). O **código do produto** fica vazio.
-- **Troca do código do produto:** é editável. Quando o PDV existir, fica **bloqueado para produto já vendido**, porque mudar quebra a programação da balança.
-- **Busca:** o Número e o código do produto entram na busca da lista.
+- **Mensagens:**
+  - código repetido → 409 "Este código já está em uso no produto {nome}." (campo `codigo`);
+  - fora de 1..999999 → 400 "O código do produto deve ter de 1 a 6 dígitos.";
+  - "Vendido na balança" sem código → 400 "Informe o código do produto para vendê-lo na balança.";
+  - código maior que o tamanho da etiqueta → 400 "Este código tem mais dígitos do que a etiqueta da balança comporta ({n})."
+- **Atalho na tela:** ao marcar "Vendido na balança" com o código vazio, a tela oferece "Usar o número do produto" (na edição, porque no cadastro o número ainda não existe; no cadastro novo, o atalho não aparece).
+- **Troca do código:** é livre nesta fase. Quando o PDV existir, ficará bloqueada para produto já vendido (registrado para a spec do PDV).
 
-## 3. Configuração da etiqueta de balança (por empresa)
-- **Tela própria:** "Configuração de etiqueta de balança", porque a configuração é da balança, não do produto.
-- **Campos:**
-  - **prefixo**, normalmente `2` (faixa de uso interno da GS1);
-  - **tamanho do código do produto** na etiqueta (4, 5 ou 6 dígitos);
-  - **tipo da informação**: peso (kg, 3 casas) ou valor total (R$, 2 casas), e quantos dígitos tem;
-  - **dígito de preenchimento** entre os campos, quando houver (algumas configurações da Toledo têm um `0` no meio);
-  - **dígito verificador** EAN-13 no fim.
-- **Modelos prontos** das configurações comuns da Toledo Prix 4.
-- **Campo de teste:** colar o número de uma etiqueta real mostra a leitura ("Produto 123 · 0,758 kg").
-- **Leitor da etiqueta:** a regra que transforma o número lido em código do produto mais peso ou valor entra como **regra de domínio testada**, como o preço vigente da Fase C, pronta para o PDV.
-- **Proteção:** impedir, ou ao menos avisar, quando um código de barras fixo cadastrado no produto se confunde com o formato configurado da etiqueta.
+### 2.1 Número também em Cliente
+- **Clientes ganham `numero`,** com o mesmo mecanismo (1, 2, 3… por empresa, imutável).
+- **Na tela de Clientes:** o número aparece no card ("Nº 12") e no topo do formulário de edição.
+- **Venda:** usará o mesmo mecanismo no PDV.
 
-## 4. Fora desta fase
-- **Códigos do fornecedor e histórico de compras do produto:** a ideia do usuário é registrar, na importação da nota de entrada, o código de cada fornecedor (um produto pode ter vários fornecedores, e códigos de fornecedores diferentes podem coincidir) e um histórico de compras mais completo. Fica para a especificação da entrada de mercadoria (Compras), a amadurecer depois.
-- **Exportar os produtos para o software da balança** (arquivo de itens do MGV da Toledo): evita digitar duas vezes, mas é uma integração que pede especificação própria.
-- **Leitura da etiqueta na venda:** fica para o PDV (etapa 11), que vai usar o leitor do §3.
+### 2.2 Numeração (mecanismo)
+- **Tabela:** `numeracoes (empresa_id, tipo, ultimo_numero)`, com PK `(empresa_id, tipo)` e `tipo` em ('PRODUTO','CLIENTE').
+- **Próximo número:** sai de `UPDATE numeracoes SET ultimo_numero = ultimo_numero + 1 WHERE empresa_id = ? AND tipo = ? RETURNING ultimo_numero`, na **mesma transação** da criação. Se a linha não existe, é criada com `INSERT ... ON CONFLICT DO NOTHING` antes.
+  - Com isso, dois cadastros simultâneos nunca pegam o mesmo número, e um cadastro que falha não consome número (o rollback desfaz o incremento).
+- **Componente:** `shared/numeracao/Numerador` com `long proximo(Long empresaId, TipoNumeracao tipo)`.
 
-## 5. Decisões do usuário (2026-10-23)
-- **Formato padrão da etiqueta** (configuração atual da balança do usuário), que vira o modelo padrão da tela:
+## 3. Etiqueta de balança (configuração por empresa)
 
-  | Parte | Dígitos | Exemplo `2000542010000` |
-  |---|---|---|
-  | Prefixo | 1 | `2` |
-  | Código do produto | 6 | `000542` → produto **542** |
-  | Valor total (R$) | 6, com **3 casas decimais** | `010000` → 010,000 → **R$ 10,00** |
-  | Dígito verificador | nenhum | — |
+### 3.1 Modelo
+Tabela `configuracoes_etiqueta_balanca`, **uma por empresa**:
 
-  A configuração continua flexível: casas decimais (2 ou 3), presença ou não do dígito verificador, tamanho do código e peso em vez de valor.
-- **Etiqueta para KG e UN:** flag **"Vendido na balança"** no produto, que não depende da unidade. Marcada, ela torna o **código do produto obrigatório**.
-  - **KG:** o PDV calcula o peso pelo valor total e pelo preço por quilo (R$ 10,00 a R$ 25,00/kg = 0,400 kg).
-  - **UN:** o PDV registra a quantidade pelo valor total e pelo preço unitário. Se o valor não for múltiplo do preço, registra 1 unidade pelo valor da etiqueta.
-- **Código do produto guardado como número:** 000542, 0542 e 542 são o **mesmo** código (542). Ele é opcional (obrigatório só com "Vendido na balança"), único por empresa, vai de 1 a 999999 e é exibido **sem zeros à esquerda**, como na balança. Na digitação, os zeros à esquerda são aceitos e ignorados. A busca encontra o produto por "542", "0542" ou "000542". Se a configuração da etiqueta usar menos dígitos, a tela avisa quais produtos têm código grande demais para ela.
+| Campo | Padrão | Regra |
+|---|---|---|
+| `prefixo` | `2` | 1 ou 2 dígitos |
+| `digitos_codigo` | 6 | de 4 a 6 |
+| `digitos_preenchimento` | 0 | de 0 a 2 (zeros entre o código e a informação, usados em algumas configurações da Toledo) |
+| `tipo_informacao` | `VALOR` | `VALOR` (R$ total) ou `PESO` (kg) |
+| `digitos_informacao` | 6 | de 4 a 7 |
+| `casas_decimais` | 3 | 2 ou 3 |
+| `digito_verificador` | `false` | se há o dígito verificador EAN-13 no fim |
 
-## 6. Requisitos registrados para o PDV (etapa 11)
-- **Digitação manual `código*quantidade`:** o operador digita, por exemplo, `542*3`, e o PDV adiciona o produto de código 542 ao carrinho com quantidade 3.
-  - A quantidade aceita decimal só se a unidade for fracionada (`542*0,750` em KG).
-  - Sem `*`, a quantidade é 1.
-  - O código aceita zeros à esquerda.
-- **Leitura da etiqueta de balança** com o leitor de §3: produto e valor (ou peso) vêm da etiqueta, e a quantidade é calculada conforme §5.
-- **Leitura de código de barras** do fabricante: qualquer um dos códigos da lista do produto.
-- **Sem ambiguidade:** o `código*quantidade` procura **só pelo código do produto**, e o leitor procura pelos códigos de barras e pela etiqueta de balança. O SKU **não** entra na venda.
-- **Número da venda:** sequencial por empresa, com o mesmo mecanismo do Número do produto (§2).
+- **Regra de tamanho:** `len(prefixo) + digitos_codigo + digitos_preenchimento + digitos_informacao + (digito_verificador ? 1 : 0) = 13`. O padrão dá 1 + 6 + 0 + 6 + 0 = 13.
+- **Empresas sem configuração:** usam o padrão. A linha só é gravada quando a configuração é salva.
 
-## 7. Formulário do produto em tela única (decisão do usuário, 2026-10-23)
+### 3.2 Leitor (regra de domínio, para o PDV)
+- **Assinatura:** `LeitorEtiquetaBalanca.ler(String codigoLido, ConfiguracaoEtiqueta config) → Optional<LeituraEtiqueta(int codigoProduto, TipoInformacao tipo, BigDecimal quantidadeOuValor)>`.
+- **Quando a leitura acontece:** só com exatamente 13 dígitos, começando pelo prefixo. Com dígito verificador, o EAN-13 tem de ser válido.
+- **Como cada campo é lido:** o código é lido sem zeros (000542 → 542). A informação é dividida por 10^casas (010000 com 3 casas → 10.000).
+- **Exemplo real do usuário:** `2000542010000` → produto **542**, valor **R$ 10,00**.
+
+### 3.3 Tela
+- **Onde fica:** nova aba **"Balança"** em Produtos (ao lado de Categorias e Unidades), em `/produtos/balanca`. Leitura para todos; salvar só ADMIN.
+- **Campos** de §3.1 e uma **prévia do formato**: "2 · CCCCCC · VVVVVV (R$, 3 casas) · sem dígito verificador".
+- **Modelos prontos:**
+  - "Toledo, código 6 + valor 6 (3 casas), sem DV" (o padrão);
+  - "Toledo, código 4 + 0 + valor 6 (2 casas) + DV";
+  - "Toledo, código 5 + valor 5 (2 casas) + DV";
+  - "Peso, código 6 + peso 5 (3 casas) + DV".
+- **Campo "Testar etiqueta":**
+  - colar um número mostra "Produto 542 · Açúcar a granel · R$ 10,00", ou "Produto 542 não cadastrado", ou "Este número não é uma etiqueta neste formato.";
+  - usa `POST /api/etiqueta-balanca/teste`, que lê com a configuração **da tela** (ainda não salva) e procura o produto pelo código.
+- **Aviso ao salvar:** se algum produto "Vendido na balança" tiver código grande demais para o novo `digitos_codigo`, aparece o aviso "N produtos têm código com mais dígitos do que esta etiqueta comporta." com a lista. **Não bloqueia.**
+
+### 3.4 Proteção dos códigos de barras
+- **Aviso na lista de códigos de barras:** ao adicionar um código de barras que **parece uma etiqueta** da configuração atual (13 dígitos com o prefixo), aparece o aviso "Este código tem o formato da etiqueta de balança configurada." **Não bloqueia,** porque alguns fabricantes usam o prefixo 2.
+
+## 4. Formulário do produto em tela única
 Substitui as abas da Fase B (`produtos-identificacao-e-formulario.md` §6.2).
-- **Tela única:** todas as seções numa página, em sequência. No topo, uma **barra de atalhos fixa** (Geral · Códigos · Preços · Estoque · Histórico) que leva até a seção e destaca a que está visível enquanto se rola.
-- **Erros ao salvar:** a página rola até o primeiro campo com erro e foca nele. O atalho da seção mostra a quantidade de erros.
-- **Rodapé:** Salvar/Cancelar fixo, como hoje, com Ctrl+Enter.
-- **Celular:** os atalhos rolam para o lado e as seções ficam em uma coluna.
+- **Barra de atalhos fixa no topo** (Geral · Códigos · Preços · Estoque · Histórico):
+  - leva até a seção com rolagem suave;
+  - destaca a seção visível (`IntersectionObserver`);
+  - mostra a quantidade de erros em cada seção;
+  - usa `aria-current` no atalho ativo.
 - **Seções, nesta ordem:**
-  1. **Geral:** **Nº do Produto** (só leitura, no topo da seção), nome, nome curto, unidade de venda, preço de venda, categoria, marca, fornecedor e descrição. **Sem o campo de código de barras.**
-  2. **Códigos:** código do produto, "Vendido na balança", SKU e a lista de códigos de barras (com o "Adicionar código", Enter para o leitor).
-  3. **Preços:** custo, preço mínimo, margem e markup, a calculadora, promoção e atacado.
-  4. **Estoque:** controle, saldo, ajuste, níveis e o bloco **"Unidade e embalagem"** (unidade de compra e fator), movido da Geral por decisão do usuário, porque serve à compra e à entrada de mercadoria.
-  5. **Histórico:** só na edição; carrega quando a seção se aproxima da tela.
+  1. **Geral:** **Nº do Produto** (só leitura, na edição; no cadastro aparece "Será gerado ao salvar"), nome, nome curto, unidade de venda, preço de venda, categoria, marca, fornecedor e descrição. **Sem o campo de código de barras.**
+  2. **Códigos:** código do produto, "Vendido na balança" (com o atalho do §2), SKU com "Gerar automaticamente" e a lista de códigos de barras com "Adicionar código" (Enter para o leitor e o aviso do §3.4).
+  3. **Preços:** §5.
+  4. **Estoque:** controle, saldo e "Ajustar estoque", níveis, estoque inicial (só no cadastro) e o bloco **"Unidade e embalagem"**, movido da Geral.
+  5. **Histórico:** só na edição; a consulta só roda quando a seção se aproxima da tela.
+- **Erros ao salvar:** a página rola até o primeiro campo com erro, na ordem das seções, e foca nele.
+- **Foco depois de "Salvar e cadastrar outro":** vai para o campo **Nome** (antes, ia para o código de barras na Geral).
+- **Mantidos:** o rodapé Salvar/Cancelar fixo, Ctrl+Enter, o aviso de alterações não salvas e o modo leitura do OPERADOR.
+- **Celular:** os atalhos rolam para o lado e as seções ficam em uma coluna.
 
-## 8. Preços: margem e markup (decisão do usuário, 2026-10-23)
-- **Margem e markup em todos os preços:** além do preço de venda, aparecem ao lado do **preço promocional** e do **preço de atacado**, calculados sobre o custo (promoção R$ 8,90 com custo R$ 6,00 → margem 32,58%, markup 48,33%). Sem custo, aparece "—".
-- **Calculadora com duas opções**, "Calcular pela margem" e "Calcular pelo markup":
-  - pela margem: preço = custo ÷ (1 − margem) (custo R$ 10,00 e margem 30% → R$ 14,29);
-  - pelo markup: preço = custo × (1 + markup) (custo R$ 10,00 e markup 30% → R$ 13,00).
-
-  Os dois arredondam para centavos (meio para cima). A margem fica entre 0 e 99,99%, e o markup é maior ou igual a 0.
-- **Explicação** junto ao bloco (ícone "?" ou texto de ajuda):
+## 5. Preços: margem e markup
+- **Em todos os preços:** margem e markup aparecem ao lado do **preço promocional** e do **preço de atacado**, além do preço de venda, calculados sobre o custo. Exemplo: promoção R$ 8,90 com custo R$ 6,00 → margem 32,58% e markup 48,33%. Sem custo, aparece "—".
+- **Calculadora** com a escolha "Pela margem" ou "Pelo markup":
+  - pela margem: preço = custo ÷ (1 − margem), com margem entre 0 e 99,99% (custo R$ 10,00, 30% → R$ 14,29);
+  - pelo markup: preço = custo × (1 + markup), com markup de 0 a 9.999,99% (custo R$ 10,00, 30% → R$ 13,00);
+  - arredondamento para centavos (meio para cima). O resultado acima do limite do campo tem a dica própria, como hoje.
+- **Explicação** num texto de ajuda junto ao bloco, sempre visível em tela larga e recolhível no celular:
   - **Margem:** quanto do preço de venda é lucro, (preço − custo) ÷ preço. Vender a R$ 15,00 algo que custou R$ 10,00 dá 33,33%.
   - **Markup:** quanto se acrescenta sobre o custo, (preço − custo) ÷ custo. O mesmo exemplo dá 50%.
 
-## 9. Pontos a fechar antes do plano
-- **Demais observações do usuário sobre Produtos.**
+## 6. Listagem e busca
+- **Busca:** um termo só com dígitos também encontra o produto por **Número** e por **código do produto** (sem zeros: "0542" → 542), além do texto e dos códigos de barras.
+- **Tabela e cards:** abaixo do nome, a linha secundária mostra "Nº 15 · Cód. 542 · SKU" (as partes que existirem).
+
+## 7. Banco — migration `V11__numero_codigo_balanca.sql`
+Aditiva sobre a V10, que não é editada.
+- **`produtos`:**
+  - `numero BIGINT`, preenchido por `row_number() OVER (PARTITION BY empresa_id ORDER BY criado_em, id)`, depois `NOT NULL`, com `UNIQUE (empresa_id, numero)`;
+  - `codigo INTEGER NULL`, com CHECK `codigo BETWEEN 1 AND 999999` e índice único parcial `(empresa_id, codigo) WHERE codigo IS NOT NULL`;
+  - `vendido_balanca BOOLEAN NOT NULL DEFAULT false`, com CHECK `NOT vendido_balanca OR codigo IS NOT NULL`.
+- **`clientes`:** `numero BIGINT`, preenchido da mesma forma, `NOT NULL` e `UNIQUE (empresa_id, numero)`.
+- **`numeracoes`:**
+  - `(empresa_id BIGINT NOT NULL REFERENCES empresa, tipo VARCHAR(20) NOT NULL CHECK IN ('PRODUTO','CLIENTE'), ultimo_numero BIGINT NOT NULL CHECK >= 0, PRIMARY KEY (empresa_id, tipo))`;
+  - preenchida com o maior número de cada tipo por empresa.
+- **`configuracoes_etiqueta_balanca`:**
+  - `(id, empresa_id UNIQUE REFERENCES empresa, prefixo VARCHAR(2), digitos_codigo SMALLINT, digitos_preenchimento SMALLINT, tipo_informacao VARCHAR(10), digitos_informacao SMALLINT, casas_decimais SMALLINT, digito_verificador BOOLEAN, atualizado_em TIMESTAMP)`;
+  - CHECKs dos intervalos de §3.1, `prefixo ~ '^[0-9]{1,2}$'` e a soma = 13.
+- **Número imutável:** a coluna é mapeada com `updatable = false`, em `Produto` e em `Cliente`.
+
+## 8. API
+- **Produto:**
+  - **Request:** ganha `codigo` (inteiro, opcional) e `vendidoBalanca` (boolean, padrão `false`). O `numero` **nunca** é aceito no request.
+  - **Response:** ganha `numero`, `codigo` e `vendidoBalanca`.
+- **Cliente:** a response ganha `numero`.
+- **Etiqueta de balança:**
+
+| Endpoint | Perfil | Resposta |
+|---|---|---|
+| `GET /api/etiqueta-balanca` | autenticado | a configuração (ou o padrão), com `padrao: true/false` |
+| `PUT /api/etiqueta-balanca` | ADMIN | 200 com `{ configuracao, produtosComCodigoGrandeDemais: [{id, numero, nome, codigo}] }`; 400 nas regras de §3.1 |
+| `POST /api/etiqueta-balanca/teste` | autenticado | `{ codigoLido, configuracao }` → `{ leitura: {codigoProduto, tipo, valor} \| null, produto: {id, numero, nome, unidade} \| null, mensagem }` |
+
+- **Busca na listagem:** como em §6. O parâmetro `busca` continua o mesmo.
+
+## 9. Testes (critérios de aceite)
+- **Backend:**
+  - **V11 (IT):** produtos e clientes existentes recebem números 1..N por empresa, por ordem de cadastro; `numeracoes` com o máximo; `codigo` nulo; os CHECKs (balança sem código, código fora do intervalo, soma ≠ 13); unicidade parcial do código; isolamento por empresa.
+  - **Numerador (IT):**
+    - sequência 1, 2, 3;
+    - 20 criações em paralelo → números distintos e consecutivos;
+    - falha na gravação não consome o número;
+    - empresas independentes.
+  - **Produto e Cliente:** o número é gerado na criação e não muda na edição (o `numero` no JSON é ignorado ou rejeitado).
+  - **Código do produto:**
+    - "000542" vira 542;
+    - repetido → 409 com o campo;
+    - 0 ou 1000000 → 400;
+    - balança sem código → 400;
+    - código grande demais para a etiqueta → 400.
+  - **`LeitorEtiquetaBalanca`:**
+    - `2000542010000` → 542 e R$ 10,00;
+    - cada modelo pronto com um exemplo;
+    - 12 ou 14 dígitos → vazio;
+    - prefixo diferente → vazio;
+    - dígito verificador inválido → vazio;
+    - peso com 3 casas.
+  - **Configuração:**
+    - GET sem configuração → padrão;
+    - PUT válido;
+    - PUT com soma ≠ 13 → 400;
+    - OPERADOR no PUT → 403;
+    - aviso de produtos com código grande demais;
+    - o teste com produto encontrado, com produto não cadastrado e com número fora do formato.
+  - **Busca:** "542", "0542" e "000542" encontram por código; "15" encontra o produto nº 15.
+- **Frontend:**
+  - **Tela única:**
+    - as seções estão na ordem;
+    - o clique no atalho rola e foca o título da seção;
+    - o atalho ativo acompanha a rolagem (com `IntersectionObserver` simulado);
+    - erro numa seção mais abaixo rola até o campo e mostra a contagem no atalho;
+    - o Histórico só carrega quando a seção fica visível;
+    - "Salvar e cadastrar outro" foca o Nome.
+  - **Geral:** mostra o Nº na edição e "Será gerado ao salvar" no cadastro; não tem mais o campo de código de barras.
+  - **Códigos:**
+    - código com zeros é enviado como número;
+    - balança sem código → erro;
+    - o atalho "Usar o número do produto";
+    - aviso de código de barras com formato de etiqueta.
+  - **Preços:**
+    - margem e markup na promoção e no atacado;
+    - calculadora pela margem (10 e 30% → 14,29) e pelo markup (10 e 30% → 13,00);
+    - a explicação aparece.
+  - **Estoque:** o bloco "Unidade e embalagem" está nessa seção.
+  - **Balança:**
+    - os campos e a prévia;
+    - os modelos prontos;
+    - a soma ≠ 13 bloqueia salvar, com a mensagem;
+    - o teste de etiqueta;
+    - o aviso de produtos com código grande demais;
+    - OPERADOR só lê.
+  - **Lista:** a linha secundária com Nº e código.
+  - **Clientes:** o Nº no card e no formulário.
+
+## 10. Fora desta fase
+- **Embalagens de venda:** Fase B3 ([produtos-embalagens.md](produtos-embalagens.md)).
+- **Códigos do fornecedor e histórico de compras completo:** ficam para a especificação da entrada de mercadoria (Compras).
+- **Exportar os produtos para o software da balança (MGV da Toledo).**
+- **Requisitos do PDV, registrados para a etapa 11:**
+  - digitação `código*quantidade` (`542*3`, `542*0,750` em KG; sem `*`, quantidade 1; zeros à esquerda aceitos), que procura **só pelo código do produto**;
+  - leitura da etiqueta pelo leitor de §3.2, com quantidade calculada pelo valor (KG: valor ÷ preço/kg; UN: valor ÷ preço unitário, ou 1 unidade pelo valor da etiqueta se não for múltiplo);
+  - leitura de qualquer código de barras da lista;
+  - o SKU não entra na venda;
+  - número da venda pelo `Numerador`;
+  - bloquear a troca do código de produto já vendido.
