@@ -225,7 +225,7 @@ class MigracaoV11IT {
         assertThatThrownBy(() -> inserirEtiqueta(empresa, "2", 6, 0, "VALOR", 6, 3, false))
                 .satisfies(erro -> violou(erro, VIOLACAO_DE_UNICIDADE, "uq_etiqueta_empresa"));
         long outra = inserirEmpresa("Empresa B");
-        // Toledo, codigo 4 + 0 + valor 6 (2 casas) + DV: 2 + 4 + 0 + 6 + 1 = 13 com prefixo de 2 digitos.
+        // Prefixo de 2 digitos: 2 + 4 + 0 + 6 + DV = 13.
         assertThatCode(() -> inserirEtiqueta(outra, "20", 4, 0, "VALOR", 6, 2, true)).doesNotThrowAnyException();
     }
 

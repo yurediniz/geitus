@@ -122,6 +122,35 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
             @Param("codigo") Integer codigo, @Param("ignorarProdutoId") Long ignorarProdutoId);
 
     /**
+     * Fase B2 (teste de etiqueta e, depois, o PDV): o produto da empresa com
+     * este codigo do produto, com a unidade de venda carregada. Restrito a
+     * empresa (DEC-016).
+     */
+    @Query("""
+            SELECT p FROM Produto p
+              JOIN FETCH p.unidade
+            WHERE p.empresa.id = :empresaId
+              AND p.codigo = :codigo
+            """)
+    Optional<Produto> findByEmpresa_IdAndCodigo(@Param("empresaId") Long empresaId, @Param("codigo") Integer codigo);
+
+    /**
+     * Fase B2: produtos "Vendidos na balanca" da empresa cujo codigo nao cabe
+     * numa etiqueta com menos digitos ({@code codigo >= menorCodigoQueNaoCabe},
+     * por exemplo 10000 para 4 digitos), em ordem de codigo. Alimenta o aviso
+     * ao salvar a configuracao da etiqueta.
+     */
+    @Query("""
+            SELECT p FROM Produto p
+            WHERE p.empresa.id = :empresaId
+              AND p.vendidoBalanca = true
+              AND p.codigo >= :menorCodigoQueNaoCabe
+            ORDER BY p.codigo
+            """)
+    List<Produto> vendidosNaBalancaComCodigoAPartirDe(@Param("empresaId") Long empresaId,
+            @Param("menorCodigoQueNaoCabe") int menorCodigoQueNaoCabe);
+
+    /**
      * SKUs da empresa no padrao da sugestao automatica ({@code P} + 6 ou mais
      * digitos, sensivel a maiusculas). O service calcula o maior numero em
      * Java ({@code BigInteger}), sem risco de estouro de tipo no banco. A

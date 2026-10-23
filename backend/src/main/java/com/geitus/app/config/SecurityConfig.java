@@ -59,6 +59,9 @@ public class SecurityConfig {
             "/api/categorias/**"
     };
 
+    /** Configuracao e teste da etiqueta de balanca (DEC-036). */
+    private static final String CAMINHO_ETIQUETA_BALANCA = "/api/etiqueta-balanca";
+
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final RestAccessDeniedHandler accessDeniedHandler;
@@ -119,6 +122,13 @@ public class SecurityConfig {
                         // como em Clientes: cobre POST/PATCH/PUT/DELETE e /{id}/inativar|reativar.
                         .requestMatchers(HttpMethod.GET, CAMINHOS_CADASTROS_DO_CATALOGO).authenticated()
                         .requestMatchers(CAMINHOS_CADASTROS_DO_CATALOGO).hasRole("ADMIN")
+                        // Etiqueta de balanca (DEC-036): ler a configuracao (GET) e testar uma
+                        // etiqueta (POST /teste, nao grava nada) liberados a qualquer autenticado;
+                        // salvar (PUT) e qualquer outro metodo/rota sob o caminho exigem ADMIN.
+                        // As regras especificas precedem a geral de ADMIN.
+                        .requestMatchers(HttpMethod.GET, CAMINHO_ETIQUETA_BALANCA).authenticated()
+                        .requestMatchers(HttpMethod.POST, CAMINHO_ETIQUETA_BALANCA + "/teste").authenticated()
+                        .requestMatchers(CAMINHO_ETIQUETA_BALANCA, CAMINHO_ETIQUETA_BALANCA + "/**").hasRole("ADMIN")
                         // Todo o restante exige autenticacao (JWT valido)
                         .anyRequest().authenticated())
                 // Respostas de erro padronizadas (sem vazar detalhes internos)
