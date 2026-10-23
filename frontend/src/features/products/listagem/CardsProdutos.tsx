@@ -1,24 +1,17 @@
-import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 
-import { formatarMoeda, formatarPercentual, formatarQuantidade } from '@/features/products/formatacaoProduto'
 import { AcoesDoProduto } from '@/features/products/listagem/AcoesDoProduto'
+import type { ListaDeProdutosProps } from '@/features/products/listagem/tipos'
 import { EstoqueDoProduto, PrecoDoProduto } from '@/features/products/listagem/ValoresDoProduto'
-import type { EstadoParaProduto } from '@/features/products/navegacaoProdutos'
+import { rotaDoProduto } from '@/features/products/navegacaoProdutos'
 import { SeloStatus } from '@/features/products/SeloStatus'
 import type { Produto } from '@/types/produto'
 
-export interface ListaDeProdutosProps {
-  produtos: Produto[]
-  somenteLeitura: boolean
-  estadoParaProduto: EstadoParaProduto
-  /** Produto com a troca de status em andamento. */
-  alterandoStatusId: string | null
-  aoAlterarStatus: (produto: Produto) => void
-  aoAjustarEstoque: (produto: Produto, origem: HTMLElement) => void
-}
-
-/** "7891000315507" ou "7891000315507 (+2)" quando ha mais codigos. */
-function textoCodigos(produto: Produto): string | null {
+/** Linha discreta do card: o SKU ou, sem ele, o primeiro codigo de barras ("789... (+2)"). */
+function identificacao(produto: Produto): string | null {
+  if (produto.sku) {
+    return produto.sku
+  }
   const [primeiro, ...demais] = produto.codigosBarras
   if (!primeiro) {
     return null
@@ -26,88 +19,55 @@ function textoCodigos(produto: Produto): string | null {
   return demais.length > 0 ? `${primeiro.codigo} (+${demais.length})` : primeiro.codigo
 }
 
-function Item({ rotulo, children, title }: { rotulo: string; children: ReactNode; title?: string }) {
-  return (
-    <div>
-      <dt className="font-medium text-foreground">{rotulo}</dt>
-      <dd title={title}>{children}</dd>
-    </div>
-  )
-}
-
-/** Cards da lista no celular (abaixo de 768 px); acima disso a tabela assume (so CSS). */
-export function CardsProdutos({ produtos, ...props }: ListaDeProdutosProps) {
+/**
+ * Cards da lista no celular (abaixo de 768 px; acima, a tabela, so por CSS).
+ * Enxutos: nome (link), marca, preco, estoque, o selo "Inativo" quando for o
+ * caso, uma linha com SKU ou codigo e as acoes. O resto fica na pagina do produto.
+ */
+export function CardsProdutos({ produtos, alterandoStatusId, aoAlterarStatus, aoAjustarEstoque, ...props }: ListaDeProdutosProps) {
   return (
     <ul className="grid gap-3 md:hidden">
-      {produtos.map((produto) => (
-        <li key={produto.id}>
-          <CardProduto produto={produto} {...props} />
-        </li>
-      ))}
+      {produtos.map((produto) => {
+        const linhaDiscreta = identificacao(produto)
+        return (
+          <li key={produto.id}>
+            <article className="space-y-3 rounded-md border p-4">
+              <div className="space-y-0.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="min-w-0 text-base font-medium">
+                    <Link
+                      to={rotaDoProduto(produto.id)}
+                      state={props.estadoParaProduto}
+                      className="underline-offset-4 outline-none hover:underline focus-visible:underline"
+                    >
+                      {produto.nome}
+                    </Link>
+                  </h3>
+                  {!produto.ativo && <SeloStatus ativo={false} />}
+                </div>
+                {produto.marca && <p className="truncate text-sm text-muted-foreground">{produto.marca}</p>}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm">
+                <PrecoDoProduto produto={produto} />
+                <span className="text-muted-foreground">
+                  <EstoqueDoProduto produto={produto} />
+                </span>
+              </div>
+
+              {linhaDiscreta && <p className="truncate text-xs text-muted-foreground">{linhaDiscreta}</p>}
+
+              <AcoesDoProduto
+                produto={produto}
+                {...props}
+                alterandoStatus={alterandoStatusId === produto.id}
+                aoAlterarStatus={() => aoAlterarStatus(produto)}
+                aoAjustarEstoque={(origem) => aoAjustarEstoque(produto, origem)}
+              />
+            </article>
+          </li>
+        )
+      })}
     </ul>
-  )
-}
-
-function CardProduto({
-  produto,
-  somenteLeitura,
-  estadoParaProduto,
-  alterandoStatusId,
-  aoAlterarStatus,
-  aoAjustarEstoque,
-}: Omit<ListaDeProdutosProps, 'produtos'> & { produto: Produto }) {
-  // Sem controle de estoque, os niveis nao valem nada na tela (o saldo nem aparece).
-  const mostrarNiveis = produto.controlaEstoque
-  const margem = formatarPercentual(produto.margem)
-  const markup = formatarPercentual(produto.markup)
-  const codigos = textoCodigos(produto)
-  const sigla = produto.unidade.sigla
-
-  return (
-    <article className="space-y-3 rounded-md border p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="truncate text-base font-medium">{produto.nome}</h3>
-        {produto.marca && <span className="truncate text-sm text-muted-foreground">{produto.marca}</span>}
-        <SeloStatus ativo={produto.ativo} />
-      </div>
-
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-muted-foreground">
-        <Item rotulo="Preço">
-          <PrecoDoProduto produto={produto} />
-        </Item>
-        <Item rotulo="Estoque">
-          <EstoqueDoProduto produto={produto} />
-        </Item>
-        {produto.custo !== null && <Item rotulo="Custo">{formatarMoeda(produto.custo)}</Item>}
-        {margem && <Item rotulo="Margem">{margem}</Item>}
-        {markup && <Item rotulo="Markup">{markup}</Item>}
-        {produto.precoMinimo !== null && <Item rotulo="Preço mínimo">{formatarMoeda(produto.precoMinimo)}</Item>}
-        {produto.sku && <Item rotulo="SKU">{produto.sku}</Item>}
-        {codigos && <Item rotulo="Código de barras">{codigos}</Item>}
-        {produto.categoria && <Item rotulo="Categoria">{produto.categoria.caminho}</Item>}
-        <Item rotulo="Unidade" title={produto.unidade.descricao}>
-          {sigla}
-        </Item>
-        {produto.conversaoTexto && <Item rotulo="Compra">{produto.conversaoTexto}</Item>}
-        {mostrarNiveis && produto.estoqueMinimo !== null && (
-          <Item rotulo="Estoque mínimo">{formatarQuantidade(produto.estoqueMinimo, sigla)}</Item>
-        )}
-        {mostrarNiveis && produto.estoqueMaximo !== null && (
-          <Item rotulo="Estoque máximo">{formatarQuantidade(produto.estoqueMaximo, sigla)}</Item>
-        )}
-        {mostrarNiveis && produto.pontoReposicao !== null && (
-          <Item rotulo="Ponto de reposição">{formatarQuantidade(produto.pontoReposicao, sigla)}</Item>
-        )}
-      </dl>
-
-      <AcoesDoProduto
-        produto={produto}
-        somenteLeitura={somenteLeitura}
-        estadoParaProduto={estadoParaProduto}
-        alterandoStatus={alterandoStatusId === produto.id}
-        aoAlterarStatus={() => aoAlterarStatus(produto)}
-        aoAjustarEstoque={(origem) => aoAjustarEstoque(produto, origem)}
-      />
-    </article>
   )
 }

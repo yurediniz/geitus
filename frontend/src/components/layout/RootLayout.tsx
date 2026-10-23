@@ -86,7 +86,7 @@ export function RootLayout() {
         <RodapeSessao usuario={usuario} aoSair={aoSair} />
       </aside>
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 items-center gap-3 border-b px-4 md:px-6">
           {/* Drawer de navegacao (mobile). O Sheet cuida de foco, Esc e aria. */}
           <Sheet open={menuAberto} onOpenChange={setMenuAberto}>

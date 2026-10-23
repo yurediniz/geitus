@@ -16,6 +16,8 @@ export const PRODUTOS_QUERY_KEY = ['produtos'] as const
 export function chaveDaListaDeProdutos(filtros: FiltrosDaListaDeProdutos) {
   return [...PRODUTOS_QUERY_KEY, 'lista', filtros] as const
 }
+/** "Existe algum produto (ativo ou inativo)?": decide o texto da lista vazia sem filtro. */
+export const PRODUTOS_EXISTENTES_QUERY_KEY = [...PRODUTOS_QUERY_KEY, 'existe-algum'] as const
 /** Historico de precos de um produto (sob o prefixo de produtos; salvar o produto o invalida). */
 export function chaveDoHistoricoDePrecos(produtoId: string) {
   return [...PRODUTOS_QUERY_KEY, produtoId, 'historico-precos'] as const

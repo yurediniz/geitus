@@ -5,45 +5,54 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { SeletorCategoria } from '@/features/products/SeletorCategoria'
+import { umDe } from '@/lib/listas'
 import { cn } from '@/lib/utils'
 import type { Categoria } from '@/types/catalogo'
-import type { EstoqueFiltro, FiltrosDaListaDeProdutos, OrdemProdutos, StatusFiltro } from '@/types/produto'
+import {
+  ESTOQUE_FILTRO,
+  ORDENS_PRODUTOS,
+  STATUS_FILTRO,
+  type EstoqueFiltro,
+  type FiltrosDaListaDeProdutos,
+  type OrdemProdutos,
+  type StatusFiltro,
+} from '@/types/produto'
 
-const OPCOES_DE_ORDEM: readonly { valor: OrdemProdutos; rotulo: string }[] = [
-  { valor: 'nome', rotulo: 'Nome (A–Z)' },
-  { valor: '-nome', rotulo: 'Nome (Z–A)' },
-  { valor: 'preco', rotulo: 'Menor preço' },
-  { valor: '-preco', rotulo: 'Maior preço' },
-  { valor: '-margem', rotulo: 'Maior margem' },
-  { valor: 'margem', rotulo: 'Menor margem' },
-  { valor: '-estoque', rotulo: 'Maior estoque' },
-  { valor: 'estoque', rotulo: 'Menor estoque' },
-  { valor: 'recentes', rotulo: 'Mais recentes' },
-  { valor: 'atualizados', rotulo: 'Atualizados recentemente' },
-]
-
-const OPCOES_DE_STATUS: readonly { valor: StatusFiltro; rotulo: string }[] = [
-  { valor: 'ativos', rotulo: 'Ativos' },
-  { valor: 'inativos', rotulo: 'Inativos' },
-  { valor: 'todos', rotulo: 'Todos' },
-]
-
-/** Valor vazio do select de estoque = sem filtro. */
-const OPCOES_DE_ESTOQUE: readonly { valor: EstoqueFiltro | ''; rotulo: string }[] = [
-  { valor: '', rotulo: 'Todos' },
-  { valor: 'baixo', rotulo: 'Estoque baixo' },
-  { valor: 'sem', rotulo: 'Sem estoque' },
-]
-
-function umDe<T extends string>(opcoes: readonly { valor: T | '' }[], valor: string): T | null {
-  return opcoes.find((opcao) => opcao.valor !== '' && opcao.valor === valor)?.valor || null
+const ROTULOS_DE_ORDEM: Record<OrdemProdutos, string> = {
+  nome: 'Nome (A–Z)',
+  '-nome': 'Nome (Z–A)',
+  preco: 'Menor preço',
+  '-preco': 'Maior preço',
+  '-margem': 'Maior margem',
+  margem: 'Menor margem',
+  '-estoque': 'Maior estoque',
+  estoque: 'Menor estoque',
+  recentes: 'Mais recentes',
+  atualizados: 'Atualizados recentemente',
 }
+
+const ROTULOS_DE_STATUS: Record<StatusFiltro, string> = {
+  ativos: 'Ativos',
+  inativos: 'Inativos',
+  todos: 'Todos',
+}
+
+/** `baixo` inclui os sem estoque (regra da spec): o rotulo diz isso. */
+const ROTULOS_DE_ESTOQUE: Record<EstoqueFiltro, string> = {
+  baixo: 'Baixo ou sem estoque',
+  sem: 'Sem estoque',
+}
+
+const ALTURA_DO_CONTROLE = 'h-11 md:h-9'
 
 export interface FiltrosProdutosProps {
   filtros: FiltrosDaListaDeProdutos
   alterar: (parcial: Partial<FiltrosDaListaDeProdutos>) => void
-  limpar: () => void
+  /** Limpa os filtros (e o texto da busca que ainda estiver pendente). */
+  aoLimpar: () => void
   temFiltroAtivo: boolean
+  /** Filtros ativos fora a busca (numero do botao "Filtros" no celular). */
+  quantidadeDeFiltros: number
   /** Texto do campo de busca (local: a URL so recebe depois do atraso ou no Enter). */
   textoBusca: string
   aoDigitarBusca: (texto: string) => void
@@ -53,33 +62,46 @@ export interface FiltrosProdutosProps {
   categorias: Categoria[]
   /** Categoria mostrada no seletor: null ("Todas") quando a da URL nao existe mais. */
   categoriaExibida: string | null
+  /** As categorias nao carregaram: o seletor fica com a da URL e aparece um aviso. */
+  erroNasCategorias: boolean
+}
+
+/** Rotulo de um controle da barra (o atributo marca a ordem dos controles). */
+function Rotulo({ htmlFor, id, children }: { htmlFor?: string; id?: string; children: string }) {
+  const classe = 'block text-sm font-medium'
+  return htmlFor ? (
+    <label htmlFor={htmlFor} className={classe} data-rotulo-filtro>
+      {children}
+    </label>
+  ) : (
+    <span id={id} className={classe} data-rotulo-filtro>
+      {children}
+    </span>
+  )
 }
 
 /**
- * Barra de filtros da lista: busca (sem botao), status, categoria, estoque,
- * "Só em promoção" e ordem. No celular, os filtros ficam num bloco que abre e
- * fecha, com o numero de filtros ativos no botao.
+ * Barra de filtros da lista: busca (sem botao), Status, Categoria, Estoque,
+ * "Só em promoção" e, por ultimo, Ordenar por. No celular, os filtros ficam
+ * num bloco que abre e fecha, com o numero de filtros ativos no botao e a
+ * ordem atual ao lado quando nao for a padrao.
  */
 export function FiltrosProdutos({
   filtros,
   alterar,
-  limpar,
+  aoLimpar,
   temFiltroAtivo,
+  quantidadeDeFiltros,
   textoBusca,
   aoDigitarBusca,
   aoBuscarAgora,
   buscando,
   categorias,
   categoriaExibida,
+  erroNasCategorias,
 }: FiltrosProdutosProps) {
   const id = useId()
   const [abertoNoCelular, setAbertoNoCelular] = useState(false)
-  const quantidadeDeFiltros = [
-    filtros.status !== 'ativos',
-    filtros.categoria !== null,
-    filtros.estoque !== null,
-    filtros.promocao,
-  ].filter(Boolean).length
 
   const buscarAgora = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -102,9 +124,10 @@ export function FiltrosProdutos({
             type="search"
             value={textoBusca}
             onChange={(event) => aoDigitarBusca(event.target.value)}
-            placeholder="Buscar por nome, SKU, marca ou código de barras"
+            placeholder="Nome, SKU, marca ou código"
             autoComplete="off"
-            className={cn('h-11 pl-9 md:h-9', buscando && 'pr-28')}
+            // Espaco fixo para o "Buscando…" (o campo nao muda de largura) e sem o "x" nativo.
+            className={cn(ALTURA_DO_CONTROLE, 'pl-9 pr-28 [&::-webkit-search-cancel-button]:appearance-none')}
           />
           <span
             aria-live="polite"
@@ -120,54 +143,52 @@ export function FiltrosProdutos({
         </form>
 
         {temFiltroAtivo && (
-          <Button type="button" variant="ghost" className="h-11 md:h-9" onClick={limpar}>
+          <Button type="button" variant="ghost" className={ALTURA_DO_CONTROLE} onClick={aoLimpar}>
             <X className="h-4 w-4" aria-hidden="true" />
             Limpar filtros
           </Button>
         )}
 
-        <Button
-          type="button"
-          variant="outline"
-          className="h-11 md:hidden"
-          aria-expanded={abertoNoCelular}
-          aria-controls={`${id}-filtros`}
-          onClick={() => setAbertoNoCelular((aberto) => !aberto)}
-        >
-          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-          {quantidadeDeFiltros > 0 ? `Filtros (${quantidadeDeFiltros})` : 'Filtros'}
-        </Button>
+        <div className="flex items-center gap-2 md:hidden">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11"
+            aria-expanded={abertoNoCelular}
+            aria-controls={`${id}-filtros`}
+            onClick={() => setAbertoNoCelular((aberto) => !aberto)}
+          >
+            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+            {quantidadeDeFiltros > 0 ? `Filtros (${quantidadeDeFiltros})` : 'Filtros'}
+          </Button>
+          {filtros.ordem !== 'nome' && (
+            <span className="text-xs text-muted-foreground md:hidden">{`Ordem: ${ROTULOS_DE_ORDEM[filtros.ordem]}`}</span>
+          )}
+        </div>
       </div>
 
       <div
         id={`${id}-filtros`}
-        className={cn(
-          'gap-3 sm:grid-cols-2 md:grid md:grid-cols-3 lg:grid-cols-5',
-          abertoNoCelular ? 'grid' : 'hidden',
-        )}
+        className={cn('gap-3 sm:grid-cols-2 md:grid md:grid-cols-3 lg:grid-cols-5', abertoNoCelular ? 'grid' : 'hidden')}
       >
         <div className="space-y-1.5">
-          <label htmlFor={`${id}-status`} className="text-sm font-medium">
-            Status
-          </label>
+          <Rotulo htmlFor={`${id}-status`}>Status</Rotulo>
           <NativeSelect
             id={`${id}-status`}
             value={filtros.status}
-            onChange={(event) => alterar({ status: umDe(OPCOES_DE_STATUS, event.target.value) ?? 'ativos' })}
-            className="h-11 md:h-9"
+            onChange={(event) => alterar({ status: umDe(STATUS_FILTRO, event.target.value) ?? 'ativos' })}
+            className={ALTURA_DO_CONTROLE}
           >
-            {OPCOES_DE_STATUS.map((opcao) => (
-              <option key={opcao.valor} value={opcao.valor}>
-                {opcao.rotulo}
+            {STATUS_FILTRO.map((status) => (
+              <option key={status} value={status}>
+                {ROTULOS_DE_STATUS[status]}
               </option>
             ))}
           </NativeSelect>
         </div>
 
         <div className="space-y-1.5">
-          <span id={`${id}-categoria-rotulo`} className="block text-sm font-medium">
-            Categoria
-          </span>
+          <Rotulo id={`${id}-categoria-rotulo`}>Categoria</Rotulo>
           <SeletorCategoria
             id={`${id}-categoria`}
             idRotulo={`${id}-categoria-rotulo`}
@@ -177,40 +198,25 @@ export function FiltrosProdutos({
             podeCriar={false}
             incluirInativas
             rotuloSemValor="Todas"
+            className={ALTURA_DO_CONTROLE}
           />
+          {erroNasCategorias && (
+            <p className="text-xs text-muted-foreground">Não foi possível carregar as categorias.</p>
+          )}
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor={`${id}-estoque`} className="text-sm font-medium">
-            Estoque
-          </label>
+          <Rotulo htmlFor={`${id}-estoque`}>Estoque</Rotulo>
           <NativeSelect
             id={`${id}-estoque`}
             value={filtros.estoque ?? ''}
-            onChange={(event) => alterar({ estoque: umDe(OPCOES_DE_ESTOQUE, event.target.value) })}
-            className="h-11 md:h-9"
+            onChange={(event) => alterar({ estoque: umDe(ESTOQUE_FILTRO, event.target.value) })}
+            className={ALTURA_DO_CONTROLE}
           >
-            {OPCOES_DE_ESTOQUE.map((opcao) => (
-              <option key={opcao.valor || 'todos'} value={opcao.valor}>
-                {opcao.rotulo}
-              </option>
-            ))}
-          </NativeSelect>
-        </div>
-
-        <div className="space-y-1.5">
-          <label htmlFor={`${id}-ordem`} className="text-sm font-medium">
-            Ordenar por
-          </label>
-          <NativeSelect
-            id={`${id}-ordem`}
-            value={filtros.ordem}
-            onChange={(event) => alterar({ ordem: umDe(OPCOES_DE_ORDEM, event.target.value) ?? 'nome' })}
-            className="h-11 md:h-9"
-          >
-            {OPCOES_DE_ORDEM.map((opcao) => (
-              <option key={opcao.valor} value={opcao.valor}>
-                {opcao.rotulo}
+            <option value="">Todos</option>
+            {ESTOQUE_FILTRO.map((estoque) => (
+              <option key={estoque} value={estoque}>
+                {ROTULOS_DE_ESTOQUE[estoque]}
               </option>
             ))}
           </NativeSelect>
@@ -224,8 +230,24 @@ export function FiltrosProdutos({
               onChange={(event) => alterar({ promocao: event.target.checked })}
               className="h-4 w-4 accent-primary"
             />
-            Só em promoção
+            <span data-rotulo-filtro>Só em promoção</span>
           </label>
+        </div>
+
+        <div className="space-y-1.5">
+          <Rotulo htmlFor={`${id}-ordem`}>Ordenar por</Rotulo>
+          <NativeSelect
+            id={`${id}-ordem`}
+            value={filtros.ordem}
+            onChange={(event) => alterar({ ordem: umDe(ORDENS_PRODUTOS, event.target.value) ?? 'nome' })}
+            className={ALTURA_DO_CONTROLE}
+          >
+            {ORDENS_PRODUTOS.map((ordem) => (
+              <option key={ordem} value={ordem}>
+                {ROTULOS_DE_ORDEM[ordem]}
+              </option>
+            ))}
+          </NativeSelect>
         </div>
       </div>
     </div>
