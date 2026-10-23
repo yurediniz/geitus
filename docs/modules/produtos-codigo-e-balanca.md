@@ -38,7 +38,29 @@
 - **Exportar os produtos para o software da balança** (arquivo de itens do MGV da Toledo): evita digitar duas vezes, mas é uma integração que pede especificação própria.
 - **Leitura da etiqueta na venda:** fica para o PDV (etapa 11), que vai usar o leitor do §3.
 
-## 5. Pontos a fechar antes do plano
+## 5. Decisões do usuário (2026-10-23)
+- **Formato padrão da etiqueta** (configuração atual da balança do usuário), que vira o modelo padrão da tela:
+
+  | Parte | Dígitos | Exemplo `2000542010000` |
+  |---|---|---|
+  | Prefixo | 1 | `2` |
+  | Código do produto | 6 | `000542` → produto **542** |
+  | Valor total (R$) | 6, com **3 casas decimais** | `010000` → 010,000 → **R$ 10,00** |
+  | Dígito verificador | nenhum | — |
+
+  A configuração continua flexível: casas decimais (2 ou 3), presença ou não do dígito verificador, tamanho do código e peso em vez de valor.
+- **Etiqueta para KG e UN:** flag **"Vendido na balança"** no produto, que não depende da unidade.
+  - **KG:** o PDV calcula o peso pelo valor total e pelo preço por quilo (R$ 10,00 a R$ 25,00/kg = 0,400 kg).
+  - **UN:** o PDV registra a quantidade pelo valor total e pelo preço unitário. Se o valor não for múltiplo do preço, registra 1 unidade pelo valor da etiqueta.
+- **Código do produto guardado como número:** 000542, 0542 e 542 são o **mesmo** código (542). Ele é único por empresa, vai de 1 a 999999 e é exibido **sem zeros à esquerda**, como na balança. Na digitação, os zeros à esquerda são aceitos e ignorados. A busca encontra o produto por "542", "0542" ou "000542". Se a configuração da etiqueta usar menos dígitos, a tela avisa quais produtos têm código grande demais para ela.
+
+## 6. Requisitos registrados para o PDV (etapa 11)
+- **Digitação manual `código*quantidade`:** o operador digita, por exemplo, `542*3`, e o PDV adiciona o produto de código 542 ao carrinho com quantidade 3.
+  - A quantidade aceita decimal só se a unidade for fracionada (`542*0,750` em KG).
+  - Sem `*`, a quantidade é 1.
+  - O código aceita zeros à esquerda.
+- **Leitura da etiqueta de balança** com o leitor de §3: produto e valor (ou peso) vêm da etiqueta, e a quantidade é calculada conforme §5.
+- **Leitura de código de barras** do fabricante: qualquer um dos códigos da lista do produto.
+
+## 7. Pontos a fechar antes do plano
 - **Demais observações do usuário sobre Produtos**, a discutir com a aplicação aberta.
-- **Formatos exatos da Prix 4** a oferecer como modelo: confirmar com o usuário quais ele usa (por exemplo `2 CCCC 0 PPPPP D` e `2 CCCCC PPPPP D`).
-- **Para quais produtos a etiqueta vale:** só para os de unidade fracionada (KG) ou para qualquer um marcado como "vendido na balança". Por exemplo, um item por unidade com preço total também pode sair da balança.
