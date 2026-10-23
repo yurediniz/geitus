@@ -12,6 +12,7 @@ import java.util.UUID;
 import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.company.Empresa;
+import com.geitus.app.shared.busca.TextoDeBusca;
 
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -51,6 +52,10 @@ import jakarta.persistence.Table;
  * <p>Fase D (V9, docs/modules/produtos-estoque.md): o produto tem a flag
  * {@code controlaEstoque}; o saldo fica no pacote {@code inventory}, derivado
  * de movimentos, e nunca e um campo do produto.
+ *
+ * <p>Fase E (V10, docs/modules/produtos-listagem.md): {@code buscaNormalizada}
+ * e {@code nomeNormalizado} sao derivadas do cadastro e recalculadas a cada
+ * {@link #atualizarDadosBasicos}, para a busca sem acento e a ordenacao da lista.
  *
  * <p>Nao deve ser exposta diretamente na API: o {@code ProdutoController} usa
  * DTOs ({@code ProdutoRequest}/{@code ProdutoResponse}).
@@ -150,6 +155,18 @@ public class Produto {
     @OrderBy("ordem")
     private List<ProdutoCodigoBarras> codigosBarras = new ArrayList<>();
 
+    /**
+     * Fase E (V10): nome, nome curto, SKU e marca normalizados por
+     * {@link TextoDeBusca} — a busca sem acento da listagem. Derivada: so muda
+     * por {@link #atualizarDadosBasicos}.
+     */
+    @Column(name = "busca_normalizada", nullable = false)
+    private String buscaNormalizada;
+
+    /** Fase E (V10): so o nome normalizado, para ordenar sem depender de acento nem de collation. */
+    @Column(name = "nome_normalizado", nullable = false)
+    private String nomeNormalizado;
+
     @Column(name = "criado_em", nullable = false, updatable = false)
     private LocalDateTime criadoEm;
 
@@ -215,6 +232,13 @@ public class Produto {
         this.precoAtacado = dados.precoAtacado();
         this.quantidadeMinimaAtacado = dados.quantidadeMinimaAtacado();
         this.controlaEstoque = dados.controlaEstoque();
+        recalcularTextosDeBusca();
+    }
+
+    /** Colunas da busca (V10) sempre coerentes com o nome, o nome curto, o SKU e a marca gravados. */
+    private void recalcularTextosDeBusca() {
+        this.nomeNormalizado = TextoDeBusca.normalizar(nome);
+        this.buscaNormalizada = TextoDeBusca.textoDoProduto(nome, nomeCurto, sku, marca);
     }
 
     /**
@@ -420,6 +444,16 @@ public class Produto {
      */
     public boolean isControlaEstoque() {
         return controlaEstoque;
+    }
+
+    /** Texto pesquisavel normalizado (V10); uso interno da busca, nao sai na API. */
+    public String getBuscaNormalizada() {
+        return buscaNormalizada;
+    }
+
+    /** Nome normalizado (V10); uso interno da ordenacao, nao sai na API. */
+    public String getNomeNormalizado() {
+        return nomeNormalizado;
     }
 
     public LocalDateTime getCriadoEm() {

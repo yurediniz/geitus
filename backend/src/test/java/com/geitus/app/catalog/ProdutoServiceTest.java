@@ -845,6 +845,31 @@ class ProdutoServiceTest {
         verify(produtoRepository, never()).delete(any());
     }
 
+    // ---------- Colunas normalizadas da busca (Fase E, spec 4.1) ----------
+
+    @Test
+    void cadastrarPreencheColunasNormalizadas() {
+        cadastroPermitido();
+
+        Produto produto = cadastrar(requestComUN().nome("  Ração Golden  ").nomeCurto("GLD AÇÚCAR").sku("P000001")
+                .marca("Premier").build());
+
+        assertThat(produto.getNomeNormalizado()).isEqualTo("racao golden");
+        assertThat(produto.getBuscaNormalizada()).isEqualTo("racao golden gld acucar p000001 premier");
+    }
+
+    @Test
+    void editarNomeMarcaSkuOuNomeCurtoRecalcula() {
+        produtoExistente(existente().nome("Arroz").sku("SKU-1").marca("Camil"));
+        edicaoPermitida();
+
+        Produto produto = atualizar(requestComUN().nome("Feijão Preto").nomeCurto("FEIJÃO").sku("SKU-2")
+                .marca("União").build());
+
+        assertThat(produto.getNomeNormalizado()).isEqualTo("feijao preto");
+        assertThat(produto.getBuscaNormalizada()).isEqualTo("feijao preto feijao sku-2 uniao");
+    }
+
     // ---------- Listagem ----------
 
     @Test
