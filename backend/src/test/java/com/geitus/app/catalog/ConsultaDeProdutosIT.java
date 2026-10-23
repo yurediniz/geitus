@@ -158,6 +158,53 @@ class ConsultaDeProdutosIT {
         assertThat(nomes(filtro().busca("%"))).containsExactly("CaboXUSB", "Desconto 50% algodão");
     }
 
+    @Test
+    void buscaSoComMarcaCombinanteUsaSoOCodigo() {
+        salvar(produto("Produto 1000315"));
+        salvar(produto("Feijão").codigo(EAN13));
+
+        PaginaDeIds soMarca = buscar(filtro().busca("\u0301"), OrdemDeProdutos.NOME, 0, TAMANHO_GRANDE);
+
+        assertThat(soMarca.ids()).isEmpty();
+        assertThat(soMarca.total()).isZero();
+        assertThat(nomes(filtro().soCodigo("1000315"))).containsExactly("Feijão");
+    }
+
+    @Test
+    void buscaComBarraInvertidaELiteral() {
+        salvar(produto("Pasta C:\\temp"));
+        salvar(produto("Pasta Ctemp"));
+
+        assertThat(nomes(filtro().busca("c:\\t"))).containsExactly("Pasta C:\\temp");
+        assertThat(nomes(filtro().busca("\\"))).containsExactly("Pasta C:\\temp");
+    }
+
+    @Test
+    void buscaComApostrofo() {
+        salvar(produto("Calça Levi's"));
+        salvar(produto("Calça Lee"));
+
+        assertThat(nomes(filtro().busca("levi's"))).containsExactly("Calça Levi's");
+    }
+
+    @Test
+    void buscaComSeisPalavrasIgnoraASexta() {
+        salvar(produto("Açúcar Cristal União 1kg Pacote"));
+        salvar(produto("Açúcar Cristal União 5kg"));
+
+        assertThat(nomes(filtro().busca("acucar cristal uniao 1kg pacote inexistente")))
+                .containsExactly("Açúcar Cristal União 1kg Pacote");
+    }
+
+    @Test
+    void buscaCasaPorTextoOuPorCodigo() {
+        salvar(produto("Kit 7891"));
+        salvar(produto("Feijão").codigo(EAN13));
+        salvar(produto("Arroz").codigo("96385074"));
+
+        assertThat(nomes(filtro().busca("7891"))).containsExactly("Feijão", "Kit 7891");
+    }
+
     // ---------- Status ----------
 
     @Test
@@ -304,6 +351,28 @@ class ConsultaDeProdutosIT {
         assertThat(nomes(filtro(), OrdemDeProdutos.NOME_DESC)).containsExactly("azeite", "Água", "Abacaxi");
     }
 
+    /** Collation "C" (V10): o espaco vem antes do hifen, em qualquer ambiente. */
+    @Test
+    void ordemPorNomeComEspacoEPontuacao() {
+        salvar(produto("Arroz-doce"));
+        salvar(produto("Arroz integral"));
+
+        assertThat(nomes(filtro(), OrdemDeProdutos.NOME)).containsExactly("Arroz integral", "Arroz-doce");
+        assertThat(nomes(filtro(), OrdemDeProdutos.NOME_DESC)).containsExactly("Arroz-doce", "Arroz integral");
+    }
+
+    /** Nomes que normalizam igual ("Água", "agua", "ÁGUA") desempatam pelo id, nas duas direcoes. */
+    @Test
+    void nomeNormalizadoIgualDesempataPeloId() {
+        List<Long> idsNaOrdemDeCadastro = List.of(salvar(produto("Água")).getId(), salvar(produto("agua")).getId(),
+                salvar(produto("ÁGUA")).getId());
+
+        assertThat(buscar(filtro(), OrdemDeProdutos.NOME, 0, TAMANHO_GRANDE).ids())
+                .containsExactlyElementsOf(idsNaOrdemDeCadastro);
+        assertThat(buscar(filtro(), OrdemDeProdutos.NOME_DESC, 0, TAMANHO_GRANDE).ids())
+                .containsExactlyElementsOf(idsNaOrdemDeCadastro);
+    }
+
     @Test
     void ordemPorPreco() {
         salvar(produto("Medio").precoVenda("10.00"));
@@ -327,6 +396,40 @@ class ConsultaDeProdutosIT {
                 .containsExactly("Margem 10", "Margem 50", "Margem 80", "Preco zero", "Sem custo A", "Sem custo B");
         assertThat(nomes(filtro(), OrdemDeProdutos.MARGEM_DESC))
                 .containsExactly("Margem 80", "Margem 50", "Margem 10", "Preco zero", "Sem custo A", "Sem custo B");
+    }
+
+    /** Custo zero (margem 100%) e custo acima do preco (margem negativa) entram na ordem normal. */
+    @Test
+    void margemComCustoZeroENegativaEntramNaOrdem() {
+        salvar(produto("Brinde").precoVenda("10.00").custo("0.00"));
+        salvar(produto("Prejuízo").precoVenda("10.00").custo("12.00"));
+        salvar(produto("Margem 50").precoVenda("10.00").custo("5.00"));
+        salvar(produto("Sem custo").precoVenda("10.00"));
+
+        assertThat(nomes(filtro(), OrdemDeProdutos.MARGEM))
+                .containsExactly("Prejuízo", "Margem 50", "Brinde", "Sem custo");
+        assertThat(nomes(filtro(), OrdemDeProdutos.MARGEM_DESC))
+                .containsExactly("Brinde", "Margem 50", "Prejuízo", "Sem custo");
+    }
+
+    /** Saldo igual em todos (dois com o mesmo nome): as paginas nao repetem nem pulam itens. */
+    @Test
+    void estoqueIgualDesempataEntrePaginas() {
+        List<Long> esperados = new ArrayList<>();
+        for (String nome : List.of("Igual", "Igual", "B", "A", "C", "E", "D")) {
+            saldo(salvar(produto(nome)), "5");
+        }
+        nomePorId.entrySet().stream()
+                .sorted(Map.Entry.<Long, String>comparingByValue().thenComparing(Map.Entry.comparingByKey()))
+                .forEach(entrada -> esperados.add(entrada.getKey()));
+
+        for (OrdemDeProdutos ordem : List.of(OrdemDeProdutos.ESTOQUE, OrdemDeProdutos.ESTOQUE_DESC)) {
+            List<Long> percorridos = new ArrayList<>();
+            for (int pagina = 0; pagina < 4; pagina++) {
+                percorridos.addAll(buscar(filtro(), ordem, pagina, 2).ids());
+            }
+            assertThat(percorridos).as("ordem %s", ordem).containsExactlyElementsOf(esperados);
+        }
     }
 
     @Test
@@ -401,6 +504,22 @@ class ConsultaDeProdutosIT {
                 .containsExactly("Produto 7");
     }
 
+    /** Total multiplo do tamanho: a ultima pagina vem cheia e a seguinte vazia, com o total. */
+    @Test
+    void paginaExatamenteNoLimite() {
+        for (int i = 1; i <= 6; i++) {
+            salvar(produto("Produto " + i));
+        }
+
+        PaginaDeIds ultima = buscar(filtro(), OrdemDeProdutos.NOME, 1, 3);
+        PaginaDeIds seguinte = buscar(filtro(), OrdemDeProdutos.NOME, 2, 3);
+
+        assertThat(ultima.ids()).extracting(nomePorId::get).containsExactly("Produto 4", "Produto 5", "Produto 6");
+        assertThat(ultima.total()).isEqualTo(6);
+        assertThat(seguinte.ids()).isEmpty();
+        assertThat(seguinte.total()).isEqualTo(6);
+    }
+
     @Test
     void paginaAlemDoFimVaziaComTotal() {
         seteProdutos();
@@ -449,6 +568,13 @@ class ConsultaDeProdutosIT {
         Filtro busca(String termo) {
             this.palavras = TextoDeBusca.palavras(termo);
             this.termoDeCodigo = TextoDeBusca.termoDeCodigo(termo);
+            return this;
+        }
+
+        /** So o termo de codigo, sem palavras (como fica um termo cujo texto some na normalizacao). */
+        Filtro soCodigo(String termo) {
+            this.palavras = List.of();
+            this.termoDeCodigo = termo;
             return this;
         }
 
