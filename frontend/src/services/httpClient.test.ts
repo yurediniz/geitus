@@ -4,6 +4,7 @@ import {
   apiDelete,
   apiGet,
   apiPost,
+  apiPut,
   HttpError,
   setUnauthorizedHandler,
 } from '@/services/httpClient'
@@ -309,6 +310,37 @@ describe('httpClient', () => {
       expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json')
     })
   })
+  describe('apiPut', () => {
+    it('envia PUT autenticado com o corpo JSON e retorna o corpo da resposta', async () => {
+      getStoredTokenMock.mockReturnValue('token-abc')
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(200, { ok: true }))
+
+      const dados = await apiPut('/etiqueta-balanca', { prefixo: '2' }, { autenticada: true })
+
+      const chamada = vi.mocked(globalThis.fetch).mock.calls[0]
+      const init = chamada?.[1] as RequestInit
+      expect(String(chamada?.[0])).toMatch(/\/etiqueta-balanca$/)
+      expect(init.method).toBe('PUT')
+      expect(init.body).toBe(JSON.stringify({ prefixo: '2' }))
+      expect(headersDaChamada().Authorization).toBe('Bearer token-abc')
+      expect(headersDaChamada()['Content-Type']).toBe('application/json')
+      expect(dados).toEqual({ ok: true })
+    })
+
+    it('mantem os campos do 400 e o status 0 em falha de rede', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+        respostaFake(400, { mensagem: 'Dados inválidos.', campos: [{ campo: 'prefixo', mensagem: 'x' }] }),
+      )
+      await expect(apiPut('/etiqueta-balanca', {}, { autenticada: true })).rejects.toMatchObject({
+        status: 400,
+        campos: { prefixo: 'x' },
+      })
+
+      vi.mocked(globalThis.fetch).mockRejectedValueOnce(new TypeError('network error'))
+      await expect(apiPut('/etiqueta-balanca', {})).rejects.toMatchObject({ status: 0 })
+    })
+  })
+
   describe('apiDelete', () => {
     it('envia DELETE autenticado e retorna undefined em 204 sem corpo', async () => {
       getStoredTokenMock.mockReturnValue('token-abc')

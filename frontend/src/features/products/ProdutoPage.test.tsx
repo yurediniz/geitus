@@ -202,6 +202,8 @@ function rotulosDasOpcoes(select: HTMLElement): string[] {
 }
 
 const REQUEST_VAZIO: ProdutoRequest = {
+  codigo: null,
+  vendidoBalanca: false,
   nome: '',
   nomeCurto: null,
   unidadeId: 'un',

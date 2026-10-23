@@ -30,6 +30,8 @@ const apiDeleteMock = vi.mocked(apiDelete)
 const ID = '3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e5f'
 
 const produtoRequest: ProdutoRequest = {
+  codigo: null,
+  vendidoBalanca: false,
   nome: 'Arroz 5kg',
   nomeCurto: null,
   unidadeId: '6f1c2b8e-0000-4000-8000-000000000001',

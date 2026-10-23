@@ -52,6 +52,12 @@ export type CampoSugestaoProduto = 'marca' | 'fornecedor'
 export interface Produto {
   /** UUID publico do produto (o id numerico interno nao sai na API). */
   id: string
+  /** Numero de registro (1, 2, 3... por empresa), gerado na criacao e imutavel. Só-leitura. */
+  numero: number
+  /** Codigo do produto (1 a 999999, exibido sem zeros); null quando nao informado. */
+  codigo: number | null
+  /** Vendido na balanca (etiqueta com o codigo do produto); exige o `codigo`. */
+  vendidoBalanca: boolean
   nome: string
   /** Nome curto informado (ate 30); null quando nao informado. */
   nomeCurto: string | null
@@ -110,8 +116,14 @@ export interface Produto {
   atualizadoEm: string | null
 }
 
-/** Corpo enviado para cadastro/atualizacao de produto. Não envia margem/markup (derivados). */
+/**
+ * Corpo enviado para cadastro/atualizacao de produto. Não envia margem/markup
+ * (derivados) nem o `numero` (gerado pelo backend e imutavel).
+ */
 export interface ProdutoRequest {
+  /** Codigo do produto ja como numero (zeros a esquerda removidos); null = sem codigo. */
+  codigo: number | null
+  vendidoBalanca: boolean
   nome: string
   nomeCurto: string | null
   /** UUID da unidade de venda (obrigatorio). */

@@ -5,6 +5,7 @@
 import { z } from 'zod'
 
 import { digitoVerificadorValido, ehCandidatoGs1, normalizarCodigo } from '@/lib/codigoBarras'
+import { interpretarCodigoProduto } from '@/lib/codigoProduto'
 import type { UnidadeMedida, UnidadeResumo } from '@/types/catalogo'
 import { formatarMoeda } from '@/features/products/formatacaoProduto'
 import { MAXIMO_DIGITOS_MOEDA, digitosParaValor, valorParaDigitos } from '@/lib/moeda'
@@ -159,6 +160,24 @@ function validarEstoque(valores: ValoresEstoque, ctx: z.RefinementCtx) {
   }
 }
 
+export const MENSAGEM_CODIGO_PRODUTO_INVALIDO = 'O código do produto deve ter de 1 a 6 dígitos.'
+export const MENSAGEM_BALANCA_SEM_CODIGO = 'Informe o código do produto para vendê-lo na balança.'
+
+/**
+ * Codigo do produto (spec B2 §2), com as mensagens da API: vazio e permitido,
+ * salvo com "Vendido na balança"; senao de 1 a 6 digitos (zeros a esquerda
+ * aceitos e ignorados).
+ */
+function validarCodigoProduto(valores: { codigo: string; vendidoBalanca: boolean }, ctx: z.RefinementCtx) {
+  const codigo = interpretarCodigoProduto(valores.codigo)
+  const erro = (message: string) => ctx.addIssue({ path: ['codigo'], code: 'custom', message })
+  if (codigo === 'invalido') {
+    erro(MENSAGEM_CODIGO_PRODUTO_INVALIDO)
+  } else if (codigo === null && valores.vendidoBalanca) {
+    erro(MENSAGEM_BALANCA_SEM_CODIGO)
+  }
+}
+
 function validarAtacado(valores: ValoresPrecoEspecial, ctx: z.RefinementCtx) {
   if (!valores.atacadoAtivo) {
     return
@@ -201,6 +220,10 @@ export const produtoSchema = z.object({
   estoqueMinimo: quantidadeOpcional('Estoque mínimo não pode ser negativo.'),
   estoqueMaximo: quantidadeOpcional('Estoque máximo não pode ser negativo.'),
   pontoReposicao: quantidadeOpcional('Ponto de reposição não pode ser negativo.'),
+  /** Codigo do produto como digitado (zeros a esquerda aceitos); validado no superRefine. */
+  codigo: z.string(),
+  /** "Vendido na balança": exige o codigo (validado no superRefine). */
+  vendidoBalanca: z.boolean(),
   sku: textoOpcional(50, 'SKU deve ter no máximo 50 caracteres.'),
   codigosBarras: z.array(z.string()).max(MAXIMO_CODIGOS_BARRAS, 'Informe no máximo 20 códigos de barras.'),
   /**
@@ -223,6 +246,7 @@ export const produtoSchema = z.object({
   validarPromocao(valores, ctx)
   validarAtacado(valores, ctx)
   validarEstoque(valores, ctx)
+  validarCodigoProduto(valores, ctx)
   const preenchido = (valor: string) => valor.trim() !== ''
   const temUnidadeCompra = valores.unidadeCompraId !== ''
   const temFator = preenchido(valores.fatorConversao)
@@ -306,7 +330,7 @@ export const CAMPOS_POR_ABA: Readonly<Record<AbaProduto, readonly (keyof Produto
     'quantidadeMinimaAtacado',
   ],
   estoque: ['controlaEstoque', 'estoqueInicial', 'estoqueMinimo', 'pontoReposicao', 'estoqueMaximo'],
-  codigos: ['sku', 'codigoPendente', 'codigosBarras'],
+  codigos: ['codigo', 'vendidoBalanca', 'sku', 'codigoPendente', 'codigosBarras'],
   historico: [],
 }
 
@@ -354,6 +378,8 @@ export function valoresIniciais(unidadePadraoId = ''): ProdutoFormValues {
     estoqueMinimo: '',
     estoqueMaximo: '',
     pontoReposicao: '',
+    codigo: '',
+    vendidoBalanca: false,
     sku: '',
     codigosBarras: [],
     codigoPendente: '',
@@ -405,6 +431,8 @@ export function valoresDoProduto(produto: Produto): ProdutoFormValues {
     estoqueMinimo: quantidadeParaTexto(produto.estoqueMinimo),
     estoqueMaximo: quantidadeParaTexto(produto.estoqueMaximo),
     pontoReposicao: quantidadeParaTexto(produto.pontoReposicao),
+    codigo: numeroParaTexto(produto.codigo),
+    vendidoBalanca: produto.vendidoBalanca,
     sku: produto.sku ?? '',
     codigosBarras: produto.codigosBarras.map((codigo) => codigo.codigo),
     codigoPendente: '',
@@ -438,8 +466,12 @@ export function montarRequest(valores: ProdutoFormValues, { novo = false }: { no
   const estoqueInicial = novo
     ? { estoqueInicial: valores.controlaEstoque ? interpretarQuantidade(valores.estoqueInicial) : null }
     : {}
+  const codigo = interpretarCodigoProduto(valores.codigo)
   return {
     ...estoqueInicial,
+    // O schema ja barrou o invalido; por garantia, ele nunca vai no request.
+    codigo: codigo === 'invalido' ? null : codigo,
+    vendidoBalanca: valores.vendidoBalanca,
     nome: valores.nome.trim(),
     nomeCurto: textoOuNulo(valores.nomeCurto),
     unidadeId: valores.unidadeId,

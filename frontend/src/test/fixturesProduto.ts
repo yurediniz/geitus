@@ -55,6 +55,9 @@ export const ID_SIMPLES = '2d1f4b5c-3e6a-4c7d-8e8f-9a0b1c2d3e4f'
 
 export const produtoAtivo: Produto = {
   id: ID_ARROZ,
+  numero: 15,
+  codigo: 542,
+  vendidoBalanca: false,
   nome: 'Arroz 5kg',
   nomeCurto: null,
   nomeCurtoEfetivo: 'Arroz 5kg',
@@ -91,6 +94,8 @@ export const produtoAtivo: Produto = {
 export const produtoInativo: Produto = {
   ...produtoAtivo,
   id: ID_FEIJAO,
+  numero: 16,
+  codigo: null,
   nome: 'Feijão 1kg',
   nomeCurtoEfetivo: 'Feijão 1kg',
   sku: 'SKU-FEIJAO',
@@ -101,6 +106,9 @@ export const produtoInativo: Produto = {
 // Produto minimo: apenas nome e preco de venda; todos os campos opcionais nulos.
 export const produtoSimples: Produto = {
   id: ID_SIMPLES,
+  numero: 3,
+  codigo: null,
+  vendidoBalanca: false,
   nome: 'Produto Simples',
   nomeCurto: null,
   nomeCurtoEfetivo: 'Produto Simples',

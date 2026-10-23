@@ -127,6 +127,8 @@ describe('produtoFormulario', () => {
 
     // O texto pendente de "Adicionar código" nunca vai no request.
     expect(montarRequest({ ...valoresDoProduto(produto), codigoPendente: '123' })).toEqual({
+      codigo: 542,
+      vendidoBalanca: false,
       nome: 'Arroz 5kg',
       nomeCurto: 'Arroz TJ',
       unidadeId: 'un',
@@ -147,6 +149,46 @@ describe('produtoFormulario', () => {
       sku: 'SKU-ARROZ',
       promocao: null,
       atacado: null,
+    })
+  })
+
+  describe('codigo do produto e balanca (Fase B2)', () => {
+    const base = { ...valoresIniciais('un'), nome: 'Açúcar a granel', precoVenda: '5' }
+    const erroEm = (valores: ProdutoFormValues, campo: keyof ProdutoFormValues) =>
+      produtoSchema.safeParse(valores).error?.issues.find((issue) => issue.path[0] === campo)?.message
+
+    it('o codigo gravado volta sem zeros e vai como numero', () => {
+      const valores = valoresDoProduto({ ...produtoAtivo, codigo: 542, vendidoBalanca: true })
+      expect(valores).toMatchObject({ codigo: '542', vendidoBalanca: true })
+      expect(montarRequest(valores)).toMatchObject({ codigo: 542, vendidoBalanca: true })
+    })
+
+    it('codigo digitado com zeros a esquerda vai como numero', () => {
+      expect(produtoSchema.safeParse({ ...base, codigo: '000542' }).success).toBe(true)
+      expect(montarRequest({ ...base, codigo: '000542' })).toMatchObject({ codigo: 542 })
+    })
+
+    it('produto antigo sem codigo vai com codigo null e balanca desligada (Review Focus 5)', () => {
+      const valores = valoresDoProduto(produtoSimples)
+      expect(valores).toMatchObject({ codigo: '', vendidoBalanca: false })
+      expect(produtoSchema.safeParse(valores).success).toBe(true)
+      expect(montarRequest(valores)).toMatchObject({ codigo: null, vendidoBalanca: false })
+      expect(montarRequest(valores)).not.toHaveProperty('numero')
+    })
+
+    it.each(['0', '1234567', '12a'])('codigo "%s" e invalido, com a mensagem da API', (codigo) => {
+      expect(erroEm({ ...base, codigo }, 'codigo')).toBe('O código do produto deve ter de 1 a 6 dígitos.')
+    })
+
+    it('"Vendido na balança" exige o codigo', () => {
+      expect(erroEm({ ...base, vendidoBalanca: true }, 'codigo')).toBe(
+        'Informe o código do produto para vendê-lo na balança.',
+      )
+      expect(produtoSchema.safeParse({ ...base, vendidoBalanca: true, codigo: '542' }).success).toBe(true)
+    })
+
+    it('produto novo comeca sem codigo e fora da balanca', () => {
+      expect(valoresIniciais()).toMatchObject({ codigo: '', vendidoBalanca: false })
     })
   })
 

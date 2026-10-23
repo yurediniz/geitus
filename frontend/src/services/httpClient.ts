@@ -225,23 +225,18 @@ export async function apiPost<T>(
   return (await resposta.json()) as T
 }
 
-/**
- * Executa um PATCH no caminho informado com corpo JSON e retorna o corpo em JSON.
- *
- * @param path caminho relativo a URL base (ex.: "/empresas/minha")
- * @param corpo objeto serializado como JSON no corpo da requisicao
- * @param opcoes.autenticada injeta o header Authorization: Bearer <token>
- */
-export async function apiPatch<T>(
+/** PATCH e PUT: corpo JSON, mesmo tratamento de erro e de 204 do POST. */
+async function enviarComCorpo<T>(
+  metodo: 'PATCH' | 'PUT',
   path: string,
   corpo: unknown,
-  opcoes: { autenticada?: boolean } = {},
+  opcoes: { autenticada?: boolean },
 ): Promise<T> {
   const autenticada = opcoes.autenticada ?? false
   let resposta: Response
   try {
     resposta = await fetch(`${baseUrl}${path}`, {
-      method: 'PATCH',
+      method: metodo,
       headers: montarHeaders(autenticada, true),
       body: JSON.stringify(corpo),
     })
@@ -258,6 +253,29 @@ export async function apiPatch<T>(
   }
 
   return (await resposta.json()) as T
+}
+
+/**
+ * Executa um PATCH no caminho informado com corpo JSON e retorna o corpo em JSON.
+ *
+ * @param path caminho relativo a URL base (ex.: "/empresas/minha")
+ * @param corpo objeto serializado como JSON no corpo da requisicao
+ * @param opcoes.autenticada injeta o header Authorization: Bearer <token>
+ */
+export function apiPatch<T>(path: string, corpo: unknown, opcoes: { autenticada?: boolean } = {}): Promise<T> {
+  return enviarComCorpo<T>('PATCH', path, corpo, opcoes)
+}
+
+/**
+ * Executa um PUT (substituicao completa do recurso) com corpo JSON e retorna o
+ * corpo em JSON.
+ *
+ * @param path caminho relativo a URL base (ex.: "/etiqueta-balanca")
+ * @param corpo objeto serializado como JSON no corpo da requisicao
+ * @param opcoes.autenticada injeta o header Authorization: Bearer <token>
+ */
+export function apiPut<T>(path: string, corpo: unknown, opcoes: { autenticada?: boolean } = {}): Promise<T> {
+  return enviarComCorpo<T>('PUT', path, corpo, opcoes)
 }
 
 /**

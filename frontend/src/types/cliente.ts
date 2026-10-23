@@ -9,6 +9,8 @@
 /** Cliente conforme retornado pela API. CPF e telefones vem so com digitos. */
 export interface Cliente {
   id: string
+  /** Numero de registro (1, 2, 3... por empresa), gerado na criacao e imutavel. */
+  numero: number
   nome: string
   cpf: string | null
   telefone: string | null

@@ -57,6 +57,7 @@ const ID_JOAO = '7a8b9c0d-1e2f-4a3b-9c8d-7e6f5a4b3c2d'
 
 const clienteAtivo: Cliente = {
   id: ID_MARIA,
+  numero: 12,
   nome: 'Maria Silva',
   cpf: '11144477735',
   telefone: '11987654321',
@@ -70,6 +71,7 @@ const clienteAtivo: Cliente = {
 
 const clienteInativo: Cliente = {
   id: ID_JOAO,
+  numero: 13,
   nome: 'João Pereira',
   cpf: null,
   telefone: '1133224455',
