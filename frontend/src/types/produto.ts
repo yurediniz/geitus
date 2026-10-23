@@ -145,11 +145,42 @@ export interface ProdutoRequest {
   sku: string | null
 }
 
-export type ProdutoStatusFiltro = 'todos' | 'ativos' | 'inativos'
+/** Filtro de status da lista de produtos (`ativos` e o padrao). */
+export type StatusFiltro = 'ativos' | 'inativos' | 'todos'
 
-export interface ListarProdutosParams {
-  busca?: string
-  status?: ProdutoStatusFiltro
+/** Filtro de estoque da lista: `baixo` inclui os sem estoque; so produtos que controlam estoque. */
+export type EstoqueFiltro = 'baixo' | 'sem'
+
+/**
+ * Ordenacao da lista (parametro `ordem` da API); o `-` inverte a direcao.
+ * `recentes` e `atualizados` sao sempre do mais novo para o mais antigo.
+ */
+export type OrdemProdutos =
+  | 'nome'
+  | '-nome'
+  | 'preco'
+  | '-preco'
+  | 'margem'
+  | '-margem'
+  | 'estoque'
+  | '-estoque'
+  | 'recentes'
+  | 'atualizados'
+
+/** Estado da lista de produtos (o mesmo da URL da tela). */
+export interface FiltrosDaListaDeProdutos {
+  /** Texto da busca, aparado; vazio = sem busca. */
+  busca: string
+  status: StatusFiltro
+  /** UUID da categoria (inclui as subcategorias); null = todas. */
+  categoria: string | null
+  /** null = sem filtro de estoque. */
+  estoque: EstoqueFiltro | null
+  /** So produtos com promocao vigente hoje. */
+  promocao: boolean
+  ordem: OrdemProdutos
+  /** Pagina da tela, comecando em 1 (a API comeca em 0). */
+  pagina: number
 }
 
 /** Campo cujo valor gerou a linha do historico de precos. */

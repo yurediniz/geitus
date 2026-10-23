@@ -146,23 +146,35 @@ async function tratarErro(resposta: Response, autenticada: boolean): Promise<nev
   throw new HttpError(resposta.status, `Requisicao falhou (HTTP ${resposta.status}).`)
 }
 
+/** Rejeicao do `fetch` causada por cancelamento (AbortSignal), e nao por falha de rede. */
+function ehAborto(erro: unknown): boolean {
+  return ehObjeto(erro) && erro.name === 'AbortError'
+}
+
 /**
  * Executa um GET no caminho informado e retorna o corpo em JSON.
  *
  * @param path caminho relativo a URL base (ex.: "/health")
  * @param opcoes.autenticada injeta o header Authorization: Bearer <token>
+ * @param opcoes.signal cancela a requisicao (ex.: o signal do TanStack Query
+ *   quando a busca muda). O cancelamento relanca o AbortError original, para
+ *   nao ser confundido com servidor fora do ar.
  */
 export async function apiGet<T>(
   path: string,
-  opcoes: { autenticada?: boolean } = {},
+  opcoes: { autenticada?: boolean; signal?: AbortSignal } = {},
 ): Promise<T> {
   const autenticada = opcoes.autenticada ?? false
   let resposta: Response
   try {
     resposta = await fetch(`${baseUrl}${path}`, {
       headers: montarHeaders(autenticada, false),
+      signal: opcoes.signal,
     })
-  } catch {
+  } catch (erro) {
+    if (ehAborto(erro) || opcoes.signal?.aborted) {
+      throw erro
+    }
     // Falha de rede (backend fora do ar, CORS bloqueado, etc.)
     throw new HttpError(0, 'Nao foi possivel conectar ao servidor.')
   }

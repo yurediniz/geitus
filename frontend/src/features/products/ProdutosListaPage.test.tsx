@@ -11,7 +11,11 @@ import { ajustarEstoque } from '@/services/estoqueService'
 import { listarUnidades } from '@/services/unidadeService'
 import { CX, ID_ARROZ, ID_FEIJAO, produtoAtivo, produtoInativo, produtoSimples, resumo, UN } from '@/test/fixturesProduto'
 import type { MovimentoEstoque } from '@/types/estoque'
-import type { Produto } from '@/types/produto'
+import type { PaginaResponse, Produto } from '@/types/produto'
+
+function paginaDe(itens: Produto[]): PaginaResponse<Produto> {
+  return { itens, pagina: 0, tamanho: 25, totalItens: itens.length }
+}
 
 vi.mock('@/services/produtoService', () => ({
   listarProdutos: vi.fn(),
@@ -105,7 +109,7 @@ describe('ProdutosListaPage', () => {
   })
 
   it('exibe a sub-navegacao do catalogo com Produtos como aba atual', async () => {
-    listarProdutosMock.mockResolvedValue([])
+    listarProdutosMock.mockResolvedValue(paginaDe([]))
 
     renderLista()
 
@@ -125,7 +129,7 @@ describe('ProdutosListaPage', () => {
   })
 
   it('mostra estado vazio quando nao ha produtos', async () => {
-    listarProdutosMock.mockResolvedValue([])
+    listarProdutosMock.mockResolvedValue(paginaDe([]))
 
     renderLista()
 
@@ -141,7 +145,7 @@ describe('ProdutosListaPage', () => {
   })
 
   it('lista produtos com status visual e dados principais', async () => {
-    listarProdutosMock.mockResolvedValue([produtoAtivo, produtoInativo])
+    listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo, produtoInativo]))
 
     renderLista()
 
@@ -161,7 +165,7 @@ describe('ProdutosListaPage', () => {
         { codigo: 'ABC-123', formato: 'OUTRO' },
       ],
     }
-    listarProdutosMock.mockResolvedValue([produto])
+    listarProdutosMock.mockResolvedValue(paginaDe([produto]))
 
     renderLista()
 
@@ -171,7 +175,7 @@ describe('ProdutosListaPage', () => {
 
   describe('busca e status na URL', () => {
     it('aplica a busca e grava na URL', async () => {
-      listarProdutosMock.mockResolvedValue([])
+      listarProdutosMock.mockResolvedValue(paginaDe([]))
 
       const router = renderLista()
 
@@ -180,13 +184,13 @@ describe('ProdutosListaPage', () => {
       fireEvent.click(screen.getByRole('button', { name: /buscar/i }))
 
       await waitFor(() => {
-        expect(listarProdutosMock).toHaveBeenLastCalledWith({ busca: 'SKU-ARROZ', status: 'todos' })
+        expect(listarProdutosMock).toHaveBeenLastCalledWith(expect.objectContaining({ busca: 'SKU-ARROZ', status: 'todos' }))
       })
       expect(router.state.location.search).toBe('?busca=SKU-ARROZ')
     })
 
     it('buscar não remonta o campo: o foco continua nele (FE I5)', async () => {
-      listarProdutosMock.mockResolvedValue([])
+      listarProdutosMock.mockResolvedValue(paginaDe([]))
 
       const router = renderLista()
       await screen.findByText(/nenhum produto encontrado/i)
@@ -205,7 +209,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('busca mudada por fora (histórico) atualiza o campo', async () => {
-      listarProdutosMock.mockResolvedValue([])
+      listarProdutosMock.mockResolvedValue(paginaDe([]))
 
       const router = renderLista('/produtos?busca=arroz')
       await screen.findByText('Resultados para "arroz".')
@@ -218,7 +222,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('filtra por status inativo e grava na URL', async () => {
-      listarProdutosMock.mockResolvedValue([])
+      listarProdutosMock.mockResolvedValue(paginaDe([]))
 
       const router = renderLista()
 
@@ -226,36 +230,36 @@ describe('ProdutosListaPage', () => {
       fireEvent.change(screen.getByLabelText(/status/i), { target: { value: 'inativos' } })
 
       await waitFor(() => {
-        expect(listarProdutosMock).toHaveBeenLastCalledWith({ busca: '', status: 'inativos' })
+        expect(listarProdutosMock).toHaveBeenLastCalledWith(expect.objectContaining({ busca: '', status: 'inativos' }))
       })
       expect(router.state.location.search).toBe('?status=inativos')
     })
 
     it('ao montar com ?busca=arroz&status=inativos, preserva o filtro na tela e na consulta', async () => {
-      listarProdutosMock.mockResolvedValue([])
+      listarProdutosMock.mockResolvedValue(paginaDe([]))
 
       renderLista('/produtos?busca=arroz&status=inativos')
 
       await screen.findByText(/nenhum produto encontrado/i)
-      expect(listarProdutosMock).toHaveBeenCalledWith({ busca: 'arroz', status: 'inativos' })
+      expect(listarProdutosMock).toHaveBeenCalledWith(expect.objectContaining({ busca: 'arroz', status: 'inativos' }))
       expect(screen.getByLabelText(/busca/i)).toHaveValue('arroz')
       expect(screen.getByLabelText(/status/i)).toHaveValue('inativos')
       expect(screen.getByText('Resultados para "arroz".')).toBeInTheDocument()
     })
 
     it('status desconhecido na URL vira "todos"', async () => {
-      listarProdutosMock.mockResolvedValue([])
+      listarProdutosMock.mockResolvedValue(paginaDe([]))
 
       renderLista('/produtos?status=qualquer')
 
       await screen.findByText(/nenhum produto encontrado/i)
-      expect(listarProdutosMock).toHaveBeenCalledWith({ busca: '', status: 'todos' })
+      expect(listarProdutosMock).toHaveBeenCalledWith(expect.objectContaining({ busca: '', status: 'todos' }))
     })
   })
 
   describe('navegacao para a pagina do produto', () => {
     it('"Novo produto" abre /produtos/novo levando a URL da lista', async () => {
-      listarProdutosMock.mockResolvedValue([])
+      listarProdutosMock.mockResolvedValue(paginaDe([]))
 
       renderLista('/produtos?busca=arroz')
 
@@ -266,7 +270,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('"Editar" abre a pagina do produto pelo UUID levando a URL da lista', async () => {
-      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
 
       renderLista('/produtos?busca=arroz&status=ativos')
 
@@ -282,7 +286,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('mostra a mensagem de sucesso vinda da pagina do produto e a retira do historico', async () => {
-      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
 
       const router = renderLista({ pathname: '/produtos', search: '?busca=arroz', state: { sucesso: 'Produto cadastrado com sucesso.' } })
 
@@ -293,7 +297,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('ignora estado de navegacao sem mensagem valida', async () => {
-      listarProdutosMock.mockResolvedValue([])
+      listarProdutosMock.mockResolvedValue(paginaDe([]))
 
       renderLista({ pathname: '/produtos', state: { sucesso: 42 } })
 
@@ -304,7 +308,7 @@ describe('ProdutosListaPage', () => {
 
   describe('status do produto', () => {
     it('inativa produto com sucesso', async () => {
-      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
       inativarProdutoMock.mockResolvedValue({ ...produtoAtivo, ativo: false })
 
       renderLista()
@@ -316,7 +320,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('reativa produto com sucesso', async () => {
-      listarProdutosMock.mockResolvedValue([produtoInativo])
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoInativo]))
       reativarProdutoMock.mockResolvedValue({ ...produtoInativo, ativo: true })
 
       renderLista()
@@ -328,7 +332,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('mostra erro ao alterar status do produto', async () => {
-      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
       inativarProdutoMock.mockRejectedValue(new Error('falha ao inativar'))
 
       renderLista()
@@ -341,7 +345,7 @@ describe('ProdutosListaPage', () => {
 
   describe('card do produto', () => {
     it('exibe margem, markup e a marca do produto', async () => {
-      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
 
       renderLista()
 
@@ -352,7 +356,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('omite campos secundários vazios, mantendo preço e status', async () => {
-      listarProdutosMock.mockResolvedValue([produtoSimples])
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoSimples]))
 
       renderLista()
 
@@ -378,7 +382,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('mantém os campos preenchidos visíveis', async () => {
-      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
 
       renderLista()
 
@@ -408,7 +412,7 @@ describe('ProdutosListaPage', () => {
         fatorConversao: 12,
         conversaoTexto: '1 CX = 12 UN',
       }
-      listarProdutosMock.mockResolvedValue([produto])
+      listarProdutosMock.mockResolvedValue(paginaDe([produto]))
 
       renderLista()
 
@@ -420,7 +424,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('não carrega unidades nem categorias na lista', async () => {
-      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
 
       renderLista()
 
@@ -433,7 +437,7 @@ describe('ProdutosListaPage', () => {
   describe('perfis', () => {
     it('OPERADOR vê a lista em modo leitura e abre o produto só para consulta', async () => {
       definirPerfil('OPERADOR')
-      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
 
       renderLista()
 
@@ -449,7 +453,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('ADMIN vê as ações de gestão e o botão de novo produto', async () => {
-      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
 
       renderLista()
 
@@ -469,7 +473,7 @@ describe('ProdutosListaPage', () => {
         promocao: { preco: 8.9, inicio: '2026-11-01', fim: '2026-11-15', situacao: 'VIGENTE' },
         emPromocao: true,
       }
-      listarProdutosMock.mockResolvedValue([emPromocao])
+      listarProdutosMock.mockResolvedValue(paginaDe([emPromocao]))
 
       renderLista()
 
@@ -490,7 +494,7 @@ describe('ProdutosListaPage', () => {
         promocao: { preco: 20.9, inicio, fim, situacao },
         emPromocao: false,
       }
-      listarProdutosMock.mockResolvedValue([semPromocaoVigente])
+      listarProdutosMock.mockResolvedValue(paginaDe([semPromocaoVigente]))
 
       renderLista()
 
@@ -510,7 +514,7 @@ describe('ProdutosListaPage', () => {
     }
 
     it('saldo normal mostra a quantidade com a sigla, sem selo', async () => {
-      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
       renderLista()
 
       const estoque = await estoqueDoCard('Arroz 5kg')
@@ -518,10 +522,10 @@ describe('ProdutosListaPage', () => {
     })
 
     it('estoque baixo e sem estoque ganham o selo', async () => {
-      listarProdutosMock.mockResolvedValue([
+      listarProdutosMock.mockResolvedValue(paginaDe([
         { ...produtoAtivo, estoqueAtual: 8, situacaoEstoque: 'BAIXO' },
         { ...produtoInativo, estoqueAtual: 0, situacaoEstoque: 'SEM_ESTOQUE' },
-      ])
+      ]))
       renderLista()
 
       const baixo = await estoqueDoCard('Arroz 5kg')
@@ -533,9 +537,9 @@ describe('ProdutosListaPage', () => {
     })
 
     it('produto sem controle de estoque mostra "—" (e o leitor de tela ouve o motivo)', async () => {
-      listarProdutosMock.mockResolvedValue([
+      listarProdutosMock.mockResolvedValue(paginaDe([
         { ...produtoAtivo, controlaEstoque: false, estoqueAtual: 12, situacaoEstoque: null },
-      ])
+      ]))
       renderLista()
 
       const estoque = await estoqueDoCard('Arroz 5kg')
@@ -546,7 +550,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('com o controle desligado, os níveis não aparecem no card', async () => {
-      listarProdutosMock.mockResolvedValue([{ ...produtoAtivo, controlaEstoque: false, situacaoEstoque: null }])
+      listarProdutosMock.mockResolvedValue(paginaDe([{ ...produtoAtivo, controlaEstoque: false, situacaoEstoque: null }]))
       renderLista()
 
       const card = await cardDoProduto('Arroz 5kg')
@@ -571,7 +575,7 @@ describe('ProdutosListaPage', () => {
     }
 
     it('abre o modal sem sair da lista; no sucesso recarrega a lista e mostra a mensagem', async () => {
-      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
       ajustarEstoqueMock.mockResolvedValue(SAIDA)
       const router = renderLista()
       const card = await cardDoProduto('Arroz 5kg')
@@ -584,7 +588,7 @@ describe('ProdutosListaPage', () => {
       fireEvent.click(within(modal).getByRole('radio', { name: 'Saída' }))
       fireEvent.change(within(modal).getByRole('textbox', { name: /^quantidade/i }), { target: { value: '2' } })
       fireEvent.change(within(modal).getByRole('combobox', { name: /^motivo/i }), { target: { value: 'PERDA_AVARIA' } })
-      listarProdutosMock.mockResolvedValue([{ ...produtoAtivo, estoqueAtual: 10 }])
+      listarProdutosMock.mockResolvedValue(paginaDe([{ ...produtoAtivo, estoqueAtual: 10 }]))
       fireEvent.click(modal.querySelector('button[type="submit"]') as HTMLElement)
 
       expect(await screen.findByText('Arroz 5kg: saída de 2 UN registrada. Saldo: 10 UN.')).toBeInTheDocument()
@@ -596,10 +600,10 @@ describe('ProdutosListaPage', () => {
     })
 
     it('aparece só nos produtos com controle de estoque', async () => {
-      listarProdutosMock.mockResolvedValue([
+      listarProdutosMock.mockResolvedValue(paginaDe([
         produtoAtivo,
         { ...produtoInativo, controlaEstoque: false, situacaoEstoque: null },
-      ])
+      ]))
       renderLista()
 
       const semControle = await cardDoProduto('Feijão 1kg')
@@ -609,7 +613,7 @@ describe('ProdutosListaPage', () => {
 
     it('OPERADOR não vê o atalho', async () => {
       definirPerfil('OPERADOR')
-      listarProdutosMock.mockResolvedValue([produtoAtivo])
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
       renderLista()
 
       const card = await cardDoProduto('Arroz 5kg')

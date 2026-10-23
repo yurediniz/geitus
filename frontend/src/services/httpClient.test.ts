@@ -258,6 +258,30 @@ describe('httpClient', () => {
     })
   })
 
+  describe('cancelamento (AbortSignal)', () => {
+    it('apiGet repassa o signal ao fetch', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(200, []))
+      const controle = new AbortController()
+
+      await apiGet('/produtos', { autenticada: true, signal: controle.signal })
+
+      const init = vi.mocked(globalThis.fetch).mock.calls[0]?.[1] as RequestInit | undefined
+      expect(init?.signal).toBe(controle.signal)
+    })
+
+    it('aborto nao vira erro de rede: lanca o AbortError original', async () => {
+      const aborto = new DOMException('The operation was aborted.', 'AbortError')
+      vi.mocked(globalThis.fetch).mockRejectedValue(aborto)
+      const controle = new AbortController()
+      controle.abort()
+
+      const erro = await apiGet('/produtos', { signal: controle.signal }).catch((e: unknown) => e)
+
+      expect(erro).toBe(aborto)
+      expect(erro).not.toBeInstanceOf(HttpError)
+    })
+  })
+
   describe('respostas de sucesso', () => {
     it('retorna o corpo JSON em GET bem-sucedido', async () => {
       vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(200, { valor: 42 }))

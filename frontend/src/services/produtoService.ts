@@ -1,8 +1,8 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/services/httpClient'
 import type {
   CampoSugestaoProduto,
+  FiltrosDaListaDeProdutos,
   HistoricoPreco,
-  ListarProdutosParams,
   PaginaResponse,
   Produto,
   ProdutoRequest,
@@ -13,33 +13,44 @@ import type {
  * logica de API nos componentes. O `id` e o UUID publico do produto.
  */
 
-function montarQuery(params: ListarProdutosParams = {}): string {
-  const searchParams = new URLSearchParams()
-  const busca = params.busca?.trim()
+/** Tamanho padrao da pagina da lista de produtos (o backend aceita ate 100). */
+export const TAMANHO_PAGINA_PRODUTOS = 25
 
+export type ListarProdutosParams = FiltrosDaListaDeProdutos & { tamanho?: number }
+
+/** Parametros da API: so os filtros presentes; a pagina 1-based da tela vira 0-based. */
+function montarQueryDaLista(params: ListarProdutosParams): string {
+  const searchParams = new URLSearchParams()
+  const busca = params.busca.trim()
   if (busca) {
     searchParams.set('busca', busca)
   }
-
-  if (params.status === 'ativos') {
-    searchParams.set('ativo', 'true')
+  searchParams.set('status', params.status)
+  if (params.categoria) {
+    searchParams.set('categoria', params.categoria)
   }
-
-  if (params.status === 'inativos') {
-    searchParams.set('ativo', 'false')
+  if (params.estoque) {
+    searchParams.set('estoque', params.estoque)
   }
-
-  const query = searchParams.toString()
-  return query ? `?${query}` : ''
+  if (params.promocao) {
+    searchParams.set('promocao', 'true')
+  }
+  searchParams.set('ordem', params.ordem)
+  searchParams.set('pagina', String(Math.max(0, params.pagina - 1)))
+  searchParams.set('tamanho', String(params.tamanho ?? TAMANHO_PAGINA_PRODUTOS))
+  return searchParams.toString()
 }
 
 function caminhoDoProduto(id: string): string {
   return `/produtos/${encodeURIComponent(id)}`
 }
 
-/** Lista produtos da empresa do usuario autenticado. */
-export function listarProdutos(params: ListarProdutosParams = {}): Promise<Produto[]> {
-  return apiGet<Produto[]>(`/produtos${montarQuery(params)}`, { autenticada: true })
+/**
+ * Uma pagina da lista de produtos da empresa do usuario autenticado, com busca,
+ * filtros e ordenacao. O `signal` cancela a requisicao quando a busca muda.
+ */
+export function listarProdutos(params: ListarProdutosParams, signal?: AbortSignal): Promise<PaginaResponse<Produto>> {
+  return apiGet<PaginaResponse<Produto>>(`/produtos?${montarQueryDaLista(params)}`, { autenticada: true, signal })
 }
 
 /** Busca um produto da empresa do usuario autenticado. */

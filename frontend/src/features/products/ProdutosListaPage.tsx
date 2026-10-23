@@ -23,7 +23,8 @@ import { SeloSituacaoEstoque } from '@/features/products/estoque/SeloSituacaoEst
 import { SeloStatus } from '@/features/products/SeloStatus'
 import { useAuth } from '@/hooks/useAuth'
 import { inativarProduto, listarProdutos, reativarProduto } from '@/services/produtoService'
-import type { Produto, ProdutoStatusFiltro } from '@/types/produto'
+import { FILTROS_PADRAO } from '@/features/products/listagem/useFiltrosDaListaDeProdutos'
+import type { Produto, StatusFiltro as ProdutoStatusFiltro } from '@/types/produto'
 
 const STATUS_VALIDOS: readonly ProdutoStatusFiltro[] = ['todos', 'ativos', 'inativos']
 
@@ -71,7 +72,8 @@ export function ProdutosListaPage() {
     refetch,
   } = useQuery<Produto[]>({
     queryKey: produtosQueryKey,
-    queryFn: () => listarProdutos({ busca, status }),
+    // Ponte ate a Task 5 da Fase E: so a primeira pagina, sem os filtros novos.
+    queryFn: async () => (await listarProdutos({ ...FILTROS_PADRAO, busca, status })).itens,
   })
 
   const atualizarFiltros = (novos: { busca: string; status: ProdutoStatusFiltro }) => {

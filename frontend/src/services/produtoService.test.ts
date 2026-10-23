@@ -57,36 +57,63 @@ describe('produtoService', () => {
     vi.clearAllMocks()
   })
 
-  it('lista produtos autenticados sem filtros', async () => {
-    apiGetMock.mockResolvedValue([])
+  describe('listarProdutos (pagina)', () => {
+    const PADRAO = {
+      busca: '',
+      status: 'ativos',
+      categoria: null,
+      estoque: null,
+      promocao: false,
+      ordem: 'nome',
+      pagina: 1,
+    } as const
 
-    await listarProdutos()
+    it('envia os padroes e a pagina 1 da tela como 0 na API', async () => {
+      const pagina = { itens: [], pagina: 0, tamanho: 25, totalItens: 0 }
+      apiGetMock.mockResolvedValue(pagina)
 
-    expect(apiGetMock).toHaveBeenCalledWith('/produtos', { autenticada: true })
-  })
+      await expect(listarProdutos(PADRAO)).resolves.toBe(pagina)
 
-  it('lista produtos com busca e status ativo', async () => {
-    apiGetMock.mockResolvedValue([])
+      expect(apiGetMock).toHaveBeenCalledWith('/produtos?status=ativos&ordem=nome&pagina=0&tamanho=25', {
+        autenticada: true,
+        signal: undefined,
+      })
+    })
 
-    await listarProdutos({ busca: ' SKU-1 ', status: 'ativos' })
+    it('envia todos os parametros, a busca aparada e o signal', async () => {
+      apiGetMock.mockResolvedValue({ itens: [], pagina: 2, tamanho: 10, totalItens: 0 })
+      const controle = new AbortController()
 
-    expect(apiGetMock).toHaveBeenCalledWith('/produtos?busca=SKU-1&ativo=true', { autenticada: true })
-  })
+      await listarProdutos(
+        {
+          busca: ' café & leite ',
+          status: 'todos',
+          categoria: '3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e5f',
+          estoque: 'baixo',
+          promocao: true,
+          ordem: '-preco',
+          pagina: 3,
+          tamanho: 10,
+        },
+        controle.signal,
+      )
 
-  it('codifica busca com espacos e caracteres especiais', async () => {
-    apiGetMock.mockResolvedValue([])
+      expect(apiGetMock).toHaveBeenCalledWith(
+        '/produtos?busca=caf%C3%A9+%26+leite&status=todos&categoria=3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e5f&estoque=baixo&promocao=true&ordem=-preco&pagina=2&tamanho=10',
+        { autenticada: true, signal: controle.signal },
+      )
+    })
 
-    await listarProdutos({ busca: 'café & leite', status: 'todos' })
+    it('busca so com espacos nao vai para a API', async () => {
+      apiGetMock.mockResolvedValue({ itens: [], pagina: 0, tamanho: 25, totalItens: 0 })
 
-    expect(apiGetMock).toHaveBeenCalledWith('/produtos?busca=caf%C3%A9+%26+leite', { autenticada: true })
-  })
+      await listarProdutos({ ...PADRAO, busca: '   ', status: 'inativos' })
 
-  it('lista produtos com status inativo', async () => {
-    apiGetMock.mockResolvedValue([])
-
-    await listarProdutos({ status: 'inativos' })
-
-    expect(apiGetMock).toHaveBeenCalledWith('/produtos?ativo=false', { autenticada: true })
+      expect(apiGetMock).toHaveBeenCalledWith('/produtos?status=inativos&ordem=nome&pagina=0&tamanho=25', {
+        autenticada: true,
+        signal: undefined,
+      })
+    })
   })
 
   it('cadastra produto via POST autenticado sem enviar empresaId', async () => {
