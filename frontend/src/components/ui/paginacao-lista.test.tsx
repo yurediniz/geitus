@@ -28,6 +28,31 @@ describe('PaginacaoLista', () => {
     expect(screen.getByText('Página 50 de 50')).toBeInTheDocument()
   })
 
+  it('total multiplo exato do tamanho fecha na ultima pagina', () => {
+    renderPaginacao(2, 50)
+
+    expect(screen.getByText('26–50 de 50')).toBeInTheDocument()
+    expect(screen.getByText('Página 2 de 2')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /próxima/i })).toBeDisabled()
+  })
+
+  it('pagina alem do fim e mostrada como a ultima (texto coerente)', () => {
+    renderPaginacao(5, 30)
+
+    expect(screen.getByText('26–30 de 30')).toBeInTheDocument()
+    expect(screen.getByText('Página 2 de 2')).toBeInTheDocument()
+    expect(screen.queryByText('30–30 de 30')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /próxima/i })).toBeDisabled()
+  })
+
+  it('sem itens, diz que nao ha nenhum e nao mostra os controles', () => {
+    renderPaginacao(1, 0)
+
+    expect(screen.getByText('Nenhum item')).toBeInTheDocument()
+    expect(screen.queryByText(/0–0/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /anterior/i })).not.toBeInTheDocument()
+  })
+
   it('Anterior fica desabilitado na primeira pagina', () => {
     const { aoMudar } = renderPaginacao(1)
 

@@ -24,11 +24,13 @@ function numero(valor: number): string {
 /**
  * Rodape de uma lista paginada no servidor: "1–25 de 1.240", Anterior/Proxima,
  * "Pagina 2 de 50" e um campo para ir direto a uma pagina (limitado a
- * 1..ultima). Com uma pagina so, mostra apenas o total.
+ * 1..ultima). Com uma pagina so, mostra apenas o total; sem itens, "Nenhum item".
  */
-export function PaginacaoLista({ pagina, total, tamanho, aoMudar, className }: PaginacaoListaProps) {
+export function PaginacaoLista({ pagina: paginaPedida, total, tamanho, aoMudar, className }: PaginacaoListaProps) {
   const ultima = Math.max(1, Math.ceil(total / tamanho))
-  const inicio = total === 0 ? 0 : Math.min((pagina - 1) * tamanho + 1, total)
+  // Pagina alem do fim (a tela ainda vai corrigir a URL): mostra a ultima, com texto coerente.
+  const pagina = Math.min(Math.max(paginaPedida, 1), ultima)
+  const inicio = (pagina - 1) * tamanho + 1
   const fim = Math.min(pagina * tamanho, total)
 
   // Texto do campo "Ir para a pagina": acompanha a pagina vinda de fora.
@@ -58,7 +60,9 @@ export function PaginacaoLista({ pagina, total, tamanho, aoMudar, className }: P
       aria-label="Paginação"
       className={cn('flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between', className)}
     >
-      <p className="text-muted-foreground tabular-nums">{`${numero(inicio)}–${numero(fim)} de ${numero(total)}`}</p>
+      <p className="text-muted-foreground tabular-nums">
+        {total === 0 ? 'Nenhum item' : `${numero(inicio)}–${numero(fim)} de ${numero(total)}`}
+      </p>
 
       {ultima > 1 && (
         <div className="flex flex-wrap items-center gap-2">
