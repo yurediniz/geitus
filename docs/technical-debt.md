@@ -442,7 +442,6 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
     - equivalencia SQL x Java da V10 so para as 53 letras da lista (usar `normalize(NFD)` se surgir outra escrita).
   - **Migrations futuras com volume:** `CREATE INDEX CONCURRENTLY` e `UPDATE` em lotes.
   - **Frontend:**
-    - entre 768 e ~1.150 px a tabela rola dentro do proprio quadro (a pagina nao rola); avaliar com o usuario mostrar a tabela so a partir de 1024 px;
     - texto de exemplo da busca cortado em 375 px;
     - "Desfazer" ao inativar;
     - tom proprio para o selo de promocao (brandbook);
