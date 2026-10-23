@@ -943,7 +943,7 @@ class ProdutoServiceTest {
         consultaDevolve(0);
 
         produtoService.listarParaUsuario(9L,
-                ParametrosDaListagem.daRequisicao(null, "inativos", null, "sem", true, "-margem", 4, 10));
+                ParametrosDaListagem.daRequisicao(null, "inativos", null, "sem", "true", "-margem", 4, 10));
 
         ArgumentCaptor<FiltroDeProdutos> filtro = ArgumentCaptor.forClass(FiltroDeProdutos.class);
         verify(consultaDeProdutos).buscar(filtro.capture(), eq(OrdemDeProdutos.MARGEM_DESC), eq(4), eq(10));

@@ -41,12 +41,17 @@ public enum OrdemDeProdutos {
         this.criterio = criterio;
     }
 
+    /** Valor aceito no parametro da API (a allow-list; tambem anunciado na OpenAPI). */
+    public String nomeNaApi() {
+        return nomeNaApi;
+    }
+
     /** Valor do parametro {@code ordem}; ausente ou vazio vale {@link #NOME}; desconhecido, 400. */
     public static OrdemDeProdutos doParametro(String valor) {
         if (ParametroDaListagem.ausente(valor)) {
             return NOME;
         }
-        return ParametroDaListagem.escolher(values(), ordem -> ordem.nomeNaApi, valor,
+        return ParametroDaListagem.escolher(values(), OrdemDeProdutos::nomeNaApi, valor,
                 () -> new RegraDeNegocioException(MENSAGEM_INVALIDA, CAMPO));
     }
 

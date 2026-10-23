@@ -25,6 +25,7 @@ import com.geitus.app.catalog.listagem.ParametrosDaListagem;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -53,7 +54,6 @@ public class ProdutoController {
 
     private static final String PAGINA_PADRAO = "0";
     private static final String TAMANHO_PADRAO_HISTORICO = "20";
-    private static final String TAMANHO_PADRAO_LISTAGEM = "" + ParametrosDaListagem.TAMANHO_PADRAO;
 
     private final ProdutoService produtoService;
 
@@ -71,23 +71,30 @@ public class ProdutoController {
     @GetMapping
     public ResponseEntity<PaginaResponse<ProdutoResponse>> listar(
             @AuthenticationPrincipal Long idUsuario,
-            @Parameter(description = "Termo de busca (texto ou parte de um codigo de barras)")
+            @Parameter(description = "Termo de busca (texto ou parte de um codigo de barras), ate 200 caracteres",
+                    schema = @Schema(maxLength = ParametrosDaListagem.TAMANHO_MAXIMO_DA_BUSCA))
             @RequestParam(required = false) String busca,
-            @Parameter(description = "ativos (padrao), inativos ou todos")
+            @Parameter(description = "Status dos produtos",
+                    schema = @Schema(allowableValues = { "ativos", "inativos", "todos" }, defaultValue = "ativos"))
             @RequestParam(required = false) String status,
             @Parameter(description = "UUID da categoria; inclui as subcategorias")
             @RequestParam(required = false) UUID categoria,
-            @Parameter(description = "baixo (inclui os sem estoque) ou sem; so produtos que controlam estoque")
+            @Parameter(description = "baixo (inclui os sem estoque) ou sem; so produtos que controlam estoque",
+                    schema = @Schema(allowableValues = { "baixo", "sem" }))
             @RequestParam(required = false) String estoque,
-            @Parameter(description = "true: so produtos com promocao vigente hoje")
-            @RequestParam(required = false) Boolean promocao,
-            @Parameter(description = "nome (padrao), -nome, preco, -preco, margem, -margem, estoque, -estoque, "
-                    + "recentes ou atualizados")
+            @Parameter(description = "true: so produtos com promocao vigente hoje",
+                    schema = @Schema(allowableValues = { "true", "false" }, defaultValue = "false"))
+            @RequestParam(required = false) String promocao,
+            @Parameter(description = "Ordenacao; o prefixo - inverte a direcao",
+                    schema = @Schema(allowableValues = { "nome", "-nome", "preco", "-preco", "margem", "-margem",
+                            "estoque", "-estoque", "recentes", "atualizados" }, defaultValue = "nome"))
             @RequestParam(required = false) String ordem,
-            @Parameter(description = "Pagina, a partir de 0")
-            @RequestParam(defaultValue = PAGINA_PADRAO) int pagina,
-            @Parameter(description = "Itens por pagina, de 1 a 100")
-            @RequestParam(defaultValue = TAMANHO_PADRAO_LISTAGEM) int tamanho) {
+            @Parameter(description = "Pagina, a partir de 0", schema = @Schema(type = "integer", defaultValue = "0",
+                    minimum = "0"))
+            @RequestParam(required = false) Integer pagina,
+            @Parameter(description = "Itens por pagina, de 1 a 100", schema = @Schema(type = "integer",
+                    defaultValue = "25", minimum = "1", maximum = "100"))
+            @RequestParam(required = false) Integer tamanho) {
         ParametrosDaListagem parametros = ParametrosDaListagem.daRequisicao(busca, status, categoria, estoque,
                 promocao, ordem, pagina, tamanho);
         return ResponseEntity.ok(produtoService.listarParaUsuario(idUsuario, parametros));

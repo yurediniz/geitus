@@ -18,8 +18,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -50,6 +54,8 @@ import com.geitus.app.config.RestAuthenticationEntryPoint;
 import com.geitus.app.config.SecurityConfig;
 import com.geitus.app.shared.error.GlobalExceptionHandler;
 import com.geitus.app.iam.Usuario;
+
+import io.swagger.v3.oas.annotations.Parameter;
 
 /**
  * Testa o contrato HTTP dos endpoints de produtos (rotas protegidas, regras de
@@ -317,13 +323,116 @@ class ProdutoControllerTest {
     }
 
     @Test
-    void promocaoInvalida_400() throws Exception {
-        mockMvc.perform(get("/api/produtos").param("promocao", "talvez")
+    void promocaoInvalida_400ComCampoPromocao() throws Exception {
+        for (String invalida : List.of("talvez", "1", "TRUE", "sim")) {
+            mockMvc.perform(get("/api/produtos").param("promocao", invalida)
+                            .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.mensagem").value("Filtro de promoção inválido."))
+                    .andExpect(jsonPath("$.campos[0].campo").value("promocao"));
+        }
+
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void promocaoFalseNaoFiltra() throws Exception {
+        when(produtoService.listarParaUsuario(eq(1L), any())).thenReturn(paginaVazia());
+
+        mockMvc.perform(get("/api/produtos").param("promocao", "false")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isOk());
+
+        verify(produtoService).listarParaUsuario(1L, new ParametrosDaListagem(null, StatusFiltro.ATIVOS, null, null,
+                false, OrdemDeProdutos.NOME, 0, 25));
+    }
+
+    @Test
+    void buscaDe201Caracteres_400ComCampoBusca() throws Exception {
+        mockMvc.perform(get("/api/produtos").param("busca", "a".repeat(201))
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("A busca deve ter no máximo 200 caracteres."))
+                .andExpect(jsonPath("$.campos[0].campo").value("busca"));
+
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void buscaDe200CaracteresAceita() throws Exception {
+        when(produtoService.listarParaUsuario(eq(1L), any())).thenReturn(paginaVazia());
+
+        mockMvc.perform(get("/api/produtos").param("busca", "a".repeat(200))
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void tamanhoUmECemAceitos() throws Exception {
+        when(produtoService.listarParaUsuario(eq(1L), any())).thenReturn(paginaVazia());
+
+        for (String tamanho : List.of("1", "100")) {
+            mockMvc.perform(get("/api/produtos").param("tamanho", tamanho)
+                            .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                    .andExpect(status().isOk());
+        }
+    }
+
+    @Test
+    void tamanhoZero_400() throws Exception {
+        mockMvc.perform(get("/api/produtos").param("tamanho", "0")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("O tamanho da página deve ser entre 1 e 100."));
+
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void paginaGrandeDemais_400() throws Exception {
+        mockMvc.perform(get("/api/produtos").param("pagina", "2147483647").param("tamanho", "25")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("A página informada é grande demais."));
+
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void paginaNaoNumerica_400() throws Exception {
+        mockMvc.perform(get("/api/produtos").param("pagina", "abc")
                         .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("Parâmetro inválido."));
 
         verifyNoInteractions(produtoService);
+    }
+
+    /** A OpenAPI anuncia exatamente os valores que a allow-list aceita (sem divergir dos enums). */
+    @Test
+    void openApiListaOsValoresAceitosDeCadaFiltro() throws Exception {
+        Map<String, List<String>> anunciados = new HashMap<>();
+        for (java.lang.reflect.Parameter parametro : ProdutoController.class.getMethod("listar", Long.class,
+                String.class, String.class, UUID.class, String.class, String.class, String.class, Integer.class,
+                Integer.class).getParameters()) {
+            Parameter documentacao = parametro.getAnnotation(Parameter.class);
+            if (documentacao != null && documentacao.schema().allowableValues().length > 0) {
+                anunciados.put(parametro.getName(), List.of(documentacao.schema().allowableValues()));
+            }
+        }
+
+        assertThat(anunciados).containsOnlyKeys("status", "estoque", "promocao", "ordem");
+        assertThat(anunciados.get("status")).containsExactlyElementsOf(nomesNaApi(StatusFiltro.values(),
+                StatusFiltro::nomeNaApi));
+        assertThat(anunciados.get("estoque")).containsExactlyElementsOf(nomesNaApi(EstoqueFiltro.values(),
+                EstoqueFiltro::nomeNaApi));
+        assertThat(anunciados.get("ordem")).containsExactlyElementsOf(nomesNaApi(OrdemDeProdutos.values(),
+                OrdemDeProdutos::nomeNaApi));
+        assertThat(anunciados.get("promocao")).containsExactly("true", "false");
+    }
+
+    private static <T> List<String> nomesNaApi(T[] valores, Function<T, String> nome) {
+        return Arrays.stream(valores).map(nome).toList();
     }
 
     @Test

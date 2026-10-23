@@ -26,12 +26,17 @@ public enum EstoqueFiltro {
         this.condicao = condicao;
     }
 
+    /** Valor aceito no parametro da API (a allow-list; tambem anunciado na OpenAPI). */
+    public String nomeNaApi() {
+        return nomeNaApi;
+    }
+
     /** Valor do parametro {@code estoque}; ausente ou vazio e {@code null} (sem filtro); desconhecido, 400. */
     public static EstoqueFiltro doParametro(String valor) {
         if (ParametroDaListagem.ausente(valor)) {
             return null;
         }
-        return ParametroDaListagem.escolher(values(), filtro -> filtro.nomeNaApi, valor,
+        return ParametroDaListagem.escolher(values(), EstoqueFiltro::nomeNaApi, valor,
                 () -> new RegraDeNegocioException(MENSAGEM_INVALIDO, CAMPO));
     }
 

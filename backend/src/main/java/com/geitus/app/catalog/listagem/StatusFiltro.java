@@ -22,12 +22,17 @@ public enum StatusFiltro {
         this.condicao = condicao;
     }
 
+    /** Valor aceito no parametro da API (a allow-list; tambem anunciado na OpenAPI). */
+    public String nomeNaApi() {
+        return nomeNaApi;
+    }
+
     /** Valor do parametro {@code status}; ausente ou vazio vale {@link #ATIVOS}; desconhecido, 400. */
     public static StatusFiltro doParametro(String valor) {
         if (ParametroDaListagem.ausente(valor)) {
             return ATIVOS;
         }
-        return ParametroDaListagem.escolher(values(), filtro -> filtro.nomeNaApi, valor,
+        return ParametroDaListagem.escolher(values(), StatusFiltro::nomeNaApi, valor,
                 () -> new RegraDeNegocioException(MENSAGEM_INVALIDO, CAMPO));
     }
 
