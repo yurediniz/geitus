@@ -425,6 +425,7 @@ function ClienteItem({ cliente, podeAlterarStatus, onEditar, onAlterarStatus, al
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="truncate text-base font-medium">{cliente.nome}</h2>
+            <span className="text-xs text-muted-foreground tabular-nums">Nº {cliente.numero}</span>
             <span
               className={
                 cliente.ativo

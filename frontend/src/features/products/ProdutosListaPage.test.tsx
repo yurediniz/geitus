@@ -356,7 +356,8 @@ describe('ProdutosListaPage', () => {
       expect(cabecalhos).toEqual(['Nome', 'Categoria', 'Unidade', 'Preço', 'Margem', 'Estoque', 'Ações'])
 
       const linha = await linhaDoProduto('Arroz 5kg')
-      expect(within(linha).getByText('Arroz TJ · SKU-ARROZ')).toBeInTheDocument()
+      // Linha secundaria da Fase B2: Nº, codigo do produto e SKU (as partes que existirem).
+      expect(within(linha).getByText('Nº 15 · Cód. 542 · SKU-ARROZ')).toBeInTheDocument()
       expect(within(linha).getByText('Mercearia')).toBeInTheDocument()
       expect(within(linha).getByText('UN')).toBeInTheDocument()
       expect(within(linha).getByText('30,50%')).toBeInTheDocument()
@@ -364,6 +365,7 @@ describe('ProdutosListaPage', () => {
       expect(within(linha).queryByText('Ativo')).not.toBeInTheDocument()
 
       const simples = await linhaDoProduto('Produto Simples')
+      expect(within(simples).getByText('Nº 3')).toBeInTheDocument()
       expect(within(simples).getAllByText('—').length).toBeGreaterThanOrEqual(2)
       expect(within(simples).getByText('Sem estoque')).toBeInTheDocument()
     })
@@ -408,7 +410,7 @@ describe('ProdutosListaPage', () => {
       )
     })
 
-    it('o card e enxuto: marca, preco, estoque e uma linha com o SKU', async () => {
+    it('o card e enxuto: marca, preco, estoque e uma linha com o Nº, o codigo e o SKU', async () => {
       listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo, produtoSimples]))
       renderLista()
 
@@ -416,7 +418,8 @@ describe('ProdutosListaPage', () => {
       expect(within(card).getByText('Tio João')).toBeInTheDocument()
       expect(within(card).getByText('R$ 25,90')).toBeInTheDocument()
       expect(within(card).getByText('12 UN')).toBeInTheDocument()
-      expect(within(card).getByText('SKU-ARROZ')).toBeInTheDocument()
+      expect(within(card).getByText('Nº 15 · Cód. 542 · SKU-ARROZ')).toBeInTheDocument()
+      expect(within(await cardDoProduto('Produto Simples')).getByText('Nº 3')).toBeInTheDocument()
       for (const rotulo of ['Custo', 'Margem', 'Markup', 'Categoria', 'Estoque mínimo', 'Preço mínimo']) {
         expect(within(card).queryByText(rotulo)).not.toBeInTheDocument()
       }
@@ -437,7 +440,7 @@ describe('ProdutosListaPage', () => {
       )
       renderLista()
 
-      expect(within(await cardDoProduto('Arroz 5kg')).getByText('7891000315507 (+1)')).toBeInTheDocument()
+      expect(within(await cardDoProduto('Arroz 5kg')).getByText('Nº 15 · Cód. 542 · 7891000315507 (+1)')).toBeInTheDocument()
     })
 
     it('promocao vigente: selo com icone, promocional e normal riscado (tabela e card)', async () => {

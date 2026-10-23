@@ -3,8 +3,9 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 
 import { CampoCodigosBarras, type CampoCodigosBarrasProps } from '@/features/products/CampoCodigosBarras'
+import { CONFIGURACAO_ETIQUETA_PADRAO } from '@/lib/etiquetaBalanca'
 
-type PropsDeTeste = Pick<CampoCodigosBarrasProps, 'desabilitado' | 'erro'> & {
+type PropsDeTeste = Pick<CampoCodigosBarrasProps, 'desabilitado' | 'erro' | 'configuracaoEtiqueta'> & {
   inicial?: string[]
   formatosGravados?: CampoCodigosBarrasProps['formatosGravados']
   onEnviar?: () => void
@@ -234,5 +235,45 @@ describe('CampoCodigosBarras', () => {
 
     expect(valorAtual()).toEqual([])
     expect(campoAdicionar()).toHaveValue('7891000315507')
+  })
+
+  describe('codigo com formato de etiqueta de balanca (Fase B2)', () => {
+    const AVISO = 'Este código tem o formato da etiqueta de balança configurada.'
+
+    it('avisa, sem bloquear, quando o codigo novo parece uma etiqueta da configuracao', () => {
+      render(<CampoComEstado configuracaoEtiqueta={CONFIGURACAO_ETIQUETA_PADRAO} />)
+
+      // 13 digitos com o prefixo 2 (e digito EAN valido, como o de um fabricante).
+      lerCodigo('2000542010008')
+
+      expect(valorAtual()).toEqual(['2000542010008'])
+      expect(screen.getByText(AVISO)).toBeInTheDocument()
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Código 2000542010008 adicionado. Ele tem o formato da etiqueta de balança.',
+      )
+    })
+
+    it('EAN comum ou sem configuracao carregada nao avisa', () => {
+      const { unmount } = render(<CampoComEstado configuracaoEtiqueta={CONFIGURACAO_ETIQUETA_PADRAO} />)
+      lerCodigo('7891000315507')
+      expect(screen.queryByText(AVISO)).not.toBeInTheDocument()
+      unmount()
+
+      render(<CampoComEstado />)
+      lerCodigo('2000542010008')
+      expect(valorAtual()).toEqual(['2000542010008'])
+      expect(screen.queryByText(AVISO)).not.toBeInTheDocument()
+    })
+
+    it('codigo ja gravado com o formato nao repete o aviso', () => {
+      render(
+        <CampoComEstado
+          configuracaoEtiqueta={CONFIGURACAO_ETIQUETA_PADRAO}
+          inicial={['2000542010008']}
+          formatosGravados={new Map([['2000542010008', 'EAN13']])}
+        />,
+      )
+      expect(screen.queryByText(AVISO)).not.toBeInTheDocument()
+    })
   })
 })

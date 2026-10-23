@@ -112,6 +112,28 @@ describe('ClientesPage', () => {
     definirPerfil('ADMIN')
   })
 
+  it('mostra o Nº do cliente no card e no topo do formulario de edicao (Fase B2)', async () => {
+    listarClientesMock.mockResolvedValue([clienteAtivo])
+
+    renderComProviders(<ClientesPage />)
+
+    const card = await cartaoDoCliente('Maria Silva')
+    expect(within(card).getByText('Nº 12')).toBeInTheDocument()
+
+    fireEvent.click(within(card).getByRole('button', { name: /editar/i }))
+    const termo = await screen.findByText('Nº do Cliente')
+    expect(termo.nextElementSibling).toHaveTextContent('12')
+  })
+
+  it('no cadastro novo o formulario nao mostra o Nº (ainda nao existe)', async () => {
+    listarClientesMock.mockResolvedValue([])
+
+    renderComProviders(<ClientesPage />)
+    await abrirFormularioNovo()
+
+    expect(screen.queryByText('Nº do Cliente')).not.toBeInTheDocument()
+  })
+
   it('lista clientes ativos por padrao', async () => {
     listarClientesMock.mockResolvedValue([clienteAtivo])
 

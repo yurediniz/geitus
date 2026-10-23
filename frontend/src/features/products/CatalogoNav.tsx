@@ -6,6 +6,7 @@ const ABAS = [
   { rotulo: 'Produtos', to: '/produtos' },
   { rotulo: 'Categorias', to: '/produtos/categorias' },
   { rotulo: 'Unidades', to: '/produtos/unidades' },
+  { rotulo: 'Balança', to: '/produtos/balanca' },
 ] as const
 
 /** Pagina de um produto (`/produtos/novo`, `/produtos/:id`): fora das demais abas. */

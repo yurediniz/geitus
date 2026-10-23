@@ -1,5 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from 'react'
-import { AlertTriangle, ArrowDown, ArrowUp, Plus, ScanBarcode, X } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, Plus, Scale, ScanBarcode, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,11 +9,15 @@ import {
   type FormatosGravados,
 } from '@/features/products/produtoFormulario'
 import { detectarFormato } from '@/lib/codigoBarras'
+import { pareceEtiqueta } from '@/lib/etiquetaBalanca'
 import { cn } from '@/lib/utils'
+import type { ConfiguracaoEtiqueta } from '@/types/etiquetaBalanca'
 import type { FormatoCodigoBarras } from '@/types/produto'
 
 const AVISO_FORMATO_OUTRO =
   'Formato não reconhecido (não é EAN-8, EAN-13 nem UPC-A). Confira antes de salvar.'
+/** Aviso (nao bloqueia) do codigo com cara de etiqueta de balanca: alguns fabricantes usam o prefixo 2 (spec B2 §3.4). */
+const AVISO_FORMATO_ETIQUETA = 'Este código tem o formato da etiqueta de balança configurada.'
 
 const ROTULO_FORMATO: Readonly<Record<FormatoCodigoBarras, string>> = {
   EAN13: 'EAN-13',
@@ -44,6 +48,8 @@ export interface CampoCodigosBarrasProps {
   desabilitado?: boolean
   /** Erro do formulario ou do backend (400/409) sobre os codigos. */
   erro?: string
+  /** Etiqueta de balanca da empresa, para avisar o codigo novo com o formato dela; null enquanto nao carrega. */
+  configuracaoEtiqueta?: ConfiguracaoEtiqueta | null
 }
 
 /** Elemento que recebe o foco depois de reordenar ou remover. */
@@ -68,6 +74,7 @@ export function CampoCodigosBarras({
   formatosGravados,
   desabilitado = false,
   erro,
+  configuracaoEtiqueta = null,
 }: CampoCodigosBarrasProps) {
   const [anuncio, setAnuncio] = useState('')
   const [focoPendente, setFocoPendente] = useState<FocoPendente | null>(null)
@@ -97,6 +104,10 @@ export function CampoCodigosBarras({
   const ehOutroNovo = (codigo: string) =>
     !formatosGravados.has(codigo) && detectarFormato(codigo) === 'OUTRO'
 
+  /** Codigo novo com o formato da etiqueta de balanca: merece o aviso (o gravado ja foi conferido). */
+  const pareceEtiquetaNova = (codigo: string) =>
+    !formatosGravados.has(codigo) && pareceEtiqueta(codigo, configuracaoEtiqueta)
+
   const adicionar = () => {
     const resultado = avaliarNovoCodigo(entrada, valor, formatosGravados)
     if (resultado.tipo === 'vazio') {
@@ -111,7 +122,11 @@ export function CampoCodigosBarras({
     onChange(resultado.lista)
     onEntradaChange('')
     onErroEntradaChange(null)
-    setAnuncio(`Código ${resultado.codigo} adicionado.`)
+    setAnuncio(
+      pareceEtiquetaNova(resultado.codigo)
+        ? `Código ${resultado.codigo} adicionado. Ele tem o formato da etiqueta de balança.`
+        : `Código ${resultado.codigo} adicionado.`,
+    )
   }
 
   const aoTeclar = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -268,6 +283,12 @@ export function CampoCodigosBarras({
                 </div>
                 {/* Aviso so para o que entrou agora: o gravado ja foi conferido (fica so o selo). */}
                 {ehOutroNovo(codigo) && <p className="mt-1 text-xs text-warning-soft-foreground">{AVISO_FORMATO_OUTRO}</p>}
+                {pareceEtiquetaNova(codigo) && (
+                  <p className="mt-1 flex items-start gap-1 text-xs text-warning-soft-foreground">
+                    <Scale className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    {AVISO_FORMATO_ETIQUETA}
+                  </p>
+                )}
               </li>
             )
           })}

@@ -163,6 +163,13 @@ export function ClienteFormulario({
 
   return (
     <form onSubmit={handleSubmit(aoSubmeter)} noValidate className="space-y-4">
+      {/* Numero de registro (so leitura, imutavel): so existe depois de salvar. */}
+      {cliente && (
+        <dl className="space-y-0.5">
+          <dt className="text-sm text-muted-foreground">Nº do Cliente</dt>
+          <dd className="text-base font-semibold tabular-nums">{cliente.numero}</dd>
+        </dl>
+      )}
       {erro && (
         <div
           role="alert"

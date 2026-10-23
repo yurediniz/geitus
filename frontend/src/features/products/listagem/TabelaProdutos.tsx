@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 
 import { formatarPercentual } from '@/features/products/formatacaoProduto'
 import { AcoesDoProduto } from '@/features/products/listagem/AcoesDoProduto'
+import { identificacaoDoProduto } from '@/features/products/listagem/identificacaoDoProduto'
 import type { ListaDeProdutosProps } from '@/features/products/listagem/tipos'
 import { EstoqueDoProduto, PrecoDoProduto, SemValor } from '@/features/products/listagem/ValoresDoProduto'
 import { rotaDoProduto } from '@/features/products/navegacaoProdutos'
@@ -115,7 +116,7 @@ export function TabelaProdutos({
         </thead>
         <tbody className="divide-y">
           {produtos.map((produto) => {
-            const detalhe = [produto.nomeCurto, produto.sku].filter(Boolean).join(' · ')
+            const detalhe = identificacaoDoProduto(produto)
             const margem = formatarPercentual(produto.margem)
             return (
               <tr key={produto.id} className="align-middle">
@@ -130,7 +131,7 @@ export function TabelaProdutos({
                     </Link>
                     {!produto.ativo && <SeloStatus ativo={false} />}
                   </div>
-                  {detalhe && <p className="mt-0.5 break-words text-xs text-muted-foreground">{detalhe}</p>}
+                  <p className="mt-0.5 break-words text-xs text-muted-foreground tabular-nums">{detalhe}</p>
                 </td>
                 <td className={cn('px-3 py-3 text-muted-foreground', SO_EM_TELA_LARGA)}>
                   {produto.categoria ? produto.categoria.caminho : <SemValor motivo="Sem categoria" />}

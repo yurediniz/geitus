@@ -21,7 +21,9 @@ import {
 } from '@/services/produtoService'
 import { cadastrarCategoria, listarCategorias } from '@/services/categoriaService'
 import { ajustarEstoque, listarMovimentosDeEstoque } from '@/services/estoqueService'
+import { buscarConfiguracaoEtiqueta } from '@/services/etiquetaBalancaService'
 import { listarUnidades } from '@/services/unidadeService'
+import { CONFIGURACAO_ETIQUETA_PADRAO } from '@/lib/etiquetaBalanca'
 import {
   CATEGORIAS,
   CX,
@@ -57,6 +59,10 @@ vi.mock('@/services/estoqueService', () => ({
   listarMovimentosDeEstoque: vi.fn(),
 }))
 
+vi.mock('@/services/etiquetaBalancaService', () => ({
+  buscarConfiguracaoEtiqueta: vi.fn(),
+}))
+
 vi.mock('@/services/unidadeService', () => ({
   listarUnidades: vi.fn(),
 }))
@@ -82,6 +88,7 @@ const listarHistoricoDePrecosMock = vi.mocked(listarHistoricoDePrecos)
 const ajustarEstoqueMock = vi.mocked(ajustarEstoque)
 const listarMovimentosDeEstoqueMock = vi.mocked(listarMovimentosDeEstoque)
 const listarUnidadesMock = vi.mocked(listarUnidades)
+const buscarConfiguracaoEtiquetaMock = vi.mocked(buscarConfiguracaoEtiqueta)
 const listarCategoriasMock = vi.mocked(listarCategorias)
 const cadastrarCategoriaMock = vi.mocked(cadastrarCategoria)
 const useAuthMock = vi.mocked(useAuth)
@@ -266,6 +273,7 @@ describe('ProdutoPage', () => {
     listarCategoriasMock.mockResolvedValue(CATEGORIAS)
     listarSugestoesMock.mockResolvedValue([])
     listarMovimentosDeEstoqueMock.mockResolvedValue({ itens: [], pagina: 0, tamanho: 20, totalItens: 0 })
+    buscarConfiguracaoEtiquetaMock.mockResolvedValue({ ...CONFIGURACAO_ETIQUETA_PADRAO, padrao: true })
     instalarIntersectionObserverFalso()
     Element.prototype.scrollIntoView = scrollIntoViewMock
   })
@@ -567,6 +575,26 @@ describe('ProdutoPage', () => {
       const [, request] = atualizarProdutoMock.mock.calls[0]
       expect(request).toMatchObject({ codigo: null, vendidoBalanca: false })
       expect(request).not.toHaveProperty('numero')
+    })
+
+    it('código de barras com o formato da etiqueta configurada avisa e continua sendo adicionado e salvo', async () => {
+      cadastrarProdutoMock.mockResolvedValue(produtoAtivo)
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      await waitFor(() => expect(buscarConfiguracaoEtiquetaMock).toHaveBeenCalled())
+
+      // 13 digitos com o prefixo 2 da etiqueta padrao (e digito EAN valido, como o de um fabricante).
+      fireEvent.change(campoCodigoBarras(), { target: { value: '2000542010008' } })
+      fireEvent.keyDown(campoCodigoBarras(), { key: 'Enter' })
+
+      expect(
+        await screen.findByText('Este código tem o formato da etiqueta de balança configurada.'),
+      ).toBeInTheDocument()
+      fireEvent.click(botaoSalvar())
+      await waitFor(() =>
+        expect(cadastrarProdutoMock).toHaveBeenCalledWith(expect.objectContaining({ codigosBarras: ['2000542010008'] })),
+      )
     })
 
     it('OPERADOR vê o código e a balança desabilitados, sem o atalho do número', async () => {

@@ -10,6 +10,8 @@ export const CATEGORIAS_QUERY_KEY = ['categorias'] as const
 /** Listas completas (ativas e inativas), compartilhadas pelas telas do catalogo e pelo formulario do produto. */
 export const TODAS_UNIDADES_QUERY_KEY = [...UNIDADES_QUERY_KEY, 'todas'] as const
 export const TODAS_CATEGORIAS_QUERY_KEY = [...CATEGORIAS_QUERY_KEY, 'todas'] as const
+/** Configuracao da etiqueta de balanca da empresa (tela Balanca e aviso nos codigos de barras). */
+export const ETIQUETA_BALANCA_QUERY_KEY = ['etiqueta-balanca'] as const
 /** Produtos exibem unidade/categoria: alteracoes no catalogo os deixam desatualizados. */
 export const PRODUTOS_QUERY_KEY = ['produtos'] as const
 /** Uma pagina da lista de produtos (sob o prefixo de produtos: as mutacoes ja o invalidam). */
