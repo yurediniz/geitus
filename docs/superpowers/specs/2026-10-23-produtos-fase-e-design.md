@@ -1,7 +1,7 @@
 # Design — Evolução do cadastro de produtos · Fase E (Listagem)
 
 **Data:** 2026-10-23
-**Status:** Desenho aprovado pelo usuário em 2026-10-23, com execução autorizada
+**Status:** Implementado em 2026-10-23 (plano: `docs/superpowers/plans/2026-10-23-produtos-fase-e.md`)
 **Spec canônica:** [`docs/modules/produtos-listagem.md`](../../modules/produtos-listagem.md) · Decisão: DEC-035
 
 ## Escopo da fase

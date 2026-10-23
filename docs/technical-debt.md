@@ -240,7 +240,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Modulo:** Backend/Frontend (Clientes, Produtos)
 - **Origem:** Design do modulo Clientes (DEC-029)
 - **Prioridade:** baixa
-- **Status:** aberto
+- **Status:** resolvido para Produtos na Fase E (DEC-035); aberto para Clientes (reutilizar `PaginacaoLista` e o padrao `ConsultaDeProdutos`)
 - **Descricao:** `GET /api/clientes` (assim como `GET /api/produtos`) retorna a lista completa da empresa, sem paginacao. Mantido assim por consistencia e simplicidade no MVP.
 - **Impacto:** Em empresas com milhares de clientes/produtos, a listagem pode ficar lenta e pesada para a tela.
 - **Quando revisar:** Quando uma empresa real passar de alguns milhares de registros ou quando o PDV exigir busca incremental com limite.
@@ -423,6 +423,34 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
     - registrar a escolha de trava pessimista no lugar do bloqueio otimista do principio 9.
 - **Impacto:** Robustez e preparacao do PDV; nenhum risco imediato no uso atual.
 - **Quando revisar:** Na spec do PDV (etapa 11) e no endurecimento pre-deploy.
+
+## DT-033 — Endurecimentos da listagem de produtos (Fase E)
+
+- **ID:** DT-033
+- **Modulo:** Backend/Frontend (Catalogo — listagem)
+- **Origem:** Revisoes da Fase E
+- **Prioridade:** baixa
+- **Status:** aberto
+- **Descricao:**
+  - **Desempenho:**
+    - indice de trigramas (`pg_trgm`) para a busca "contem" quando uma empresa passar de dezenas de milhares de produtos;
+    - indice para `status=todos` com ordem por nome e para `-nome`;
+    - remover `idx_produto_empresa` da V1, redundante com os novos.
+  - **Consistencia:**
+    - contagem e ids em comandos separados (READ COMMITTED): avaliar `REPEATABLE_READ`;
+    - `CHECK (starts_with(busca_normalizada, nome_normalizado))` como defesa contra escrita direta;
+    - equivalencia SQL x Java da V10 so para as 53 letras da lista (usar `normalize(NFD)` se surgir outra escrita).
+  - **Migrations futuras com volume:** `CREATE INDEX CONCURRENTLY` e `UPDATE` em lotes.
+  - **Frontend:**
+    - entre 768 e ~1.150 px a tabela rola dentro do proprio quadro (a pagina nao rola); avaliar com o usuario mostrar a tabela so a partir de 1024 px;
+    - texto de exemplo da busca cortado em 375 px;
+    - "Desfazer" ao inativar;
+    - tom proprio para o selo de promocao (brandbook);
+    - abrir o produto direto quando a leitura de codigo der um unico resultado;
+    - campo "ir para a pagina" so a partir de ~5 paginas;
+    - categorias inativas no fim do seletor do filtro.
+- **Impacto:** Desempenho em catalogos grandes e refinamentos de UX; nenhum risco imediato.
+- **Quando revisar:** Quando um cliente tiver catalogo grande ou na proxima rodada de UX da lista.
 
 ## DT-026 — Teto de profundidade e de quantidade na arvore de categorias
 

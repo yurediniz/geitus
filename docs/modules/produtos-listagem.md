@@ -1,6 +1,6 @@
 # Produtos: Listagem (Fase E da evolução de Produtos)
 
-> **Status:** spec aprovada em 2026-10-23 (desenho aprovado em conversa, com execução autorizada). Quinta das 6 fases da DEC-030; decisões desta fase na **DEC-035**. Depende da Fase D ([produtos-estoque.md](produtos-estoque.md)). Fecha a DT-020 para Produtos. Registro de design: [`docs/superpowers/specs/2026-10-23-produtos-fase-e-design.md`](../superpowers/specs/2026-10-23-produtos-fase-e-design.md).
+> **Status:** implementado em 2026-10-23 (migration V10 aplicada). Ajustes das revisões em §9. Quinta das 6 fases da DEC-030; decisões desta fase na **DEC-035**. Depende da Fase D ([produtos-estoque.md](produtos-estoque.md)). Fecha a DT-020 para Produtos. Registro de design: [`docs/superpowers/specs/2026-10-23-produtos-fase-e-design.md`](../superpowers/specs/2026-10-23-produtos-fase-e-design.md).
 
 ## 1. Visão geral
 
@@ -224,3 +224,27 @@ O desempate é sempre por `nome_normalizado` e depois por `id`, para a paginaç�
 ## 8. Pontos em aberto
 - **Índice de trigramas:** fica para quando um cliente passar de dezenas de milhares de produtos.
 - **Clientes:** a lista de Clientes continua sem paginação (DT-020). O componente `PaginacaoLista` fica pronto para ela.
+
+## 9. Ajustes incorporados na implementação (revisões)
+- **V10:**
+  - `busca_normalizada` e `nome_normalizado` com `COLLATE "C"`, para a ordem por nome não depender da collation do banco;
+  - índices de "recentes" e "atualizados" com o mesmo desempate do `ORDER BY` (`nome_normalizado, id`);
+  - a normalização remove também caracteres de controle e de formatação (invisíveis), no Java e no SQL.
+- **API:**
+  - `promocao` aceita só `true`/`false` (outro valor → 400 "Filtro de promoção inválido.");
+  - `busca` tem no máximo 200 caracteres ("A busca deve ter no máximo 200 caracteres.");
+  - os padrões ficam num só lugar (`ParametrosDaListagem.daRequisicao`);
+  - a OpenAPI lista os valores aceitos.
+- **Tela:**
+  - sem a coluna Status: o selo "Inativo" aparece ao lado do nome;
+  - Categoria e Unidade só a partir de 1024 px;
+  - a tabela fica num quadro com rolagem lateral própria (a página nunca rola para o lado);
+  - ações: "Estoque" visível e Editar e Inativar/Reativar no menu "⋯";
+  - cards do celular enxutos, com o nome como link;
+  - título com o total ("27 produtos", "1 produto encontrado"), anunciado ao leitor de tela;
+  - estados vazios distinguem "nenhum ativo" (com "Buscar também nos inativos" / "Ver todos") de "nenhum cadastrado";
+  - mensagens de inativar e reativar com o nome do produto;
+  - o selo "Promoção" ganhou ícone;
+  - o filtro de estoque se chama "Baixo ou sem estoque";
+  - "Ordenar por" fica por último, e no celular a ordem atual aparece junto do botão "Filtros".
+- **Dívidas:** DT-020 resolvida para Produtos; DT-033 (endurecimentos da listagem).

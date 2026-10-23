@@ -29,7 +29,7 @@ Frontend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Co
 - **Autenticação**: tela de login, estado de sessão e proteção de rotas (ver seção "Autenticação" abaixo).
 - **Empresa** (`/empresa`): cadastro da empresa do usuário autenticado (representante legal, "Já possui CNPJ?", endereço com autofill por CEP); edição apenas para ADMIN, leitura para os demais. Nome da empresa visível na sidebar.
 - **Usuários** (`/usuarios`, apenas ADMIN via `AdminRoute`): listagem, criação, edição, inativação/reativação e redefinição de senha; qualquer usuário pode trocar a própria senha.
-- **Produtos** (`/produtos`): listagem com busca e filtro de status guardados na URL. Cadastro e edição em **página própria** (`/produtos/novo`, `/produtos/:id`) com abas Geral, Preços, Estoque e Códigos:
+- **Produtos** (`/produtos`): listagem paginada (25 por página) com busca enquanto se digita, filtros (status, categoria, estoque, promoção) e ordenação, tudo guardado na URL; tabela a partir de 768 px e cards no celular. Cadastro e edição em **página própria** (`/produtos/novo`, `/produtos/:id`) com abas Geral, Preços, Estoque e Códigos:
   - cadastro mínimo inteiro na aba Geral (nome, unidade, preço e código de barras);
   - vários códigos de barras, com validação EAN/UPC;
   - SKU gerado automaticamente;
