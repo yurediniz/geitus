@@ -9,7 +9,7 @@ Torna a lista de produtos utilizável com milhares de itens:
 - **busca enquanto se digita**, sem diferenciar maiúsculas nem acentos, por nome, nome curto, SKU, marca e qualquer código de barras;
 - **ordenação** por nome, preço, margem, estoque e data;
 - **filtros combináveis**: status, categoria (com as subcategorias), estoque (baixo/sem estoque) e em promoção;
-- **tabela** em telas médias e grandes e **cards** no celular;
+- **tabela** a partir de 1.024 px e **cards** abaixo disso (celular e tablet);
 - **estado na URL**, para voltar da edição exatamente onde se estava.
 
 ## 2. Escopo
@@ -120,7 +120,7 @@ O desempate é sempre por `nome_normalizado` e depois por `id`, para a paginaç�
 - **"Limpar filtros":** aparece quando houver qualquer filtro diferente do padrão.
 - **Tablet e celular:** os filtros quebram em linhas, e no celular "Filtros" vira um bloco que abre e fecha, com um contador de filtros ativos.
 
-### 6.2 Tabela (≥ 768 px)
+### 6.2 Tabela (≥ 1.024 px)
 
 | Coluna | Conteúdo | Ordenável |
 |---|---|---|
@@ -136,7 +136,7 @@ O desempate é sempre por `nome_normalizado` e depois por `id`, para a paginaç�
 - **Cabeçalho:** clicar ordena ascendente e um segundo clique inverte. O cabeçalho tem `aria-sort` e um ícone de direção. O select "Ordenar por" e o cabeçalho ficam sincronizados.
 - **Linha:** clicar no nome abre o produto. As ações são botões próprios.
 
-### 6.3 Celular (< 768 px)
+### 6.3 Celular e tablet (< 1.024 px)
 - **Cards atuais:** mostram nome, preço com selo, estoque com selo, status e as ações.
 - **Ordenação:** só pelo select.
 
@@ -218,7 +218,7 @@ O desempate é sempre por `nome_normalizado` e depois por `id`, para a paginaç�
 - **Ordenação:** o clique no cabeçalho alterna e atualiza `aria-sort` e o select.
 - **Paginação:** "1–25 de 60", Próxima, Anterior, ir para a página e página além do fim → última.
 - **Estados:** carregando, trocando (itens antigos visíveis), erro, vazio sem filtro e vazio com filtro.
-- **Layout:** tabela ≥ 768 px e cards abaixo.
+- **Layout:** tabela ≥ 1.024 px e cards abaixo.
 - **Ações:** as ações atuais continuam funcionando na tabela e nos cards (Editar, Ajustar estoque, Inativar/Reativar).
 
 ## 8. Pontos em aberto
@@ -237,8 +237,7 @@ O desempate é sempre por `nome_normalizado` e depois por `id`, para a paginaç�
   - a OpenAPI lista os valores aceitos.
 - **Tela:**
   - sem a coluna Status: o selo "Inativo" aparece ao lado do nome;
-  - Categoria e Unidade só a partir de 1024 px;
-  - a tabela fica num quadro com rolagem lateral própria (a página nunca rola para o lado);
+  - **decisão do usuário (2026-10-23):** a tabela aparece só a partir de 1.024 px (cards abaixo), e Categoria e Unidade só a partir de 1.280 px, para a tabela caber sem rolagem lateral. O quadro com rolagem própria fica como rede de segurança, e a página nunca rola para o lado;
   - ações: "Estoque" visível e Editar e Inativar/Reativar no menu "⋯";
   - cards do celular enxutos, com o nome como link;
   - título com o total ("27 produtos", "1 produto encontrado"), anunciado ao leitor de tela;

@@ -805,7 +805,7 @@ Quinta fase da DEC-030. A lista carregava todos os produtos de uma vez (DT-020),
 - `GET /api/produtos` passa a devolver `PaginaResponse` (25 por página, máximo 100), com `busca`, `status` (`ativos` padrão/`inativos`/`todos`), `categoria` (com descendentes), `estoque` (`baixo` inclui sem estoque/`sem`), `promocao` (vigente hoje) e `ordem` (nome, preço, margem, estoque, recentes, atualizados).
 - Consulta de leitura em SQL nativo (`ConsultaDeProdutos`, `NamedParameterJdbcTemplate`) em duas etapas: ids e total, depois os produtos com as relações na mesma ordem. SQL só com fragmentos fixos escolhidos por enums.
 - Colunas `busca_normalizada` e `nome_normalizado` mantidas pela aplicação (`TextoDeBusca.normalizar`). A migration V10 preenche os existentes e cria os índices. Sem extensão do PostgreSQL.
-- Tela com tabela (≥ 768 px) e cards no celular, busca enquanto se digita (300 ms, com cancelamento das requisições antigas), páginas numeradas e todo o estado na URL.
+- Tela com tabela a partir de 1.024 px (Categoria e Unidade a partir de 1.280 px) e cards abaixo disso, busca enquanto se digita (300 ms, com cancelamento das requisições antigas), páginas numeradas e todo o estado na URL.
 
 **Motivo:**
 Decisões do usuário (páginas numeradas, tabela, filtro de estoque, Nome A–Z). A consulta em duas etapas é a forma mais simples de filtrar e ordenar no banco por dados de catálogo, estoque e promoção sem misturar os pacotes.

@@ -12,7 +12,7 @@ Item §8 (Listagem) do pedido de evolução (DEC-030), sem a miniatura (Fase F).
 | Tema | Escolha |
 |---|---|
 | Navegação | **Páginas numeradas**, 25 por página, página na URL |
-| Layout | **Tabela** com cabeçalho ordenável (≥ 768 px) e **cards** no celular |
+| Layout | **Tabela** com cabeçalho ordenável e **cards** no celular; depois da revisão, tabela só a partir de **1.024 px** e Categoria/Unidade a partir de **1.280 px** (decisão do usuário, para caber sem rolagem) |
 | Filtro de estoque | **Todos / Baixo (inclui sem estoque) / Sem estoque** |
 | Ordenação padrão | **Nome A–Z** |
 
