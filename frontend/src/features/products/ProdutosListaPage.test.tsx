@@ -101,10 +101,14 @@ function SondaProduto() {
   )
 }
 
+/** Cliente do ultimo render: os testes esperam as consultas ficarem ociosas em vez de dormir. */
+let clienteAtual: QueryClient | null = null
+
 function renderLista(entrada: string | { pathname: string; search?: string; state?: unknown } = '/produtos') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
+  clienteAtual = queryClient
   const router = createMemoryRouter(
     [
       { path: '/produtos', element: <ProdutosListaPage /> },
@@ -119,6 +123,20 @@ function renderLista(entrada: string | { pathname: string; search?: string; stat
     </QueryClientProvider>,
   )
   return router
+}
+
+/** Espera nenhuma consulta nem mutacao em andamento (no lugar de esperas por tempo). */
+async function consultasOciosas(): Promise<void> {
+  await waitFor(() => {
+    expect(clienteAtual?.isFetching()).toBe(0)
+    expect(clienteAtual?.isMutating()).toBe(0)
+  })
+}
+
+/** Espera a primeira carga da lista terminar (o esqueleto sumir), qualquer que seja o resultado. */
+async function listaCarregada(): Promise<void> {
+  await waitFor(() => expect(screen.queryByRole('status', { name: /carregando produtos/i })).not.toBeInTheDocument())
+  await consultasOciosas()
 }
 
 async function cardDoProduto(nome: string): Promise<HTMLElement> {
@@ -151,6 +169,10 @@ function gatilhoCategoria(): HTMLElement {
 }
 
 describe('ProdutosListaPage', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     definirPerfil('ADMIN')
@@ -168,7 +190,7 @@ describe('ProdutosListaPage', () => {
   it('consulta com os padroes: ativos, por nome, pagina 1', async () => {
     renderLista()
 
-    await estadoVazio('Nenhum produto cadastrado ainda.')
+    await listaCarregada()
     expect(listarProdutosMock).toHaveBeenCalledWith(
       { busca: '', status: 'ativos', categoria: null, estoque: null, promocao: false, ordem: 'nome', pagina: 1 },
       expect.any(AbortSignal),
@@ -455,7 +477,7 @@ describe('ProdutosListaPage', () => {
 
     it('o campo tem o texto de exemplo e espaco fixo para o indicador', async () => {
       renderLista()
-      await estadoVazio('Nenhum produto cadastrado ainda.')
+      await listaCarregada()
 
       expect(campoBusca()).toHaveAttribute('placeholder', 'Nome, SKU, marca ou código')
       expect(campoBusca()).toHaveClass('pr-28')
@@ -464,11 +486,12 @@ describe('ProdutosListaPage', () => {
     it('digitar espera 300 ms parado e entao consulta com a busca', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true })
       const router = renderLista('/produtos?pagina=2')
-      await screen.findByRole('searchbox')
+      await listaCarregada()
 
       fireEvent.change(campoBusca(), { target: { value: 'arroz' } })
       act(() => vi.advanceTimersByTime(299))
       expect(chamadasComBusca('arroz')).toHaveLength(0)
+      expect(router.state.location.search).toBe('?pagina=2')
 
       act(() => vi.advanceTimersByTime(1))
       await waitFor(() => expect(chamadasComBusca('arroz')).toHaveLength(1))
@@ -479,7 +502,7 @@ describe('ProdutosListaPage', () => {
 
     it('Enter consulta na hora, sem esperar o atraso', async () => {
       renderLista()
-      await estadoVazio('Nenhum produto cadastrado ainda.')
+      await listaCarregada()
 
       fireEvent.change(campoBusca(), { target: { value: 'feijao' } })
       fireEvent.submit(campoBusca().closest('form') as HTMLFormElement)
@@ -489,7 +512,7 @@ describe('ProdutosListaPage', () => {
 
     it('buscar nao remonta o campo: o foco e o espaco no fim continuam', async () => {
       const router = renderLista()
-      await estadoVazio('Nenhum produto cadastrado ainda.')
+      await listaCarregada()
       const campo = campoBusca()
       campo.focus()
 
@@ -599,6 +622,31 @@ describe('ProdutosListaPage', () => {
       expect(router.state.historyAction).toBe('PUSH')
     })
 
+    it('"Ordenar por" tem as 10 opcoes da spec, na ordem, todas aceitas pelo backend', async () => {
+      renderLista()
+      await listaCarregada()
+
+      const opcoes = within(screen.getByRole('combobox', { name: 'Ordenar por' }))
+        .getAllByRole('option')
+        .map((opcao) => [opcao.textContent, (opcao as HTMLOptionElement).value])
+      expect(opcoes).toEqual([
+        ['Nome (A–Z)', 'nome'],
+        ['Nome (Z–A)', '-nome'],
+        ['Menor preço', 'preco'],
+        ['Maior preço', '-preco'],
+        ['Maior margem', '-margem'],
+        ['Menor margem', 'margem'],
+        ['Maior estoque', '-estoque'],
+        ['Menor estoque', 'estoque'],
+        ['Mais recentes', 'recentes'],
+        ['Atualizados recentemente', 'atualizados'],
+      ])
+      const aceitosPeloBackend = ['nome', '-nome', 'preco', '-preco', 'margem', '-margem', 'estoque', '-estoque', 'recentes', 'atualizados']
+      for (const [, valor] of opcoes) {
+        expect(aceitosPeloBackend).toContain(valor)
+      }
+    })
+
     it('o filtro de estoque diz "Baixo ou sem estoque"', async () => {
       renderLista()
       await screen.findByRole('searchbox')
@@ -686,6 +734,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('"Limpar filtros" com digitacao pendente limpa o campo e o atraso nao grava a busca de novo', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
       listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
       const router = renderLista('/produtos?status=inativos')
       await cardDoProduto('Arroz 5kg')
@@ -695,7 +744,9 @@ describe('ProdutosListaPage', () => {
 
       await waitFor(() => expect(router.state.location.search).toBe(''))
       expect(campoBusca()).toHaveValue('')
-      await new Promise((resolver) => setTimeout(resolver, 400))
+      // Passa (com folga) o atraso da busca: nada pode ser gravado.
+      act(() => vi.advanceTimersByTime(400))
+      await consultasOciosas()
       expect(router.state.location.search).toBe('')
       expect(chamadasComBusca('arr')).toHaveLength(0)
     })
@@ -743,6 +794,34 @@ describe('ProdutosListaPage', () => {
       await waitFor(() => expect(cabecalho()).toHaveAttribute('aria-sort', 'descending'))
       expect(screen.getByRole('combobox', { name: 'Ordenar por' })).toHaveValue('-preco')
       expect(ultimosParametros().ordem).toBe('-preco')
+    })
+
+    it('Nome ja e o padrao: um clique inverte para -nome (descending)', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
+      const router = renderLista()
+      const tabela = await screen.findByRole('table')
+      const nome = () => within(tabela).getByRole('columnheader', { name: /nome/i })
+
+      fireEvent.click(within(nome()).getByRole('button'))
+
+      await waitFor(() => expect(nome()).toHaveAttribute('aria-sort', 'descending'))
+      expect(ultimosParametros().ordem).toBe('-nome')
+      expect(router.state.location.search).toBe('?ordem=-nome')
+    })
+
+    it.each([
+      ['Margem', 'margem'],
+      ['Estoque', 'estoque'],
+    ] as const)('%s: o primeiro clique ordena ascendente', async (coluna, ordem) => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
+      renderLista()
+      const tabela = await screen.findByRole('table')
+      const cabecalho = () => within(tabela).getByRole('columnheader', { name: new RegExp(coluna, 'i') })
+
+      fireEvent.click(within(cabecalho()).getByRole('button'))
+
+      await waitFor(() => expect(cabecalho()).toHaveAttribute('aria-sort', 'ascending'))
+      expect(ultimosParametros().ordem).toBe(ordem)
     })
 
     it('o select muda o cabecalho ordenado', async () => {
@@ -810,8 +889,36 @@ describe('ProdutosListaPage', () => {
       await cardDoProduto('Arroz 5kg')
       expect(router.state.location.search).toBe('?estoque=baixo&pagina=2')
       expect(router.state.historyAction).toBe('REPLACE')
-      await new Promise((resolver) => setTimeout(resolver, 50))
+      await consultasOciosas()
       expect(chamadasDaLista().map((params) => params.pagina)).toEqual([5, 2])
+    })
+
+    it('inativar o unico item da ultima pagina volta para a anterior, sem laco', async () => {
+      let inativado = false
+      listarProdutosMock.mockImplementation(async (params) => {
+        if (params.pagina === 3) {
+          return inativado
+            ? paginaDe([], { pagina: 2, totalItens: 50 })
+            : paginaDe([produtoAtivo], { pagina: 2, totalItens: 51 })
+        }
+        return paginaDe([produtoSimples], { pagina: params.pagina - 1, totalItens: inativado ? 50 : 51 })
+      })
+      inativarProdutoMock.mockImplementation(async () => {
+        inativado = true
+        return { ...produtoAtivo, ativo: false }
+      })
+      const router = renderLista('/produtos?pagina=3')
+      await cardDoProduto('Arroz 5kg')
+
+      const menu = await abrirMenu(await linhaDoProduto('Arroz 5kg'), 'Arroz 5kg')
+      fireEvent.click(within(menu).getByRole('menuitem', { name: 'Inativar' }))
+
+      expect(await screen.findByText('Arroz 5kg inativado. Ele aparece em Status: Inativos.')).toBeInTheDocument()
+      await waitFor(() => expect(router.state.location.search).toBe('?pagina=2'))
+      expect(router.state.historyAction).toBe('REPLACE')
+      expect(await cardDoProduto('Produto Simples')).toBeInTheDocument()
+      await consultasOciosas()
+      expect(chamadasDaLista().map((params) => params.pagina)).toEqual([3, 3, 2])
     })
 
     it('voltar a mesma pagina alem do fim corrige de novo (o esqueleto nao fica preso)', async () => {

@@ -111,6 +111,20 @@ describe('useFiltrosDaListaDeProdutos', () => {
     expect(router.state.historyAction).toBe('REPLACE')
   })
 
+  it('busca com caracteres especiais vai e volta da URL identica', () => {
+    const busca = '50% & café+leite'
+    const { router, hook } = montar()
+
+    act(() => hook().alterar({ busca }))
+
+    expect(new URLSearchParams(router.state.location.search).get('busca')).toBe(busca)
+    expect(hook().filtros.busca).toBe(busca)
+
+    // E reabrindo a lista pela mesma URL (ex.: voltar da edicao).
+    const reaberta = montar(`/produtos${router.state.location.search}`)
+    expect(reaberta.hook().filtros.busca).toBe(busca)
+  })
+
   it('alterar sem mudanca real nao mexe na URL', () => {
     const { router, hook } = montar('/produtos?busca=arroz&pagina=3')
 
