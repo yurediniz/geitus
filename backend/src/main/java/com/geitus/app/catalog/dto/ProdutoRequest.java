@@ -4,6 +4,9 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.geitus.app.shared.json.InteiroSemCasasDecimais;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
@@ -145,6 +148,7 @@ public record ProdutoRequest(
                 + "Exibido sem zeros a esquerda", example = "542")
         @Min(value = 1, message = "O código do produto deve ter de 1 a 6 dígitos.")
         @Max(value = 999999, message = "O código do produto deve ter de 1 a 6 dígitos.")
+        @JsonDeserialize(using = InteiroSemCasasDecimais.class)
         Integer codigo,
 
         @Schema(description = "Se o produto e vendido na balanca (exige codigo); null ou ausente = false",

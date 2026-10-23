@@ -1306,6 +1306,38 @@ class ProdutoControllerTest {
                         .value("Este código já está em uso no produto Açúcar a granel."));
     }
 
+    /** 542.9 nao pode virar 542: a coercao de decimal para inteiro esta desligada (application.yml). */
+    @Test
+    void codigoFracionario_400() throws Exception {
+        for (String fracionario : List.of("542.9", "542.0", "1e3")) {
+            mockMvc.perform(post("/api/produtos")
+                            .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(corpo("Produto", "10.00", "\"codigo\": " + fracionario)))
+                    .andExpect(status().isBadRequest());
+        }
+
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void codigoNosLimites_1e999999_aceitos() throws Exception {
+        when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
+                .thenReturn(respostaComId(PRODUTO_ID, "Produto", null));
+
+        for (String limite : List.of("1", "999999")) {
+            mockMvc.perform(post("/api/produtos")
+                            .header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(corpo("Produto", "10.00", "\"codigo\": " + limite)))
+                    .andExpect(status().isCreated());
+        }
+
+        ArgumentCaptor<ProdutoRequest> requests = ArgumentCaptor.forClass(ProdutoRequest.class);
+        verify(produtoService, times(2)).cadastrarParaUsuario(eq(1L), requests.capture());
+        assertThat(requests.getAllValues()).extracting(ProdutoRequest::codigo).containsExactly(1, 999999);
+    }
+
     /** O {@code numero} nunca e aceito no request: o mesmo corpo com e sem ele chega igual ao service. */
     @Test
     void numeroNoJsonEIgnorado() throws Exception {

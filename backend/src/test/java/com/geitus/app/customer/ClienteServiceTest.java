@@ -410,7 +410,7 @@ class ClienteServiceTest {
 
     /** O CPF repetido e recusado antes de reservar o numero: nenhum numero e consumido. */
     @Test
-    void cadastroRecusadoNaoReservaNumero() {
+    void cadastroRecusadoAntesDeReservarNaoConsomeNumero() {
         usuarioAtivoDaEmpresa();
         when(clienteRepository.existsByCpfAndEmpresa_Id(CPF_VALIDO, ID_EMPRESA)).thenReturn(true);
 

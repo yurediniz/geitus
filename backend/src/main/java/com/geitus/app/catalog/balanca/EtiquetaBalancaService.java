@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +46,8 @@ public class EtiquetaBalancaService implements TamanhoDoCodigoNaEtiqueta {
     private static final Locale PORTUGUES_DO_BRASIL = Locale.of("pt", "BR");
     private static final int CASAS_DO_REAL = 2;
 
+    private static final Logger LOG = LoggerFactory.getLogger(EtiquetaBalancaService.class);
+
     private final ConfiguracaoEtiquetaRepository configuracaoRepository;
     private final ProdutoRepository produtoRepository;
     private final EmpresaRepository empresaRepository;
@@ -73,18 +77,24 @@ public class EtiquetaBalancaService implements TamanhoDoCodigoNaEtiqueta {
      * primeira vez. Devolve tambem os produtos "Vendidos na balanca" cujo
      * codigo nao cabe no novo tamanho: o aviso nao bloqueia (spec 3.3), e
      * esses produtos so voltam a salvar com um codigo menor (Review Focus 3).
+     *
+     * <p><b>Rastro provisorio</b> ate existir a auditoria: log {@code INFO} so
+     * com identificadores (usuario e empresa) e o formato salvo, como o da
+     * exclusao de produto. O {@code saveAndFlush} vem antes do log, para so
+     * registrar o que o banco aceitou.
      */
     @Transactional
     public SalvarEtiquetaResponse salvarParaUsuario(Long idUsuario, ConfiguracaoEtiquetaRequest request) {
         Long empresaId = resolverEmpresaId(idUsuario);
         ConfiguracaoEtiqueta configuracao = request.paraConfiguracao();
-        configuracao.validar();
 
         ConfiguracaoEtiquetaBalanca gravada = configuracaoRepository.findByEmpresa_Id(empresaId)
                 .map(existente -> existente.aplicar(configuracao))
                 .orElseGet(() -> new ConfiguracaoEtiquetaBalanca(empresaRepository.getReferenceById(empresaId),
                         configuracao));
         configuracaoRepository.saveAndFlush(gravada);
+        LOG.info("Etiqueta de balanca salva: usuario={} empresa={} formato={}", idUsuario, empresaId,
+                configuracao.descricaoCompacta());
 
         return new SalvarEtiquetaResponse(ConfiguracaoEtiquetaResponse.de(gravada.configuracao(), false),
                 produtosComCodigoGrandeDemais(empresaId, configuracao.digitosCodigo()));
@@ -98,7 +108,6 @@ public class EtiquetaBalancaService implements TamanhoDoCodigoNaEtiqueta {
     public TesteEtiquetaResponse testarParaUsuario(Long idUsuario, TesteEtiquetaRequest request) {
         Long empresaId = resolverEmpresaId(idUsuario);
         ConfiguracaoEtiqueta configuracao = request.configuracao().paraConfiguracao();
-        configuracao.validar();
 
         Optional<LeituraEtiqueta> leitura = LeitorEtiquetaBalanca.ler(request.codigoLido().strip(), configuracao);
         if (leitura.isEmpty()) {
@@ -115,7 +124,15 @@ public class EtiquetaBalancaService implements TamanhoDoCodigoNaEtiqueta {
 
     // ---------- Uso interno ----------
 
-    /** Configuracao da empresa, ou o padrao se ela ainda nao salvou a sua. */
+    /**
+     * Configuracao da empresa, ou o padrao se ela ainda nao salvou a sua.
+     *
+     * <p>Chamado de dentro de outra transacao (o cadastro do produto, via
+     * {@link #digitosCodigo}), a leitura ENTRA na transacao de quem chama, de
+     * proposito: o produto e validado com a configuracao vista na mesma
+     * transacao, e o {@code readOnly} so vale quando este metodo abre a
+     * transacao.
+     */
     @Transactional(readOnly = true)
     public ConfiguracaoEtiqueta configuracaoDaEmpresa(Long empresaId) {
         return configuracaoRepository.findByEmpresa_Id(empresaId)
@@ -123,6 +140,11 @@ public class EtiquetaBalancaService implements TamanhoDoCodigoNaEtiqueta {
                 .orElseGet(ConfiguracaoEtiqueta::padrao);
     }
 
+    /**
+     * Digitos do codigo na etiqueta da empresa, para o cadastro do produto. A
+     * chamada e interna ({@link #configuracaoDaEmpresa} sem passar pelo proxy):
+     * a leitura roda na transacao do cadastro, de proposito (ver la).
+     */
     @Override
     public int digitosCodigo(Long empresaId) {
         return configuracaoDaEmpresa(empresaId).digitosCodigo();

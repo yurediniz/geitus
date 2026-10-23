@@ -21,6 +21,19 @@ import org.springframework.transaction.annotation.Transactional;
  * na primeira vez com {@code INSERT ... ON CONFLICT DO NOTHING}, seguro tambem
  * entre transacoes concorrentes.
  *
+ * <p><b>Toda criacao de produto ou de cliente precisa passar por aqui</b>
+ * (inclusive cargas e scripts): um registro gravado com numero escolhido por
+ * fora deixa {@code numeracoes} para tras, e o proximo cadastro bate na
+ * UNIQUE {@code (empresa_id, numero)}. Se isso acontecer, a ressincronizacao e:
+ * <pre>
+ * UPDATE numeracoes n SET ultimo_numero = (SELECT coalesce(max(numero), 0) FROM produtos p
+ *  WHERE p.empresa_id = n.empresa_id) WHERE tipo = 'PRODUTO';
+ * UPDATE numeracoes n SET ultimo_numero = (SELECT coalesce(max(numero), 0) FROM clientes c
+ *  WHERE c.empresa_id = n.empresa_id) WHERE tipo = 'CLIENTE';
+ * </pre>
+ * (empresa sem linha em {@code numeracoes} e criada no primeiro cadastro e
+ * comeca do 1; se ela ja tiver registros, insira a linha com o maximo antes).
+ *
  * <p>SQL fixo com parametros nomeados; o tipo vai como o nome do enum.
  */
 @Component
@@ -29,7 +42,7 @@ public class Numerador {
     private static final String CRIAR_SE_AUSENTE = """
             INSERT INTO numeracoes (empresa_id, tipo, ultimo_numero)
             VALUES (:empresaId, :tipo, 0)
-            ON CONFLICT DO NOTHING""";
+            ON CONFLICT (empresa_id, tipo) DO NOTHING""";
     private static final String INCREMENTAR = """
             UPDATE numeracoes
                SET ultimo_numero = ultimo_numero + 1

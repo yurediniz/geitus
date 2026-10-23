@@ -165,7 +165,9 @@ public class ProdutoController {
             description = "Substitui a lista inteira de codigos de barras pela informada. estoqueInicial nao e "
                     + "aceito (400: use o ajuste de estoque); produto com movimentacao de estoque nao troca a "
                     + "unidade de venda (400). O numero de registro nunca muda (numero no corpo e ignorado); "
-                    + "as regras de codigo e vendidoBalanca sao as do cadastro.",
+                    + "as regras de codigo e vendidoBalanca sao as do cadastro. Como os demais opcionais, codigo "
+                    + "e vendidoBalanca ausentes sao gravados como nulo e false (diferente de codigosBarras, que "
+                    + "ausente mantem a lista atual).",
             security = @SecurityRequirement(name = "bearer-jwt"))
     @PatchMapping("/{id}")
     public ResponseEntity<ProdutoResponse> atualizar(

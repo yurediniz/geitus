@@ -602,6 +602,16 @@ class ConsultaDeProdutosIT {
         assertThat(nomes(filtro().busca("000000000000000000001"))).containsExactly("Leite");
     }
 
+    /** "0" e "000" nao viram numero (sem numero 0 nem codigo 0); so o texto e os codigos de barras contam. */
+    @Test
+    void buscaPorZeroNaoCasaNumeroNemCodigo() {
+        salvar(produto("Leite").numero(1).codigoDoProduto(1));
+        salvar(produto("Arroz").numero(2).codigoDoProduto(2));
+
+        assertThat(nomes(filtro().busca("0"))).isEmpty();
+        assertThat(nomes(filtro().busca("000"))).isEmpty();
+    }
+
     /** DEC-016: numero e codigo iguais em outra empresa nao aparecem. */
     @Test
     void buscaNumericaIsolaPorEmpresa() {

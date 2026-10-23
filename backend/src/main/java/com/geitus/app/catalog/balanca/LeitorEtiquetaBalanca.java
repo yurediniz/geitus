@@ -13,9 +13,9 @@ import com.geitus.app.catalog.CodigoBarras;
  *
  * <p>So ha leitura com exatamente 13 digitos ASCII comecando pelo prefixo e,
  * com digito verificador, EAN-13 valido. O codigo e lido sem zeros (000542 =
- * 542) e tem de ser um codigo de produto (de 1 a 999999); o preenchimento e
- * ignorado; a informacao e dividida por 10^casas, mantendo a escala (010000
- * com 3 casas = 10.000).
+ * 542) e tem de ser um codigo de produto (de 1 a 999999); os digitos de
+ * preenchimento tem de ser zeros (spec 3.1); a informacao e dividida por
+ * 10^casas, mantendo a escala (010000 com 3 casas = 10.000).
  */
 public final class LeitorEtiquetaBalanca {
 
@@ -43,12 +43,16 @@ public final class LeitorEtiquetaBalanca {
         int fimDaInformacao = inicioDaInformacao + config.digitosInformacao();
 
         int codigoProduto = Integer.parseInt(codigoLido.substring(inicioDoCodigo, fimDoCodigo));
-        if (codigoProduto == 0) {
+        if (codigoProduto == 0 || !soZeros(codigoLido.substring(fimDoCodigo, inicioDaInformacao))) {
             return Optional.empty();
         }
         BigDecimal valor = new BigDecimal(new BigInteger(codigoLido.substring(inicioDaInformacao, fimDaInformacao)),
                 config.casasDecimais());
         return Optional.of(new LeituraEtiqueta(codigoProduto, config.tipoInformacao(), valor));
+    }
+
+    private static boolean soZeros(String preenchimento) {
+        return preenchimento.chars().allMatch(digito -> digito == '0');
     }
 
     private static boolean temOFormato(String codigoLido, ConfiguracaoEtiqueta config) {

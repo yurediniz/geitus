@@ -8,7 +8,13 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -119,6 +125,28 @@ class EtiquetaBalancaIT {
                 .isEqualTo(ConfiguracaoEtiquetaResponse.de(PESO.paraConfiguracao(), false));
         assertThat(linhasDeConfiguracao(empresa)).isEqualTo(1);
         assertThat(etiquetaService.configuracaoDaEmpresa(empresa.getId())).isEqualTo(PESO.paraConfiguracao());
+    }
+
+    /** Rastro provisorio ate a auditoria: INFO so com ids e o formato salvo. */
+    @Test
+    void salvarRegistraRastroSoComIdsEFormato() {
+        Empresa empresa = novaEmpresa();
+        Long admin = novoAdmin(empresa);
+        Logger logDoService = (Logger) LoggerFactory.getLogger(EtiquetaBalancaService.class);
+        ListAppender<ILoggingEvent> capturados = new ListAppender<>();
+        capturados.start();
+        logDoService.addAppender(capturados);
+        try {
+            etiquetaService.salvarParaUsuario(admin, CODIGO_4);
+        } finally {
+            logDoService.detachAppender(capturados);
+        }
+
+        assertThat(capturados.list).singleElement().satisfies(evento -> {
+            assertThat(evento.getLevel()).isEqualTo(Level.INFO);
+            assertThat(evento.getFormattedMessage()).isEqualTo("Etiqueta de balanca salva: usuario=" + admin
+                    + " empresa=" + empresa.getId() + " formato=2|codigo 4|preenchimento 1|VALOR 6|casas 2|com DV");
+        });
     }
 
     @Test

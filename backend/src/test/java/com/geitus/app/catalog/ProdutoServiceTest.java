@@ -51,6 +51,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.postgresql.util.PSQLException;
+import org.postgresql.util.ServerErrorMessage;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
@@ -2304,7 +2306,7 @@ class ProdutoServiceTest {
 
     /** Review Focus 1: a regra recusa antes de reservar o numero, entao nenhum numero e consumido. */
     @Test
-    void cadastroRecusadoNaoReservaNumero() {
+    void cadastroRecusadoAntesDeReservarNaoConsomeNumero() {
         when(produtoRepository.existsBySkuAndEmpresa_Id("SKU-1", EMPRESA_ID)).thenReturn(true);
 
         assertThatThrownBy(() -> cadastrar(requestComUN().sku("SKU-1").build()))
@@ -2481,6 +2483,45 @@ class ProdutoServiceTest {
         assertThatThrownBy(() -> cadastrar(requestComUN().codigoDoProduto(542).sku("SKU-1").build()))
                 .isSameAs(violacao);
         verify(produtoRepository, never()).nomeDoProdutoComCodigoEmNovaTransacao(any(), any(), any());
+    }
+
+    /**
+     * O nome da constraint vem do servidor ({@code PSQLException}), nao do texto
+     * da mensagem: com o PostgreSQL em portugues, o Hibernate nao extrai o nome
+     * (aqui, {@code null}) e a corrida continua reconhecida.
+     */
+    @Test
+    void corridaReconhecidaPeloNomeDaConstraintDoServidor() {
+        unidadeDaEmpresa(un);
+        when(empresaRepository.findById(EMPRESA_ID)).thenReturn(Optional.of(empresa));
+        when(produtoRepository.save(any(Produto.class)))
+                .thenThrow(violacaoComMensagemEmPortugues("uq_produto_empresa_codigo"));
+        when(produtoRepository.nomeDoProdutoComCodigoEmNovaTransacao(EMPRESA_ID, 542, null))
+                .thenReturn(Optional.of("Açúcar a granel"));
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().codigoDoProduto(542).build()))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("Este código já está em uso no produto Açúcar a granel.")
+                .satisfies(noCampo("codigo"));
+    }
+
+    @Test
+    void outraConstraintDoServidorNaoViraConflitoDeCodigo() {
+        unidadeDaEmpresa(un);
+        when(empresaRepository.findById(EMPRESA_ID)).thenReturn(Optional.of(empresa));
+        DataIntegrityViolationException violacao = violacaoComMensagemEmPortugues("uq_produto_empresa_sku");
+        when(produtoRepository.save(any(Produto.class))).thenThrow(violacao);
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().codigoDoProduto(542).build())).isSameAs(violacao);
+        verify(produtoRepository, never()).nomeDoProdutoComCodigoEmNovaTransacao(any(), any(), any());
+    }
+
+    /** Como chega do driver com {@code lc_messages} em portugues: o Hibernate nao acha o nome no texto. */
+    private static DataIntegrityViolationException violacaoComMensagemEmPortugues(String constraint) {
+        PSQLException doServidor = new PSQLException(new ServerErrorMessage("SERRO\0C23505\0Mduplicar valor da "
+                + "chave viola a restrição de unicidade\0n" + constraint + "\0"));
+        return new DataIntegrityViolationException("could not execute statement",
+                new ConstraintViolationException("duplicar valor da chave", doServidor, null));
     }
 
     private static DataIntegrityViolationException violacaoDe(String constraint) {

@@ -21,6 +21,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.hibernate.exception.ConstraintViolationException;
+import org.postgresql.util.PSQLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -669,14 +670,25 @@ public class ProdutoService {
         }
     }
 
-    /** Se a violacao veio da constraint informada (nome lido pelo Hibernate da mensagem do PostgreSQL). */
+    /**
+     * Se a violacao veio da constraint informada. O nome vem do campo
+     * "constraint" que o PostgreSQL envia no erro ({@link PSQLException}), que
+     * nao depende do idioma das mensagens do servidor; so sem ele vale o nome
+     * que o Hibernate extraiu do texto da mensagem.
+     */
     private static boolean violou(DataIntegrityViolationException violacao, String constraint) {
+        String nomeDoServidor = null;
+        String nomeDoHibernate = null;
         for (Throwable causa = violacao; causa != null; causa = causa.getCause()) {
-            if (causa instanceof ConstraintViolationException violacaoDeConstraint) {
-                return constraint.equalsIgnoreCase(violacaoDeConstraint.getConstraintName());
+            if (causa instanceof PSQLException doServidor && doServidor.getServerErrorMessage() != null) {
+                nomeDoServidor = doServidor.getServerErrorMessage().getConstraint();
+            }
+            if (causa instanceof ConstraintViolationException doHibernate && nomeDoHibernate == null) {
+                nomeDoHibernate = doHibernate.getConstraintName();
             }
         }
-        return false;
+        String nome = nomeDoServidor != null ? nomeDoServidor : nomeDoHibernate;
+        return constraint.equalsIgnoreCase(nome);
     }
 
     // ---------- Sugestoes (spec 4.4) ----------

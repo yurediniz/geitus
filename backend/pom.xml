@@ -73,11 +73,13 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
-        <!-- Driver do PostgreSQL (usado em tempo de execucao) -->
+        <!-- Driver do PostgreSQL. Escopo de compilacao so para ler, na violacao de
+             constraint, o nome que o servidor envia (PSQLException ->
+             ServerErrorMessage.getConstraint), sem depender do idioma das
+             mensagens do PostgreSQL (ProdutoService.violou). -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
         </dependency>
 
         <!-- JWT: dependencias preparadas para a autenticacao futura (ainda nao utilizadas) -->

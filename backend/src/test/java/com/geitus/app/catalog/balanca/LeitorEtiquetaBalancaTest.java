@@ -76,15 +76,30 @@ class LeitorEtiquetaBalancaTest {
                 .contains(new LeituraEtiqueta(542, TipoInformacaoEtiqueta.PESO, new BigDecimal("0.750")));
     }
 
-    /** Os digitos de preenchimento (entre o codigo e a informacao) nao entram em nenhum campo. */
+    /** Spec 3.1: o preenchimento sao zeros entre o codigo e a informacao; outro digito nao e etiqueta. */
     @Test
-    void preenchimentoIgnorado() {
+    void preenchimentoDeveSerZero() {
         ConfiguracaoEtiqueta comDoisDePreenchimento =
                 new ConfiguracaoEtiqueta("2", 4, 2, TipoInformacaoEtiqueta.VALOR, 6, 2, false);
-        LeituraEtiqueta esperada = new LeituraEtiqueta(542, TipoInformacaoEtiqueta.VALOR, new BigDecimal("10.00"));
 
-        assertThat(LeitorEtiquetaBalanca.ler("2054200001000", comDoisDePreenchimento)).contains(esperada);
-        assertThat(LeitorEtiquetaBalanca.ler("2054297001000", comDoisDePreenchimento)).contains(esperada);
+        assertThat(LeitorEtiquetaBalanca.ler("2054200001000", comDoisDePreenchimento))
+                .contains(new LeituraEtiqueta(542, TipoInformacaoEtiqueta.VALOR, new BigDecimal("10.00")));
+        assertThat(LeitorEtiquetaBalanca.ler("2054250001000", comDoisDePreenchimento)).isEmpty();
+        assertThat(LeitorEtiquetaBalanca.ler("2054205001000", comDoisDePreenchimento)).isEmpty();
+    }
+
+    /** Prefixo de 2 digitos com DV: 20 + codigo 5 + valor 5 (2 casas) + DV = 13. */
+    @Test
+    void prefixoDeDoisDigitosComDv() {
+        ConfiguracaoEtiqueta prefixoDuploComDv =
+                new ConfiguracaoEtiqueta("20", 5, 0, TipoInformacaoEtiqueta.VALOR, 5, 2, true);
+        String etiqueta = "2000542010008";
+        assertThat(CodigoBarras.digitoVerificadorValido(etiqueta)).isTrue();
+
+        assertThat(LeitorEtiquetaBalanca.ler(etiqueta, prefixoDuploComDv))
+                .contains(new LeituraEtiqueta(542, TipoInformacaoEtiqueta.VALOR, new BigDecimal("10.00")));
+        assertThat(LeitorEtiquetaBalanca.ler("2000542010009", prefixoDuploComDv)).isEmpty();
+        assertThat(LeitorEtiquetaBalanca.ler("2100542010005", prefixoDuploComDv)).isEmpty();
     }
 
     @Test
@@ -114,6 +129,31 @@ class LeitorEtiquetaBalancaTest {
     void dvInvalido_vazio() {
         assertThat(LeitorEtiquetaBalanca.ler("2000542007504", PESO_CODIGO_6)).isEmpty();
         assertThat(LeitorEtiquetaBalanca.ler("2054200010009", TOLEDO_CODIGO_4_COM_ZERO)).isEmpty();
+    }
+
+    @Test
+    void codigoMaximoDe6() {
+        assertThat(LeitorEtiquetaBalanca.ler("2999999010000", ConfiguracaoEtiqueta.padrao()))
+                .contains(new LeituraEtiqueta(999999, TipoInformacaoEtiqueta.VALOR, new BigDecimal("10.000")));
+    }
+
+    /** Modelo 4 + 0 + 6 (2 casas) + DV com o maior codigo de 4 digitos. */
+    @Test
+    void codigo4NoLimite() {
+        String etiqueta = "2999900010005";
+        assertThat(CodigoBarras.digitoVerificadorValido(etiqueta)).isTrue();
+
+        assertThat(LeitorEtiquetaBalanca.ler(etiqueta, TOLEDO_CODIGO_4_COM_ZERO))
+                .contains(new LeituraEtiqueta(9999, TipoInformacaoEtiqueta.VALOR, new BigDecimal("10.00")));
+    }
+
+    /** 2 + codigo 5 + valor 7 (2 casas), sem DV = 13. */
+    @Test
+    void informacaoCom7Digitos() {
+        ConfiguracaoEtiqueta valorDe7 = new ConfiguracaoEtiqueta("2", 5, 0, TipoInformacaoEtiqueta.VALOR, 7, 2, false);
+
+        assertThat(LeitorEtiquetaBalanca.ler("2005420001000", valorDe7))
+                .contains(new LeituraEtiqueta(542, TipoInformacaoEtiqueta.VALOR, new BigDecimal("10.00")));
     }
 
     /** Codigo 000000 nao e um codigo de produto (1 a 999999). */

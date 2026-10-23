@@ -748,7 +748,7 @@ class CatalogoServiceIT {
 
     /** Review Focus 1: o SKU repetido falha e nao "queima" numero; o proximo cadastro e o 2. */
     @Test
-    void cadastroQueFalhaNaoConsomeNumero() {
+    void cadastroRecusadoAntesDeReservarNaoConsomeNumero() {
         Empresa empresa = novaEmpresa();
         Long idUsuario = novoAdmin(empresa);
         UUID un = unidadePadrao(empresa, idUsuario, "UN");
@@ -760,6 +760,27 @@ class CatalogoServiceIT {
 
         assertThat(produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder.comUnidade(un).build())
                 .numero()).isEqualTo(2L);
+    }
+
+    /** Spec 2: o numero nunca e reaproveitado; excluir o ultimo deixa o numero vago. */
+    @Test
+    void numeroDeProdutoExcluidoNaoEReaproveitado() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder.comUnidade(un).nome("Um").build());
+        produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder.comUnidade(un).nome("Dois").build());
+        ProdutoResponse terceiro = produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("Tres").build());
+        assertThat(terceiro.numero()).isEqualTo(3L);
+
+        produtoService.excluirParaUsuario(idUsuario, terceiro.id());
+
+        assertThat(produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("Quatro").build()).numero()).isEqualTo(4L);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT ultimo_numero FROM numeracoes WHERE empresa_id = ? AND tipo = 'PRODUTO'", Long.class,
+                empresa.getId())).isEqualTo(4L);
     }
 
     /** Review Focus 1: cadastros simultaneos na mesma empresa recebem numeros distintos e consecutivos. */
@@ -835,6 +856,34 @@ class CatalogoServiceIT {
 
         assertThat(produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder.comUnidade(kg).build())
                 .numero()).isEqualTo(2L);
+    }
+
+    /**
+     * Corrida na EDICAO: a checagem do codigo "passa" (spy, como se o outro
+     * produto ainda nao tivesse gravado) e o banco recusa no flush da edicao.
+     * A resposta e o 409 com o nome do outro produto (a releitura ignora o
+     * proprio produto) e a edicao e desfeita.
+     */
+    @Test
+    void codigoGravadoAoMesmoTempoNaEdicao_409ComNomeECampo() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID kg = unidadePadrao(empresa, idUsuario, "KG");
+        produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(kg).nome("Açúcar a granel").codigoDoProduto(542).build());
+        ProdutoResponse feijao = produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(kg).nome("Feijão a granel").build());
+        Long idDoFeijao = idInternoDoProduto(feijao.id());
+        doReturn(Optional.empty()).when(produtoRepository).nomeDoProdutoComCodigo(empresa.getId(), 542, idDoFeijao);
+
+        assertThatThrownBy(() -> produtoService.atualizarDadosBasicosParaUsuario(idUsuario, feijao.id(),
+                ProdutoRequestBuilder.comUnidade(kg).nome("Feijão a granel").codigoDoProduto(542).build()))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("Este código já está em uso no produto Açúcar a granel.")
+                .extracting(erro -> ((ProdutoConflitoException) erro).campo()).isEqualTo(Optional.of("codigo"));
+
+        assertThat(jdbcTemplate.queryForObject("SELECT codigo FROM produtos WHERE uuid = ?", Integer.class,
+                feijao.id())).isNull();
     }
 
     /** Review Focus 5: produto sem codigo (como os migrados) editado com codigo nulo e balanca false. */

@@ -18,6 +18,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -68,6 +70,9 @@ class ClienteServiceIT {
     @Autowired
     private UsuarioRepository usuarioRepository;
 
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
     @Test
     void clientesRecebemNumerosEmSequenciaEAEdicaoNaoMuda() {
         Long idUsuario = novoAdmin(novaEmpresa());
@@ -84,13 +89,29 @@ class ClienteServiceIT {
 
     /** Review Focus 1: o CPF repetido falha e nao "queima" numero. */
     @Test
-    void cadastroQueFalhaNaoConsomeNumero() {
+    void cadastroRecusadoAntesDeReservarNaoConsomeNumero() {
         Long idUsuario = novoAdmin(novaEmpresa());
         clienteService.cadastrarParaUsuario(idUsuario, dados("Ana", CPF_VALIDO));
 
         assertThatThrownBy(() -> clienteService.cadastrarParaUsuario(idUsuario, dados("Outra Ana", CPF_VALIDO)))
                 .isInstanceOf(ClienteConflitoException.class);
 
+        assertThat(clienteService.cadastrarParaUsuario(idUsuario, dados("Bruno", null)).getNumero()).isEqualTo(2L);
+    }
+
+    /** O cadastro reservou o numero e foi desfeito (rollback): o proximo recebe o mesmo numero. */
+    @Test
+    void cadastroDesfeitoDepoisDeReservarNaoConsomeNumero() {
+        Long idUsuario = novoAdmin(novaEmpresa());
+        clienteService.cadastrarParaUsuario(idUsuario, dados("Ana", null));
+
+        Long numeroDesfeito = new TransactionTemplate(transactionManager).execute(status -> {
+            Long numero = clienteService.cadastrarParaUsuario(idUsuario, dados("Desfeito", null)).getNumero();
+            status.setRollbackOnly();
+            return numero;
+        });
+
+        assertThat(numeroDesfeito).isEqualTo(2L);
         assertThat(clienteService.cadastrarParaUsuario(idUsuario, dados("Bruno", null)).getNumero()).isEqualTo(2L);
     }
 
