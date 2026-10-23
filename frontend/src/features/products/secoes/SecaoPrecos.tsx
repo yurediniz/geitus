@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Controller, useFormContext } from 'react-hook-form'
-import { CheckCircle2, X } from 'lucide-react'
+import { CheckCircle2, ChevronDown, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,8 +18,10 @@ import {
   type CampoDeBloco,
   calcularMargemMarkup,
   calcularPrecoPelaMargem,
+  calcularPrecoPeloMarkup,
   dataHojeSaoPaulo,
   margemDesejadaValida,
+  markupDesejadoValido,
   numeroValido,
   situacaoPromocaoLocal,
   textoAbaixoDoCusto,
@@ -105,6 +107,68 @@ function BlocoComInterruptor({ id, rotulo, descricao, desabilitado, aoAlternar, 
   )
 }
 
+interface MargemEMarkupDoPrecoProps {
+  /** Nome do preco, para o grupo acessivel (ex.: "preço promocional"). */
+  nome: string
+  preco: string
+  custo: string
+}
+
+/**
+ * Margem e markup de um preco especial (promocional ou de atacado), calculados
+ * sobre o custo como os do preco de venda (spec B2 §5). Sem custo ou preco, "—".
+ */
+function MargemEMarkupDoPreco({ nome, preco, custo }: MargemEMarkupDoPrecoProps) {
+  const { margem, markup } = calcularMargemMarkup(preco, custo)
+  return (
+    <dl role="group" aria-label={`Margem e markup do ${nome}`} className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+      <div className="flex items-baseline gap-1.5">
+        <dt className="text-muted-foreground">Margem</dt>
+        <dd className="font-semibold tabular-nums">{formatarPercentual(margem) ?? '—'}</dd>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <dt className="text-muted-foreground">Markup</dt>
+        <dd className="font-semibold tabular-nums">{formatarPercentual(markup) ?? '—'}</dd>
+      </div>
+    </dl>
+  )
+}
+
+/**
+ * O que sao margem e markup, com o mesmo exemplo para os dois (spec B2 §5).
+ * Sempre visivel em tela larga; no celular, recolhida atras de um botao.
+ */
+function ExplicacaoMargemMarkup() {
+  const [aberta, setAberta] = useState(false)
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        aria-expanded={aberta}
+        aria-controls="explicacao-margem-markup"
+        onClick={() => setAberta((valor) => !valor)}
+        className="inline-flex min-h-11 items-center gap-1 rounded-md text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+      >
+        O que são margem e markup?
+        <ChevronDown className={cn('h-4 w-4 transition-transform', aberta && 'rotate-180')} aria-hidden="true" />
+      </button>
+      <div
+        id="explicacao-margem-markup"
+        className={cn('space-y-1 text-xs text-muted-foreground md:block', aberta ? 'block' : 'hidden')}
+      >
+        <p>
+          <span className="font-medium text-foreground">Margem:</span> quanto do preço de venda é lucro, (preço − custo)
+          ÷ preço. Vender a R$ 15,00 algo que custou R$ 10,00 dá 33,33%.
+        </p>
+        <p>
+          <span className="font-medium text-foreground">Markup:</span> quanto se acrescenta sobre o custo, (preço −
+          custo) ÷ custo. O mesmo exemplo dá 50%.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 /** Texto quando a margem nao pode ser calculada: o que falta informar. */
 function textoSemMargem(precoVenda: string): string {
   return numeroValido(precoVenda) === null
@@ -132,6 +196,7 @@ export function SecaoPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: SecaoP
     custo,
     unidadeId,
     promocaoAtiva,
+    precoPromocional,
     promocaoInicio,
     promocaoFim,
     atacadoAtivo,
@@ -142,6 +207,7 @@ export function SecaoPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: SecaoP
     'custo',
     'unidadeId',
     'promocaoAtiva',
+    'precoPromocional',
     'promocaoInicio',
     'promocaoFim',
     'atacadoAtivo',
@@ -244,9 +310,10 @@ export function SecaoPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: SecaoP
             <AvisoAbaixoDoCusto texto={avisoPrecoVenda} />
           </p>
         )}
+        <ExplicacaoMargemMarkup />
       </GrupoCampos>
 
-      <CalculoPelaMargem custo={custo} desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
+      <CalculadoraDePreco custo={custo} desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
 
       <BlocoComInterruptor
         id="promocaoAtiva"
@@ -282,6 +349,7 @@ export function SecaoPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: SecaoP
             disabled={desabilitado}
           />
         </div>
+        <MargemEMarkupDoPreco nome="preço promocional" preco={precoPromocional} custo={custo} />
         {situacao && (
           <div className="flex flex-wrap items-center gap-2">
             <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', CLASSE_SELO[situacao])}>
@@ -333,6 +401,7 @@ export function SecaoPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: SecaoP
             placeholder="Ex.: 12"
           />
         </div>
+        <MargemEMarkupDoPreco nome="preço de atacado" preco={precoAtacado} custo={custo} />
         {ajudaAtacado && <p className="text-sm text-muted-foreground">{ajudaAtacado}</p>}
       </BlocoComInterruptor>
 
@@ -346,39 +415,77 @@ export function SecaoPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: SecaoP
   )
 }
 
-interface CalculoPelaMargemProps {
+/** Base da calculadora: a margem (sobre o preco) ou o markup (sobre o custo). */
+type BaseDoCalculo = 'margem' | 'markup'
+
+const REGRA_DA_BASE: Readonly<
+  Record<
+    BaseDoCalculo,
+    {
+      rotulo: string
+      opcao: string
+      vazio: string
+      invalido: string
+      valido: (percentual: string) => boolean
+      calcular: (custo: string, percentual: string) => string | null
+    }
+  >
+> = {
+  margem: {
+    rotulo: 'Margem desejada (%)',
+    opcao: 'Pela margem',
+    vazio: 'Informe a margem desejada.',
+    invalido: 'Use uma margem entre 0 e 99,99% (até 2 casas decimais).',
+    valido: margemDesejadaValida,
+    calcular: calcularPrecoPelaMargem,
+  },
+  markup: {
+    rotulo: 'Markup desejado (%)',
+    opcao: 'Pelo markup',
+    vazio: 'Informe o markup desejado.',
+    invalido: 'Use um markup entre 0 e 9.999,99% (até 2 casas decimais).',
+    valido: markupDesejadoValido,
+    calcular: calcularPrecoPeloMarkup,
+  },
+}
+
+interface CalculadoraDePrecoProps {
   custo: string
   desabilitado: boolean
   aoAlterarCampo: () => void
 }
 
 /** Por que o calculo nao pode ser feito; null quando pode. */
-function motivoSemCalculo(custo: string, margem: string): string | null {
+function motivoSemCalculo(base: BaseDoCalculo, custo: string, percentual: string): string | null {
+  const regra = REGRA_DA_BASE[base]
   if (!(Number(custo) > 0)) {
     return 'Informe o custo para calcular o preço.'
   }
-  if (margem.trim() === '') {
-    return 'Informe a margem desejada.'
+  if (percentual.trim() === '') {
+    return regra.vazio
   }
-  if (!margemDesejadaValida(margem)) {
-    return 'Use uma margem entre 0 e 99,99% (até 2 casas decimais).'
+  if (!regra.valido(percentual)) {
+    return regra.invalido
   }
-  return calcularPrecoPelaMargem(custo, margem) === null ? 'O preço calculado passa do limite permitido.' : null
+  return regra.calcular(custo, percentual) === null ? 'O preço calculado passa do limite permitido.' : null
 }
 
 /**
- * "Calcular preco pela margem" (spec 4.2): a margem desejada nao e gravada, so
- * gera o preco de venda, que passa a contar como alterado. Fica no estado da
- * secao (e um auxilio de calculo, nao um dado do produto).
+ * Calculadora do preco de venda (spec 4.2 e B2 §5), pela margem ou pelo markup
+ * desejado: o percentual nao e gravado, so gera o preco de venda, que passa a
+ * contar como alterado. Fica no estado da secao (e um auxilio de calculo, nao
+ * um dado do produto).
  */
-function CalculoPelaMargem({ custo, desabilitado, aoAlterarCampo }: CalculoPelaMargemProps) {
+function CalculadoraDePreco({ custo, desabilitado, aoAlterarCampo }: CalculadoraDePrecoProps) {
   const { setValue } = useFormContext<ProdutoFormValues>()
-  const [margem, setMargem] = useState('')
+  const [base, setBase] = useState<BaseDoCalculo>('margem')
+  const [percentual, setPercentual] = useState('')
   // A confirmacao guarda o custo usado: mudar o custo a esconde (o preco ja nao corresponde).
   const [confirmacao, setConfirmacao] = useState<{ texto: string; custo: string } | null>(null)
-  const preco = calcularPrecoPelaMargem(custo, margem)
-  const motivo = motivoSemCalculo(custo, margem)
-  const margemInvalida = margem.trim() !== '' && !margemDesejadaValida(margem)
+  const regra = REGRA_DA_BASE[base]
+  const preco = regra.calcular(custo, percentual)
+  const motivo = motivoSemCalculo(base, custo, percentual)
+  const percentualInvalido = percentual.trim() !== '' && !regra.valido(percentual)
 
   const calcular = () => {
     if (preco === null) {
@@ -386,32 +493,56 @@ function CalculoPelaMargem({ custo, desabilitado, aoAlterarCampo }: CalculoPelaM
     }
     setValue('precoVenda', preco, { shouldDirty: true, shouldValidate: true })
     aoAlterarCampo()
-    const margemTexto = margem.trim().replace('.', ',')
+    const percentualTexto = percentual.trim().replace('.', ',')
     setConfirmacao({
-      texto: `Preço de venda atualizado para ${formatarMoeda(Number(preco))} (margem de ${margemTexto}%).`,
+      texto: `Preço de venda atualizado para ${formatarMoeda(Number(preco))} (${base} de ${percentualTexto}%).`,
       custo,
     })
   }
 
   return (
     <GrupoCampos
-      titulo="Calcular preço pela margem"
-      idTitulo="margem-desejada-titulo"
+      titulo="Calculadora de preço"
+      idTitulo="calculadora-preco-titulo"
       descricao="O preço de venda é calculado a partir do custo e substitui o atual."
     >
+      <fieldset className="space-y-1.5" disabled={desabilitado}>
+        <legend className="text-sm font-medium">Calcular</legend>
+        <div className="flex flex-wrap gap-2">
+          {(Object.keys(REGRA_DA_BASE) as BaseDoCalculo[]).map((opcao) => (
+            <label
+              key={opcao}
+              className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm has-[:checked]:border-primary has-[:checked]:font-medium has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50"
+            >
+              <input
+                type="radio"
+                name="baseDoCalculo"
+                value={opcao}
+                checked={base === opcao}
+                onChange={() => {
+                  setBase(opcao)
+                  setConfirmacao(null)
+                }}
+                className="accent-primary"
+              />
+              {REGRA_DA_BASE[opcao].opcao}
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <div className="flex flex-wrap items-end gap-3">
-        <div className="w-40 space-y-1.5">
-          <label htmlFor="margemDesejada" className="text-sm font-medium">
-            Margem desejada (%)
+        <div className="w-44 space-y-1.5">
+          <label htmlFor="percentualDesejado" className="text-sm font-medium">
+            {regra.rotulo}
           </label>
           <Input
-            id="margemDesejada"
+            id="percentualDesejado"
             inputMode="decimal"
             autoComplete="off"
             placeholder="Ex.: 30"
-            value={margem}
+            value={percentual}
             onChange={(event) => {
-              setMargem(event.target.value)
+              setPercentual(event.target.value)
               setConfirmacao(null)
             }}
             // Enter aqui calcula (nao salva o produto); Ctrl/Cmd+Enter segue para o formulario.
@@ -422,8 +553,8 @@ function CalculoPelaMargem({ custo, desabilitado, aoAlterarCampo }: CalculoPelaM
               }
             }}
             disabled={desabilitado}
-            aria-invalid={margemInvalida ? true : undefined}
-            aria-describedby={motivo ? 'margemDesejada-ajuda' : undefined}
+            aria-invalid={percentualInvalido ? true : undefined}
+            aria-describedby={motivo ? 'percentualDesejado-ajuda' : undefined}
           />
         </div>
         <Button
@@ -432,13 +563,13 @@ function CalculoPelaMargem({ custo, desabilitado, aoAlterarCampo }: CalculoPelaM
           className="min-h-11"
           onClick={calcular}
           disabled={desabilitado || preco === null}
-          aria-describedby={motivo ? 'margemDesejada-ajuda' : undefined}
+          aria-describedby={motivo ? 'percentualDesejado-ajuda' : undefined}
         >
           Calcular preço
         </Button>
       </div>
       {motivo && (
-        <p id="margemDesejada-ajuda" className="text-xs text-muted-foreground">
+        <p id="percentualDesejado-ajuda" className="text-xs text-muted-foreground">
           {motivo}
         </p>
       )}

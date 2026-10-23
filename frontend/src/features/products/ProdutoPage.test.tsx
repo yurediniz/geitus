@@ -2175,6 +2175,103 @@ describe('ProdutoPage', () => {
       fireEvent.change(screen.getByLabelText('Fim'), { target: { value: fim } })
     }
 
+    describe('margem e markup em todos os preços (Fase B2)', () => {
+      function derivadosDe(nome: RegExp): HTMLElement {
+        return screen.getByRole('group', { name: nome })
+      }
+
+      it('mostra margem e markup ao lado do preço promocional, calculados sobre o custo', async () => {
+        renderNovo()
+        await esperarFormulario()
+        await preencherMinimo('Café', '10,00')
+        fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '6,00' } })
+        fireEvent.click(interruptorPromocao())
+        fireEvent.change(screen.getByLabelText('Preço promocional'), { target: { value: '8,90' } })
+
+        const derivados = derivadosDe(/margem e markup do preço promocional/i)
+        expect(within(derivados).getByText('32,58%')).toBeInTheDocument()
+        expect(within(derivados).getByText('48,33%')).toBeInTheDocument()
+      })
+
+      it('mostra margem e markup ao lado do preço de atacado', async () => {
+        renderNovo()
+        await esperarFormulario()
+        await preencherMinimo('Café', '10,00')
+        fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '6,00' } })
+        fireEvent.click(interruptorAtacado())
+        fireEvent.change(screen.getByLabelText('Preço de atacado'), { target: { value: '8,90' } })
+
+        const derivados = derivadosDe(/margem e markup do preço de atacado/i)
+        expect(within(derivados).getByText('32,58%')).toBeInTheDocument()
+        expect(within(derivados).getByText('48,33%')).toBeInTheDocument()
+      })
+
+      it('sem custo, a margem e o markup dos preços especiais aparecem como "—"', async () => {
+        renderNovo()
+        await esperarFormulario()
+        await preencherMinimo('Café', '10,00')
+        fireEvent.click(interruptorPromocao())
+        fireEvent.change(screen.getByLabelText('Preço promocional'), { target: { value: '8,90' } })
+
+        expect(within(derivadosDe(/margem e markup do preço promocional/i)).getAllByText('—')).toHaveLength(2)
+      })
+
+      it('a calculadora calcula pela margem (10 e 30% → R$ 14,29) ou pelo markup (10 e 30% → R$ 13,00)', async () => {
+        renderNovo()
+        await esperarFormulario()
+        fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '10,00' } })
+        expect(screen.getByRole('radio', { name: 'Pela margem' })).toBeChecked()
+
+        fireEvent.change(screen.getByLabelText('Margem desejada (%)'), { target: { value: '30' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Calcular preço' }))
+        expect(screen.getByLabelText(/preço de venda/i)).toHaveValue('14,29')
+        expect(screen.getByText(/^preço de venda atualizado para R\$\s14,29 \(margem de 30%\)\.$/i)).toBeInTheDocument()
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Pelo markup' }))
+        // Trocar a base tira a confirmacao anterior e o campo passa a ser o do markup.
+        expect(screen.queryByText(/preço de venda atualizado/i)).not.toBeInTheDocument()
+        fireEvent.change(screen.getByLabelText('Markup desejado (%)'), { target: { value: '30' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Calcular preço' }))
+
+        expect(screen.getByLabelText(/preço de venda/i)).toHaveValue('13,00')
+        expect(screen.getByText(/^preço de venda atualizado para R\$\s13,00 \(markup de 30%\)\.$/i)).toBeInTheDocument()
+      })
+
+      it('pelo markup aceita acima de 100% e barra fora de 0 a 9.999,99%', async () => {
+        renderNovo()
+        await esperarFormulario()
+        fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '10,00' } })
+        fireEvent.click(screen.getByRole('radio', { name: 'Pelo markup' }))
+        const botao = screen.getByRole('button', { name: 'Calcular preço' })
+        expect(botao).toHaveAccessibleDescription('Informe o markup desejado.')
+
+        fireEvent.change(screen.getByLabelText('Markup desejado (%)'), { target: { value: '10000' } })
+        expect(botao).toBeDisabled()
+        expect(botao).toHaveAccessibleDescription('Use um markup entre 0 e 9.999,99% (até 2 casas decimais).')
+
+        fireEvent.change(screen.getByLabelText('Markup desejado (%)'), { target: { value: '150' } })
+        fireEvent.click(botao)
+        expect(screen.getByLabelText(/preço de venda/i)).toHaveValue('25,00')
+      })
+
+      it('explica margem e markup com os exemplos', async () => {
+        renderNovo()
+        await esperarFormulario()
+
+        expect(
+          screen.getByText(/quanto do preço de venda é lucro, \(preço − custo\) ÷ preço\. Vender a R\$\s15,00 algo que custou R\$\s10,00 dá 33,33%\./),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByText(/quanto se acrescenta sobre o custo, \(preço − custo\) ÷ custo\. O mesmo exemplo dá 50%\./),
+        ).toBeInTheDocument()
+        // No celular a explicacao recolhe: o botao diz se ela esta aberta.
+        const alternar = screen.getByRole('button', { name: 'O que são margem e markup?' })
+        expect(alternar).toHaveAttribute('aria-expanded', 'false')
+        fireEvent.click(alternar)
+        expect(alternar).toHaveAttribute('aria-expanded', 'true')
+      })
+    })
+
     it('avisa preço abaixo do custo na Geral, na Preços e nos blocos, sem impedir o salvamento', async () => {
       cadastrarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Café' })
       renderNovo()

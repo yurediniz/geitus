@@ -9,6 +9,8 @@ import {
   avaliarNovoCodigo,
   calcularMargemMarkup,
   calcularPrecoPelaMargem,
+  calcularPrecoPeloMarkup,
+  markupDesejadoValido,
   campoDaChaveDoServidor,
   dataHojeSaoPaulo,
   erroFracaoAtacado,
@@ -298,6 +300,39 @@ describe('produtoFormulario', () => {
 
   /** O "R$" sai com espaco inseparavel (Intl), como no resto da tela. */
   const comEspacoSimples = (texto: string | null) => texto?.replace(/ /g, ' ') ?? null
+
+  describe('preco pelo markup desejado (Fase B2)', () => {
+    it.each([
+      ['10', '30', '13.00'],
+      ['10', '0', '10.00'],
+      ['10', '30,5', '13.05'],
+      ['7', '33.33', '9.33'],
+      ['10', '9999,99', '1010.00'],
+      ['0.01', '50', '0.02'],
+    ])('custo %s com markup %s -> %s (meio para cima)', (custo, markup, esperado) => {
+      expect(calcularPrecoPeloMarkup(custo, markup)).toBe(esperado)
+    })
+
+    it.each([
+      ['', '30'],
+      ['0', '30'],
+      ['10', ''],
+      ['10', '10000'],
+      ['10', '-5'],
+      ['10', '30,555'],
+      ['99999999.99', '9999'],
+    ])('custo %s com markup %s nao calcula', (custo, markup) => {
+      expect(calcularPrecoPeloMarkup(custo, markup)).toBeNull()
+    })
+
+    it('markup desejado de 0 a 9.999,99 com ate 2 casas', () => {
+      expect(markupDesejadoValido('0')).toBe(true)
+      expect(markupDesejadoValido('150,5')).toBe(true)
+      expect(markupDesejadoValido('9999.99')).toBe(true)
+      expect(markupDesejadoValido('10000')).toBe(false)
+      expect(markupDesejadoValido('1,234')).toBe(false)
+    })
+  })
 
   describe('preco pela margem desejada', () => {
     it.each([

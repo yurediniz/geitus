@@ -690,6 +690,39 @@ export function calcularPrecoPelaMargem(custo: string, margem: string): string |
   return digitos.length > MAXIMO_DIGITOS_MOEDA ? null : digitosParaValor(digitos)
 }
 
+/** Markup desejado com virgula ou ponto e ate 2 casas: de 0 a 9.999,99. */
+export function markupDesejadoValido(markup: string): boolean {
+  return markupEmCentesimos(markup) !== null
+}
+
+/** Markup desejado com virgula ou ponto e ate 2 casas, de 0 a 9.999,99, em centesimos de ponto percentual. */
+function markupEmCentesimos(markup: string): bigint | null {
+  const partes = /^(\d{1,4})(?:[.,](\d{1,2}))?$/.exec(markup.trim())
+  if (!partes) {
+    return null
+  }
+  const [, inteiros, decimais = ''] = partes
+  return BigInt(`${inteiros}${decimais.padEnd(2, '0')}`)
+}
+
+/**
+ * Preco de venda pelo markup desejado: custo x (1 + markup / 100), arredondado
+ * para centavos (meio para cima), com a conta em inteiros como a da margem
+ * (custo 10 e markup 30 -> "13.00"). Null sem custo > 0, com markup fora de 0 a
+ * 9.999,99 ou com resultado acima de 12 digitos.
+ */
+export function calcularPrecoPeloMarkup(custo: string, markup: string): string | null {
+  const centavosCusto = BigInt(valorParaDigitos(custo) || '0')
+  const centesimosMarkup = markupEmCentesimos(markup)
+  if (centavosCusto <= 0n || centesimosMarkup === null) {
+    return null
+  }
+  // custo * (10000 + m) / 10000 com meio para cima, em inteiros: (2a + b) / 2b.
+  const centavosPreco = (2n * centavosCusto * (10000n + centesimosMarkup) + 10000n) / 20000n
+  const digitos = centavosPreco.toString()
+  return digitos.length > MAXIMO_DIGITOS_MOEDA ? null : digitosParaValor(digitos)
+}
+
 // --- Promocao e atacado ------------------------------------------------------
 
 /** Campos de texto de cada bloco opcional (limpos ao desligar o interruptor). */
