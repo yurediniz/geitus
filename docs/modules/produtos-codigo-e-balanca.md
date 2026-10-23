@@ -75,7 +75,7 @@ Substitui as abas da Fase B (`produtos-identificacao-e-formulario.md` §6.2).
   1. **Geral:** **Nº do Produto** (só leitura, no topo da seção), nome, nome curto, unidade de venda, preço de venda, categoria, marca, fornecedor e descrição. **Sem o campo de código de barras.**
   2. **Códigos:** código do produto, "Vendido na balança", SKU e a lista de códigos de barras (com o "Adicionar código", Enter para o leitor).
   3. **Preços:** custo, preço mínimo, margem e markup, a calculadora, promoção e atacado.
-  4. **Estoque:** controle, saldo, ajuste e níveis.
+  4. **Estoque:** controle, saldo, ajuste, níveis e o bloco **"Unidade e embalagem"** (unidade de compra e fator), movido da Geral por decisão do usuário, porque serve à compra e à entrada de mercadoria.
   5. **Histórico:** só na edição; carrega quando a seção se aproxima da tela.
 
 ## 8. Preços: margem e markup (decisão do usuário, 2026-10-23)
@@ -90,5 +90,4 @@ Substitui as abas da Fase B (`produtos-identificacao-e-formulario.md` §6.2).
   - **Markup:** quanto se acrescenta sobre o custo, (preço − custo) ÷ custo. O mesmo exemplo dá 50%.
 
 ## 9. Pontos a fechar antes do plano
-- **Bloco "Unidade e embalagem":** sugestão de movê-lo da Geral para a seção Estoque, porque serve à compra e à entrada de mercadoria, não à venda. Aguarda a resposta do usuário.
 - **Demais observações do usuário sobre Produtos.**
