@@ -13,7 +13,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Arvore de categorias de UMA empresa, montada em memoria a partir da lista
@@ -64,6 +66,17 @@ public final class CategoriaArvore {
     /** Ativa e sem nenhum ancestral inativo (pode ser oferecida no seletor do produto). */
     public boolean selecionavel(Long id) {
         return linhagem(id).stream().allMatch(Categoria::isAtivo);
+    }
+
+    /**
+     * Categoria desta arvore com o UUID publico; vazio se o UUID for nulo, de
+     * outra empresa ou de categoria que nao existe mais.
+     */
+    public Optional<Categoria> buscarPeloUuid(UUID uuid) {
+        if (uuid == null) {
+            return Optional.empty();
+        }
+        return porId.values().stream().filter(categoria -> uuid.equals(categoria.getUuid())).findFirst();
     }
 
     /** A propria categoria e todos os seus descendentes. */

@@ -1,5 +1,6 @@
 package com.geitus.app.catalog;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -138,15 +139,14 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
     List<String> sugestoesDeFornecedor(@Param("empresaId") Long empresaId, @Param("padrao") String padrao,
             @Param("limite") int limite);
 
-    // Nota: a listagem com filtros usa duas queries em vez de uma unica com
-    // ":busca IS NULL OR ...": quando :busca era null, o PostgreSQL inferia o
-    // parametro dentro de LOWER(CONCAT(...)) como bytea e a query falhava em
-    // runtime com "function lower(bytea) does not exist". Separar os casos
-    // garante que os padroes nunca sejam null na query que os utiliza.
-
     /**
-     * Lista produtos da empresa, com filtro opcional de status ativo/inativo
-     * ({@code ativo} e ignorado quando {@code null}).
+     * Etapa 2 da listagem (docs/modules/produtos-listagem.md, 5): os produtos
+     * da empresa com estes ids internos (vindos da {@code ConsultaDeProdutos}),
+     * com os vinculos e os codigos no mesmo SELECT. Sem ordem nem paginacao:
+     * a pagina ja foi recortada na etapa 1 e o service reconstroi a ordem pelos
+     * ids — por isso o {@code JOIN FETCH} da colecao nao cai na paginacao em
+     * memoria ({@code fail_on_pagination_over_collection_fetch}). Ids de outra
+     * empresa nunca voltam (DEC-016).
      */
     @Query("""
             SELECT p FROM Produto p
@@ -155,38 +155,7 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
               LEFT JOIN FETCH p.categoria
               LEFT JOIN FETCH p.codigosBarras
             WHERE p.empresa.id = :empresaId
-              AND (:ativo IS NULL OR p.ativo = :ativo)
-            ORDER BY p.nome
+              AND p.id IN :ids
             """)
-    List<Produto> buscarPorEmpresa(@Param("empresaId") Long empresaId, @Param("ativo") Boolean ativo);
-
-    /**
-     * Lista produtos da empresa cujo nome, nome curto ou SKU casa com
-     * {@code padraoTexto}, ou que tem algum codigo de barras que casa com
-     * {@code padraoCodigo} (o termo sem espacos), com filtro opcional de status.
-     * Os padroes chegam prontos do service (minusculas, {@code %}, {@code _} e
-     * {@code \} escapados — DT-017 — e {@code %} nas pontas) e NUNCA sao
-     * {@code null}; sem termo o service usa {@link #buscarPorEmpresa}. A busca
-     * por codigo usa {@code EXISTS} para que todos os codigos do produto
-     * continuem no resultado, nao so o que casou.
-     */
-    @Query("""
-            SELECT p FROM Produto p
-              JOIN FETCH p.unidade
-              LEFT JOIN FETCH p.unidadeCompra
-              LEFT JOIN FETCH p.categoria
-              LEFT JOIN FETCH p.codigosBarras
-            WHERE p.empresa.id = :empresaId
-              AND (LOWER(p.nome) LIKE :padraoTexto ESCAPE '\\'
-                   OR LOWER(p.nomeCurto) LIKE :padraoTexto ESCAPE '\\'
-                   OR LOWER(p.sku) LIKE :padraoTexto ESCAPE '\\'
-                   OR EXISTS (SELECT 1 FROM ProdutoCodigoBarras c
-                              WHERE c.produto = p
-                                AND LOWER(c.codigo) LIKE :padraoCodigo ESCAPE '\\'))
-              AND (:ativo IS NULL OR p.ativo = :ativo)
-            ORDER BY p.nome
-            """)
-    List<Produto> buscarPorEmpresaComBusca(@Param("empresaId") Long empresaId,
-            @Param("padraoTexto") String padraoTexto, @Param("padraoCodigo") String padraoCodigo,
-            @Param("ativo") Boolean ativo);
+    List<Produto> buscarComRelacoesPorIds(@Param("empresaId") Long empresaId, @Param("ids") Collection<Long> ids);
 }

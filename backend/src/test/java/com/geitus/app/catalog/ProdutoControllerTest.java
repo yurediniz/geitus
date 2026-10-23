@@ -3,7 +3,6 @@ package com.geitus.app.catalog;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -38,6 +37,10 @@ import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
 import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
+import com.geitus.app.catalog.listagem.EstoqueFiltro;
+import com.geitus.app.catalog.listagem.OrdemDeProdutos;
+import com.geitus.app.catalog.listagem.ParametrosDaListagem;
+import com.geitus.app.catalog.listagem.StatusFiltro;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.iam.JwtAuthenticationFilter;
 import com.geitus.app.iam.JwtService;
@@ -166,7 +169,7 @@ class ProdutoControllerTest {
 
     @Test
     void listarComPerfilOperadorDeveRetornar200() throws Exception {
-        when(produtoService.listarParaUsuario(eq(2L), isNull(), isNull())).thenReturn(List.of());
+        when(produtoService.listarParaUsuario(eq(2L), any())).thenReturn(paginaVazia());
 
         String token = tokenParaUsuarioComPerfil(2L, "OPERADOR");
 
@@ -220,47 +223,127 @@ class ProdutoControllerTest {
         verifyNoInteractions(produtoService);
     }
 
-    // ---------- Listagem ----------
+    // ---------- Listagem (docs/modules/produtos-listagem.md, 4 e 5) ----------
+
+    private static PaginaResponse<ProdutoResponse> paginaVazia() {
+        return new PaginaResponse<>(List.of(), 0, 25, 0);
+    }
 
     @Test
-    void listarComTokenValidoDeveRetornarProdutosDaEmpresaDoUsuario() throws Exception {
-        when(produtoService.listarParaUsuario(eq(1L), isNull(), isNull()))
-                .thenReturn(List.of(respostaComId(PRODUTO_ID, "Arroz 5kg", "SKU-1")));
+    void listarSemParametrosUsaPadroes() throws Exception {
+        when(produtoService.listarParaUsuario(eq(1L), any())).thenReturn(paginaVazia());
 
-        String token = tokenParaUsuario(1L);
+        mockMvc.perform(get("/api/produtos").header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/produtos").header("Authorization", "Bearer " + token))
+        verify(produtoService).listarParaUsuario(1L, new ParametrosDaListagem(null, StatusFiltro.ATIVOS, null, null,
+                false, OrdemDeProdutos.NOME, 0, 25));
+    }
+
+    @Test
+    void listarRepassaTodosOsParametros() throws Exception {
+        UUID categoria = UUID.fromString("00000000-0000-0000-0000-0000000000cc");
+        when(produtoService.listarParaUsuario(eq(1L), any())).thenReturn(paginaVazia());
+
+        mockMvc.perform(get("/api/produtos").header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .param("busca", "açúcar união").param("status", "todos")
+                        .param("categoria", categoria.toString()).param("estoque", "baixo")
+                        .param("promocao", "true").param("ordem", "-preco")
+                        .param("pagina", "2").param("tamanho", "50"))
+                .andExpect(status().isOk());
+
+        verify(produtoService).listarParaUsuario(1L, new ParametrosDaListagem("açúcar união", StatusFiltro.TODOS,
+                categoria, EstoqueFiltro.BAIXO, true, OrdemDeProdutos.PRECO_DESC, 2, 50));
+    }
+
+    @Test
+    void respostaEhPagina() throws Exception {
+        when(produtoService.listarParaUsuario(eq(1L), any())).thenReturn(
+                new PaginaResponse<>(List.of(respostaComId(PRODUTO_ID, "Arroz 5kg", "SKU-1")), 3, 25, 76));
+
+        mockMvc.perform(get("/api/produtos").param("pagina", "3")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(PRODUTO_ID.toString()))
-                .andExpect(jsonPath("$[0].nome").value("Arroz 5kg"));
-
-        verify(produtoService).listarParaUsuario(eq(1L), isNull(), isNull());
+                .andExpect(jsonPath("$.itens[0].id").value(PRODUTO_ID.toString()))
+                .andExpect(jsonPath("$.itens[0].nome").value("Arroz 5kg"))
+                .andExpect(jsonPath("$.itens[0].buscaNormalizada").doesNotExist())
+                .andExpect(jsonPath("$.itens[0].nomeNormalizado").doesNotExist())
+                .andExpect(jsonPath("$.pagina").value(3))
+                .andExpect(jsonPath("$.tamanho").value(25))
+                .andExpect(jsonPath("$.totalItens").value(76));
     }
 
     @Test
-    void listarComFiltroBuscaDeveRepassarParametroAoService() throws Exception {
-        when(produtoService.listarParaUsuario(eq(1L), eq("arroz"), isNull())).thenReturn(List.of());
+    void ordemInvalida_400ComCampoOrdem() throws Exception {
+        mockMvc.perform(get("/api/produtos").param("ordem", "nome; DROP TABLE produtos")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Ordenação inválida."))
+                .andExpect(jsonPath("$.campos[0].campo").value("ordem"));
 
-        String token = tokenParaUsuario(1L);
-
-        mockMvc.perform(get("/api/produtos").param("busca", "arroz")
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk());
-
-        verify(produtoService).listarParaUsuario(eq(1L), eq("arroz"), isNull());
+        verifyNoInteractions(produtoService);
     }
 
     @Test
-    void listarComFiltroAtivoDeveRepassarParametroAoService() throws Exception {
-        when(produtoService.listarParaUsuario(eq(1L), isNull(), eq(false))).thenReturn(List.of());
+    void statusInvalido_400() throws Exception {
+        mockMvc.perform(get("/api/produtos").param("status", "true")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Status inválido."))
+                .andExpect(jsonPath("$.campos[0].campo").value("status"));
 
-        String token = tokenParaUsuario(1L);
+        verifyNoInteractions(produtoService);
+    }
 
-        mockMvc.perform(get("/api/produtos").param("ativo", "false")
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk());
+    @Test
+    void estoqueInvalido_400() throws Exception {
+        mockMvc.perform(get("/api/produtos").param("estoque", "zerado")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Filtro de estoque inválido."))
+                .andExpect(jsonPath("$.campos[0].campo").value("estoque"));
 
-        verify(produtoService).listarParaUsuario(eq(1L), isNull(), eq(false));
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void categoriaUuidMalformado_400() throws Exception {
+        mockMvc.perform(get("/api/produtos").param("categoria", "racao")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Parâmetro inválido."));
+
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void promocaoInvalida_400() throws Exception {
+        mockMvc.perform(get("/api/produtos").param("promocao", "talvez")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Parâmetro inválido."));
+
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void tamanho101_400() throws Exception {
+        mockMvc.perform(get("/api/produtos").param("tamanho", "101")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("O tamanho da página deve ser entre 1 e 100."));
+
+        verifyNoInteractions(produtoService);
+    }
+
+    @Test
+    void paginaNegativa_400() throws Exception {
+        mockMvc.perform(get("/api/produtos").param("pagina", "-1")
+                        .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("A página deve ser maior ou igual a zero."));
+
+        verifyNoInteractions(produtoService);
     }
 
     // ---------- Busca por id ----------

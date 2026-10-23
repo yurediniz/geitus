@@ -15,8 +15,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +37,10 @@ import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.dto.PromocaoRequest;
+import com.geitus.app.catalog.listagem.ConsultaDeProdutos;
+import com.geitus.app.catalog.listagem.FiltroDeProdutos;
+import com.geitus.app.catalog.listagem.PaginaDeIds;
+import com.geitus.app.catalog.listagem.ParametrosDaListagem;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.company.Empresa;
@@ -43,6 +49,7 @@ import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.shared.busca.PadraoLike;
+import com.geitus.app.shared.busca.TextoDeBusca;
 
 /**
  * Regras de negocio do modulo Produtos.
@@ -85,6 +92,10 @@ import com.geitus.app.shared.busca.PadraoLike;
  * inicial. O estoque e consultado e escrito pelas interfaces
  * {@link UsoDoProdutoNoEstoque} e {@link RegistroDeEstoqueInicial}, implementadas
  * no pacote {@code inventory}: o catalogo nao depende dele.
+ *
+ * <p>Fase E (docs/modules/produtos-listagem.md): a listagem e paginada no
+ * servidor, com busca sem acento, filtros e ordenacao feitos no banco pela
+ * {@link ConsultaDeProdutos}.
  */
 @Service
 public class ProdutoService {
@@ -167,12 +178,14 @@ public class ProdutoService {
     private final HistoricoPrecoRepository historicoPrecoRepository;
     private final UsoDoProdutoNoEstoque usoNoEstoque;
     private final RegistroDeEstoqueInicial registroDeEstoqueInicial;
+    private final ConsultaDeProdutos consultaDeProdutos;
     private final Clock relogio;
 
     public ProdutoService(ProdutoRepository produtoRepository, EmpresaRepository empresaRepository,
             UsuarioRepository usuarioRepository, UnidadeMedidaService unidadeService,
             CategoriaService categoriaService, HistoricoPrecoRepository historicoPrecoRepository,
-            UsoDoProdutoNoEstoque usoNoEstoque, RegistroDeEstoqueInicial registroDeEstoqueInicial, Clock relogio) {
+            UsoDoProdutoNoEstoque usoNoEstoque, RegistroDeEstoqueInicial registroDeEstoqueInicial,
+            ConsultaDeProdutos consultaDeProdutos, Clock relogio) {
         this.produtoRepository = produtoRepository;
         this.empresaRepository = empresaRepository;
         this.usuarioRepository = usuarioRepository;
@@ -181,6 +194,7 @@ public class ProdutoService {
         this.historicoPrecoRepository = historicoPrecoRepository;
         this.usoNoEstoque = usoNoEstoque;
         this.registroDeEstoqueInicial = registroDeEstoqueInicial;
+        this.consultaDeProdutos = consultaDeProdutos;
         this.relogio = relogio;
     }
 
@@ -333,28 +347,6 @@ public class ProdutoService {
     }
 
     /**
-     * Lista com filtros. Com termo, casa nome, nome curto e SKU pelo termo e
-     * os codigos de barras pelo termo sem espacos; {@code %} e {@code _} do
-     * termo sao literais (DT-017). Sem termo, usa a query sem padroes (ver nota
-     * no {@link ProdutoRepository}).
-     *
-     * <p>"Sem termo" e decidido pelo termo de codigo, que remove TODO espaco
-     * Unicode — inclusive os nao separaveis (U+00A0, U+2007, U+202F), que
-     * {@code StringUtils.hasText} e {@code trim} nao tratam como espaco. Se
-     * nao sobra nada, e listagem sem busca; se sobra, o termo de texto tambem
-     * tem conteudo.
-     */
-    List<Produto> listarPorEmpresaComFiltros(Long empresaId, String busca, Boolean ativo) {
-        String termoDeCodigo = CodigoBarras.normalizar(busca);
-        if (termoDeCodigo == null) {
-            return produtoRepository.buscarPorEmpresa(empresaId, ativo);
-        }
-        String padraoTexto = PadraoLike.contem(emMinusculas(busca.trim()));
-        String padraoCodigo = PadraoLike.contem(emMinusculas(termoDeCodigo));
-        return produtoRepository.buscarPorEmpresaComBusca(empresaId, padraoTexto, padraoCodigo, ativo);
-    }
-
-    /**
      * Proximo SKU no padrao {@code P} + 6 digitos (spec 4.2): o maior numero
      * entre os SKUs da empresa que seguem exatamente o padrao, mais 1. SKUs
      * fora do padrao sao ignorados; passando de 999999 o numero cresce. Nao
@@ -421,18 +413,66 @@ public class ProdutoService {
     }
 
     /**
-     * Lista com filtros; a arvore de categorias e montada uma unica vez e o
-     * estoque de todos os produtos vem numa unica chamada (em lote, sem N+1).
+     * Listagem paginada (docs/modules/produtos-listagem.md, 4 e 5), em duas
+     * etapas: a {@link ConsultaDeProdutos} filtra, ordena e recorta a pagina
+     * no banco (ids e total); depois os produtos desses ids sao carregados com
+     * as relacoes e devolvidos NA MESMA ORDEM. A arvore de categorias (que
+     * tambem resolve o filtro de categoria) e montada uma vez e o estoque vem
+     * em lote: o numero de comandos SQL nao depende do tamanho da pagina.
+     * Pagina alem do fim devolve {@code itens} vazio com o total real.
      */
     @Transactional(readOnly = true)
-    public List<ProdutoResponse> listarParaUsuario(Long idUsuario, String busca, Boolean ativo) {
+    public PaginaResponse<ProdutoResponse> listarParaUsuario(Long idUsuario, ParametrosDaListagem parametros) {
         Long empresaId = resolverEmpresaId(idUsuario);
-        List<Produto> produtos = listarPorEmpresaComFiltros(empresaId, busca, ativo);
         CategoriaArvore arvore = categoriaService.arvoreDaEmpresa(empresaId);
         LocalDate hoje = SituacaoPromocao.hoje(relogio);
-        Map<Long, ResumoDeEstoque> estoques = usoNoEstoque.resumos(empresaId,
-                produtos.stream().map(Produto::getId).toList());
-        return produtos.stream()
+        PaginaDeIds pagina = consultaDeProdutos.buscar(filtroDaListagem(empresaId, parametros, arvore, hoje),
+                parametros.ordem(), parametros.pagina(), parametros.tamanho());
+        return new PaginaResponse<>(itensDaPagina(empresaId, pagina.ids(), arvore, hoje), parametros.pagina(),
+                parametros.tamanho(), pagina.total());
+    }
+
+    /**
+     * Filtro da consulta: o termo vira as palavras normalizadas e o termo de
+     * codigo (sem nenhum espaco Unicode; so espacos = sem busca, Review Focus 1)
+     * e a categoria vira ela e as descendentes.
+     */
+    private static FiltroDeProdutos filtroDaListagem(Long empresaId, ParametrosDaListagem parametros,
+            CategoriaArvore arvore, LocalDate hoje) {
+        return new FiltroDeProdutos(empresaId, TextoDeBusca.palavras(parametros.busca()),
+                CodigoBarras.normalizar(parametros.busca()), parametros.status(),
+                categoriasDoFiltro(arvore, parametros.categoria()), parametros.estoque(), parametros.emPromocao(),
+                hoje);
+    }
+
+    /**
+     * {@code null} sem filtro; categoria fora da arvore da empresa (de outra
+     * empresa ou excluida) vira conjunto vazio: lista vazia, sem revelar nada.
+     */
+    private static Set<Long> categoriasDoFiltro(CategoriaArvore arvore, UUID categoria) {
+        if (categoria == null) {
+            return null;
+        }
+        return arvore.buscarPeloUuid(categoria)
+                .map(encontrada -> arvore.idsDaSubarvore(encontrada.getId()))
+                .orElse(Set.of());
+    }
+
+    /**
+     * Etapa 2: produtos dos ids com as relacoes, na ordem dos ids. Um id que
+     * sumiu entre as etapas (produto excluido no meio) fica fora da pagina.
+     */
+    private List<ProdutoResponse> itensDaPagina(Long empresaId, List<Long> ids, CategoriaArvore arvore,
+            LocalDate hoje) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, Produto> porId = produtoRepository.buscarComRelacoesPorIds(empresaId, ids).stream()
+                .collect(Collectors.toMap(Produto::getId, Function.identity()));
+        Map<Long, ResumoDeEstoque> estoques = usoNoEstoque.resumos(empresaId, ids);
+        return ids.stream()
+                .map(porId::get)
+                .filter(Objects::nonNull)
                 .map(produto -> responder(produto, arvore, hoje,
                         estoques.getOrDefault(produto.getId(), ResumoDeEstoque.VAZIO)))
                 .toList();

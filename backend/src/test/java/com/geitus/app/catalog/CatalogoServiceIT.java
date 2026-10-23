@@ -44,6 +44,7 @@ import com.geitus.app.catalog.dto.CodigoBarrasResponse;
 import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
 import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
+import com.geitus.app.catalog.listagem.ParametrosDaListagem;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.catalog.unidade.UnidadesPadrao;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaResponse;
@@ -142,7 +143,8 @@ class CatalogoServiceIT {
                         .compra(siglaParaUuid(unidades, "CX"), "12")
                         .build());
 
-        List<ProdutoResponse> listados = produtoService.listarParaUsuario(idUsuario, null, null);
+        List<ProdutoResponse> listados = produtoService.listarParaUsuario(idUsuario,
+                ParametrosDaListagem.daRequisicao(null, null, null, null, null, null, 0, 25)).itens();
         assertThat(listados).singleElement().satisfies(CatalogoServiceIT::vinculosDoSacheResolvidos);
         vinculosDoSacheResolvidos(produtoService.buscarPorIdParaUsuario(idUsuario, cadastrado.id()));
     }

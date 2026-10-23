@@ -40,6 +40,7 @@ import com.geitus.app.catalog.ResumoDeEstoque;
 import com.geitus.app.catalog.SituacaoEstoque;
 import com.geitus.app.catalog.UsoDoProdutoNoEstoque;
 import com.geitus.app.catalog.dto.ProdutoResponse;
+import com.geitus.app.catalog.listagem.ParametrosDaListagem;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaRequest;
 import com.geitus.app.inventory.dto.AjusteEstoqueRequest;
@@ -368,7 +369,7 @@ class EstoqueCatalogoIT {
         long comandosComSeis = comandosAoListar(empresa, 6);
 
         assertThat(comandosComSeis).isEqualTo(comandosComTres);
-        List<ProdutoResponse> listados = produtoService.listarParaUsuario(empresa.admin(), null, null);
+        List<ProdutoResponse> listados = listarPrimeiraPagina(empresa);
         assertThat(listados).extracting(ProdutoResponse::podeExcluir)
                 .containsExactly(true, true, false, true, true, false);
         assertThat(listados).extracting(ProdutoResponse::estoqueAtual)
@@ -410,10 +411,15 @@ class EstoqueCatalogoIT {
                 .isEqualTo(new BigDecimal("0.000"));
     }
 
+    private List<ProdutoResponse> listarPrimeiraPagina(CenarioDeEstoque.EmpresaDeTeste empresa) {
+        return produtoService.listarParaUsuario(empresa.admin(),
+                ParametrosDaListagem.daRequisicao(null, null, null, null, null, null, 0, 25)).itens();
+    }
+
     private long comandosAoListar(CenarioDeEstoque.EmpresaDeTeste empresa, int esperados) {
         Statistics estatisticas = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
         estatisticas.clear();
-        assertThat(produtoService.listarParaUsuario(empresa.admin(), null, null)).hasSize(esperados);
+        assertThat(listarPrimeiraPagina(empresa)).hasSize(esperados);
         return estatisticas.getPrepareStatementCount();
     }
 }

@@ -21,6 +21,7 @@ import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.dto.SkuSugestaoResponse;
+import com.geitus.app.catalog.listagem.ParametrosDaListagem;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -52,6 +53,7 @@ public class ProdutoController {
 
     private static final String PAGINA_PADRAO = "0";
     private static final String TAMANHO_PADRAO_HISTORICO = "20";
+    private static final String TAMANHO_PADRAO_LISTAGEM = "" + ParametrosDaListagem.TAMANHO_PADRAO;
 
     private final ProdutoService produtoService;
 
@@ -59,18 +61,36 @@ public class ProdutoController {
         this.produtoService = produtoService;
     }
 
-    @Operation(summary = "Lista os produtos da empresa do usuario autenticado",
-            description = "Aceita filtros opcionais de busca (nome, nome curto, SKU ou qualquer codigo de barras) "
-                    + "e status ativo/inativo.",
+    @Operation(summary = "Lista os produtos da empresa do usuario autenticado, paginada",
+            description = "Busca sem diferenciar maiusculas nem acentos por nome, nome curto, SKU e marca (cada "
+                    + "palavra, ate 5, em qualquer ordem) ou por parte de qualquer codigo de barras. Filtros "
+                    + "combinados com E; categoria de outra empresa ou inexistente devolve pagina vazia. Valor "
+                    + "invalido em status, estoque, ordem, promocao, pagina ou tamanho responde 400. Pagina alem "
+                    + "do fim devolve itens vazio com o totalItens real.",
             security = @SecurityRequirement(name = "bearer-jwt"))
     @GetMapping
-    public ResponseEntity<List<ProdutoResponse>> listar(
+    public ResponseEntity<PaginaResponse<ProdutoResponse>> listar(
             @AuthenticationPrincipal Long idUsuario,
-            @Parameter(description = "Filtra por nome, nome curto, SKU ou codigo de barras contendo o termo")
+            @Parameter(description = "Termo de busca (texto ou parte de um codigo de barras)")
             @RequestParam(required = false) String busca,
-            @Parameter(description = "Filtra por status ativo/inativo")
-            @RequestParam(required = false) Boolean ativo) {
-        return ResponseEntity.ok(produtoService.listarParaUsuario(idUsuario, busca, ativo));
+            @Parameter(description = "ativos (padrao), inativos ou todos")
+            @RequestParam(required = false) String status,
+            @Parameter(description = "UUID da categoria; inclui as subcategorias")
+            @RequestParam(required = false) UUID categoria,
+            @Parameter(description = "baixo (inclui os sem estoque) ou sem; so produtos que controlam estoque")
+            @RequestParam(required = false) String estoque,
+            @Parameter(description = "true: so produtos com promocao vigente hoje")
+            @RequestParam(required = false) Boolean promocao,
+            @Parameter(description = "nome (padrao), -nome, preco, -preco, margem, -margem, estoque, -estoque, "
+                    + "recentes ou atualizados")
+            @RequestParam(required = false) String ordem,
+            @Parameter(description = "Pagina, a partir de 0")
+            @RequestParam(defaultValue = PAGINA_PADRAO) int pagina,
+            @Parameter(description = "Itens por pagina, de 1 a 100")
+            @RequestParam(defaultValue = TAMANHO_PADRAO_LISTAGEM) int tamanho) {
+        ParametrosDaListagem parametros = ParametrosDaListagem.daRequisicao(busca, status, categoria, estoque,
+                promocao, ordem, pagina, tamanho);
+        return ResponseEntity.ok(produtoService.listarParaUsuario(idUsuario, parametros));
     }
 
     @Operation(summary = "Sugere o proximo SKU no padrao P + 6 digitos (ADMIN)",

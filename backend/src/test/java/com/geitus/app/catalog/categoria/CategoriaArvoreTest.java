@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,6 +59,15 @@ class CategoriaArvoreTest {
 
     private CategoriaArvore arvore() {
         return CategoriaArvore.de(categorias);
+    }
+
+    @Test
+    void buscarPeloUuidSoAchaCategoriaDaArvore() {
+        CategoriaArvore arvore = arvore();
+
+        assertThat(arvore.buscarPeloUuid(umida.getUuid())).containsSame(umida);
+        assertThat(arvore.buscarPeloUuid(UUID.randomUUID())).isEmpty();
+        assertThat(arvore.buscarPeloUuid(null)).isEmpty();
     }
 
     @Test

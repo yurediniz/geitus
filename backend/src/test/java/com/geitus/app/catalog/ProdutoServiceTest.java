@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -62,6 +63,13 @@ import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
 import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
+import com.geitus.app.catalog.listagem.ConsultaDeProdutos;
+import com.geitus.app.catalog.listagem.EstoqueFiltro;
+import com.geitus.app.catalog.listagem.FiltroDeProdutos;
+import com.geitus.app.catalog.listagem.OrdemDeProdutos;
+import com.geitus.app.catalog.listagem.PaginaDeIds;
+import com.geitus.app.catalog.listagem.ParametrosDaListagem;
+import com.geitus.app.catalog.listagem.StatusFiltro;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.company.Empresa;
@@ -120,6 +128,9 @@ class ProdutoServiceTest {
     @Mock
     private RegistroDeEstoqueInicial registroDeEstoqueInicial;
 
+    @Mock
+    private ConsultaDeProdutos consultaDeProdutos;
+
     private ProdutoService produtoService;
 
     private Empresa empresa;
@@ -130,7 +141,7 @@ class ProdutoServiceTest {
     void setUp() {
         produtoService = new ProdutoService(produtoRepository, empresaRepository, usuarioRepository,
                 unidadeService, categoriaService, historicoPrecoRepository, usoNoEstoque, registroDeEstoqueInicial,
-                RELOGIO);
+                consultaDeProdutos, RELOGIO);
         empresa = empresaComId(EMPRESA_ID);
         un = unidade(10L, empresa, "UN");
     }
@@ -870,44 +881,163 @@ class ProdutoServiceTest {
         assertThat(produto.getBuscaNormalizada()).isEqualTo("feijao preto feijao sku-2 uniao");
     }
 
-    // ---------- Listagem ----------
+    // ---------- Listagem (docs/modules/produtos-listagem.md, 4 e 5) ----------
 
+    private static final LocalDate HOJE_DO_RELOGIO = LocalDate.of(2020, 3, 8);
+
+    private static ParametrosDaListagem parametros(String busca) {
+        return ParametrosDaListagem.daRequisicao(busca, null, null, null, null, null, 0, 25);
+    }
+
+    /** A consulta devolve estes ids (na ordem) e o total; o repositorio carrega os produtos em outra ordem. */
+    private void consultaDevolve(long total, Produto... produtosNaOrdem) {
+        List<Long> ids = Arrays.stream(produtosNaOrdem).map(Produto::getId).toList();
+        when(consultaDeProdutos.buscar(any(), any(), anyInt(), anyInt())).thenReturn(new PaginaDeIds(ids, total));
+        if (ids.isEmpty()) {
+            return;
+        }
+        List<Produto> foraDeOrdem = new ArrayList<>(List.of(produtosNaOrdem));
+        Collections.reverse(foraDeOrdem);
+        when(produtoRepository.buscarComRelacoesPorIds(EMPRESA_ID, ids)).thenReturn(foraDeOrdem);
+    }
+
+    private FiltroDeProdutos filtroConsultado() {
+        ArgumentCaptor<FiltroDeProdutos> filtro = ArgumentCaptor.forClass(FiltroDeProdutos.class);
+        verify(consultaDeProdutos, atLeast(1)).buscar(filtro.capture(), any(), anyInt(), anyInt());
+        return filtro.getValue();
+    }
+
+    /** Review Focus 1: NBSP colado de planilha, U+2007, U+202F ou so espacos nunca viram busca (nem 500). */
     @Test
-    void listarSemTermoDeBuscaDeveUsarQuerySemParametroDeBusca() {
-        // Regressao do bug "function lower(bytea) does not exist": sem termo de
-        // busca (null ou em branco), a query que usa os padroes NAO deve ser chamada.
-        when(produtoRepository.buscarPorEmpresa(EMPRESA_ID, true)).thenReturn(List.of());
+    void buscaSoComEspacosUnicodeEhSemBusca() {
+        usuarioAtivoDaEmpresa(9L);
+        arvoreDaEmpresa();
+        consultaDevolve(0);
 
-        produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, null, true);
-        produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, "   ", true);
+        for (String busca : Arrays.asList(null, "", "   ", "\u00a0", "\u2007", " \u202f ", "\t\u3000")) {
+            produtoService.listarParaUsuario(9L, parametros(busca));
 
-        verify(produtoRepository, times(2)).buscarPorEmpresa(EMPRESA_ID, true);
-        verify(produtoRepository, never()).buscarPorEmpresaComBusca(any(), any(), any(), any());
+            FiltroDeProdutos filtro = filtroConsultado();
+            assertThat(filtro.palavras()).as("palavras de [%s]", busca).isEmpty();
+            assertThat(filtro.termoDeCodigo()).as("codigo de [%s]", busca).isNull();
+        }
     }
 
     @Test
-    void listarComBuscaSoDeEspacosNaoSeparaveisUsaQuerySemBusca() {
-        // Regressao: "\u00A0" passava no hasText, a normalizacao do codigo virava null e dava NPE (500).
-        when(produtoRepository.buscarPorEmpresa(EMPRESA_ID, null)).thenReturn(List.of());
+    void buscaViraPalavrasNormalizadasETermoDeCodigoSemEspacos() {
+        usuarioAtivoDaEmpresa(9L);
+        arvoreDaEmpresa();
+        consultaDevolve(0);
 
-        produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, "\u00A0", null);
-        produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, "\u2007", null);
-        produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, " \u202F ", null);
+        produtoService.listarParaUsuario(9L, parametros(" 50%_  AÇÚCAR\u00a0União "));
 
-        verify(produtoRepository, times(3)).buscarPorEmpresa(EMPRESA_ID, null);
-        verify(produtoRepository, never()).buscarPorEmpresaComBusca(any(), any(), any(), any());
+        FiltroDeProdutos filtro = filtroConsultado();
+        assertThat(filtro.palavras()).containsExactly("50%_", "acucar", "uniao");
+        assertThat(filtro.termoDeCodigo()).isEqualTo("50%_AÇÚCARUnião");
     }
 
     @Test
-    void listarComTermoDeBuscaDeveUsarPadroesEscapadosDeTextoEDeCodigo() {
-        // DT-017: '%' e '_' digitados sao literais; o padrao de codigo vem normalizado (sem espacos).
-        when(produtoRepository.buscarPorEmpresaComBusca(EMPRESA_ID, "%50\\%\\_ arroz%", "%50\\%\\_arroz%", null))
-                .thenReturn(List.of());
+    void filtrosEOrdemSaoRepassadosAConsultaComAEmpresaEOHojeDoRelogio() {
+        usuarioAtivoDaEmpresa(9L);
+        arvoreDaEmpresa();
+        consultaDevolve(0);
 
-        produtoService.listarPorEmpresaComFiltros(EMPRESA_ID, " 50%_ Arroz ", null);
+        produtoService.listarParaUsuario(9L,
+                ParametrosDaListagem.daRequisicao(null, "inativos", null, "sem", true, "-margem", 4, 10));
 
-        verify(produtoRepository).buscarPorEmpresaComBusca(EMPRESA_ID, "%50\\%\\_ arroz%", "%50\\%\\_arroz%", null);
-        verify(produtoRepository, never()).buscarPorEmpresa(any(), any());
+        ArgumentCaptor<FiltroDeProdutos> filtro = ArgumentCaptor.forClass(FiltroDeProdutos.class);
+        verify(consultaDeProdutos).buscar(filtro.capture(), eq(OrdemDeProdutos.MARGEM_DESC), eq(4), eq(10));
+        assertThat(filtro.getValue()).isEqualTo(new FiltroDeProdutos(EMPRESA_ID, List.of(), null,
+                StatusFiltro.INATIVOS, null, EstoqueFiltro.SEM, true, HOJE_DO_RELOGIO));
+    }
+
+    @Test
+    void categoriaFiltraComAsDescendentesDaArvore() {
+        usuarioAtivoDaEmpresa(9L);
+        Categoria racao = categoria(100L, empresa, null, "Ração");
+        Categoria umida = categoria(101L, empresa, racao, "Úmida");
+        Categoria bebidas = categoria(102L, empresa, null, "Bebidas");
+        arvoreDaEmpresa(racao, umida, bebidas);
+        consultaDevolve(0);
+
+        produtoService.listarParaUsuario(9L,
+                ParametrosDaListagem.daRequisicao(null, null, racao.getUuid(), null, null, null, 0, 25));
+
+        assertThat(filtroConsultado().categoriaIds()).containsExactlyInAnyOrder(100L, 101L);
+        verify(categoriaService, times(1)).arvoreDaEmpresa(EMPRESA_ID);
+    }
+
+    /** Review Focus 5: categoria de outra empresa ou excluida (UUID que nao esta na arvore) = lista vazia. */
+    @Test
+    void categoriaForaDaArvoreDaEmpresaViraConjuntoVazio() {
+        usuarioAtivoDaEmpresa(9L);
+        arvoreDaEmpresa(categoria(100L, empresa, null, "Ração"));
+        consultaDevolve(0);
+
+        produtoService.listarParaUsuario(9L,
+                ParametrosDaListagem.daRequisicao(null, null, UUID.randomUUID(), null, null, null, 0, 25));
+
+        assertThat(filtroConsultado().categoriaIds()).isEmpty();
+    }
+
+    @Test
+    void semCategoriaNaoFiltraPorCategoria() {
+        usuarioAtivoDaEmpresa(9L);
+        arvoreDaEmpresa();
+        consultaDevolve(0);
+
+        produtoService.listarParaUsuario(9L, parametros(null));
+
+        assertThat(filtroConsultado().categoriaIds()).isNull();
+    }
+
+    @Test
+    void respostaPreservaAOrdemDosIds() {
+        usuarioAtivoDaEmpresa(9L);
+        arvoreDaEmpresa();
+        Produto caro = ProdutoTesteBuilder.produto(empresa, un).id(7L).nome("Caro").build();
+        Produto medio = ProdutoTesteBuilder.produto(empresa, un).id(5L).nome("Medio").build();
+        Produto barato = ProdutoTesteBuilder.produto(empresa, un).id(6L).nome("Barato").build();
+        consultaDevolve(3, caro, medio, barato);
+
+        PaginaResponse<ProdutoResponse> pagina = produtoService.listarParaUsuario(9L, parametros(null));
+
+        assertThat(pagina.itens()).extracting(ProdutoResponse::nome).containsExactly("Caro", "Medio", "Barato");
+        assertThat(pagina.totalItens()).isEqualTo(3);
+        assertThat(pagina.pagina()).isZero();
+        assertThat(pagina.tamanho()).isEqualTo(25);
+    }
+
+    /** Produto excluido entre a contagem e a carga (corrida): fica fora da pagina, sem erro. */
+    @Test
+    void idQueSumiuEntreAsEtapasFicaForaDaPagina() {
+        usuarioAtivoDaEmpresa(9L);
+        arvoreDaEmpresa();
+        Produto arroz = ProdutoTesteBuilder.produto(empresa, un).id(5L).nome("Arroz").build();
+        when(consultaDeProdutos.buscar(any(), any(), anyInt(), anyInt()))
+                .thenReturn(new PaginaDeIds(List.of(8L, 5L), 2));
+        when(produtoRepository.buscarComRelacoesPorIds(EMPRESA_ID, List.of(8L, 5L))).thenReturn(List.of(arroz));
+
+        PaginaResponse<ProdutoResponse> pagina = produtoService.listarParaUsuario(9L, parametros(null));
+
+        assertThat(pagina.itens()).extracting(ProdutoResponse::nome).containsExactly("Arroz");
+    }
+
+    /** Review Focus 2: pagina alem do fim traz o total real e nao carrega produtos nem estoque. */
+    @Test
+    void paginaAlemDoFimDevolveOTotalSemCarregarProdutos() {
+        usuarioAtivoDaEmpresa(9L);
+        arvoreDaEmpresa();
+        consultaDevolve(40);
+
+        PaginaResponse<ProdutoResponse> pagina = produtoService.listarParaUsuario(9L,
+                ParametrosDaListagem.daRequisicao(null, null, null, null, null, null, 9, 25));
+
+        assertThat(pagina.itens()).isEmpty();
+        assertThat(pagina.totalItens()).isEqualTo(40);
+        assertThat(pagina.pagina()).isEqualTo(9);
+        verify(produtoRepository, never()).buscarComRelacoesPorIds(any(), any());
+        verifyNoInteractions(usoNoEstoque);
     }
 
     @Test
@@ -915,13 +1045,14 @@ class ProdutoServiceTest {
         usuarioAtivoDaEmpresa(9L);
         Categoria racao = categoria(100L, empresa, null, "Ração");
         Categoria umida = categoria(101L, empresa, racao, "Úmida");
-        Produto comCategoria = ProdutoTesteBuilder.produto(empresa, un).nome("Sachê").categoria(umida)
+        Produto comCategoria = ProdutoTesteBuilder.produto(empresa, un).id(5L).nome("Sachê").categoria(umida)
                 .precoVenda("3.00").codigo(EAN13_VALIDO).build();
-        Produto semCategoria = ProdutoTesteBuilder.produto(empresa, un).nome("Avulso").precoVenda("1.00").build();
-        when(produtoRepository.buscarPorEmpresa(EMPRESA_ID, null)).thenReturn(List.of(comCategoria, semCategoria));
+        Produto semCategoria = ProdutoTesteBuilder.produto(empresa, un).id(6L).nome("Avulso").precoVenda("1.00")
+                .build();
+        consultaDevolve(2, comCategoria, semCategoria);
         arvoreDaEmpresa(racao, umida);
 
-        List<ProdutoResponse> produtos = produtoService.listarParaUsuario(9L, null, null);
+        List<ProdutoResponse> produtos = produtoService.listarParaUsuario(9L, parametros(null)).itens();
 
         assertThat(produtos).hasSize(2);
         assertThat(produtos.get(0).categoria().caminho()).isEqualTo("Ração › Úmida");
@@ -937,15 +1068,15 @@ class ProdutoServiceTest {
     void listarParaUsuarioCalculaASituacaoDaPromocaoPeloRelogio() {
         // RELOGIO: 08/03/2020 em Sao Paulo.
         usuarioAtivoDaEmpresa(9L);
-        Produto vigente = ProdutoTesteBuilder.produto(empresa, un).nome("Vigente")
+        Produto vigente = ProdutoTesteBuilder.produto(empresa, un).id(5L).nome("Vigente")
                 .promocao("8.90", INICIO_PROMOCAO, FIM_PROMOCAO).build();
-        Produto agendada = ProdutoTesteBuilder.produto(empresa, un).nome("Agendada")
+        Produto agendada = ProdutoTesteBuilder.produto(empresa, un).id(6L).nome("Agendada")
                 .promocao("8.90", LocalDate.of(2020, 3, 9), FIM_PROMOCAO).build();
-        Produto semPromocao = ProdutoTesteBuilder.produto(empresa, un).nome("Sem promoção").build();
-        when(produtoRepository.buscarPorEmpresa(EMPRESA_ID, null)).thenReturn(List.of(vigente, agendada, semPromocao));
+        Produto semPromocao = ProdutoTesteBuilder.produto(empresa, un).id(7L).nome("Sem promoção").build();
+        consultaDevolve(3, vigente, agendada, semPromocao);
         arvoreDaEmpresa();
 
-        List<ProdutoResponse> produtos = produtoService.listarParaUsuario(9L, null, null);
+        List<ProdutoResponse> produtos = produtoService.listarParaUsuario(9L, parametros(null)).itens();
 
         assertThat(produtos).extracting(ProdutoResponse::emPromocao).containsExactly(true, false, false);
         assertThat(produtos.get(0).promocao().situacao()).isEqualTo(SituacaoPromocao.VIGENTE);
@@ -2069,11 +2200,12 @@ class ProdutoServiceTest {
         usuarioAtivoDaEmpresa(9L);
         Produto arroz = ProdutoTesteBuilder.produto(empresa, un).id(5L).nome("Arroz").build();
         Produto feijao = ProdutoTesteBuilder.produto(empresa, un).id(6L).nome("Feijão").build();
-        when(produtoRepository.buscarPorEmpresa(EMPRESA_ID, null)).thenReturn(List.of(arroz, feijao));
+        arvoreDaEmpresa();
+        consultaDevolve(2, arroz, feijao);
         when(usoNoEstoque.resumos(EMPRESA_ID, List.of(5L, 6L)))
                 .thenReturn(Map.of(5L, comAjuste("3"), 6L, soEstoqueInicial("4")));
 
-        List<ProdutoResponse> produtos = produtoService.listarParaUsuario(9L, null, null);
+        List<ProdutoResponse> produtos = produtoService.listarParaUsuario(9L, parametros(null)).itens();
 
         assertThat(produtos).extracting(ProdutoResponse::estoqueAtual)
                 .usingElementComparator(BigDecimal::compareTo)
