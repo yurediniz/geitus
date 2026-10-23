@@ -29,8 +29,10 @@ import com.geitus.app.shared.busca.TextoDeBusca;
  * existem hoje, aplica a V10 e confere via JDBC que a conversao SQL do
  * preenchimento da o MESMO resultado que {@link TextoDeBusca} (a que a
  * aplicacao usa dali em diante) — para todas as letras acentuadas do
- * {@code translate} da V10 e para os 30 produtos do catalogo de exemplo do
- * banco de desenvolvimento —, que as colunas ficam {@code NOT NULL} e que os
+ * {@code translate} da V10, para todos os caracteres de controle e de
+ * formatacao do plano basico do Unicode e para os 30 produtos do catalogo de
+ * exemplo do banco de desenvolvimento —, que as colunas ficam {@code NOT NULL}
+ * e com collation {@code "C"} (a mesma ordem em todo ambiente) e que os
  * indices existem (docs/modules/produtos-listagem.md, 3 e 4.1).
  *
  * <p>Requer Docker disponivel no ambiente.
@@ -83,8 +85,13 @@ class MigracaoV10IT {
             new ProdutoDeExemplo("Boné Aba Curva", "DEMO-ROU-009", null),
             new ProdutoDeExemplo("Jaqueta Corta-vento P", "DEMO-ROU-010", "Adidas"));
 
+    /**
+     * {@code postgres:16} (Debian/glibc), a mesma imagem do banco de
+     * desenvolvimento: a prova de equivalencia e a da collation rodam no
+     * ambiente do alvo, nao no musl do {@code -alpine} dos demais ITs.
+     */
     @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
+    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16");
 
     @BeforeEach
     void prepararBancoNoSchemaDaV9() {
@@ -128,6 +135,32 @@ class MigracaoV10IT {
         assertThat(normalizadosGravados()).containsExactlyElementsOf(esperadosPeloJava(cadastros));
     }
 
+    /**
+     * Todo caractere Cc e Cf do plano basico (menos o U+0000, que o PostgreSQL
+     * nao guarda em texto) entre duas letras: os que sao espaco (tab, quebras,
+     * U+0085) viram espaco e os demais somem, no SQL e no Java.
+     */
+    @Test
+    void sqlEquivaleAoJavaParaControlesEFormatacao() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        List<Cadastro> cadastros = new ArrayList<>();
+        for (int codigo = 1; codigo <= Character.MAX_VALUE; codigo++) {
+            int tipo = Character.getType(codigo);
+            if (tipo == Character.CONTROL || tipo == Character.FORMAT) {
+                String texto = "A" + Character.toString(codigo) + "B";
+                cadastros.add(new Cadastro(texto, null, null, texto));
+            }
+        }
+        for (Cadastro cadastro : cadastros) {
+            inserirProduto(empresa, cadastro);
+        }
+
+        aplicarV10();
+
+        assertThat(cadastros).hasSizeGreaterThan(80);
+        assertThat(normalizadosGravados()).containsExactlyElementsOf(esperadosPeloJava(cadastros));
+    }
+
     @Test
     void sqlEquivaleAoJavaNoCatalogoDeExemplo() throws SQLException {
         long empresa = inserirEmpresa("Empresa Demo");
@@ -167,15 +200,40 @@ class MigracaoV10IT {
                 .extracting(erro -> ((SQLException) erro).getSQLState()).isEqualTo(VIOLACAO_DE_NOT_NULL);
     }
 
+    /**
+     * Collation {@code "C"} nas duas colunas: a ordem por nome e a mesma no
+     * glibc do dev, no musl dos testes e em producao. Em {@code en_US} o espaco
+     * e a pontuacao seriam ignorados ("arroz-doce" antes de "arroz integral");
+     * em C valem pelo codigo (espaco antes do hifen).
+     */
+    @Test
+    void colunasComCollationCOrdenamIgualEmTodoAmbiente() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        inserirProduto(empresa, new Cadastro("Arroz-doce", null, null, null));
+        inserirProduto(empresa, new Cadastro("Arroz integral", null, null, null));
+        inserirProduto(empresa, new Cadastro("Arroz Branco", null, null, null));
+
+        aplicarV10();
+
+        assertThat(contar("""
+                SELECT count(*) FROM information_schema.columns
+                 WHERE table_name = 'produtos' AND column_name IN ('busca_normalizada', 'nome_normalizado')
+                   AND collation_name = 'C'
+                """)).isEqualTo(2);
+        assertThat(nomesNaOrdemNormalizada()).containsExactly("Arroz Branco", "Arroz integral", "Arroz-doce");
+    }
+
+    /** Os indices de ordem seguem o ORDER BY da listagem, com o desempate por nome e id. */
     @Test
     void indicesCriados() throws SQLException {
         aplicarV10();
 
         assertThat(definicaoDoIndice("ix_produto_empresa_ativo_nome"))
                 .contains("(empresa_id, ativo, nome_normalizado, id)");
-        assertThat(definicaoDoIndice("ix_produto_empresa_criado")).contains("(empresa_id, criado_em DESC, id DESC)");
+        assertThat(definicaoDoIndice("ix_produto_empresa_criado"))
+                .contains("(empresa_id, criado_em DESC, nome_normalizado, id)");
         assertThat(definicaoDoIndice("ix_produto_empresa_atualizado"))
-                .contains("COALESCE(atualizado_em, criado_em) DESC", "id DESC");
+                .contains("(empresa_id, COALESCE(atualizado_em, criado_em) DESC, nome_normalizado, id)");
     }
 
     // ------------------------------------------------------------------
@@ -211,6 +269,18 @@ class MigracaoV10IT {
             }
         }
         return gravados;
+    }
+
+    private static List<String> nomesNaOrdemNormalizada() throws SQLException {
+        List<String> nomes = new ArrayList<>();
+        try (Connection conexao = conectar();
+                Statement comando = conexao.createStatement();
+                ResultSet resultado = comando.executeQuery("SELECT nome FROM produtos ORDER BY nome_normalizado")) {
+            while (resultado.next()) {
+                nomes.add(resultado.getString(1));
+            }
+        }
+        return nomes;
     }
 
     private static String definicaoDoIndice(String nome) throws SQLException {

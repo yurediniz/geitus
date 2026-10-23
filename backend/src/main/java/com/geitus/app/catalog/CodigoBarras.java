@@ -2,6 +2,8 @@ package com.geitus.app.catalog;
 
 import java.util.regex.Pattern;
 
+import com.geitus.app.shared.busca.TextoDeBusca;
+
 /**
  * Regra pura do codigo de barras (docs/modules/produtos-identificacao-e-formulario.md,
  * secao 4.3), sem dependencia de banco ou Spring.
@@ -13,8 +15,6 @@ import java.util.regex.Pattern;
  */
 public final class CodigoBarras {
 
-    /** Qualquer espaco em branco Unicode (inclui tab, quebra de linha e espaco nao separavel). */
-    private static final Pattern ESPACO_EM_BRANCO = Pattern.compile("\\s", Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern SO_DIGITOS = Pattern.compile("[0-9]+");
 
     private static final int TAMANHO_EAN8 = 8;
@@ -27,12 +27,17 @@ public final class CodigoBarras {
     private CodigoBarras() {
     }
 
-    /** Remove todo espaco em branco (inclusive interno); {@code null}, vazio ou so espacos viram {@code null}. */
+    /**
+     * Remove todo espaco em branco Unicode (inclusive interno, tab, quebra de
+     * linha e espaco nao separavel — a mesma classe da busca,
+     * {@link TextoDeBusca#ESPACOS_EM_BRANCO}); {@code null}, vazio ou so
+     * espacos viram {@code null}.
+     */
     public static String normalizar(String codigo) {
         if (codigo == null) {
             return null;
         }
-        String semEspacos = ESPACO_EM_BRANCO.matcher(codigo).replaceAll("");
+        String semEspacos = TextoDeBusca.ESPACOS_EM_BRANCO.matcher(codigo).replaceAll("");
         return semEspacos.isEmpty() ? null : semEspacos;
     }
 

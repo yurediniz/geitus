@@ -440,7 +440,7 @@ public class ProdutoService {
     private static FiltroDeProdutos filtroDaListagem(Long empresaId, ParametrosDaListagem parametros,
             CategoriaArvore arvore, LocalDate hoje) {
         return new FiltroDeProdutos(empresaId, TextoDeBusca.palavras(parametros.busca()),
-                CodigoBarras.normalizar(parametros.busca()), parametros.status(),
+                TextoDeBusca.termoDeCodigo(parametros.busca()), parametros.status(),
                 categoriasDoFiltro(arvore, parametros.categoria()), parametros.estoque(), parametros.emPromocao(),
                 hoje);
     }

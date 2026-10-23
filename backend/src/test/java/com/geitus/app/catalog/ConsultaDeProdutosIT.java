@@ -448,7 +448,7 @@ class ConsultaDeProdutosIT {
         /** O termo como o service o prepara: palavras normalizadas e o termo de codigo sem espacos. */
         Filtro busca(String termo) {
             this.palavras = TextoDeBusca.palavras(termo);
-            this.termoDeCodigo = CodigoBarras.normalizar(termo);
+            this.termoDeCodigo = TextoDeBusca.termoDeCodigo(termo);
             return this;
         }
 
