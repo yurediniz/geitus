@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
@@ -8,23 +8,15 @@ import { useAuth } from '@/hooks/useAuth'
 import { inativarProduto, listarProdutos, reativarProduto } from '@/services/produtoService'
 import { listarCategorias } from '@/services/categoriaService'
 import { ajustarEstoque } from '@/services/estoqueService'
-import { listarUnidades } from '@/services/unidadeService'
-import { CX, ID_ARROZ, ID_FEIJAO, produtoAtivo, produtoInativo, produtoSimples, resumo, UN } from '@/test/fixturesProduto'
+import { categoria, ID_ARROZ, ID_FEIJAO, produtoAtivo, produtoInativo, produtoSimples } from '@/test/fixturesProduto'
 import type { MovimentoEstoque } from '@/types/estoque'
-import type { PaginaResponse, Produto } from '@/types/produto'
-
-function paginaDe(itens: Produto[]): PaginaResponse<Produto> {
-  return { itens, pagina: 0, tamanho: 25, totalItens: itens.length }
-}
+import type { FiltrosDaListaDeProdutos, PaginaResponse, Produto } from '@/types/produto'
 
 vi.mock('@/services/produtoService', () => ({
+  TAMANHO_PAGINA_PRODUTOS: 25,
   listarProdutos: vi.fn(),
   inativarProduto: vi.fn(),
   reativarProduto: vi.fn(),
-}))
-
-vi.mock('@/services/unidadeService', () => ({
-  listarUnidades: vi.fn(),
 }))
 
 vi.mock('@/services/estoqueService', () => ({
@@ -33,6 +25,7 @@ vi.mock('@/services/estoqueService', () => ({
 
 vi.mock('@/services/categoriaService', () => ({
   listarCategorias: vi.fn(),
+  cadastrarCategoria: vi.fn(),
 }))
 
 // Mocka o hook de auth para alternar o perfil (ADMIN gerencia / OPERADOR leitura).
@@ -43,10 +36,32 @@ vi.mock('@/hooks/useAuth', () => ({
 const listarProdutosMock = vi.mocked(listarProdutos)
 const inativarProdutoMock = vi.mocked(inativarProduto)
 const reativarProdutoMock = vi.mocked(reativarProduto)
-const listarUnidadesMock = vi.mocked(listarUnidades)
 const listarCategoriasMock = vi.mocked(listarCategorias)
 const ajustarEstoqueMock = vi.mocked(ajustarEstoque)
 const useAuthMock = vi.mocked(useAuth)
+
+// Categorias com UUID (a URL so aceita UUID em `categoria`).
+const ID_RACAO = '7a1b2c3d-0000-4000-8000-000000000001'
+const ID_SACHE = '7a1b2c3d-0000-4000-8000-000000000002'
+const ID_SUMIDA = '7a1b2c3d-0000-4000-8000-0000000000ff'
+const CATEGORIAS = [categoria(ID_RACAO, 'Ração', null, 'Ração'), categoria(ID_SACHE, 'Sachê', ID_RACAO, 'Ração › Sachê')]
+
+function paginaDe(itens: Produto[], extra: Partial<PaginaResponse<Produto>> = {}): PaginaResponse<Produto> {
+  return { itens, pagina: 0, tamanho: 25, totalItens: itens.length, ...extra }
+}
+
+/** Parametros da ultima chamada a `listarProdutos`. */
+function ultimosParametros(): FiltrosDaListaDeProdutos {
+  const chamada = listarProdutosMock.mock.lastCall
+  if (!chamada) {
+    throw new Error('listarProdutos nao foi chamado')
+  }
+  return chamada[0]
+}
+
+function chamadasComBusca(busca: string) {
+  return listarProdutosMock.mock.calls.filter(([params]) => params.busca === busca)
+}
 
 function definirPerfil(perfil: 'ADMIN' | 'OPERADOR') {
   useAuthMock.mockReturnValue({
@@ -102,165 +117,487 @@ async function cardDoProduto(nome: string): Promise<HTMLElement> {
   return titulo.closest('article') as HTMLElement
 }
 
+async function linhaDoProduto(nome: string): Promise<HTMLElement> {
+  const tabela = await screen.findByRole('table')
+  return within(tabela).getByRole('link', { name: nome }).closest('tr') as HTMLElement
+}
+
+function campoBusca(): HTMLElement {
+  return screen.getByRole('searchbox', { name: /buscar produtos/i })
+}
+
 describe('ProdutosListaPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     definirPerfil('ADMIN')
+    listarCategoriasMock.mockResolvedValue(CATEGORIAS)
+    listarProdutosMock.mockResolvedValue(paginaDe([]))
   })
 
   it('exibe a sub-navegacao do catalogo com Produtos como aba atual', async () => {
-    listarProdutosMock.mockResolvedValue(paginaDe([]))
-
     renderLista()
 
     const nav = await screen.findByRole('navigation', { name: /catálogo/i })
     expect(within(nav).getByRole('link', { name: 'Produtos' })).toHaveAttribute('aria-current', 'page')
     expect(within(nav).getByRole('link', { name: 'Categorias' })).toHaveAttribute('href', '/produtos/categorias')
-    expect(within(nav).getByRole('link', { name: 'Unidades' })).toHaveAttribute('href', '/produtos/unidades')
   })
 
-  it('renderiza o titulo e o estado de carregamento', () => {
-    listarProdutosMock.mockReturnValue(new Promise(() => {}))
-
+  it('consulta com os padroes: ativos, por nome, pagina 1', async () => {
     renderLista()
 
-    expect(screen.getByRole('heading', { name: 'Produtos' })).toBeInTheDocument()
-    expect(screen.getByText(/carregando produtos/i)).toBeInTheDocument()
+    await screen.findByText('Nenhum produto cadastrado ainda.')
+    expect(listarProdutosMock).toHaveBeenCalledWith(
+      { busca: '', status: 'ativos', categoria: null, estoque: null, promocao: false, ordem: 'nome', pagina: 1 },
+      expect.any(AbortSignal),
+    )
   })
 
-  it('mostra estado vazio quando nao ha produtos', async () => {
-    listarProdutosMock.mockResolvedValue(paginaDe([]))
+  describe('estados', () => {
+    it('mostra o esqueleto na primeira carga', () => {
+      listarProdutosMock.mockReturnValue(new Promise(() => {}))
 
-    renderLista()
+      renderLista()
 
-    expect(await screen.findByText(/nenhum produto encontrado/i)).toBeInTheDocument()
-  })
-
-  it('mostra erro ao carregar produtos', async () => {
-    listarProdutosMock.mockRejectedValue(new Error('falha'))
-
-    renderLista()
-
-    expect(await screen.findByText(/não foi possível carregar os produtos/i)).toBeInTheDocument()
-  })
-
-  it('lista produtos com status visual e dados principais', async () => {
-    listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo, produtoInativo]))
-
-    renderLista()
-
-    expect(await screen.findByRole('heading', { name: 'Arroz 5kg' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Feijão 1kg' })).toBeInTheDocument()
-    expect(screen.getByText('SKU-ARROZ')).toBeInTheDocument()
-    expect(screen.getAllByText('R$ 25,90').length).toBeGreaterThan(0)
-    expect(screen.getByText('Inativo')).toBeInTheDocument()
-  })
-
-  it('mostra o primeiro codigo de barras e quantos ha alem dele', async () => {
-    const produto: Produto = {
-      ...produtoAtivo,
-      codigosBarras: [
-        { codigo: '7891000315507', formato: 'EAN13' },
-        { codigo: '96385074', formato: 'EAN8' },
-        { codigo: 'ABC-123', formato: 'OUTRO' },
-      ],
-    }
-    listarProdutosMock.mockResolvedValue(paginaDe([produto]))
-
-    renderLista()
-
-    const card = await cardDoProduto('Arroz 5kg')
-    expect(within(card).getByText('7891000315507 (+2)')).toBeInTheDocument()
-  })
-
-  describe('busca e status na URL', () => {
-    it('aplica a busca e grava na URL', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([]))
-
-      const router = renderLista()
-
-      await screen.findByText(/nenhum produto encontrado/i)
-      fireEvent.change(screen.getByLabelText(/busca/i), { target: { value: ' SKU-ARROZ ' } })
-      fireEvent.click(screen.getByRole('button', { name: /buscar/i }))
-
-      await waitFor(() => {
-        expect(listarProdutosMock).toHaveBeenLastCalledWith(expect.objectContaining({ busca: 'SKU-ARROZ', status: 'todos' }))
-      })
-      expect(router.state.location.search).toBe('?busca=SKU-ARROZ')
+      expect(screen.getByRole('heading', { name: 'Produtos' })).toBeInTheDocument()
+      expect(screen.getByRole('status', { name: /carregando produtos/i })).toBeInTheDocument()
     })
 
-    it('buscar não remonta o campo: o foco continua nele (FE I5)', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([]))
+    it('mostra o erro e "Tentar de novo" recarrega', async () => {
+      listarProdutosMock.mockRejectedValueOnce(new Error('falha interna xyz'))
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
 
+      renderLista()
+
+      expect(await screen.findByText('Não foi possível carregar os produtos.')).toBeInTheDocument()
+      expect(screen.queryByText(/xyz/)).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }))
+
+      expect(await cardDoProduto('Arroz 5kg')).toBeInTheDocument()
+    })
+
+    it('vazio sem filtro: convida a cadastrar (ADMIN)', async () => {
+      renderLista()
+
+      expect(await screen.findByText('Nenhum produto cadastrado ainda.')).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Cadastrar produto' })).toHaveAttribute('href', '/produtos/novo')
+      expect(screen.queryByRole('button', { name: 'Limpar filtros' })).not.toBeInTheDocument()
+    })
+
+    it('vazio sem filtro para OPERADOR nao oferece o cadastro', async () => {
+      definirPerfil('OPERADOR')
+      renderLista()
+
+      expect(await screen.findByText('Nenhum produto cadastrado ainda.')).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Cadastrar produto' })).not.toBeInTheDocument()
+    })
+
+    it('vazio com busca cita o termo e "Limpar filtros" restaura os padroes', async () => {
+      const router = renderLista('/produtos?busca=a%C3%A7%C3%BAcar&estoque=sem&pagina=2')
+
+      expect(await screen.findByText('Nenhum produto encontrado para "açúcar".')).toBeInTheDocument()
+      const limpar = screen.getAllByRole('button', { name: 'Limpar filtros' })
+      fireEvent.click(limpar[limpar.length - 1] as HTMLElement)
+
+      await waitFor(() => expect(router.state.location.search).toBe(''))
+      await waitFor(() => expect(ultimosParametros()).toMatchObject({ busca: '', estoque: null, pagina: 1 }))
+      expect(campoBusca()).toHaveValue('')
+    })
+
+    it('vazio com filtros (sem busca) fala dos filtros escolhidos', async () => {
+      renderLista('/produtos?estoque=sem')
+
+      expect(await screen.findByText('Nenhum produto encontrado com os filtros escolhidos.')).toBeInTheDocument()
+      expect(screen.getAllByRole('button', { name: 'Limpar filtros' }).length).toBeGreaterThan(0)
+    })
+
+    it('mantem os itens antigos visiveis (esmaecidos) durante a troca de pagina', async () => {
+      listarProdutosMock.mockImplementation(async (params) =>
+        params.pagina === 1 ? paginaDe([produtoAtivo], { totalItens: 30 }) : new Promise(() => {}),
+      )
+      renderLista()
+      await cardDoProduto('Arroz 5kg')
+
+      fireEvent.click(screen.getByRole('button', { name: /próxima/i }))
+
+      await waitFor(() => expect(ultimosParametros().pagina).toBe(2))
+      expect(screen.getByRole('heading', { name: 'Arroz 5kg' })).toBeInTheDocument()
+      expect(screen.getByRole('table').closest('[aria-busy]')).toHaveAttribute('aria-busy', 'true')
+    })
+  })
+
+  describe('tabela e cards', () => {
+    it('a tabela mostra as colunas e os dados do produto', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([{ ...produtoAtivo, nomeCurto: 'Arroz TJ' }, produtoSimples]))
+      renderLista()
+
+      const tabela = await screen.findByRole('table')
+      const cabecalhos = within(tabela)
+        .getAllByRole('columnheader')
+        .map((th) => th.textContent?.trim())
+      expect(cabecalhos).toEqual(['Nome', 'Categoria', 'Unidade', 'Preço', 'Margem', 'Estoque', 'Status', 'Ações'])
+
+      const linha = await linhaDoProduto('Arroz 5kg')
+      expect(within(linha).getByText('Arroz TJ · SKU-ARROZ')).toBeInTheDocument()
+      expect(within(linha).getByText('Mercearia')).toBeInTheDocument()
+      expect(within(linha).getByText('UN')).toBeInTheDocument()
+      expect(within(linha).getByText('30,50%')).toBeInTheDocument()
+      expect(within(linha).getByText('12 UN')).toBeInTheDocument()
+      expect(within(linha).getByText('Ativo')).toBeInTheDocument()
+
+      const simples = await linhaDoProduto('Produto Simples')
+      // Sem categoria e sem custo: "—".
+      expect(within(simples).getAllByText('—').length).toBeGreaterThanOrEqual(2)
+      expect(within(simples).getByText('Sem estoque')).toBeInTheDocument()
+    })
+
+    it('a tabela fica so em telas medias e os cards so no celular (por CSS)', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
+      renderLista()
+
+      expect(await screen.findByRole('table')).toHaveClass('hidden', 'md:table')
+      expect((await cardDoProduto('Arroz 5kg')).closest('ul')).toHaveClass('md:hidden')
+    })
+
+    it('o nome na tabela abre o produto levando a URL da lista', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
+      renderLista('/produtos?busca=arroz&pagina=2')
+
+      fireEvent.click(within(await linhaDoProduto('Arroz 5kg')).getByRole('link', { name: 'Arroz 5kg' }))
+
+      expect(await screen.findByText(`Página do produto /produtos/${ID_ARROZ}`)).toBeInTheDocument()
+      expect(screen.getByTestId('estado')).toHaveTextContent(
+        JSON.stringify({ voltarPara: '/produtos?busca=arroz&pagina=2' }),
+      )
+    })
+
+    it('o card mostra margem, markup, marca e omite os campos vazios', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo, produtoSimples]))
+      renderLista()
+
+      const card = await cardDoProduto('Arroz 5kg')
+      expect(within(card).getByText('Tio João')).toBeInTheDocument()
+      expect(within(card).getByText('30,50%')).toBeInTheDocument()
+      expect(within(card).getByText('43,89%')).toBeInTheDocument()
+      const simples = await cardDoProduto('Produto Simples')
+      for (const rotulo of ['Custo', 'SKU', 'Código de barras', 'Categoria', 'Margem', 'Markup']) {
+        expect(within(simples).queryByText(rotulo)).not.toBeInTheDocument()
+      }
+    })
+
+    it('promocao vigente: selo, promocional e normal riscado (tabela e card)', async () => {
+      const emPromocao: Produto = {
+        ...produtoAtivo,
+        precoVenda: 10,
+        promocao: { preco: 8.9, inicio: '2026-11-01', fim: '2026-11-15', situacao: 'VIGENTE' },
+        emPromocao: true,
+      }
+      listarProdutosMock.mockResolvedValue(paginaDe([emPromocao]))
+      renderLista()
+
+      for (const area of [await linhaDoProduto('Arroz 5kg'), await cardDoProduto('Arroz 5kg')]) {
+        expect(within(area).getByText('Promoção')).toBeInTheDocument()
+        expect(within(area).getByText(/^de R\$\s10,00 por R\$\s8,90$/)).toHaveClass('sr-only')
+        expect(within(area).getByText(/^R\$\s10,00$/).tagName).toBe('S')
+      }
+    })
+
+    it('produto sem controle de estoque mostra "—" e o motivo para leitor de tela', async () => {
+      listarProdutosMock.mockResolvedValue(
+        paginaDe([{ ...produtoAtivo, controlaEstoque: false, estoqueAtual: 12, situacaoEstoque: null }]),
+      )
+      renderLista()
+
+      const linha = await linhaDoProduto('Arroz 5kg')
+      expect(within(linha).getByText('Não controla estoque')).toHaveClass('sr-only')
+      expect(within(linha).queryByText(/12 UN/)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('busca', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('digitar espera 300 ms parado e entao consulta com a busca', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      const router = renderLista('/produtos?pagina=2')
+      await screen.findByText('Nenhum produto cadastrado ainda.')
+
+      fireEvent.change(campoBusca(), { target: { value: 'arroz' } })
+      act(() => vi.advanceTimersByTime(299))
+      expect(chamadasComBusca('arroz')).toHaveLength(0)
+
+      act(() => vi.advanceTimersByTime(1))
+      await waitFor(() => expect(chamadasComBusca('arroz')).toHaveLength(1))
+      expect(ultimosParametros().pagina).toBe(1)
+      expect(router.state.location.search).toBe('?busca=arroz')
+      expect(router.state.historyAction).toBe('REPLACE')
+    })
+
+    it('Enter consulta na hora, sem esperar o atraso', async () => {
+      renderLista()
+      await screen.findByText('Nenhum produto cadastrado ainda.')
+
+      fireEvent.change(campoBusca(), { target: { value: 'feijao' } })
+      fireEvent.submit(campoBusca().closest('form') as HTMLFormElement)
+
+      await waitFor(() => expect(chamadasComBusca('feijao')).toHaveLength(1))
+    })
+
+    it('buscar nao remonta o campo: o foco e o espaco no fim continuam', async () => {
       const router = renderLista()
-      await screen.findByText(/nenhum produto encontrado/i)
-      const campo = screen.getByLabelText(/busca/i)
+      await screen.findByText('Nenhum produto cadastrado ainda.')
+      const campo = campoBusca()
       campo.focus()
-      fireEvent.change(campo, { target: { value: 'arroz' } })
 
-      // Enter no campo envia o formulario de busca.
-      fireEvent.submit(campo.closest('form') as HTMLFormElement)
+      fireEvent.change(campo, { target: { value: 'arroz ' } })
 
       await waitFor(() => expect(router.state.location.search).toBe('?busca=arroz'))
-      await screen.findByText('Resultados para "arroz".')
-      expect(screen.getByLabelText(/busca/i)).toBe(campo)
+      expect(campoBusca()).toBe(campo)
       expect(campo).toHaveFocus()
-      expect(campo).toHaveValue('arroz')
+      expect(campo).toHaveValue('arroz ')
     })
 
-    it('busca mudada por fora (histórico) atualiza o campo', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([]))
+    it('uma resposta atrasada do termo antigo nao aparece', async () => {
+      let responderAntigo: (pagina: PaginaResponse<Produto>) => void = () => {}
+      listarProdutosMock.mockImplementation((params) => {
+        if (params.busca === 'feij') {
+          return new Promise((resolver) => {
+            responderAntigo = resolver
+          })
+        }
+        if (params.busca === 'arroz') {
+          return Promise.resolve(paginaDe([produtoAtivo]))
+        }
+        return Promise.resolve(paginaDe([]))
+      })
+      renderLista()
+      await screen.findByText('Nenhum produto cadastrado ainda.')
 
+      fireEvent.change(campoBusca(), { target: { value: 'feij' } })
+      fireEvent.submit(campoBusca().closest('form') as HTMLFormElement)
+      await waitFor(() => expect(chamadasComBusca('feij')).toHaveLength(1))
+      fireEvent.change(campoBusca(), { target: { value: 'arroz' } })
+      fireEvent.submit(campoBusca().closest('form') as HTMLFormElement)
+      await cardDoProduto('Arroz 5kg')
+
+      await act(async () => responderAntigo(paginaDe([produtoInativo])))
+
+      expect(screen.getByRole('heading', { name: 'Arroz 5kg' })).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Feijão 1kg' })).not.toBeInTheDocument()
+      // A requisicao do termo antigo foi cancelada.
+      const signalAntigo = chamadasComBusca('feij')[0]?.[1]
+      expect(signalAntigo?.aborted).toBe(true)
+    })
+
+    it('apagar tudo volta a lista sem busca', async () => {
+      listarProdutosMock.mockImplementation(async (params) =>
+        params.busca === '' ? paginaDe([produtoAtivo, produtoInativo]) : paginaDe([produtoAtivo]),
+      )
       const router = renderLista('/produtos?busca=arroz')
-      await screen.findByText('Resultados para "arroz".')
-      expect(screen.getByLabelText(/busca/i)).toHaveValue('arroz')
+      await cardDoProduto('Arroz 5kg')
+      expect(screen.queryByRole('heading', { name: 'Feijão 1kg' })).not.toBeInTheDocument()
+
+      fireEvent.change(campoBusca(), { target: { value: '' } })
+
+      expect(await cardDoProduto('Feijão 1kg')).toBeInTheDocument()
+      expect(router.state.location.search).toBe('')
+    })
+
+    it('mostra "Buscando…" enquanto a busca nao chegou', async () => {
+      listarProdutosMock.mockImplementation((params) =>
+        params.busca === 'arroz' ? new Promise(() => {}) : Promise.resolve(paginaDe([produtoAtivo])),
+      )
+      renderLista()
+      await cardDoProduto('Arroz 5kg')
+      expect(screen.queryByText('Buscando…')).not.toBeInTheDocument()
+
+      fireEvent.change(campoBusca(), { target: { value: 'arroz' } })
+
+      expect(screen.getByText('Buscando…')).toBeInTheDocument()
+      await waitFor(() => expect(chamadasComBusca('arroz')).toHaveLength(1))
+      expect(screen.getByText('Buscando…')).toBeInTheDocument()
+    })
+
+    it('busca mudada por fora (historico) atualiza o campo', async () => {
+      const router = renderLista('/produtos?busca=arroz')
+      await screen.findByText('Nenhum produto encontrado para "arroz".')
+      expect(campoBusca()).toHaveValue('arroz')
 
       await act(() => router.navigate('/produtos?busca=feijao'))
 
-      expect(await screen.findByText('Resultados para "feijao".')).toBeInTheDocument()
-      expect(screen.getByLabelText(/busca/i)).toHaveValue('feijao')
-    })
-
-    it('filtra por status inativo e grava na URL', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([]))
-
-      const router = renderLista()
-
-      await screen.findByText(/nenhum produto encontrado/i)
-      fireEvent.change(screen.getByLabelText(/status/i), { target: { value: 'inativos' } })
-
-      await waitFor(() => {
-        expect(listarProdutosMock).toHaveBeenLastCalledWith(expect.objectContaining({ busca: '', status: 'inativos' }))
-      })
-      expect(router.state.location.search).toBe('?status=inativos')
-    })
-
-    it('ao montar com ?busca=arroz&status=inativos, preserva o filtro na tela e na consulta', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([]))
-
-      renderLista('/produtos?busca=arroz&status=inativos')
-
-      await screen.findByText(/nenhum produto encontrado/i)
-      expect(listarProdutosMock).toHaveBeenCalledWith(expect.objectContaining({ busca: 'arroz', status: 'inativos' }))
-      expect(screen.getByLabelText(/busca/i)).toHaveValue('arroz')
-      expect(screen.getByLabelText(/status/i)).toHaveValue('inativos')
-      expect(screen.getByText('Resultados para "arroz".')).toBeInTheDocument()
-    })
-
-    it('status desconhecido na URL vira "todos"', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([]))
-
-      renderLista('/produtos?status=qualquer')
-
-      await screen.findByText(/nenhum produto encontrado/i)
-      expect(listarProdutosMock).toHaveBeenCalledWith(expect.objectContaining({ busca: '', status: 'todos' }))
+      expect(await screen.findByText('Nenhum produto encontrado para "feijao".')).toBeInTheDocument()
+      expect(campoBusca()).toHaveValue('feijao')
     })
   })
 
-  describe('navegacao para a pagina do produto', () => {
-    it('"Novo produto" abre /produtos/novo levando a URL da lista', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([]))
+  describe('filtros', () => {
+    it.each([
+      ['Status', 'inativos', { status: 'inativos' }, '?status=inativos'],
+      ['Estoque', 'baixo', { estoque: 'baixo' }, '?estoque=baixo'],
+      ['Ordenar por', '-preco', { ordem: '-preco' }, '?ordem=-preco'],
+    ] as const)('%s chama a API com o parametro e volta para a pagina 1', async (rotulo, valor, esperado, search) => {
+      const router = renderLista('/produtos?pagina=3')
+      await screen.findByText(/nenhum produto/i)
 
+      fireEvent.change(screen.getByRole('combobox', { name: rotulo }), { target: { value: valor } })
+
+      await waitFor(() => expect(ultimosParametros()).toMatchObject({ ...esperado, pagina: 1 }))
+      expect(router.state.location.search).toBe(search)
+      expect(router.state.historyAction).toBe('PUSH')
+    })
+
+    it('"Só em promoção" chama a API com promocao', async () => {
+      const router = renderLista('/produtos?pagina=3')
+      await screen.findByText(/nenhum produto/i)
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Só em promoção' }))
+
+      await waitFor(() => expect(ultimosParametros()).toMatchObject({ promocao: true, pagina: 1 }))
+      expect(router.state.location.search).toBe('?promocao=1')
+    })
+
+    it('a categoria e escolhida pelo seletor com busca e vai para a API', async () => {
+      const router = renderLista('/produtos?pagina=3')
+      await screen.findByText(/nenhum produto/i)
+      const gatilho = screen.getByRole('button', { name: /categoria/i })
+      expect(gatilho).toHaveTextContent('Todas')
+
+      fireEvent.click(gatilho)
+      fireEvent.click(await screen.findByRole('option', { name: 'Ração › Sachê' }))
+
+      await waitFor(() => expect(ultimosParametros()).toMatchObject({ categoria: ID_SACHE, pagina: 1 }))
+      expect(router.state.location.search).toBe(`?categoria=${ID_SACHE}`)
+      expect(screen.getByRole('button', { name: /categoria/i })).toHaveTextContent('Ração › Sachê')
+    })
+
+    it('categoria que nao existe mais na URL mostra "Todas" e oferece "Limpar filtros"', async () => {
+      renderLista(`/produtos?categoria=${ID_SUMIDA}`)
+
+      expect(await screen.findByText('Nenhum produto encontrado com os filtros escolhidos.')).toBeInTheDocument()
+      await waitFor(() => expect(listarCategoriasMock).toHaveBeenCalled())
+      await waitFor(() => expect(screen.getByRole('button', { name: /categoria/i })).toHaveTextContent('Todas'))
+      expect(ultimosParametros().categoria).toBe(ID_SUMIDA)
+      expect(screen.getAllByRole('button', { name: 'Limpar filtros' }).length).toBeGreaterThan(0)
+    })
+
+    it('a URL preenche os filtros na tela', async () => {
+      renderLista(`/produtos?busca=arroz&status=todos&categoria=${ID_RACAO}&estoque=sem&promocao=1&ordem=-margem`)
+
+      await screen.findByText('Nenhum produto encontrado para "arroz".')
+      expect(campoBusca()).toHaveValue('arroz')
+      expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('todos')
+      expect(screen.getByRole('combobox', { name: 'Estoque' })).toHaveValue('sem')
+      expect(screen.getByRole('combobox', { name: 'Ordenar por' })).toHaveValue('-margem')
+      expect(screen.getByRole('checkbox', { name: 'Só em promoção' })).toBeChecked()
+      await waitFor(() => expect(screen.getByRole('button', { name: /categoria/i })).toHaveTextContent('Ração'))
+    })
+
+    it('"Limpar filtros" na barra so aparece com filtro e restaura os padroes', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
+      const router = renderLista('/produtos?status=inativos&ordem=-preco')
+      await cardDoProduto('Arroz 5kg')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Limpar filtros' }))
+
+      await waitFor(() => expect(router.state.location.search).toBe('?ordem=-preco'))
+      expect(ultimosParametros()).toMatchObject({ status: 'ativos', ordem: '-preco' })
+      expect(screen.queryByRole('button', { name: 'Limpar filtros' })).not.toBeInTheDocument()
+    })
+
+    it('no celular, "Filtros (n)" abre e fecha o bloco e conta os filtros ativos', async () => {
+      renderLista('/produtos?estoque=sem&promocao=1')
+      await screen.findByText(/nenhum produto/i)
+
+      const alternar = screen.getByRole('button', { name: 'Filtros (2)' })
+      expect(alternar).toHaveAttribute('aria-expanded', 'false')
+      const bloco = document.getElementById(alternar.getAttribute('aria-controls') ?? '') as HTMLElement
+      expect(bloco).toHaveClass('hidden', 'md:grid')
+
+      fireEvent.click(alternar)
+
+      expect(alternar).toHaveAttribute('aria-expanded', 'true')
+      expect(bloco).not.toHaveClass('hidden')
+    })
+  })
+
+  describe('ordenacao pelo cabecalho', () => {
+    it('Preço alterna aria-sort entre ascending e descending e o select acompanha', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
+      renderLista()
+      const tabela = await screen.findByRole('table')
+      const cabecalho = () => within(tabela).getByRole('columnheader', { name: /preço/i })
+      expect(within(tabela).getByRole('columnheader', { name: /nome/i })).toHaveAttribute('aria-sort', 'ascending')
+      expect(cabecalho()).not.toHaveAttribute('aria-sort')
+
+      fireEvent.click(within(cabecalho()).getByRole('button'))
+
+      await waitFor(() => expect(cabecalho()).toHaveAttribute('aria-sort', 'ascending'))
+      expect(screen.getByRole('combobox', { name: 'Ordenar por' })).toHaveValue('preco')
+      expect(ultimosParametros().ordem).toBe('preco')
+
+      fireEvent.click(within(cabecalho()).getByRole('button'))
+
+      await waitFor(() => expect(cabecalho()).toHaveAttribute('aria-sort', 'descending'))
+      expect(screen.getByRole('combobox', { name: 'Ordenar por' })).toHaveValue('-preco')
+      expect(ultimosParametros().ordem).toBe('-preco')
+    })
+
+    it('o select muda o cabecalho ordenado', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
+      renderLista()
+      const tabela = await screen.findByRole('table')
+
+      fireEvent.change(screen.getByRole('combobox', { name: 'Ordenar por' }), { target: { value: '-estoque' } })
+
+      await waitFor(() =>
+        expect(within(tabela).getByRole('columnheader', { name: /estoque/i })).toHaveAttribute('aria-sort', 'descending'),
+      )
+      expect(within(tabela).getByRole('columnheader', { name: /nome/i })).not.toHaveAttribute('aria-sort')
+    })
+  })
+
+  describe('paginacao', () => {
+    it('Próxima consulta a pagina seguinte, cria entrada no historico e foca o titulo da lista', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo], { totalItens: 60 }))
+      const router = renderLista('/produtos?busca=arroz')
+      await cardDoProduto('Arroz 5kg')
+      expect(screen.getByText('1–25 de 60')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: /próxima/i }))
+
+      await waitFor(() => expect(ultimosParametros()).toMatchObject({ busca: 'arroz', pagina: 2 }))
+      expect(router.state.location.search).toBe('?busca=arroz&pagina=2')
+      expect(router.state.historyAction).toBe('PUSH')
+      expect(screen.getByRole('heading', { name: 'Lista de produtos' })).toHaveFocus()
+    })
+
+    it('respeita a pagina da URL', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo], { pagina: 2, totalItens: 60 }))
+      renderLista('/produtos?pagina=3')
+
+      await cardDoProduto('Arroz 5kg')
+      expect(ultimosParametros().pagina).toBe(3)
+      expect(screen.getByText('Página 3 de 3')).toBeInTheDocument()
+    })
+
+    it('pagina alem do fim vai para a ultima uma unica vez (sem laco)', async () => {
+      listarProdutosMock.mockImplementation(async (params) =>
+        params.pagina === 2
+          ? paginaDe([produtoAtivo], { pagina: 1, totalItens: 30 })
+          : paginaDe([], { pagina: params.pagina - 1, totalItens: 30 }),
+      )
+      const router = renderLista('/produtos?estoque=baixo&pagina=5')
+
+      await cardDoProduto('Arroz 5kg')
+      expect(router.state.location.search).toBe('?estoque=baixo&pagina=2')
+      expect(router.state.historyAction).toBe('REPLACE')
+      expect(listarProdutosMock.mock.calls.map(([params]) => params.pagina)).toEqual([5, 2])
+    })
+  })
+
+  describe('navegacao e feedback', () => {
+    it('"Novo produto" abre /produtos/novo levando a URL da lista', async () => {
       renderLista('/produtos?busca=arroz')
 
       fireEvent.click(await screen.findByRole('link', { name: /novo produto/i }))
@@ -269,319 +606,122 @@ describe('ProdutosListaPage', () => {
       expect(screen.getByTestId('estado')).toHaveTextContent(JSON.stringify({ voltarPara: '/produtos?busca=arroz' }))
     })
 
-    it('"Editar" abre a pagina do produto pelo UUID levando a URL da lista', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
+    it('"Editar" leva a URL completa da lista (filtros e pagina) para a volta da edicao', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo], { totalItens: 60 }))
+      renderLista('/produtos?busca=arroz&estoque=baixo&ordem=-preco&pagina=2')
 
-      renderLista('/produtos?busca=arroz&status=ativos')
-
-      const card = await cardDoProduto('Arroz 5kg')
-      const editar = within(card).getByRole('link', { name: /editar/i })
-      expect(editar).toHaveAccessibleName('Editar Arroz 5kg')
+      const editar = within(await cardDoProduto('Arroz 5kg')).getByRole('link', { name: 'Editar Arroz 5kg' })
       fireEvent.click(editar)
 
       expect(await screen.findByText(`Página do produto /produtos/${ID_ARROZ}`)).toBeInTheDocument()
       expect(screen.getByTestId('estado')).toHaveTextContent(
-        JSON.stringify({ voltarPara: '/produtos?busca=arroz&status=ativos' }),
+        JSON.stringify({ voltarPara: '/produtos?busca=arroz&estoque=baixo&ordem=-preco&pagina=2' }),
       )
     })
 
-    it('mostra a mensagem de sucesso vinda da pagina do produto e a retira do historico', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
+    it('voltar da edicao restaura filtros e pagina', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo], { pagina: 1, totalItens: 60 }))
+      renderLista({ pathname: '/produtos', search: '?busca=arroz&estoque=baixo&pagina=2', state: { sucesso: 'Produto salvo com sucesso.' } })
 
+      expect(await screen.findByText('Produto salvo com sucesso.')).toBeInTheDocument()
+      await cardDoProduto('Arroz 5kg')
+      expect(ultimosParametros()).toMatchObject({ busca: 'arroz', estoque: 'baixo', pagina: 2 })
+      expect(campoBusca()).toHaveValue('arroz')
+      expect(screen.getByRole('combobox', { name: 'Estoque' })).toHaveValue('baixo')
+      expect(screen.getByText('Página 2 de 3')).toBeInTheDocument()
+    })
+
+    it('a mensagem de sucesso sai do historico sem perder a URL', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
       const router = renderLista({ pathname: '/produtos', search: '?busca=arroz', state: { sucesso: 'Produto cadastrado com sucesso.' } })
 
-      expect(await screen.findByRole('status')).toHaveTextContent('Produto cadastrado com sucesso.')
+      expect(await screen.findByText('Produto cadastrado com sucesso.')).toBeInTheDocument()
       await waitFor(() => expect(router.state.location.state).toBeNull())
       expect(router.state.location.search).toBe('?busca=arroz')
-      expect(screen.getByText('Produto cadastrado com sucesso.')).toBeInTheDocument()
-    })
-
-    it('ignora estado de navegacao sem mensagem valida', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([]))
-
-      renderLista({ pathname: '/produtos', state: { sucesso: 42 } })
-
-      await screen.findByText(/nenhum produto encontrado/i)
-      expect(screen.queryByRole('status')).not.toBeInTheDocument()
     })
   })
 
-  describe('status do produto', () => {
-    it('inativa produto com sucesso', async () => {
+  describe('acoes do produto', () => {
+    it('inativa pela tabela, recarrega a lista e mostra o sucesso', async () => {
       listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
       inativarProdutoMock.mockResolvedValue({ ...produtoAtivo, ativo: false })
-
       renderLista()
+      const linha = await linhaDoProduto('Arroz 5kg')
+      const chamadasAntes = listarProdutosMock.mock.calls.length
 
-      fireEvent.click(within(await cardDoProduto('Arroz 5kg')).getByRole('button', { name: /inativar/i }))
+      fireEvent.click(within(linha).getByRole('button', { name: 'Inativar Arroz 5kg' }))
 
       await waitFor(() => expect(inativarProdutoMock).toHaveBeenCalledWith(ID_ARROZ))
-      expect(await screen.findByText(/produto inativado com sucesso/i)).toBeInTheDocument()
+      expect(await screen.findByText('Produto inativado com sucesso.')).toBeInTheDocument()
+      expect(listarProdutosMock.mock.calls.length).toBeGreaterThan(chamadasAntes)
     })
 
-    it('reativa produto com sucesso', async () => {
+    it('reativa pelo card', async () => {
       listarProdutosMock.mockResolvedValue(paginaDe([produtoInativo]))
       reativarProdutoMock.mockResolvedValue({ ...produtoInativo, ativo: true })
+      renderLista('/produtos?status=inativos')
 
-      renderLista()
-
-      fireEvent.click(within(await cardDoProduto('Feijão 1kg')).getByRole('button', { name: /reativar/i }))
+      fireEvent.click(within(await cardDoProduto('Feijão 1kg')).getByRole('button', { name: 'Reativar Feijão 1kg' }))
 
       await waitFor(() => expect(reativarProdutoMock).toHaveBeenCalledWith(ID_FEIJAO))
-      expect(await screen.findByText(/produto reativado com sucesso/i)).toBeInTheDocument()
+      expect(await screen.findByText('Produto reativado com sucesso.')).toBeInTheDocument()
     })
 
-    it('mostra erro ao alterar status do produto', async () => {
+    it('mostra erro amigavel ao falhar a troca de status', async () => {
       listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
       inativarProdutoMock.mockRejectedValue(new Error('falha ao inativar'))
-
       renderLista()
 
-      fireEvent.click(within(await cardDoProduto('Arroz 5kg')).getByRole('button', { name: /inativar/i }))
+      fireEvent.click(within(await cardDoProduto('Arroz 5kg')).getByRole('button', { name: 'Inativar Arroz 5kg' }))
 
-      expect(await screen.findByText(/não foi possível alterar o status do produto/i)).toBeInTheDocument()
-    })
-  })
-
-  describe('card do produto', () => {
-    it('exibe margem, markup e a marca do produto', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
-
-      renderLista()
-
-      const card = await cardDoProduto('Arroz 5kg')
-      expect(within(card).getByText('Tio João')).toBeInTheDocument()
-      expect(within(card).getByText('30,50%')).toBeInTheDocument()
-      expect(within(card).getByText('43,89%')).toBeInTheDocument()
+      expect(await screen.findByText('Não foi possível alterar o status do produto. Tente novamente.')).toBeInTheDocument()
     })
 
-    it('omite campos secundários vazios, mantendo preço e status', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([produtoSimples]))
-
-      renderLista()
-
-      const card = await cardDoProduto('Produto Simples')
-      expect(within(card).getByText('Preço')).toBeInTheDocument()
-      expect(within(card).getByText('R$ 5,00')).toBeInTheDocument()
-      expect(within(card).getByText('Ativo')).toBeInTheDocument()
-      for (const rotulo of [
-        'Custo',
-        'SKU',
-        'Código de barras',
-        'Categoria',
-        'Compra',
-        'Estoque mínimo',
-        'Estoque máximo',
-        'Ponto de reposição',
-        'Preço mínimo',
-        'Margem',
-        'Markup',
-      ]) {
-        expect(within(card).queryByText(rotulo)).not.toBeInTheDocument()
-      }
-    })
-
-    it('mantém os campos preenchidos visíveis', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
-
-      renderLista()
-
-      const card = await cardDoProduto('Arroz 5kg')
-      for (const rotulo of [
-        'Custo',
-        'SKU',
-        'Código de barras',
-        'Categoria',
-        'Unidade',
-        'Estoque mínimo',
-        'Estoque máximo',
-        'Ponto de reposição',
-        'Preço mínimo',
-      ]) {
-        expect(within(card).getByText(rotulo)).toBeInTheDocument()
-      }
-      expect(within(card).getByText('7891000315507')).toBeInTheDocument()
-    })
-
-    it('mostra o caminho da categoria, a sigla da unidade e a conversão de compra', async () => {
-      const produto: Produto = {
-        ...produtoAtivo,
-        categoria: { id: 'sache', nome: 'Sachê', caminho: 'Ração › Úmida › Sachê' },
-        unidade: resumo(UN),
-        unidadeCompra: resumo(CX),
-        fatorConversao: 12,
-        conversaoTexto: '1 CX = 12 UN',
-      }
-      listarProdutosMock.mockResolvedValue(paginaDe([produto]))
-
-      renderLista()
-
-      const card = await cardDoProduto('Arroz 5kg')
-      expect(within(card).getByText('Ração › Úmida › Sachê')).toBeInTheDocument()
-      expect(within(card).getByText('UN')).toBeInTheDocument()
-      expect(within(card).getByText('1 CX = 12 UN')).toBeInTheDocument()
-      expect(within(card).getByText('2 UN')).toBeInTheDocument()
-    })
-
-    it('não carrega unidades nem categorias na lista', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
-
-      renderLista()
-
-      await screen.findByRole('heading', { name: 'Arroz 5kg' })
-      expect(listarUnidadesMock).not.toHaveBeenCalled()
-      expect(listarCategoriasMock).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('perfis', () => {
-    it('OPERADOR vê a lista em modo leitura e abre o produto só para consulta', async () => {
+    it('OPERADOR ve so "Ver detalhes" (tabela e card) e o aviso de leitura', async () => {
       definirPerfil('OPERADOR')
       listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
-
       renderLista()
 
-      const card = await cardDoProduto('Arroz 5kg')
+      for (const area of [await linhaDoProduto('Arroz 5kg'), await cardDoProduto('Arroz 5kg')]) {
+        expect(within(area).getByRole('link', { name: 'Ver detalhes Arroz 5kg' })).toHaveAttribute(
+          'href',
+          `/produtos/${ID_ARROZ}`,
+        )
+        expect(within(area).queryByRole('button', { name: /inativar|ajustar estoque/i })).not.toBeInTheDocument()
+      }
       expect(screen.getByText(/somente administradores podem gerenciar produtos/i)).toBeInTheDocument()
       expect(screen.queryByRole('link', { name: /novo produto/i })).not.toBeInTheDocument()
-      expect(within(card).queryByRole('link', { name: /editar/i })).not.toBeInTheDocument()
-      expect(within(card).queryByRole('button', { name: /inativar/i })).not.toBeInTheDocument()
-      expect(within(card).getByRole('link', { name: 'Ver detalhes Arroz 5kg' })).toHaveAttribute(
-        'href',
-        `/produtos/${ID_ARROZ}`,
+    })
+
+    it('"Ajustar estoque" so aparece para quem controla estoque', async () => {
+      listarProdutosMock.mockResolvedValue(
+        paginaDe([produtoAtivo, { ...produtoInativo, controlaEstoque: false, situacaoEstoque: null }]),
       )
-    })
-
-    it('ADMIN vê as ações de gestão e o botão de novo produto', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
-
       renderLista()
 
-      expect(await screen.findByRole('heading', { name: 'Arroz 5kg' })).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: /novo produto/i })).toHaveAttribute('href', '/produtos/novo')
-      expect(screen.getByRole('link', { name: /editar/i })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /inativar/i })).toBeInTheDocument()
-      expect(screen.queryByText(/somente administradores podem gerenciar produtos/i)).not.toBeInTheDocument()
+      expect(within(await linhaDoProduto('Feijão 1kg')).queryByRole('button', { name: /ajustar estoque/i })).toBeNull()
+      expect(within(await linhaDoProduto('Arroz 5kg')).getByRole('button', { name: 'Ajustar estoque Arroz 5kg' })).toBeInTheDocument()
     })
-  })
 
-  describe('promoção vigente', () => {
-    it('mostra o selo Promoção, o preço promocional e o normal riscado', async () => {
-      const emPromocao: Produto = {
-        ...produtoAtivo,
-        precoVenda: 10,
-        promocao: { preco: 8.9, inicio: '2026-11-01', fim: '2026-11-15', situacao: 'VIGENTE' },
-        emPromocao: true,
+    it('"Ajustar estoque" abre o modal; no sucesso recarrega e devolve o foco ao botao de origem', async () => {
+      const SAIDA: MovimentoEstoque = {
+        id: 'mov-1',
+        tipo: 'SAIDA',
+        motivo: 'PERDA_AVARIA',
+        origem: 'AJUSTE_MANUAL',
+        quantidade: -2,
+        saldoAnterior: 12,
+        saldoNovo: 10,
+        observacao: null,
+        usuarioNome: 'Ana Souza',
+        criadoEm: '2026-10-21T15:20:00',
       }
-      listarProdutosMock.mockResolvedValue(paginaDe([emPromocao]))
-
-      renderLista()
-
-      const card = await cardDoProduto('Arroz 5kg')
-      expect(within(card).getByText('Promoção')).toBeInTheDocument()
-      expect(within(card).getByText(/^de R\$\s10,00 por R\$\s8,90$/)).toHaveClass('sr-only')
-      const riscado = within(card).getByText(/^R\$\s10,00$/)
-      expect(riscado.tagName).toBe('S')
-      expect(within(card).getByText(/^R\$\s8,90$/)).toBeInTheDocument()
-    })
-
-    it.each([
-      ['AGENDADA', '2026-12-01', '2026-12-15'],
-      ['ENCERRADA', '2026-10-01', '2026-10-15'],
-    ] as const)('promoção %s não muda o preço da lista', async (situacao, inicio, fim) => {
-      const semPromocaoVigente: Produto = {
-        ...produtoAtivo,
-        promocao: { preco: 20.9, inicio, fim, situacao },
-        emPromocao: false,
-      }
-      listarProdutosMock.mockResolvedValue(paginaDe([semPromocaoVigente]))
-
-      renderLista()
-
-      const card = await cardDoProduto('Arroz 5kg')
-      expect(within(card).queryByText('Promoção')).not.toBeInTheDocument()
-      expect(within(card).queryByText(/R\$\s20,90/)).not.toBeInTheDocument()
-      expect(within(card).getByText(/^R\$\s25,90$/).tagName).not.toBe('S')
-    })
-  })
-
-  describe('estoque (Fase D)', () => {
-    /** Valor do item "Estoque" do card. */
-    async function estoqueDoCard(nome: string): Promise<HTMLElement> {
-      const card = await cardDoProduto(nome)
-      const rotulo = within(card).getByText('Estoque', { selector: 'dt' })
-      return rotulo.nextElementSibling as HTMLElement
-    }
-
-    it('saldo normal mostra a quantidade com a sigla, sem selo', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
-      renderLista()
-
-      const estoque = await estoqueDoCard('Arroz 5kg')
-      expect(estoque).toHaveTextContent(/^12 UN$/)
-    })
-
-    it('estoque baixo e sem estoque ganham o selo', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([
-        { ...produtoAtivo, estoqueAtual: 8, situacaoEstoque: 'BAIXO' },
-        { ...produtoInativo, estoqueAtual: 0, situacaoEstoque: 'SEM_ESTOQUE' },
-      ]))
-      renderLista()
-
-      const baixo = await estoqueDoCard('Arroz 5kg')
-      expect(within(baixo).getByText('8 UN')).toBeInTheDocument()
-      expect(within(baixo).getByText('Estoque baixo')).toBeInTheDocument()
-      const sem = await estoqueDoCard('Feijão 1kg')
-      expect(within(sem).getByText('0 UN')).toBeInTheDocument()
-      expect(within(sem).getByText('Sem estoque')).toBeInTheDocument()
-    })
-
-    it('produto sem controle de estoque mostra "—" (e o leitor de tela ouve o motivo)', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([
-        { ...produtoAtivo, controlaEstoque: false, estoqueAtual: 12, situacaoEstoque: null },
-      ]))
-      renderLista()
-
-      const estoque = await estoqueDoCard('Arroz 5kg')
-      expect(within(estoque).getByText('—')).toHaveAttribute('aria-hidden', 'true')
-      expect(within(estoque).getByText('Não controla estoque')).toHaveClass('sr-only')
-      // O saldo guardado nao aparece enquanto o controle esta desligado.
-      expect(within(estoque).queryByText(/12/)).not.toBeInTheDocument()
-    })
-
-    it('com o controle desligado, os níveis não aparecem no card', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([{ ...produtoAtivo, controlaEstoque: false, situacaoEstoque: null }]))
-      renderLista()
-
-      const card = await cardDoProduto('Arroz 5kg')
-      for (const rotulo of ['Estoque mínimo', 'Estoque máximo', 'Ponto de reposição']) {
-        expect(within(card).queryByText(rotulo)).not.toBeInTheDocument()
-      }
-    })
-  })
-
-  describe('atalho "Ajustar estoque" (Fase D)', () => {
-    const SAIDA: MovimentoEstoque = {
-      id: 'mov-1',
-      tipo: 'SAIDA',
-      motivo: 'PERDA_AVARIA',
-      origem: 'AJUSTE_MANUAL',
-      quantidade: -2,
-      saldoAnterior: 12,
-      saldoNovo: 10,
-      observacao: null,
-      usuarioNome: 'Ana Souza',
-      criadoEm: '2026-10-21T15:20:00',
-    }
-
-    it('abre o modal sem sair da lista; no sucesso recarrega a lista e mostra a mensagem', async () => {
       listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
       ajustarEstoqueMock.mockResolvedValue(SAIDA)
       const router = renderLista()
       const card = await cardDoProduto('Arroz 5kg')
-      const botao = within(card).getByRole('button', { name: 'Ajustar estoque Arroz 5kg' })
 
-      fireEvent.click(botao)
+      fireEvent.click(within(card).getByRole('button', { name: 'Ajustar estoque Arroz 5kg' }))
 
       const modal = await screen.findByRole('dialog', { name: 'Ajustar estoque' })
       expect(within(modal).getByText('Saldo atual: 12 UN')).toBeInTheDocument()
@@ -593,37 +733,11 @@ describe('ProdutosListaPage', () => {
 
       expect(await screen.findByText('Arroz 5kg: saída de 2 UN registrada. Saldo: 10 UN.')).toBeInTheDocument()
       expect(ajustarEstoqueMock).toHaveBeenCalledWith(ID_ARROZ, expect.objectContaining({ tipo: 'SAIDA', quantidade: 2 }))
-      expect(screen.queryByRole('dialog', { name: 'Ajustar estoque' })).not.toBeInTheDocument()
-      await waitFor(async () => expect(await estoqueDoCardAtual('Arroz 5kg')).toHaveTextContent(/^10 UN$/))
+      await waitFor(async () => expect(within(await linhaDoProduto('Arroz 5kg')).getByText('10 UN')).toBeInTheDocument())
       expect(router.state.location.pathname).toBe('/produtos')
-      await waitFor(() => expect(within(card).getByRole('button', { name: 'Ajustar estoque Arroz 5kg' })).toHaveFocus())
-    })
-
-    it('aparece só nos produtos com controle de estoque', async () => {
-      listarProdutosMock.mockResolvedValue(paginaDe([
-        produtoAtivo,
-        { ...produtoInativo, controlaEstoque: false, situacaoEstoque: null },
-      ]))
-      renderLista()
-
-      const semControle = await cardDoProduto('Feijão 1kg')
-      expect(within(semControle).queryByRole('button', { name: /ajustar estoque/i })).not.toBeInTheDocument()
-      expect(within(await cardDoProduto('Arroz 5kg')).getByRole('button', { name: /ajustar estoque/i })).toBeInTheDocument()
-    })
-
-    it('OPERADOR não vê o atalho', async () => {
-      definirPerfil('OPERADOR')
-      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
-      renderLista()
-
-      const card = await cardDoProduto('Arroz 5kg')
-      expect(within(card).queryByRole('button', { name: /ajustar estoque/i })).not.toBeInTheDocument()
+      await waitFor(() =>
+        expect(within(card).getByRole('button', { name: 'Ajustar estoque Arroz 5kg' })).toHaveFocus(),
+      )
     })
   })
 })
-
-/** Valor do item "Estoque" do card como esta na tela agora (o card pode ter sido recriado). */
-async function estoqueDoCardAtual(nome: string): Promise<HTMLElement> {
-  const card = await cardDoProduto(nome)
-  return within(card).getByText('Estoque', { selector: 'dt' }).nextElementSibling as HTMLElement
-}

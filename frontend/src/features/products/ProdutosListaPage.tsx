@@ -1,40 +1,40 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, Eye, Loader2, Package, Pencil, Plus, RotateCcw, Search, SlidersHorizontal, XCircle } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertCircle, Package, Plus, SearchX } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { NativeSelect } from '@/components/ui/native-select'
-import { PRODUTOS_QUERY_KEY } from '@/features/catalog/catalogoQuery'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { PaginacaoLista } from '@/components/ui/paginacao-lista'
+import { chaveDaListaDeProdutos, PRODUTOS_QUERY_KEY, TODAS_CATEGORIAS_QUERY_KEY } from '@/features/catalog/catalogoQuery'
 import { AvisoSomenteLeitura, FeedbackCatalogo } from '@/features/catalog/FeedbackCatalogo'
 import { CatalogoNav } from '@/features/products/CatalogoNav'
-import { formatarMoeda, formatarPercentual, formatarQuantidade } from '@/features/products/formatacaoProduto'
-import {
-  ROTA_NOVO_PRODUTO,
-  rotaDoProduto,
-  sucessoDaNavegacao,
-  type EstadoParaProduto,
-} from '@/features/products/navegacaoProdutos'
 import { mensagemDeSucesso } from '@/features/products/estoque/ajusteEstoque'
 import { ModalAjusteEstoque } from '@/features/products/estoque/ModalAjusteEstoque'
-import { SeloSituacaoEstoque } from '@/features/products/estoque/SeloSituacaoEstoque'
-import { SeloStatus } from '@/features/products/SeloStatus'
+import { CardsProdutos } from '@/features/products/listagem/CardsProdutos'
+import { FiltrosProdutos } from '@/features/products/listagem/FiltrosProdutos'
+import { TabelaProdutos } from '@/features/products/listagem/TabelaProdutos'
+import { useFiltrosDaListaDeProdutos } from '@/features/products/listagem/useFiltrosDaListaDeProdutos'
+import { ROTA_NOVO_PRODUTO, sucessoDaNavegacao, type EstadoParaProduto } from '@/features/products/navegacaoProdutos'
 import { useAuth } from '@/hooks/useAuth'
+import { useBuscaComAtraso } from '@/hooks/useBuscaComAtraso'
+import { cn } from '@/lib/utils'
+import { listarCategorias } from '@/services/categoriaService'
 import { inativarProduto, listarProdutos, reativarProduto } from '@/services/produtoService'
-import { FILTROS_PADRAO } from '@/features/products/listagem/useFiltrosDaListaDeProdutos'
-import type { Produto, StatusFiltro as ProdutoStatusFiltro } from '@/types/produto'
+import type { Categoria } from '@/types/catalogo'
+import type { PaginaResponse, Produto } from '@/types/produto'
 
-const STATUS_VALIDOS: readonly ProdutoStatusFiltro[] = ['todos', 'ativos', 'inativos']
-
-function lerStatus(valor: string | null): ProdutoStatusFiltro {
-  return STATUS_VALIDOS.find((status) => status === valor) ?? 'todos'
+/** Produto com o modal "Ajustar estoque" aberto e o botao que o abriu (recebe o foco ao fechar). */
+interface Ajuste {
+  produto: Produto
+  origem: HTMLElement
 }
 
 /**
- * Lista de produtos. Busca e status ficam na URL (`?busca=&status=`): voltar da
- * pagina do produto (ou pelo historico) reabre o mesmo filtro.
+ * Lista de produtos paginada no servidor, com busca enquanto se digita,
+ * filtros e ordenacao. Todo o estado fica na URL (ver
+ * useFiltrosDaListaDeProdutos): voltar da pagina do produto reabre a lista
+ * exatamente onde estava.
  */
 export function ProdutosListaPage() {
   const queryClient = useQueryClient()
@@ -42,17 +42,14 @@ export function ProdutosListaPage() {
   const location = useLocation()
   const { usuario } = useAuth()
   const somenteLeitura = usuario?.perfil !== 'ADMIN'
-  const [searchParams, setSearchParams] = useSearchParams()
-  const busca = (searchParams.get('busca') ?? '').trim()
-  const status = lerStatus(searchParams.get('status'))
+  const { filtros, alterar, limpar, temFiltroAtivo } = useFiltrosDaListaDeProdutos()
 
   // Sucesso vindo da pagina do produto: lido uma vez e retirado do historico,
   // para nao reaparecer ao recarregar a pagina.
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(() => sucessoDaNavegacao(location.state))
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [acaoStatusId, setAcaoStatusId] = useState<string | null>(null)
-  /** Produto com o modal "Ajustar estoque" aberto (atalho do card, so ADMIN). */
-  const [ajustando, setAjustando] = useState<Produto | null>(null)
+  const [ajuste, setAjuste] = useState<Ajuste | null>(null)
   const temEstadoDeNavegacao = sucessoDaNavegacao(location.state) !== null
   useEffect(() => {
     if (temEstadoDeNavegacao) {
@@ -60,46 +57,83 @@ export function ProdutosListaPage() {
     }
   }, [temEstadoDeNavegacao, navigate, location.pathname, location.search])
 
-  // Leva a URL atual da lista para a pagina do produto voltar ao mesmo filtro.
+  // Leva a URL atual da lista para a pagina do produto voltar ao mesmo lugar.
   const estadoParaProduto: EstadoParaProduto = { voltarPara: `${location.pathname}${location.search}` }
 
-  const produtosQueryKey = useMemo(() => [...PRODUTOS_QUERY_KEY, { busca, status }], [busca, status])
+  // --- Busca: texto local, aplicado na URL 300 ms depois de parar de digitar ou no Enter.
+  const [textoBusca, setTextoBusca] = useState(filtros.busca)
+  const [buscaDaUrl, setBuscaDaUrl] = useState(filtros.busca)
+  if (filtros.busca !== buscaDaUrl) {
+    setBuscaDaUrl(filtros.busca)
+    // So reescreve o campo quando a URL mudou por fora (historico, "Limpar
+    // filtros"); a busca do proprio campo chega aparada e nao pode comer o
+    // espaco que a pessoa acabou de digitar.
+    if (filtros.busca !== textoBusca.trim()) {
+      setTextoBusca(filtros.busca)
+    }
+  }
+  const buscaComAtraso = useBuscaComAtraso(textoBusca)
+  const ultimaBuscaComAtraso = useRef(buscaComAtraso)
+  useEffect(() => {
+    // So reage quando o valor com atraso muda: uma mudanca da URL por fora
+    // (historico) nao pode ser sobrescrita pelo texto antigo do campo.
+    if (buscaComAtraso === ultimaBuscaComAtraso.current) {
+      return
+    }
+    ultimaBuscaComAtraso.current = buscaComAtraso
+    alterar({ busca: buscaComAtraso })
+  }, [buscaComAtraso, alterar])
 
-  const {
-    data: produtos = [],
-    isPending,
-    isError,
-    refetch,
-  } = useQuery<Produto[]>({
-    queryKey: produtosQueryKey,
-    // Ponte ate a Task 5 da Fase E: so a primeira pagina, sem os filtros novos.
-    queryFn: async () => (await listarProdutos({ ...FILTROS_PADRAO, busca, status })).itens,
+  // --- Consulta: cada combinacao de filtros e uma entrada do cache; a troca
+  // cancela a requisicao anterior (signal) e mantem os itens atuais na tela.
+  const consulta = useQuery<PaginaResponse<Produto>>({
+    queryKey: chaveDaListaDeProdutos(filtros),
+    queryFn: ({ signal }) => listarProdutos(filtros, signal),
+    placeholderData: keepPreviousData,
   })
+  const { data: pagina, isPending, isError, isFetching, isPlaceholderData, refetch } = consulta
+  const buscando = textoBusca.trim() !== filtros.busca || (isFetching && filtros.busca !== '')
 
-  const atualizarFiltros = (novos: { busca: string; status: ProdutoStatusFiltro }) => {
-    const proximos = new URLSearchParams()
-    if (novos.busca.trim()) {
-      proximos.set('busca', novos.busca.trim())
+  const categoriasQuery = useQuery<Categoria[]>({
+    queryKey: TODAS_CATEGORIAS_QUERY_KEY,
+    queryFn: () => listarCategorias(),
+  })
+  const categorias = categoriasQuery.data ?? []
+  // Categoria da URL que nao existe mais (ou de outra empresa): o seletor
+  // mostra "Todas"; a lista vem vazia e oferece "Limpar filtros".
+  const categoriaExibida =
+    filtros.categoria !== null && categorias.some((categoria) => categoria.id === filtros.categoria)
+      ? filtros.categoria
+      : null
+
+  // --- Pagina alem do fim (ex.: estava na 5 e o filtro deixou 2): vai para a
+  // ultima, substituindo a entrada do historico. A pagina pedida so diminui,
+  // entao nao ha laco; a marca evita repetir a mesma correcao.
+  const ultimaPagina = pagina ? Math.max(1, Math.ceil(pagina.totalItens / pagina.tamanho)) : 1
+  const alemDoFim =
+    pagina !== undefined &&
+    !isPlaceholderData &&
+    pagina.itens.length === 0 &&
+    pagina.totalItens > 0 &&
+    filtros.pagina > ultimaPagina
+  const correcaoFeita = useRef<string | null>(null)
+  useEffect(() => {
+    if (!alemDoFim) {
+      return
     }
-    if (novos.status !== 'todos') {
-      proximos.set('status', novos.status)
+    const marca = JSON.stringify(filtros)
+    if (correcaoFeita.current === marca) {
+      return
     }
-    // Substitui a entrada: cada busca nao vira um passo no "Voltar" do navegador.
-    setSearchParams(proximos, { replace: true })
-  }
+    correcaoFeita.current = marca
+    alterar({ pagina: ultimaPagina }, { substituir: true })
+  }, [alemDoFim, filtros, ultimaPagina, alterar])
 
-  // Texto do campo de busca. Acompanha a URL quando ela muda por fora
-  // (historico, sidebar) sem remontar o formulario: buscar nao tira o foco do campo.
-  const [textoBusca, setTextoBusca] = useState(busca)
-  const [buscaDaUrl, setBuscaDaUrl] = useState(busca)
-  if (busca !== buscaDaUrl) {
-    setBuscaDaUrl(busca)
-    setTextoBusca(busca)
-  }
-
-  const aplicarBusca = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    atualizarFiltros({ busca: textoBusca, status })
+  const tituloRef = useRef<HTMLHeadingElement>(null)
+  const mudarPagina = (proxima: number) => {
+    alterar({ pagina: proxima })
+    tituloRef.current?.scrollIntoView?.({ block: 'start' })
+    tituloRef.current?.focus({ preventScroll: true })
   }
 
   const statusMutation = useMutation<Produto, unknown, { produto: Produto; proximoAtivo: boolean }>({
@@ -121,6 +155,16 @@ export function ProdutosListaPage() {
       setAcaoStatusId(null)
     },
   })
+
+  const propsDaLista = {
+    somenteLeitura,
+    estadoParaProduto,
+    alterandoStatusId: acaoStatusId,
+    aoAlterarStatus: (produto: Produto) => statusMutation.mutate({ produto, proximoAtivo: !produto.ativo }),
+    aoAjustarEstoque: (produto: Produto, origem: HTMLElement) => setAjuste({ produto, origem }),
+  }
+
+  const itens = pagina?.itens ?? []
 
   return (
     <div className="space-y-6">
@@ -151,66 +195,32 @@ export function ProdutosListaPage() {
       <FeedbackCatalogo sucesso={mensagemSucesso} erro={erroGeral} />
 
       <Card>
-        <CardContent className="pt-6">
-          <form onSubmit={aplicarBusca} className="grid gap-3 lg:grid-cols-[1fr_180px_auto]">
-            <div className="space-y-1.5">
-              <label htmlFor="busca-produto" className="text-sm font-medium">
-                Busca
-              </label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-                <Input
-                  id="busca-produto"
-                  name="busca"
-                  type="search"
-                  value={textoBusca}
-                  onChange={(event) => setTextoBusca(event.target.value)}
-                  placeholder="Nome, nome curto, SKU ou código de barras"
-                  className="pl-9"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label htmlFor="status-produto" className="text-sm font-medium">
-                Status
-              </label>
-              <NativeSelect
-                id="status-produto"
-                value={status}
-                onChange={(event) => atualizarFiltros({ busca, status: lerStatus(event.target.value) })}
-              >
-                <option value="todos">Todos</option>
-                <option value="ativos">Ativos</option>
-                <option value="inativos">Inativos</option>
-              </NativeSelect>
-            </div>
-
-            <div className="flex items-end">
-              <Button type="submit" variant="outline" className="w-full lg:w-auto">
-                Buscar
-              </Button>
-            </div>
-          </form>
+        <CardContent>
+          <FiltrosProdutos
+            filtros={filtros}
+            alterar={alterar}
+            limpar={limpar}
+            temFiltroAtivo={temFiltroAtivo}
+            textoBusca={textoBusca}
+            aoDigitarBusca={setTextoBusca}
+            aoBuscarAgora={() => alterar({ busca: textoBusca })}
+            buscando={buscando}
+            categorias={categorias}
+            categoriaExibida={categoriaExibida}
+          />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Lista de produtos</CardTitle>
-          <CardDescription>
-            {busca ? `Resultados para "${busca}".` : 'Produtos cadastrados na empresa autenticada.'}
-          </CardDescription>
+          <h2 ref={tituloRef} tabIndex={-1} className="scroll-mt-4 font-display font-semibold leading-none outline-none">
+            Lista de produtos
+          </h2>
         </CardHeader>
         <CardContent>
-          {isPending && (
-            <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              Carregando produtos...
-            </p>
-          )}
-
-          {isError && (
+          {isPending || alemDoFim ? (
+            <EsqueletoDaLista />
+          ) : isError && !pagina ? (
             <div className="space-y-3">
               <div
                 role="alert"
@@ -219,57 +229,54 @@ export function ProdutosListaPage() {
                 <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
                 <span>Não foi possível carregar os produtos.</span>
               </div>
-              <Button variant="outline" size="sm" onClick={() => refetch()}>
-                Tentar novamente
+              <Button type="button" variant="outline" onClick={() => refetch()}>
+                Tentar de novo
               </Button>
             </div>
-          )}
-
-          {!isPending && !isError && produtos.length === 0 && (
-            <div className="flex max-w-xl items-start gap-3 rounded-md border border-dashed p-4">
-              <Package className="mt-0.5 h-5 w-5 text-muted-foreground" aria-hidden="true" />
-              <div>
-                <p className="text-sm font-medium">Nenhum produto encontrado.</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Cadastre o primeiro produto ou ajuste os filtros da busca.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {!isPending && !isError && produtos.length > 0 && (
-            <div className="grid gap-3">
-              {produtos.map((produto) => (
-                <ProdutoItem
-                  key={produto.id}
-                  produto={produto}
-                  somenteLeitura={somenteLeitura}
-                  estadoParaProduto={estadoParaProduto}
-                  onAlterarStatus={() => statusMutation.mutate({ produto, proximoAtivo: !produto.ativo })}
-                  alterandoStatus={acaoStatusId === produto.id}
-                  onAjustarEstoque={() => setAjustando(produto)}
+          ) : itens.length === 0 ? (
+            <ListaVazia
+              comFiltro={temFiltroAtivo}
+              busca={filtros.busca}
+              podeCadastrar={!somenteLeitura}
+              aoLimpar={limpar}
+              estadoParaProduto={estadoParaProduto}
+            />
+          ) : (
+            <div
+              aria-busy={isPlaceholderData}
+              className={cn('space-y-4 transition-opacity duration-150', isPlaceholderData && 'opacity-60')}
+            >
+              <TabelaProdutos produtos={itens} ordem={filtros.ordem} aoOrdenar={(ordem) => alterar({ ordem })} {...propsDaLista} />
+              <CardsProdutos produtos={itens} {...propsDaLista} />
+              {pagina && (
+                <PaginacaoLista
+                  pagina={filtros.pagina}
+                  total={pagina.totalItens}
+                  tamanho={pagina.tamanho}
+                  aoMudar={mudarPagina}
+                  className="border-t pt-4"
                 />
-              ))}
+              )}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {ajustando && (
+      {ajuste && (
         <ModalAjusteEstoque
           aberto
-          produtoId={ajustando.id}
-          saldo={ajustando.estoqueAtual}
-          sigla={ajustando.unidade.sigla}
-          fracionada={ajustando.unidade.fracionada}
-          aoFechar={() => setAjustando(null)}
-          focoAoFechar={() => document.getElementById(idDoAtalhoDeEstoque(ajustando.id))}
+          produtoId={ajuste.produto.id}
+          saldo={ajuste.produto.estoqueAtual}
+          sigla={ajuste.produto.unidade.sigla}
+          fracionada={ajuste.produto.unidade.fracionada}
+          aoFechar={() => setAjuste(null)}
+          focoAoFechar={() => (ajuste.origem.isConnected ? ajuste.origem : null)}
           aoConcluir={(movimento) => {
             // O modal ja invalidou os produtos: a lista recarrega com o saldo novo.
-            const mensagem = mensagemDeSucesso(movimento, ajustando.unidade.sigla)
-            setAjustando(null)
+            const mensagem = mensagemDeSucesso(movimento, ajuste.produto.unidade.sigla)
+            setAjuste(null)
             setErroGeral(null)
-            setMensagemSucesso(`${ajustando.nome}: ${mensagem.charAt(0).toLowerCase()}${mensagem.slice(1)}`)
+            setMensagemSucesso(`${ajuste.produto.nome}: ${mensagem.charAt(0).toLowerCase()}${mensagem.slice(1)}`)
           }}
         />
       )}
@@ -277,218 +284,63 @@ export function ProdutosListaPage() {
   )
 }
 
-/** Id do botao "Ajustar estoque" do card (recebe o foco quando o modal fecha). */
-function idDoAtalhoDeEstoque(produtoId: string): string {
-  return `ajustar-estoque-${produtoId}`
-}
-
-interface ProdutoItemProps {
-  produto: Produto
-  somenteLeitura: boolean
-  estadoParaProduto: EstadoParaProduto
-  onAlterarStatus: () => void
-  alterandoStatus: boolean
-  /** Abre o modal "Ajustar estoque" (so ADMIN e com o controle ligado). */
-  onAjustarEstoque: () => void
-}
-
-/** "7891000315507" ou "7891000315507 (+2)" quando ha mais codigos. */
-function textoCodigos(produto: Produto): string | null {
-  const [primeiro, ...demais] = produto.codigosBarras
-  if (!primeiro) {
-    return null
-  }
-  return demais.length > 0 ? `${primeiro.codigo} (+${demais.length})` : primeiro.codigo
-}
-
-/**
- * Preco da lista: com promocao vigente, o promocional em destaque, o normal
- * riscado e o selo "Promoção" (leitores de tela ouvem "de R$ X por R$ Y").
- * Promocao agendada ou encerrada nao muda nada (Fase E traz o filtro).
- */
-function PrecoDoProduto({ produto }: { produto: Produto }) {
-  if (!produto.emPromocao || produto.promocao === null) {
-    return <>{formatarMoeda(produto.precoVenda)}</>
-  }
-  const normal = formatarMoeda(produto.precoVenda)
-  const promocional = formatarMoeda(produto.promocao.preco)
+/** Esqueleto da primeira carga (e da correcao de pagina alem do fim). */
+function EsqueletoDaLista() {
   return (
-    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="sr-only">{`de ${normal} por ${promocional}`}</span>
-      <span aria-hidden="true" className="font-semibold text-foreground tabular-nums">
-        {promocional}
-      </span>
-      <s aria-hidden="true" className="tabular-nums">
-        {normal}
-      </s>
-      <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">Promoção</span>
-    </span>
+    <div role="status" aria-label="Carregando produtos" className="space-y-3">
+      <span className="sr-only">Carregando produtos...</span>
+      {Array.from({ length: 5 }, (_, indice) => (
+        <div key={indice} aria-hidden="true" className="flex items-center gap-4">
+          <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
+          <div className="hidden h-4 w-24 animate-pulse rounded bg-muted md:block" />
+          <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+          <div className="hidden h-4 w-16 animate-pulse rounded bg-muted md:block" />
+        </div>
+      ))}
+    </div>
   )
 }
 
-/**
- * Saldo da lista: "12 UN" com o selo "Estoque baixo" ou "Sem estoque"; "—"
- * para produto sem controle de estoque (o saldo guardado nao aparece).
- */
-function EstoqueDoProduto({ produto }: { produto: Produto }) {
-  if (!produto.controlaEstoque) {
+interface ListaVaziaProps {
+  comFiltro: boolean
+  busca: string
+  podeCadastrar: boolean
+  aoLimpar: () => void
+  estadoParaProduto: EstadoParaProduto
+}
+
+function ListaVazia({ comFiltro, busca, podeCadastrar, aoLimpar, estadoParaProduto }: ListaVaziaProps) {
+  if (comFiltro) {
     return (
-      <>
-        <span aria-hidden="true">—</span>
-        <span className="sr-only">Não controla estoque</span>
-      </>
+      <div className="flex max-w-xl flex-col items-start gap-3 rounded-md bg-muted/50 p-4 sm:flex-row">
+        <SearchX className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="space-y-3">
+          <p className="text-sm font-medium">
+            {busca
+              ? `Nenhum produto encontrado para "${busca}".`
+              : 'Nenhum produto encontrado com os filtros escolhidos.'}
+          </p>
+          <Button type="button" variant="outline" onClick={aoLimpar}>
+            Limpar filtros
+          </Button>
+        </div>
+      </div>
     )
   }
   return (
-    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-      <span className="tabular-nums">{formatarQuantidade(produto.estoqueAtual, produto.unidade.sigla)}</span>
-      <SeloSituacaoEstoque situacao={produto.situacaoEstoque} />
-    </span>
-  )
-}
-
-function ProdutoItem({
-  produto,
-  somenteLeitura,
-  estadoParaProduto,
-  onAlterarStatus,
-  alterandoStatus,
-  onAjustarEstoque,
-}: ProdutoItemProps) {
-  // Sem controle de estoque, os niveis nao valem nada na tela (o saldo nem aparece).
-  const mostrarNiveis = produto.controlaEstoque
-  const margem = formatarPercentual(produto.margem)
-  const markup = formatarPercentual(produto.markup)
-  const codigos = textoCodigos(produto)
-
-  return (
-    <article className="rounded-md border p-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="truncate text-base font-medium">{produto.nome}</h2>
-            {produto.marca && <span className="truncate text-sm text-muted-foreground">{produto.marca}</span>}
-            <SeloStatus ativo={produto.ativo} />
-          </div>
-
-          <dl className="grid gap-x-4 gap-y-1 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
-            <div>
-              <dt className="font-medium text-foreground">Preço</dt>
-              <dd>
-                <PrecoDoProduto produto={produto} />
-              </dd>
-            </div>
-            <div>
-              <dt className="font-medium text-foreground">Estoque</dt>
-              <dd>
-                <EstoqueDoProduto produto={produto} />
-              </dd>
-            </div>
-            {produto.custo !== null && (
-              <div>
-                <dt className="font-medium text-foreground">Custo</dt>
-                <dd>{formatarMoeda(produto.custo)}</dd>
-              </div>
-            )}
-            {margem && (
-              <div>
-                <dt className="font-medium text-foreground">Margem</dt>
-                <dd>{margem}</dd>
-              </div>
-            )}
-            {markup && (
-              <div>
-                <dt className="font-medium text-foreground">Markup</dt>
-                <dd>{markup}</dd>
-              </div>
-            )}
-            {produto.precoMinimo !== null && (
-              <div>
-                <dt className="font-medium text-foreground">Preço mínimo</dt>
-                <dd>{formatarMoeda(produto.precoMinimo)}</dd>
-              </div>
-            )}
-            {produto.sku && (
-              <div>
-                <dt className="font-medium text-foreground">SKU</dt>
-                <dd>{produto.sku}</dd>
-              </div>
-            )}
-            {codigos && (
-              <div>
-                <dt className="font-medium text-foreground">Código de barras</dt>
-                <dd>{codigos}</dd>
-              </div>
-            )}
-            {produto.categoria && (
-              <div>
-                <dt className="font-medium text-foreground">Categoria</dt>
-                <dd>{produto.categoria.caminho}</dd>
-              </div>
-            )}
-            <div>
-              <dt className="font-medium text-foreground">Unidade</dt>
-              <dd title={produto.unidade.descricao}>{produto.unidade.sigla}</dd>
-            </div>
-            {produto.conversaoTexto && (
-              <div>
-                <dt className="font-medium text-foreground">Compra</dt>
-                <dd>{produto.conversaoTexto}</dd>
-              </div>
-            )}
-            {mostrarNiveis && produto.estoqueMinimo !== null && (
-              <div>
-                <dt className="font-medium text-foreground">Estoque mínimo</dt>
-                <dd>{formatarQuantidade(produto.estoqueMinimo, produto.unidade.sigla)}</dd>
-              </div>
-            )}
-            {mostrarNiveis && produto.estoqueMaximo !== null && (
-              <div>
-                <dt className="font-medium text-foreground">Estoque máximo</dt>
-                <dd>{formatarQuantidade(produto.estoqueMaximo, produto.unidade.sigla)}</dd>
-              </div>
-            )}
-            {mostrarNiveis && produto.pontoReposicao !== null && (
-              <div>
-                <dt className="font-medium text-foreground">Ponto de reposição</dt>
-                <dd>{formatarQuantidade(produto.pontoReposicao, produto.unidade.sigla)}</dd>
-              </div>
-            )}
-          </dl>
-        </div>
-
-        <div className="flex flex-wrap gap-2 lg:justify-end">
-          <Button asChild variant="outline" size="sm">
-            <Link to={rotaDoProduto(produto.id)} state={estadoParaProduto}>
-              {somenteLeitura ? (
-                <Eye className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <Pencil className="h-4 w-4" aria-hidden="true" />
-              )}
-              {somenteLeitura ? 'Ver detalhes' : 'Editar'}{' '}
-              <span className="sr-only">{produto.nome}</span>
+    <div className="flex max-w-xl flex-col items-start gap-3 rounded-md bg-muted/50 p-4 sm:flex-row">
+      <Package className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <div className="space-y-3">
+        <p className="text-sm font-medium">Nenhum produto cadastrado ainda.</p>
+        {podeCadastrar && (
+          <Button asChild>
+            <Link to={ROTA_NOVO_PRODUTO} state={estadoParaProduto}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Cadastrar produto
             </Link>
           </Button>
-          {!somenteLeitura && produto.controlaEstoque && (
-            <Button id={idDoAtalhoDeEstoque(produto.id)} type="button" variant="outline" size="sm" onClick={onAjustarEstoque}>
-              <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-              Ajustar estoque <span className="sr-only">{produto.nome}</span>
-            </Button>
-          )}
-          {!somenteLeitura && (
-            <Button type="button" variant="outline" size="sm" onClick={onAlterarStatus} disabled={alterandoStatus}>
-              {alterandoStatus ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : produto.ativo ? (
-                <XCircle className="h-4 w-4" aria-hidden="true" />
-              ) : (
-                <RotateCcw className="h-4 w-4" aria-hidden="true" />
-              )}
-              {produto.ativo ? 'Inativar' : 'Reativar'}
-            </Button>
-          )}
-        </div>
+        )}
       </div>
-    </article>
+    </div>
   )
 }

@@ -102,6 +102,29 @@ describe('SeletorCategoria', () => {
     vi.clearAllMocks()
   })
 
+  describe('uso como filtro (lista de produtos)', () => {
+    it('rotuloSemValor troca "Sem categoria" por "Todas" no gatilho e na lista', async () => {
+      renderSeletor({ rotuloSemValor: 'Todas', podeCriar: false })
+
+      expect(gatilho()).toHaveAccessibleName('Categoria Todas')
+      const lista = await abrir()
+      expect(within(lista).getAllByRole('option')[0]).toHaveTextContent('Todas')
+      expect(within(lista).queryByText('Sem categoria')).not.toBeInTheDocument()
+    })
+
+    it('incluirInativas oferece tambem as nao selecionaveis, marcadas "(inativa)"', async () => {
+      const onChangeSpy = vi.fn()
+      renderSeletor({ incluirInativas: true, podeCriar: false, onChangeSpy })
+
+      const lista = await abrir()
+      const rotulos = within(lista).getAllByRole('option').map((opcao) => opcao.textContent)
+      expect(rotulos).toContain('Brinquedos (inativa)')
+      expect(rotulos).toContain('Brinquedos › Bolinhas (inativa)')
+      fireEvent.click(within(lista).getByRole('option', { name: 'Brinquedos › Bolinhas (inativa)' }))
+      expect(onChangeSpy).toHaveBeenCalledWith('bolinhas')
+    })
+  })
+
   it('mostra "Sem categoria" quando nao ha valor e compoe o nome acessivel com o valor', () => {
     renderSeletor()
 

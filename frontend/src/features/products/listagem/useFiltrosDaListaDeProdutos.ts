@@ -16,7 +16,7 @@ export const FILTROS_PADRAO: FiltrosDaListaDeProdutos = {
 
 const STATUS: readonly StatusFiltro[] = ['ativos', 'inativos', 'todos']
 const ESTOQUES: readonly EstoqueFiltro[] = ['baixo', 'sem']
-export const ORDENS: readonly OrdemProdutos[] = [
+const ORDENS: readonly OrdemProdutos[] = [
   'nome',
   '-nome',
   'preco',

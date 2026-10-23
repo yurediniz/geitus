@@ -42,6 +42,14 @@ export interface SeletorCategoriaProps {
   /** Id do rotulo externo: compoe o nome acessivel com o valor atual. */
   idRotulo?: string
   invalido?: boolean
+  /** Rotulo da opcao sem categoria (`null`). No filtro da lista e "Todas". */
+  rotuloSemValor?: string
+  /**
+   * Oferece tambem as categorias nao selecionaveis (inativas), marcadas com
+   * "(inativa)". Usado no filtro da lista: produto em categoria inativa
+   * continua existindo e precisa ser encontrado.
+   */
+  incluirInativas?: boolean
 }
 
 interface Opcao {
@@ -84,6 +92,8 @@ export function SeletorCategoria({
   id,
   idRotulo,
   invalido,
+  rotuloSemValor = 'Sem categoria',
+  incluirInativas = false,
 }: SeletorCategoriaProps) {
   const idBase = useId()
   const idGatilho = id ?? `${idBase}-gatilho`
@@ -107,8 +117,8 @@ export function SeletorCategoria({
   }, [categorias, criadaAgora])
 
   const selecionaveis = useMemo(
-    () => [...porId.values()].filter((categoria) => categoria.selecionavel),
-    [porId],
+    () => [...porId.values()].filter((categoria) => incluirInativas || categoria.selecionavel),
+    [porId, incluirInativas],
   )
 
   /** Categoria atual nao selecionavel (inativa ou sob ramo inativo): mantida como opcao. */
@@ -128,17 +138,17 @@ export function SeletorCategoria({
     const filtradas = filtrarPorTermo(selecionaveis, termo).map<Opcao>((categoria) => ({
       id: categoria.id,
       rotulo: categoria.caminho,
-      inativa: false,
+      inativa: !categoria.selecionavel,
     }))
     const atual =
       opcaoAtualInativa && casaTermo(opcaoAtualInativa.rotulo, termo) ? [opcaoAtualInativa] : []
-    const semCategoria: Opcao[] = termo.trim() === '' ? [{ id: null, rotulo: 'Sem categoria', inativa: false }] : []
+    const semCategoria: Opcao[] = termo.trim() === '' ? [{ id: null, rotulo: rotuloSemValor, inativa: false }] : []
     return [...semCategoria, ...atual, ...filtradas]
-  }, [selecionaveis, termo, opcaoAtualInativa])
+  }, [selecionaveis, termo, opcaoAtualInativa, rotuloSemValor])
 
   const textoValor = useMemo(() => {
     if (valor === null) {
-      return 'Sem categoria'
+      return rotuloSemValor
     }
     const conhecida = porId.get(valor)
     if (conhecida) {
@@ -148,7 +158,7 @@ export function SeletorCategoria({
       return valorAtual.caminho
     }
     return 'Categoria selecionada'
-  }, [valor, porId, valorAtual])
+  }, [valor, porId, valorAtual, rotuloSemValor])
 
   // Nome igual (sem diferenciar maiusculas) a uma principal selecionavel: ela ja
   // aparece na lista e criar daria nome repetido. Inativas nao contam: a
@@ -166,7 +176,8 @@ export function SeletorCategoria({
   // mais rasa; ignora a categoria atual, que ja aparece como opcao "(inativa)".
   const naoSelecionavelComMesmoNome = useMemo(() => {
     const alvo = normalizarTexto(termo)
-    if (alvo === '') {
+    // Com as inativas na lista, nao ha o que explicar.
+    if (alvo === '' || incluirInativas) {
       return null
     }
     const candidatas = [...porId.values()].filter(
@@ -174,7 +185,7 @@ export function SeletorCategoria({
         !categoria.selecionavel && categoria.id !== opcaoAtualInativa?.id && normalizarTexto(categoria.nome) === alvo,
     )
     return candidatas.sort((a, b) => a.nivel - b.nivel)[0] ?? null
-  }, [termo, porId, opcaoAtualInativa])
+  }, [termo, porId, opcaoAtualInativa, incluirInativas])
 
   const indiceSeguro = opcoes.length === 0 ? -1 : Math.min(indiceAtivo, opcoes.length - 1)
   const idOpcao = (indice: number) => `${idBase}-opcao-${indice}`
@@ -190,9 +201,9 @@ export function SeletorCategoria({
 
   // Indice do valor atual na lista sem filtro (termo vazio), usado ao abrir.
   const opcoesIniciais = (): Opcao[] => [
-    { id: null, rotulo: 'Sem categoria', inativa: false },
+    { id: null, rotulo: rotuloSemValor, inativa: false },
     ...(opcaoAtualInativa ? [opcaoAtualInativa] : []),
-    ...selecionaveis.map((categoria) => ({ id: categoria.id, rotulo: categoria.caminho, inativa: false })),
+    ...selecionaveis.map((categoria) => ({ id: categoria.id, rotulo: categoria.caminho, inativa: !categoria.selecionavel })),
   ]
 
   const abrir = (proximo: boolean) => {
