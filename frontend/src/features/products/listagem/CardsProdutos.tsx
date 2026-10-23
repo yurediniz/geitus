@@ -20,13 +20,13 @@ function identificacao(produto: Produto): string | null {
 }
 
 /**
- * Cards da lista no celular (abaixo de 768 px; acima, a tabela, so por CSS).
+ * Cards da lista no celular e no tablet (abaixo de 1.024 px; acima, a tabela, so por CSS).
  * Enxutos: nome (link), marca, preco, estoque, o selo "Inativo" quando for o
  * caso, uma linha com SKU ou codigo e as acoes. O resto fica na pagina do produto.
  */
 export function CardsProdutos({ produtos, alterandoStatusId, aoAlterarStatus, aoAjustarEstoque, ...props }: ListaDeProdutosProps) {
   return (
-    <ul className="grid gap-3 md:hidden">
+    <ul className="grid gap-3 lg:hidden">
       {produtos.map((produto) => {
         const linhaDiscreta = identificacao(produto)
         return (

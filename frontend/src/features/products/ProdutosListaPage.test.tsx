@@ -378,20 +378,20 @@ describe('ProdutosListaPage', () => {
       expect(within(await cardDoProduto('Arroz 5kg')).queryByText(/ativo/i)).not.toBeInTheDocument()
     })
 
-    it('tabela so em telas medias, com rolagem lateral; Categoria e Unidade so em telas largas', async () => {
+    it('tabela a partir de 1024 px (cards abaixo), com rolagem lateral; Categoria e Unidade a partir de 1280 px', async () => {
       listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
       renderLista()
 
       const tabela = await screen.findByRole('table')
-      expect(tabela.parentElement).toHaveClass('hidden', 'md:block', 'overflow-x-auto')
+      expect(tabela.parentElement).toHaveClass('hidden', 'lg:block', 'overflow-x-auto')
       for (const coluna of ['Categoria', 'Unidade']) {
-        expect(within(tabela).getByRole('columnheader', { name: coluna })).toHaveClass('hidden', 'lg:table-cell')
+        expect(within(tabela).getByRole('columnheader', { name: coluna })).toHaveClass('hidden', 'xl:table-cell')
       }
       expect(within(await linhaDoProduto('Arroz 5kg')).getByText('Mercearia').closest('td')).toHaveClass(
         'hidden',
-        'lg:table-cell',
+        'xl:table-cell',
       )
-      expect((await cardDoProduto('Arroz 5kg')).closest('ul')).toHaveClass('md:hidden')
+      expect((await cardDoProduto('Arroz 5kg')).closest('ul')).toHaveClass('lg:hidden')
     })
 
     it('o nome abre o produto levando a URL da lista (tabela e card)', async () => {

@@ -65,11 +65,11 @@ export interface TabelaProdutosProps extends ListaDeProdutosProps {
   idDoTitulo: string
 }
 
-/** Colunas secundarias: so a partir de telas largas, para a tabela caber entre 768 e 1.024 px. */
-const SO_EM_TELA_LARGA = 'hidden lg:table-cell'
+/** Colunas secundarias: so a partir de 1.280 px, para a tabela caber sem rolagem entre 1.024 e 1.280 px. */
+const SO_EM_TELA_LARGA = 'hidden xl:table-cell'
 
 /**
- * Tabela da lista a partir de 768 px (abaixo, os cards), com rolagem lateral
+ * Tabela da lista a partir de 1.024 px (abaixo, os cards), com rolagem lateral
  * se ainda faltar espaco. Os cabecalhos ordenaveis tem `aria-sort` e ficam
  * sincronizados com o select "Ordenar por".
  */
@@ -86,7 +86,7 @@ export function TabelaProdutos({
 }: TabelaProdutosProps) {
   const cabecalho = { ordem, aoOrdenar }
   return (
-    <div className="hidden overflow-x-auto md:block">
+    <div className="hidden overflow-x-auto lg:block">
       <table aria-labelledby={idDoTitulo} className="w-full text-sm">
         <thead className="border-b text-left text-muted-foreground">
           <tr>
