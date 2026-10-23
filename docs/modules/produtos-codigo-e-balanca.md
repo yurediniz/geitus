@@ -65,5 +65,30 @@
 - **Sem ambiguidade:** o `código*quantidade` procura **só pelo código do produto**, e o leitor procura pelos códigos de barras e pela etiqueta de balança. O SKU **não** entra na venda.
 - **Número da venda:** sequencial por empresa, com o mesmo mecanismo do Número do produto (§2).
 
-## 7. Pontos a fechar antes do plano
-- **Demais observações do usuário sobre Produtos**, a discutir com a aplicação aberta.
+## 7. Formulário do produto em tela única (decisão do usuário, 2026-10-23)
+Substitui as abas da Fase B (`produtos-identificacao-e-formulario.md` §6.2).
+- **Tela única:** todas as seções numa página, em sequência. No topo, uma **barra de atalhos fixa** (Geral · Códigos · Preços · Estoque · Histórico) que leva até a seção e destaca a que está visível enquanto se rola.
+- **Erros ao salvar:** a página rola até o primeiro campo com erro e foca nele. O atalho da seção mostra a quantidade de erros.
+- **Rodapé:** Salvar/Cancelar fixo, como hoje, com Ctrl+Enter.
+- **Celular:** os atalhos rolam para o lado e as seções ficam em uma coluna.
+- **Seções, nesta ordem:**
+  1. **Geral:** **Nº do Produto** (só leitura, no topo da seção), nome, nome curto, unidade de venda, preço de venda, categoria, marca, fornecedor e descrição. **Sem o campo de código de barras.**
+  2. **Códigos:** código do produto, "Vendido na balança", SKU e a lista de códigos de barras (com o "Adicionar código", Enter para o leitor).
+  3. **Preços:** custo, preço mínimo, margem e markup, a calculadora, promoção e atacado.
+  4. **Estoque:** controle, saldo, ajuste e níveis.
+  5. **Histórico:** só na edição; carrega quando a seção se aproxima da tela.
+
+## 8. Preços: margem e markup (decisão do usuário, 2026-10-23)
+- **Margem e markup em todos os preços:** além do preço de venda, aparecem ao lado do **preço promocional** e do **preço de atacado**, calculados sobre o custo (promoção R$ 8,90 com custo R$ 6,00 → margem 32,58%, markup 48,33%). Sem custo, aparece "—".
+- **Calculadora com duas opções**, "Calcular pela margem" e "Calcular pelo markup":
+  - pela margem: preço = custo ÷ (1 − margem) (custo R$ 10,00 e margem 30% → R$ 14,29);
+  - pelo markup: preço = custo × (1 + markup) (custo R$ 10,00 e markup 30% → R$ 13,00).
+
+  Os dois arredondam para centavos (meio para cima). A margem fica entre 0 e 99,99%, e o markup é maior ou igual a 0.
+- **Explicação** junto ao bloco (ícone "?" ou texto de ajuda):
+  - **Margem:** quanto do preço de venda é lucro, (preço − custo) ÷ preço. Vender a R$ 15,00 algo que custou R$ 10,00 dá 33,33%.
+  - **Markup:** quanto se acrescenta sobre o custo, (preço − custo) ÷ custo. O mesmo exemplo dá 50%.
+
+## 9. Pontos a fechar antes do plano
+- **Bloco "Unidade e embalagem":** sugestão de movê-lo da Geral para a seção Estoque, porque serve à compra e à entrada de mercadoria, não à venda. Aguarda a resposta do usuário.
+- **Demais observações do usuário sobre Produtos.**
