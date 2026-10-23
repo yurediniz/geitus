@@ -815,3 +815,35 @@ Contrato de `GET /api/produtos` muda de lista para página (o parâmetro `ativo`
 
 **Observações futuras:**
 Índice de trigramas quando houver dezenas de milhares de produtos por empresa; paginação de Clientes reutilizando `PaginacaoLista`.
+
+## DEC-036 — Número de registro, código do produto, etiqueta de balança e formulário em tela única (Fase B2)
+
+**Data:** 2026-10-23
+**Status:** Aceita
+**Contexto:**
+A loja vende produtos a granel e itens pesados na balança Toledo Prix 4, cuja etiqueta traz o código do produto programado na balança e o valor total. O Geitus não tinha esse código nem um número de registro sequencial por empresa. O formulário em abas da Fase B escondia informação e erros, e a margem e o markup não apareciam nos preços de promoção e de atacado.
+
+**Decisão:**
+- **Número** sequencial por empresa (produto e cliente agora, venda no PDV), imutável, gerado por `numeracoes` com incremento atômico na transação da criação. Não é a PK.
+- **Código do produto** inteiro de 1 a 999999, opcional, único por empresa, exibido sem zeros; obrigatório com a flag "Vendido na balança" (KG e UN).
+- **SKU** inalterado e fora da venda.
+- **Configuração da etiqueta de balança** por empresa (padrão do usuário: `2` + código 6 + valor 6 com 3 casas, sem DV), com leitor como regra de domínio, modelos prontos e teste de etiqueta.
+- **Formulário do produto em tela única** com atalhos fixos, nesta ordem: Geral (com o Nº), Códigos, Preços, Estoque (com "Unidade e embalagem") e Histórico.
+- **Margem e markup** em todos os preços, e calculadora pela margem ou pelo markup, com explicação.
+- **Migration V11.**
+
+**Motivo:**
+Decisões do usuário em conversa (várias versões do modelo dos códigos até esta). O número fora da PK preserva o isolamento multiempresa e a estabilidade das chaves. O código numérico separado do SKU elimina a ambiguidade na venda.
+
+**Impacto:**
+- Contratos de produto e cliente ganham `numero`; o de produto ganha `codigo` e `vendidoBalanca`.
+- Endpoints novos `/api/etiqueta-balanca`.
+- Aba "Balança" em Produtos.
+- Formulário do produto reorganizado.
+- Spec: `docs/modules/produtos-codigo-e-balanca.md`.
+- Revisores obrigatórios: `data-reviewer` (V11, numeração) e `security-reviewer` (endpoints novos, número imutável).
+
+**Observações futuras:**
+- A Fase B3 (embalagens de venda) vem em seguida.
+- O PDV usa o leitor da etiqueta, o `código*quantidade` e o `Numerador` da venda.
+- Códigos do fornecedor ficam para Compras.
