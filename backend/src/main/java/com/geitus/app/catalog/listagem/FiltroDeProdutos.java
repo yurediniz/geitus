@@ -13,14 +13,16 @@ import com.geitus.app.shared.busca.TextoDeBusca;
  * @param empresaId     empresa do usuario autenticado (DEC-016), obrigatoria
  * @param palavras      palavras normalizadas do termo ({@link TextoDeBusca#palavras}); vazia = sem busca por texto
  * @param termoDeCodigo termo sem espacos comparado com os codigos de barras, ou {@code null}
+ * @param termoNumerico termo so de digitos, sem zeros a esquerda ({@link TextoDeBusca#termoNumerico}),
+ *                      comparado com o numero e o codigo do produto, ou {@code null}
  * @param status        filtro de status, obrigatorio
  * @param categoriaIds  categoria e descendentes; {@code null} = sem filtro, vazio = lista vazia
  * @param estoque       filtro de estoque, ou {@code null}
  * @param emPromocao    so produtos com promocao vigente em {@code hoje}
  * @param hoje          data de referencia da promocao (relogio de Sao Paulo), obrigatoria
  */
-public record FiltroDeProdutos(Long empresaId, List<String> palavras, String termoDeCodigo, StatusFiltro status,
-        Set<Long> categoriaIds, EstoqueFiltro estoque, boolean emPromocao, LocalDate hoje) {
+public record FiltroDeProdutos(Long empresaId, List<String> palavras, String termoDeCodigo, Long termoNumerico,
+        StatusFiltro status, Set<Long> categoriaIds, EstoqueFiltro estoque, boolean emPromocao, LocalDate hoje) {
 
     public FiltroDeProdutos {
         Objects.requireNonNull(empresaId, "empresaId");
@@ -33,9 +35,9 @@ public record FiltroDeProdutos(Long empresaId, List<String> palavras, String ter
         categoriaIds = categoriaIds == null ? null : Set.copyOf(categoriaIds);
     }
 
-    /** Ha termo de busca (por texto, por codigo ou pelos dois). */
+    /** Ha termo de busca (por texto, por codigo de barras, por numero ou codigo do produto). */
     boolean temBusca() {
-        return !palavras.isEmpty() || termoDeCodigo != null;
+        return !palavras.isEmpty() || termoDeCodigo != null || termoNumerico != null;
     }
 
     /** O filtro de categoria nao casa com nenhum produto (categoria inexistente ou de outra empresa). */

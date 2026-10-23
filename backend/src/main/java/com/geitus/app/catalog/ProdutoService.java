@@ -461,14 +461,16 @@ public class ProdutoService {
     }
 
     /**
-     * Filtro da consulta: o termo vira as palavras normalizadas e o termo de
+     * Filtro da consulta: o termo vira as palavras normalizadas, o termo de
      * codigo (sem nenhum espaco Unicode; so espacos = sem busca, Review Focus 1)
-     * e a categoria vira ela e as descendentes.
+     * e, se for so de digitos, o termo numerico sem zeros a esquerda (numero e
+     * codigo do produto, Fase B2); a categoria vira ela e as descendentes.
      */
     private static FiltroDeProdutos filtroDaListagem(Long empresaId, ParametrosDaListagem parametros,
             CategoriaArvore arvore, LocalDate hoje) {
         return new FiltroDeProdutos(empresaId, TextoDeBusca.palavras(parametros.busca()),
-                TextoDeBusca.termoDeCodigo(parametros.busca()), parametros.status(),
+                TextoDeBusca.termoDeCodigo(parametros.busca()), TextoDeBusca.termoNumerico(parametros.busca()),
+                parametros.status(),
                 categoriasDoFiltro(arvore, parametros.categoria()), parametros.estoque(), parametros.emPromocao(),
                 hoje);
     }

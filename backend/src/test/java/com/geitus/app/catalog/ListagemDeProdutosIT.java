@@ -294,6 +294,23 @@ class ListagemDeProdutosIT {
                 .andExpect(jsonPath("$.itens[0].nome").value("Arroz"));
     }
 
+    /** Fase B2 de ponta a ponta: "0542" acha pelo codigo e "1" pelo numero de registro. */
+    @Test
+    void buscaPorCodigoComZerosEPeloNumero() {
+        Loja loja = novaLoja();
+        cadastrar(loja, comUnidade(loja).nome("Açúcar a granel"));
+        cadastrar(loja, comUnidade(loja).nome("Feijão a granel").codigoDoProduto(542));
+
+        assertThat(nomes(listar(loja, parametros("0542", null, 0, 25)))).containsExactly("Feijão a granel");
+        assertThat(nomes(listar(loja, parametros("1", null, 0, 25)))).containsExactly("Açúcar a granel");
+        assertThat(listar(loja, parametros("000542", null, 0, 25)).itens())
+                .singleElement()
+                .satisfies(produto -> {
+                    assertThat(produto.numero()).isEqualTo(2L);
+                    assertThat(produto.codigo()).isEqualTo(542);
+                });
+    }
+
     // ------------------------------------------------------------------
     // Apoio
     // ------------------------------------------------------------------

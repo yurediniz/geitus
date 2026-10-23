@@ -39,6 +39,12 @@ public final class TextoDeBusca {
 
     private static final String ESPACO = " ";
 
+    /** Digitos ASCII (nada de digitos de outros alfabetos, como os de largura total). */
+    private static final Pattern SO_DIGITOS = Pattern.compile("[0-9]+");
+    private static final Pattern ZEROS_A_ESQUERDA = Pattern.compile("^0+");
+    /** Ate 18 digitos sempre cabem num {@code long} (o maximo tem 19). */
+    private static final int MAXIMO_DE_DIGITOS_DO_TERMO_NUMERICO = 18;
+
     /**
      * Caracteres de controle (Cc) e de formatacao (Cf) invisiveis, como U+0000,
      * U+200B, U+FEFF e U+00AD, menos os que sao espaco em branco (tab, quebras
@@ -81,6 +87,26 @@ public final class TextoDeBusca {
         String semInvisiveis = INVISIVEIS.matcher(termo).replaceAll("");
         String semEspacos = ESPACOS_EM_BRANCO.matcher(semInvisiveis).replaceAll("");
         return semEspacos.isEmpty() ? null : semEspacos;
+    }
+
+    /**
+     * Fase B2 (docs/modules/produtos-codigo-e-balanca.md, 6): o termo como
+     * numero, para comparar com o numero de registro e o codigo do produto. Parte
+     * do {@link #termoDeCodigo} (sem espacos nem invisiveis), que precisa ser so
+     * de digitos ASCII; os zeros a esquerda sao ignorados ("0542" = 542). Nao
+     * numerico, so zeros ou com mais de 18 digitos significativos: {@code null}
+     * (sem busca por numero; o texto e os codigos de barras continuam).
+     */
+    public static Long termoNumerico(String termo) {
+        String semEspacos = termoDeCodigo(termo);
+        if (semEspacos == null || !SO_DIGITOS.matcher(semEspacos).matches()) {
+            return null;
+        }
+        String semZeros = ZEROS_A_ESQUERDA.matcher(semEspacos).replaceFirst("");
+        if (semZeros.isEmpty() || semZeros.length() > MAXIMO_DE_DIGITOS_DO_TERMO_NUMERICO) {
+            return null;
+        }
+        return Long.parseLong(semZeros);
     }
 
     /** Texto pesquisavel do produto: nome, nome curto, SKU e marca informados, juntos e normalizados. */

@@ -546,6 +546,73 @@ class ConsultaDeProdutosIT {
         assertThat(nomes(new Filtro(outra.getId()).busca("arroz"))).containsExactly("Arroz da B");
     }
 
+    // ---------- Fase B2: busca por numero e codigo do produto (spec 6) ----------
+
+    /** Review Focus 2: "542", "0542" e "000542" sao o mesmo codigo; a comparacao e exata (5420 fica fora). */
+    @Test
+    void buscaPorCodigoComESemZeros() {
+        salvar(produto("Açúcar a granel").numero(1).codigoDoProduto(542));
+        salvar(produto("Arroz a granel").numero(2).codigoDoProduto(5420));
+        salvar(produto("Feijão").numero(3));
+
+        for (String termo : List.of("542", "0542", "000542", " 0 542 ")) {
+            assertThat(nomes(filtro().busca(termo))).as("busca [%s]", termo).containsExactly("Açúcar a granel");
+        }
+    }
+
+    @Test
+    void buscaPeloNumero() {
+        salvar(produto("Leite").numero(15));
+        salvar(produto("Café").numero(150));
+        salvar(produto("Pão").numero(16).codigoDoProduto(7));
+
+        assertThat(nomes(filtro().busca("15"))).containsExactly("Leite");
+        assertThat(nomes(filtro().busca("015"))).containsExactly("Leite");
+        assertThat(nomes(filtro().busca("7"))).containsExactly("Pão");
+    }
+
+    /** O termo numerico soma ao texto e aos codigos de barras (OU), nao substitui. */
+    @Test
+    void termoNumericoTambemBuscaTextoECodigoDeBarras() {
+        salvar(produto("Pelo codigo").numero(1).codigoDoProduto(789));
+        salvar(produto("Pelo numero").numero(789));
+        salvar(produto("Leite 789 ml").numero(2));
+        salvar(produto("Pelo codigo de barras").numero(3).codigo(EAN13));
+        salvar(produto("Nada").numero(4).codigoDoProduto(78));
+
+        assertThat(nomes(filtro().busca("789")))
+                .containsExactly("Leite 789 ml", "Pelo codigo", "Pelo codigo de barras", "Pelo numero");
+    }
+
+    @Test
+    void termoNaoNumericoNaoUsaNumero() {
+        salvar(produto("Leite").numero(15).codigoDoProduto(15));
+
+        assertThat(nomes(filtro().busca("15a"))).isEmpty();
+        assertThat(nomes(filtro().busca("15-"))).isEmpty();
+        assertThat(nomes(filtro().busca("n15"))).isEmpty();
+    }
+
+    @Test
+    void termoComMaisDe18DigitosNaoQuebra() {
+        salvar(produto("Leite").numero(1).codigoDoProduto(1));
+
+        assertThat(nomes(filtro().busca("1234567890123456789"))).isEmpty();
+        assertThat(nomes(filtro().busca("9".repeat(40)))).isEmpty();
+        assertThat(nomes(filtro().busca("000000000000000000001"))).containsExactly("Leite");
+    }
+
+    /** DEC-016: numero e codigo iguais em outra empresa nao aparecem. */
+    @Test
+    void buscaNumericaIsolaPorEmpresa() {
+        Empresa outra = novaEmpresa("Outra Lista");
+        salvar(produtoDa(outra, "Da outra").numero(15).codigoDoProduto(542));
+        salvar(produto("Daqui").numero(15).codigoDoProduto(542));
+
+        assertThat(nomes(filtro().busca("15"))).containsExactly("Daqui");
+        assertThat(nomes(filtro().busca("542"))).containsExactly("Daqui");
+    }
+
     // ------------------------------------------------------------------
     // Apoio
     // ------------------------------------------------------------------
@@ -559,6 +626,7 @@ class ConsultaDeProdutosIT {
         private Set<Long> categoriaIds;
         private EstoqueFiltro estoque;
         private boolean emPromocao;
+        private Long termoNumerico;
 
         Filtro(Long empresaId) {
             this.empresaId = empresaId;
@@ -568,6 +636,7 @@ class ConsultaDeProdutosIT {
         Filtro busca(String termo) {
             this.palavras = TextoDeBusca.palavras(termo);
             this.termoDeCodigo = TextoDeBusca.termoDeCodigo(termo);
+            this.termoNumerico = TextoDeBusca.termoNumerico(termo);
             return this;
         }
 
@@ -575,6 +644,7 @@ class ConsultaDeProdutosIT {
         Filtro soCodigo(String termo) {
             this.palavras = List.of();
             this.termoDeCodigo = termo;
+            this.termoNumerico = null;
             return this;
         }
 
@@ -599,8 +669,8 @@ class ConsultaDeProdutosIT {
         }
 
         FiltroDeProdutos montar() {
-            return new FiltroDeProdutos(empresaId, palavras, termoDeCodigo, status, categoriaIds, estoque, emPromocao,
-                    HOJE);
+            return new FiltroDeProdutos(empresaId, palavras, termoDeCodigo, termoNumerico, status, categoriaIds,
+                    estoque, emPromocao, HOJE);
         }
     }
 

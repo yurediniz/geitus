@@ -107,4 +107,34 @@ class TextoDeBuscaTest {
         assertThat(TextoDeBusca.palavras(null)).isEmpty();
         assertThat(TextoDeBusca.palavras("\u00a0\u2007 \u202f")).isEmpty();
     }
+
+    // ---------- Fase B2: termo numerico (numero e codigo do produto) ----------
+
+    @Test
+    void termoNumericoSemEspacosESemZerosAEsquerda() {
+        assertThat(TextoDeBusca.termoNumerico("542")).isEqualTo(542L);
+        assertThat(TextoDeBusca.termoNumerico("0542")).isEqualTo(542L);
+        assertThat(TextoDeBusca.termoNumerico(" 000542 ")).isEqualTo(542L);
+        assertThat(TextoDeBusca.termoNumerico("1\u00a05")).isEqualTo(15L);
+        assertThat(TextoDeBusca.termoNumerico("7891000315507")).isEqualTo(7_891_000_315_507L);
+    }
+
+    @Test
+    void termoNumericoSoComDigitosAsciiAte18() {
+        assertThat(TextoDeBusca.termoNumerico("123456789012345678")).isEqualTo(123_456_789_012_345_678L);
+        assertThat(TextoDeBusca.termoNumerico("0000123456789012345678")).isEqualTo(123_456_789_012_345_678L);
+        assertThat(TextoDeBusca.termoNumerico("1234567890123456789")).isNull();
+        assertThat(TextoDeBusca.termoNumerico("99999999999999999999999")).isNull();
+    }
+
+    @Test
+    void termoNaoNumericoOuSemValorEhNulo() {
+        assertThat(TextoDeBusca.termoNumerico(null)).isNull();
+        assertThat(TextoDeBusca.termoNumerico("   ")).isNull();
+        assertThat(TextoDeBusca.termoNumerico("15a")).isNull();
+        assertThat(TextoDeBusca.termoNumerico("-15")).isNull();
+        assertThat(TextoDeBusca.termoNumerico("1,5")).isNull();
+        assertThat(TextoDeBusca.termoNumerico("\uff11\uff15")).isNull();
+        assertThat(TextoDeBusca.termoNumerico("000")).isNull();
+    }
 }

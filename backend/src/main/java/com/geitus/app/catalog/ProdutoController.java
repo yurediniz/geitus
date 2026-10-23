@@ -63,7 +63,9 @@ public class ProdutoController {
 
     @Operation(summary = "Lista os produtos da empresa do usuario autenticado, paginada",
             description = "Busca sem diferenciar maiusculas nem acentos por nome, nome curto, SKU e marca (cada "
-                    + "palavra, ate 5, em qualquer ordem) ou por parte de qualquer codigo de barras. Filtros "
+                    + "palavra, ate 5, em qualquer ordem) ou por parte de qualquer codigo de barras; um termo so "
+                    + "de digitos tambem encontra o produto pelo numero ou pelo codigo do produto, sem zeros a "
+                    + "esquerda (\"0542\" = 542). Filtros "
                     + "combinados com E; categoria de outra empresa ou inexistente devolve pagina vazia. Valor "
                     + "invalido em status, estoque, ordem, promocao, pagina ou tamanho responde 400. Pagina alem "
                     + "do fim devolve itens vazio com o totalItens real.",
@@ -71,7 +73,8 @@ public class ProdutoController {
     @GetMapping
     public ResponseEntity<PaginaResponse<ProdutoResponse>> listar(
             @AuthenticationPrincipal Long idUsuario,
-            @Parameter(description = "Termo de busca (texto ou parte de um codigo de barras), ate 200 caracteres",
+            @Parameter(description = "Termo de busca (texto, parte de um codigo de barras, ou numero/codigo do "
+                    + "produto quando so de digitos), ate 200 caracteres",
                     schema = @Schema(maxLength = ParametrosDaListagem.TAMANHO_MAXIMO_DA_BUSCA))
             @RequestParam(required = false) String busca,
             @Parameter(description = "Status dos produtos",

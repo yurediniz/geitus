@@ -20,7 +20,7 @@ import com.geitus.app.shared.busca.PadraoLike;
  * ({@link StatusFiltro}, {@link EstoqueFiltro}, {@link OrdemDeProdutos}). Os
  * unicos nomes gerados sao {@code :palavra0} a {@code :palavra4}, pelo indice
  * da palavra (no maximo {@value com.geitus.app.shared.busca.TextoDeBusca#MAXIMO_DE_PALAVRAS}, garantido
- * pelo {@link FiltroDeProdutos}). Todo valor do usuario (palavras, codigo,
+ * pelo {@link FiltroDeProdutos}). Todo valor do usuario (palavras, codigo, termo numerico,
  * categorias, data, pagina) vai como parametro nomeado; os padroes {@code LIKE}
  * escapam {@code %}, {@code _} e {@code \} ({@link PadraoLike}, DT-017) com
  * {@code ESCAPE '\'}.
@@ -48,6 +48,8 @@ public class ConsultaDeProdutos {
             EXISTS (SELECT 1 FROM produto_codigos_barras c
                      WHERE c.empresa_id = p.empresa_id AND c.produto_id = p.id
                        AND lower(c.codigo) LIKE :codigo ESCAPE '\\')""";
+    /** Fase B2: numero de registro ou codigo do produto iguais ao termo numerico (indices unicos da V11). */
+    private static final String NUMERO_OU_CODIGO = "p.numero = :termoNumerico OR p.codigo = :termoNumerico";
     private static final String CATEGORIAS = " AND p.categoria_id = ANY(:categoriaIds)";
     private static final String PROMOCAO_VIGENTE =
             " AND p.preco_promocional IS NOT NULL AND :hoje BETWEEN p.promocao_inicio AND p.promocao_fim";
@@ -106,7 +108,8 @@ public class ConsultaDeProdutos {
 
     /**
      * Spec 4.1: todas as palavras (E, em qualquer ordem) no texto normalizado,
-     * OU o termo sem espacos em qualquer codigo de barras.
+     * OU o termo sem espacos em qualquer codigo de barras, OU (Fase B2, termo so
+     * de digitos) o numero ou o codigo do produto iguais ao termo sem zeros.
      */
     private static String condicaoDeBusca(FiltroDeProdutos filtro, MapSqlParameterSource parametros) {
         StringBuilder sql = new StringBuilder();
@@ -128,6 +131,13 @@ public class ConsultaDeProdutos {
             }
             sql.append(CODIGO);
             parametros.addValue("codigo", PadraoLike.contem(filtro.termoDeCodigo().toLowerCase(Locale.ROOT)));
+        }
+        if (filtro.termoNumerico() != null) {
+            if (!sql.isEmpty()) {
+                sql.append(" OR ");
+            }
+            sql.append(NUMERO_OU_CODIGO);
+            parametros.addValue("termoNumerico", filtro.termoNumerico());
         }
         return sql.toString();
     }

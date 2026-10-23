@@ -944,6 +944,22 @@ class ProdutoServiceTest {
         FiltroDeProdutos filtro = filtroConsultado();
         assertThat(filtro.palavras()).containsExactly("50%_", "acucar", "uniao");
         assertThat(filtro.termoDeCodigo()).isEqualTo("50%_AÇÚCARUnião");
+        assertThat(filtro.termoNumerico()).isNull();
+    }
+
+    /** Fase B2: termo so com digitos tambem vira o numero (sem zeros) para o Nº e o codigo do produto. */
+    @Test
+    void buscaNumericaViraTermoNumericoSemZeros() {
+        usuarioAtivoDaEmpresa(9L);
+        arvoreDaEmpresa();
+        consultaDevolve(0);
+
+        produtoService.listarParaUsuario(9L, parametros(" 000542 "));
+
+        FiltroDeProdutos filtro = filtroConsultado();
+        assertThat(filtro.palavras()).containsExactly("000542");
+        assertThat(filtro.termoDeCodigo()).isEqualTo("000542");
+        assertThat(filtro.termoNumerico()).isEqualTo(542L);
     }
 
     @Test
@@ -957,7 +973,7 @@ class ProdutoServiceTest {
 
         ArgumentCaptor<FiltroDeProdutos> filtro = ArgumentCaptor.forClass(FiltroDeProdutos.class);
         verify(consultaDeProdutos).buscar(filtro.capture(), eq(OrdemDeProdutos.MARGEM_DESC), eq(4), eq(10));
-        assertThat(filtro.getValue()).isEqualTo(new FiltroDeProdutos(EMPRESA_ID, List.of(), null,
+        assertThat(filtro.getValue()).isEqualTo(new FiltroDeProdutos(EMPRESA_ID, List.of(), null, null,
                 StatusFiltro.INATIVOS, null, EstoqueFiltro.SEM, true, HOJE_DO_RELOGIO));
     }
 
