@@ -17,8 +17,8 @@ import {
  *   dialogo "Descartar alteracoes?" via `useBlocker` (exige data router);
  * - fechar ou recarregar a aba usa o aviso nativo (`beforeunload`).
  *
- * So bloqueia troca de caminho: trocar de aba dentro da pagina ou mudar so a
- * query/hash nao conta. Para sair logo apos salvar, a pagina desativa o aviso
+ * So bloqueia troca de caminho: usar os atalhos das secoes da pagina ou mudar
+ * so a query/hash nao conta. Para sair logo apos salvar, a pagina desativa o aviso
  * e navega no render seguinte (o bloqueio e lido do ultimo render).
  */
 export function useAvisoAlteracoesNaoSalvas(ativo: boolean): { dialogo: ReactNode } {

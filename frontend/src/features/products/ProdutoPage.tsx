@@ -6,8 +6,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Loader2, RotateCcw, Trash2, XCircle } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   PRODUTOS_QUERY_KEY,
   TODAS_CATEGORIAS_QUERY_KEY,
@@ -16,18 +14,13 @@ import {
 } from '@/features/catalog/catalogoQuery'
 import { ConfirmarExclusaoDialog } from '@/features/catalog/ConfirmarExclusaoDialog'
 import { AvisoSomenteLeitura, ErroInline, FeedbackCatalogo } from '@/features/catalog/FeedbackCatalogo'
-import { AbaCodigos } from '@/features/products/abas/AbaCodigos'
-import { AbaEstoque } from '@/features/products/abas/AbaEstoque'
-import { AbaGeral } from '@/features/products/abas/AbaGeral'
-import { AbaHistorico } from '@/features/products/abas/AbaHistorico'
-import { AbaPrecos } from '@/features/products/abas/AbaPrecos'
 import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { formatarQuantidade } from '@/features/products/formatacaoProduto'
 import { destinoDaLista, type EstadoParaLista } from '@/features/products/navegacaoProdutos'
 import {
-  ABAS_PRODUTO,
-  CAMPOS_POR_ABA,
-  ROTULO_ABA,
+  CAMPOS_POR_SECAO,
+  ROTULO_SECAO,
+  SECOES_PRODUTO,
   avaliarNovoCodigo,
   campoDaChaveDoServidor,
   erroFracaoAtacado,
@@ -39,13 +32,22 @@ import {
   montarRequest,
   primeiroCampoComErro,
   produtoSchema,
+  secaoDoCampo,
   valoresDoProduto,
   valoresIniciais,
   valoresParaCadastrarOutro,
-  type AbaProduto,
   type ProdutoFormValues,
+  type SecaoProduto,
 } from '@/features/products/produtoFormulario'
 import { SeloStatus } from '@/features/products/SeloStatus'
+import { AtalhosDasSecoes, SecaoDaPagina } from '@/features/products/secoes/AtalhosDasSecoes'
+import { idDoTituloDaSecao, rolarEFocar } from '@/features/products/secoes/rolagem'
+import { SecaoCodigos } from '@/features/products/secoes/SecaoCodigos'
+import { SecaoEstoque } from '@/features/products/secoes/SecaoEstoque'
+import { SecaoGeral } from '@/features/products/secoes/SecaoGeral'
+import { SecaoHistorico } from '@/features/products/secoes/SecaoHistorico'
+import { SecaoPrecos } from '@/features/products/secoes/SecaoPrecos'
+import { useSecaoAtiva } from '@/features/products/secoes/useSecaoVisivel'
 import { useAvisoAlteracoesNaoSalvas } from '@/features/products/useAvisoAlteracoesNaoSalvas'
 import { useAuth } from '@/hooks/useAuth'
 import { listarCategorias } from '@/services/categoriaService'
@@ -74,12 +76,12 @@ type AcaoAposSalvar = 'voltar' | 'cadastrarOutro'
 function mensagemErroSalvar(erro: unknown): string {
   if (erro instanceof HttpError) {
     if (erro.status === 409) {
-      // Duplicidade de SKU ou codigo de barras: usa a mensagem curada do
+      // Duplicidade de codigo, SKU ou codigo de barras: usa a mensagem curada do
       // backend; sem ela, um texto fixo (nunca o generico tecnico do httpClient).
       if (!ehMensagemGenerica(erro.message)) {
         return erro.message
       }
-      return 'Já existe um produto com este SKU ou código de barras nesta empresa.'
+      return 'Já existe um produto com este código, SKU ou código de barras nesta empresa.'
     }
     if (erro.status === 400) {
       const mensagensCampos = erro.campos ? Object.values(erro.campos).filter(Boolean) : []
@@ -104,9 +106,9 @@ function mensagemErroSalvar(erro: unknown): string {
 /** Orientacao somada ao 409 de SKU: a sugestao nao reserva o SKU (spec 4.2). */
 const ORIENTACAO_SKU_DUPLICADO = 'Gere outro SKU ou informe um diferente.'
 
-/** Resumo no topo quando o erro foi levado ao campo (que pode estar numa aba fechada). */
-function mensagemErroNaAba(aba: AbaProduto): string {
-  return `O produto não foi salvo. Confira o erro na aba ${ROTULO_ABA[aba]}.`
+/** Resumo no topo quando o erro foi levado ao campo (que pode estar numa secao mais abaixo). */
+function mensagemErroNaSecao(secao: SecaoProduto): string {
+  return `O produto não foi salvo. Confira o erro na seção ${ROTULO_SECAO[secao]}.`
 }
 
 /** Falha ao salvar mostrada no topo; mudar um dos `campos` a retira (o erro ja esta sendo corrigido). */
@@ -146,16 +148,19 @@ const CAMPOS_COM_ERRO_DE_FRACAO = ['quantidadeMinimaAtacado', 'estoqueInicial'] 
 
 /** Inicio fixo das mensagens do backend sobre um codigo de barras (409 de outro produto, 400 de digito). */
 const INICIO_MENSAGEM_CODIGO_DE_BARRAS = 'O código de barras '
+/** Inicio fixo da mensagem do backend para codigo do produto repetido (409). */
+const INICIO_MENSAGEM_CODIGO_DO_PRODUTO = 'Este código já está em uso no produto '
 /** Mensagem fixa do backend para SKU repetido (409). */
 const MENSAGEM_SKU_DUPLICADO = 'Já existe um produto com este SKU nesta empresa.'
 
 /**
  * Erros do backend que pertencem a campos do formulario, para marcar cada
- * campo (e a aba dele). Usa `campos` da resposta (400 e 409): a chave sem o
+ * campo (e o atalho da secao dele). Usa `campos` da resposta (400 e 409): a chave sem o
  * indice (`codigosBarras[2]` -> `codigosBarras`) ou, na promocao e no atacado,
  * o campo correspondente (`promocao.preco` -> `precoPromocional`). Sem `campos`, o texto e so o
- * fallback: codigo de barras primeiro, pelo inicio fixo da mensagem (o nome de
- * outro produto citado nela pode conter "SKU"), depois a mensagem exata de SKU.
+ * fallback: codigo de barras e codigo do produto primeiro, pelo inicio fixo da
+ * mensagem (o nome de outro produto citado nela pode conter "SKU"), depois a
+ * mensagem exata de SKU.
  * `restantes` sao mensagens de chaves que nao sao campos do formulario.
  */
 function errosDeCampoDoServidor(erro: unknown): { erros: ErroDeCampoDoServidor[]; restantes: string[] } {
@@ -194,28 +199,26 @@ function errosDeCampoDoServidor(erro: unknown): { erros: ErroDeCampoDoServidor[]
   if (erro.message.startsWith(INICIO_MENSAGEM_CODIGO_DE_BARRAS)) {
     return { erros: [{ campo: 'codigosBarras', mensagem: erro.message }], restantes: [] }
   }
+  if (erro.status === 409 && erro.message.startsWith(INICIO_MENSAGEM_CODIGO_DO_PRODUTO)) {
+    return { erros: [{ campo: 'codigo', mensagem: erro.message }], restantes: [] }
+  }
   if (erro.status === 409 && erro.message === MENSAGEM_SKU_DUPLICADO) {
     return { erros: [{ campo: 'sku', mensagem: comOrientacao('sku', erro.message) }], restantes: [] }
   }
   return vazio
 }
 
-/**
- * Resumo no topo quando os erros foram levados aos campos: diz em que aba(s)
- * olhar. `abaAtual` conta para um campo que ela tambem mostra.
- */
-function mensagemErrosNosCampos(campos: readonly (keyof ProdutoFormValues)[], abaAtual: AbaProduto): string {
-  const abas = ABAS_PRODUTO.filter((aba) =>
-    campos.some((campo) => primeiroCampoComErro((alvo) => alvo === campo, abaAtual)?.aba === aba),
-  )
-  if (abas.length <= 1) {
-    const aba = abas[0] ?? abaAtual
+/** Resumo no topo quando os erros foram levados aos campos: diz em que secao(oes) olhar. */
+function mensagemErrosNosCampos(campos: readonly (keyof ProdutoFormValues)[]): string {
+  const secoes = SECOES_PRODUTO.filter((secao) => campos.some((campo) => secaoDoCampo(campo) === secao))
+  if (secoes.length <= 1) {
+    const secao = secoes[0] ?? 'geral'
     return campos.length > 1
-      ? `O produto não foi salvo. Confira os erros na aba ${ROTULO_ABA[aba]}.`
-      : mensagemErroNaAba(aba)
+      ? `O produto não foi salvo. Confira os erros na seção ${ROTULO_SECAO[secao]}.`
+      : mensagemErroNaSecao(secao)
   }
-  const nomes = abas.map((aba) => ROTULO_ABA[aba])
-  return `O produto não foi salvo. Confira os erros nas abas ${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}.`
+  const nomes = secoes.map((secao) => ROTULO_SECAO[secao])
+  return `O produto não foi salvo. Confira os erros nas seções ${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}.`
 }
 
 /** Mensagem do dialogo quando a exclusao falha (409 traz o motivo curado do backend). */
@@ -237,12 +240,12 @@ function mensagemErroExcluir(erro: unknown): string {
   return 'Não foi possível excluir o produto. Tente novamente.'
 }
 
-function ehAba(valor: string): valor is AbaProduto {
-  return (ABAS_PRODUTO as readonly string[]).includes(valor)
-}
+/** Secoes do cadastro novo: o Historico so existe para um produto ja gravado. */
+const SECOES_DO_CADASTRO = SECOES_PRODUTO.filter((secao) => secao !== 'historico')
 
 /**
- * Pagina do produto (`/produtos/novo` e `/produtos/:id`): formulario em abas.
+ * Pagina do produto (`/produtos/novo` e `/produtos/:id`): formulario em tela
+ * unica, com as secoes empilhadas e a barra de atalhos (spec B2 §4).
  * A `key` remonta tudo ao trocar de produto, sem estado herdado do anterior.
  */
 export function ProdutoPage() {
@@ -382,7 +385,8 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   const navigate = useNavigate()
   const modoNovo = produto === null
 
-  const [aba, setAba] = useState<AbaProduto>('geral')
+  const secoesVisiveis = modoNovo ? SECOES_DO_CADASTRO : SECOES_PRODUTO
+  const [secaoAtiva, setSecaoAtiva] = useSecaoAtiva(secoesVisiveis)
   // O cadastro novo comeca pelo Nome.
   const [campoParaFocar, setCampoParaFocar] = useState<keyof ProdutoFormValues | null>(modoNovo ? 'nome' : null)
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null)
@@ -405,7 +409,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   const form = useForm<ProdutoFormValues>({
     resolver: zodResolver(produtoSchema),
     defaultValues: produto ? valoresDoProduto(produto) : valoresIniciais(),
-    // O foco do erro e da pagina: o campo pode estar numa aba fechada (ver aoInvalidar).
+    // O foco do erro e da pagina: rola ate o campo antes de focar (ver aoInvalidar).
     shouldFocusError: false,
   })
   const {
@@ -489,9 +493,10 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     }
   }, [modoNovo, unidades, getValues, getFieldState, resetField])
 
-  // Foco pedido ao abrir o cadastro, ao salvar com erro ou ao cadastrar outro.
-  // O conteudo da aba recem-ativada monta num render seguinte (Presence do
-  // Radix): por isso o foco vai para a fila, depois desse render. Sem o campo, foca a aba.
+  // Foco pedido ao abrir o cadastro, ao salvar com erro ou ao cadastrar outro:
+  // rola ate o campo e foca nele. Campos que aparecem com o erro (ex.: niveis
+  // com o controle desligado, bloco de promocao) montam num render seguinte:
+  // por isso o foco vai para a fila. Sem o campo, foca o titulo da secao.
   useEffect(() => {
     if (!campoParaFocar) {
       return
@@ -499,12 +504,29 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     const timer = window.setTimeout(() => {
       const alvo =
         document.getElementById(idDoCampo(campoParaFocar)) ??
-        document.querySelector<HTMLElement>(`[role="tab"][data-aba="${aba}"]`)
-      alvo?.focus()
+        document.getElementById(idDoTituloDaSecao(secaoDoCampo(campoParaFocar)))
+      if (alvo) {
+        rolarEFocar(alvo, 'centro')
+      }
       setCampoParaFocar(null)
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [campoParaFocar, aba])
+  }, [campoParaFocar])
+
+  /** Atalho: rola ate a secao e foca o titulo dela. */
+  const irParaSecao = (secao: SecaoProduto) => {
+    setSecaoAtiva(secao)
+    const titulo = document.getElementById(idDoTituloDaSecao(secao))
+    if (titulo) {
+      rolarEFocar(titulo, 'inicio')
+    }
+  }
+
+  /** Leva ao campo com erro: marca a secao dele no atalho e pede o foco. */
+  const irParaCampo = (destino: { secao: SecaoProduto; campo: keyof ProdutoFormValues }) => {
+    setSecaoAtiva(destino.secao)
+    setCampoParaFocar(destino.campo)
+  }
 
   // Siglas conhecidas (lista + unidades do produto) para "1 CX = 12 UN" e "por UN".
   const siglaPorId = useMemo(() => {
@@ -551,9 +573,8 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
       if (acao === 'cadastrarOutro') {
         reset(valoresParaCadastrarOutro(valores))
         setMensagemSucesso(`Produto "${salvo.nome}" cadastrado com sucesso.`)
-        setAba('geral')
-        // No cadastro em sequencia com leitor, o proximo produto comeca pelo codigo.
-        setCampoParaFocar('codigosBarras')
+        // O proximo produto comeca pelo Nome, no topo da tela (spec B2 §4).
+        irParaCampo({ secao: 'geral', campo: 'nome' })
         return
       }
       setSaida({
@@ -565,8 +586,8 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
       setMensagemSucesso(null)
       const { erros: errosDeCampo, restantes } = errosDeCampoDoServidor(erro)
       if (errosDeCampo.length > 0) {
-        // Cada erro vai para o seu campo (com o indicador da aba); a pagina vai
-        // para a primeira aba com erro (ou fica, se a atual mostra o campo).
+        // Cada erro vai para o seu campo (com a contagem no atalho da secao); a
+        // pagina rola ate o primeiro, na ordem das secoes.
         for (const { campo, mensagem } of errosDeCampo) {
           // Erro num campo de promocao/atacado: o bloco abre para o erro aparecer.
           const interruptor = interruptorDoCampo(campo)
@@ -576,12 +597,11 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
           setError(campo, { type: 'server', message: mensagem })
         }
         const campos = errosDeCampo.map(({ campo }) => campo)
-        const destino = primeiroCampoComErro((campo) => campos.includes(campo), aba)
-        const resumo = mensagemErrosNosCampos(campos, aba)
+        const destino = primeiroCampoComErro((campo) => campos.includes(campo))
+        const resumo = mensagemErrosNosCampos(campos)
         setErroSalvar({ mensagem: [...restantes, resumo].join(' '), campos: restantes.length > 0 ? [] : campos })
         if (destino) {
-          setAba(destino.aba)
-          setCampoParaFocar(destino.campo)
+          irParaCampo(destino)
         }
       } else {
         setErroSalvar({ mensagem: mensagemErroSalvar(erro), campos: [] })
@@ -644,19 +664,18 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     setErroExcluir(null)
   }
 
-  /** Erro de validacao: vai para a primeira aba com erro (ou fica, se a atual mostra o campo) e foca o campo. */
+  /** Erro de validacao: rola ate o primeiro campo com erro (na ordem das secoes) e foca nele. */
   const aoInvalidar = (erros: FieldErrors<ProdutoFormValues>) => {
-    const destino = primeiroCampoComErro((campo) => erros[campo] !== undefined, aba)
+    const destino = primeiroCampoComErro((campo) => erros[campo] !== undefined)
     if (destino) {
-      setAba(destino.aba)
-      setCampoParaFocar(destino.campo)
+      irParaCampo(destino)
     }
   }
 
   /**
    * Codigo digitado e nao adicionado: ao salvar, entra na lista com as mesmas
    * regras do "Adicionar". Se for barrado, nada e salvo e o erro aparece no
-   * campo (na aba atual, se ela o mostra; senao na Geral).
+   * campo, na secao Codigos.
    */
   const incorporarCodigoPendente = (): boolean => {
     const pendente = getValues('codigoPendente')
@@ -669,11 +688,9 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     }
     if (resultado.tipo === 'bloqueado') {
       setError('codigoPendente', { type: 'manual', message: resultado.motivo })
-      const abaDestino: AbaProduto = aba === 'codigos' ? 'codigos' : 'geral'
       setMensagemSucesso(null)
-      setErroSalvar({ mensagem: mensagemErroNaAba(abaDestino), campos: ['codigoPendente', 'codigosBarras'] })
-      setAba(abaDestino)
-      setCampoParaFocar('codigoPendente')
+      setErroSalvar({ mensagem: mensagemErroNaSecao('codigos'), campos: ['codigoPendente', 'codigosBarras'] })
+      irParaCampo({ secao: 'codigos', campo: 'codigoPendente' })
       return false
     }
     setValue('codigosBarras', resultado.lista, { shouldDirty: true })
@@ -747,9 +764,8 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   const acaoEmAndamento = salvarMutation.isPending ? salvarMutation.variables?.acao : undefined
   const desabilitado = salvando || somenteLeitura
 
-  const errosPorAba = (alvo: AbaProduto) => CAMPOS_POR_ABA[alvo].filter((campo) => errors[campo] !== undefined).length
-  // Historico so existe para um produto ja gravado.
-  const abasVisiveis = modoNovo ? ABAS_PRODUTO.filter((alvo) => alvo !== 'historico') : ABAS_PRODUTO
+  const errosDaSecao = (secao: SecaoProduto) =>
+    CAMPOS_POR_SECAO[secao].filter((campo) => errors[campo] !== undefined).length
 
   const podeExcluir = produto !== null && !somenteLeitura && produto.podeExcluir
   // 409: o produto teve movimentacao; inativar e a saida que a mensagem indica.
@@ -822,75 +838,58 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
             </p>
           )}
 
-          <Tabs value={aba} onValueChange={(valor) => ehAba(valor) && setAba(valor)}>
-            <TabsList aria-label="Seções do produto">
-              {abasVisiveis.map((alvo) => {
-                const quantidadeErros = errosPorAba(alvo)
-                return (
-                  <TabsTrigger key={alvo} value={alvo} data-aba={alvo}>
-                    {ROTULO_ABA[alvo]}
-                    {quantidadeErros > 0 && (
-                      <>
-                        <span aria-hidden="true" className="size-2 rounded-full bg-destructive" />{' '}
-                        <span className="sr-only">
-                          {quantidadeErros === 1 ? '(1 erro)' : `(${quantidadeErros} erros)`}
-                        </span>
-                      </>
-                    )}
-                  </TabsTrigger>
-                )
-              })}
-            </TabsList>
+          <AtalhosDasSecoes
+            secoes={secoesVisiveis}
+            ativa={secaoAtiva}
+            errosDaSecao={errosDaSecao}
+            aoEscolher={irParaSecao}
+          />
 
-            <Card>
-              <CardContent>
-                <TabsContent value="geral">
-                  <AbaGeral
-                    produto={produto}
-                    unidadesQuery={unidadesQuery}
-                    categoriasQuery={categoriasQuery}
-                    siglaPorId={siglaPorId}
-                    desabilitado={desabilitado}
-                    somenteLeitura={somenteLeitura}
-                    aoAlterarCampo={aoAlterarCampo}
-                  />
-                </TabsContent>
-                <TabsContent value="precos">
-                  <AbaPrecos siglaPorId={siglaPorId} desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
-                </TabsContent>
-                <TabsContent value="estoque">
-                  <AbaEstoque
-                    produto={produto}
-                    siglaPorId={siglaPorId}
-                    desabilitado={desabilitado}
-                    somenteLeitura={somenteLeitura}
-                    aoAlterarCampo={aoAlterarCampo}
-                    aoAjustarEstoque={(mensagem) => {
-                      setErroGeral(null)
-                      setMensagemSucesso(mensagem)
-                    }}
-                  />
-                </TabsContent>
-                <TabsContent value="codigos">
-                  <AbaCodigos
-                    produto={produto}
-                    desabilitado={desabilitado}
-                    somenteLeitura={somenteLeitura}
-                    aoAlterarCampo={aoAlterarCampo}
-                  />
-                </TabsContent>
-                {produto && (
-                  <TabsContent value="historico">
-                    <AbaHistorico
-                      produtoId={produto.id}
-                      sigla={produto.unidade.sigla}
-                      controlaEstoque={produto.controlaEstoque}
-                    />
-                  </TabsContent>
-                )}
-              </CardContent>
-            </Card>
-          </Tabs>
+          <SecaoDaPagina secao="geral">
+            <SecaoGeral
+              produto={produto}
+              unidadesQuery={unidadesQuery}
+              categoriasQuery={categoriasQuery}
+              siglaPorId={siglaPorId}
+              desabilitado={desabilitado}
+              somenteLeitura={somenteLeitura}
+              aoAlterarCampo={aoAlterarCampo}
+            />
+          </SecaoDaPagina>
+          <SecaoDaPagina secao="codigos">
+            <SecaoCodigos
+              produto={produto}
+              desabilitado={desabilitado}
+              somenteLeitura={somenteLeitura}
+              aoAlterarCampo={aoAlterarCampo}
+            />
+          </SecaoDaPagina>
+          <SecaoDaPagina secao="precos">
+            <SecaoPrecos siglaPorId={siglaPorId} desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
+          </SecaoDaPagina>
+          <SecaoDaPagina secao="estoque">
+            <SecaoEstoque
+              produto={produto}
+              unidadesQuery={unidadesQuery}
+              siglaPorId={siglaPorId}
+              desabilitado={desabilitado}
+              somenteLeitura={somenteLeitura}
+              aoAlterarCampo={aoAlterarCampo}
+              aoAjustarEstoque={(mensagem) => {
+                setErroGeral(null)
+                setMensagemSucesso(mensagem)
+              }}
+            />
+          </SecaoDaPagina>
+          {produto && (
+            <SecaoDaPagina secao="historico">
+              <SecaoHistorico
+                produtoId={produto.id}
+                sigla={produto.unidade.sigla}
+                controlaEstoque={produto.controlaEstoque}
+              />
+            </SecaoDaPagina>
+          )}
 
           {!somenteLeitura && (
             <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t bg-background py-3 sm:flex-row sm:items-center sm:justify-end">

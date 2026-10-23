@@ -1,7 +1,7 @@
 import { Info } from 'lucide-react'
 
 import { chaveDosMovimentosDeEstoque } from '@/features/catalog/catalogoQuery'
-import { SecaoHistorico } from '@/features/products/abas/SecaoHistorico'
+import { ListaHistorico } from '@/features/products/secoes/ListaHistorico'
 import { textoMovimento } from '@/features/products/estoque/ajusteEstoque'
 import { formatarDataHora } from '@/features/products/formatacaoProduto'
 import { listarMovimentosDeEstoque } from '@/services/estoqueService'
@@ -15,12 +15,12 @@ export interface SecaoMovimentosEstoqueProps {
   controlaEstoque: boolean
 }
 
-/** Secao "Estoque" da aba Historico: as movimentacoes do produto, da mais recente para a mais antiga. */
+/** Lista "Estoque" da secao Historico: as movimentacoes do produto, da mais recente para a mais antiga. */
 export function SecaoMovimentosEstoque({ produtoId, sigla, controlaEstoque }: SecaoMovimentosEstoqueProps) {
   return (
-    <SecaoHistorico<MovimentoEstoque>
+    <ListaHistorico<MovimentoEstoque>
       id="historico-estoque"
-      titulo="Estoque"
+      titulo="Movimentações de estoque"
       chave={chaveDosMovimentosDeEstoque(produtoId)}
       buscar={(pagina) => listarMovimentosDeEstoque(produtoId, pagina)}
       nota={

@@ -10,15 +10,13 @@ export interface CodigosBarrasDoProdutoProps {
   produto: Produto | null
   desabilitado: boolean
   aoAlterarCampo: () => void
-  variante: 'completa' | 'compacta'
 }
 
 /**
  * Liga o campo de codigos de barras ao formulario: a lista (`codigosBarras`)
- * e o texto ainda nao adicionado (`codigoPendente`) sao os mesmos na aba
- * Geral e na aba Codigos.
+ * e o texto ainda nao adicionado (`codigoPendente`).
  */
-export function CodigosBarrasDoProduto({ produto, desabilitado, aoAlterarCampo, variante }: CodigosBarrasDoProdutoProps) {
+export function CodigosBarrasDoProduto({ produto, desabilitado, aoAlterarCampo }: CodigosBarrasDoProdutoProps) {
   const { control, setError, clearErrors } = useFormContext<ProdutoFormValues>()
   const { field: lista, fieldState: estadoLista } = useController({ control, name: 'codigosBarras' })
   const { field: pendente, fieldState: estadoPendente } = useController({ control, name: 'codigoPendente' })
@@ -27,7 +25,6 @@ export function CodigosBarrasDoProduto({ produto, desabilitado, aoAlterarCampo, 
 
   return (
     <CampoCodigosBarras
-      variante={variante}
       valor={lista.value}
       onChange={(codigos) => {
         lista.onChange(codigos)

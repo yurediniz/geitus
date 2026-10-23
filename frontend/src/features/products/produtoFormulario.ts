@@ -1,6 +1,6 @@
 /**
  * Formulario do produto: schema Zod, valores iniciais, mapeamentos de/para a
- * API e a distribuicao dos campos pelas abas. Sem React: testavel isolado.
+ * API e a distribuicao dos campos pelas secoes. Sem React: testavel isolado.
  */
 import { z } from 'zod'
 
@@ -228,7 +228,7 @@ export const produtoSchema = z.object({
   codigosBarras: z.array(z.string()).max(MAXIMO_CODIGOS_BARRAS, 'Informe no máximo 20 códigos de barras.'),
   /**
    * Texto digitado em "Adicionar código" e ainda nao adicionado. Fica no
-   * formulario (sobrevive a troca de aba e conta como alteracao), mas nao vai
+   * formulario (conta como alteracao), mas nao vai
    * no request: ao salvar, a pagina tenta adiciona-lo a lista antes de enviar.
    */
   codigoPendente: z.string(),
@@ -284,40 +284,30 @@ export const produtoSchema = z.object({
 
 export type ProdutoFormValues = z.infer<typeof produtoSchema>
 
-/** Abas da pagina do produto, na ordem de exibicao. Historico so existe na edicao. */
-export const ABAS_PRODUTO = ['geral', 'precos', 'estoque', 'codigos', 'historico'] as const
-export type AbaProduto = (typeof ABAS_PRODUTO)[number]
+/**
+ * Secoes da pagina do produto (tela unica, spec B2 §4), na ordem de exibicao.
+ * Historico so existe na edicao.
+ */
+export const SECOES_PRODUTO = ['geral', 'codigos', 'precos', 'estoque', 'historico'] as const
+export type SecaoProduto = (typeof SECOES_PRODUTO)[number]
 
-export const ROTULO_ABA: Readonly<Record<AbaProduto, string>> = {
+export const ROTULO_SECAO: Readonly<Record<SecaoProduto, string>> = {
   geral: 'Geral',
+  codigos: 'Códigos',
   precos: 'Preços',
   estoque: 'Estoque',
-  codigos: 'Códigos',
   historico: 'Histórico',
 }
 
 /**
- * Campos de cada aba, na ordem da tela: alimenta o indicador de erro da aba e
- * diz qual campo focar ao salvar com erro. Todo campo do formulario aparece em
- * alguma aba; so os codigos de barras aparecem em duas (cadastro rapido na
- * Geral e a lista completa em Codigos), garantido por teste. Historico e so
+ * Campos de cada secao, na ordem da tela: alimenta a contagem de erros do
+ * atalho e diz qual campo focar ao salvar com erro. Todo campo do formulario
+ * aparece em exatamente uma secao (garantido por teste). Historico e so
  * leitura: nenhum campo.
  */
-export const CAMPOS_POR_ABA: Readonly<Record<AbaProduto, readonly (keyof ProdutoFormValues)[]>> = {
-  geral: [
-    'nome',
-    'nomeCurto',
-    'unidadeId',
-    'precoVenda',
-    'codigoPendente',
-    'codigosBarras',
-    'categoriaId',
-    'marca',
-    'fornecedor',
-    'unidadeCompraId',
-    'fatorConversao',
-    'descricao',
-  ],
+export const CAMPOS_POR_SECAO: Readonly<Record<SecaoProduto, readonly (keyof ProdutoFormValues)[]>> = {
+  geral: ['nome', 'nomeCurto', 'unidadeId', 'precoVenda', 'categoriaId', 'marca', 'fornecedor', 'descricao'],
+  codigos: ['codigo', 'vendidoBalanca', 'sku', 'codigoPendente', 'codigosBarras'],
   precos: [
     'custo',
     'precoMinimo',
@@ -329,25 +319,31 @@ export const CAMPOS_POR_ABA: Readonly<Record<AbaProduto, readonly (keyof Produto
     'precoAtacado',
     'quantidadeMinimaAtacado',
   ],
-  estoque: ['controlaEstoque', 'estoqueInicial', 'estoqueMinimo', 'pontoReposicao', 'estoqueMaximo'],
-  codigos: ['codigo', 'vendidoBalanca', 'sku', 'codigoPendente', 'codigosBarras'],
+  estoque: [
+    'controlaEstoque',
+    'estoqueInicial',
+    'estoqueMinimo',
+    'pontoReposicao',
+    'estoqueMaximo',
+    'unidadeCompraId',
+    'fatorConversao',
+  ],
   historico: [],
 }
 
-/**
- * Para onde ir ao salvar com erro: o primeiro campo em erro (na ordem das
- * abas) e a primeira aba que o mostra. Se a aba atual tambem mostra esse campo
- * (ex.: codigos de barras, em Geral e em Codigos), fica nela.
- */
+/** Secao que mostra o campo. */
+export function secaoDoCampo(campo: keyof ProdutoFormValues): SecaoProduto {
+  return SECOES_PRODUTO.find((secao) => CAMPOS_POR_SECAO[secao].includes(campo)) ?? 'geral'
+}
+
+/** Para onde ir ao salvar com erro: o primeiro campo em erro, na ordem das secoes, e a secao dele. */
 export function primeiroCampoComErro(
   comErro: (campo: keyof ProdutoFormValues) => boolean,
-  abaAtual?: AbaProduto,
-): { aba: AbaProduto; campo: keyof ProdutoFormValues } | null {
-  for (const aba of ABAS_PRODUTO) {
-    const campo = CAMPOS_POR_ABA[aba].find(comErro)
+): { secao: SecaoProduto; campo: keyof ProdutoFormValues } | null {
+  for (const secao of SECOES_PRODUTO) {
+    const campo = CAMPOS_POR_SECAO[secao].find(comErro)
     if (campo) {
-      const ficaNaAtual = abaAtual !== undefined && CAMPOS_POR_ABA[abaAtual].includes(campo)
-      return { aba: ficaNaAtual ? abaAtual : aba, campo }
+      return { secao, campo }
     }
   }
   return null

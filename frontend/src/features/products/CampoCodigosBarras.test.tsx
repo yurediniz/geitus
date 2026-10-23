@@ -4,7 +4,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react'
 
 import { CampoCodigosBarras, type CampoCodigosBarrasProps } from '@/features/products/CampoCodigosBarras'
 
-type PropsDeTeste = Pick<CampoCodigosBarrasProps, 'desabilitado' | 'erro' | 'variante'> & {
+type PropsDeTeste = Pick<CampoCodigosBarrasProps, 'desabilitado' | 'erro'> & {
   inicial?: string[]
   formatosGravados?: CampoCodigosBarrasProps['formatosGravados']
   onEnviar?: () => void
@@ -234,30 +234,5 @@ describe('CampoCodigosBarras', () => {
 
     expect(valorAtual()).toEqual([])
     expect(campoAdicionar()).toHaveValue('7891000315507')
-  })
-
-  describe('variante compacta (aba Geral)', () => {
-    it('rótulo próprio, etiquetas com remover e sem reordenar', () => {
-      render(<CampoComEstado variante="compacta" inicial={['7891000315507', '96385074']} />)
-
-      expect(screen.getByLabelText('Adicionar código de barras')).toBeInTheDocument()
-      const etiquetas = within(screen.getByRole('list', { name: /códigos de barras do produto/i })).getAllByRole('listitem')
-      expect(etiquetas.map((item) => item.textContent)).toEqual(['7891000315507', '96385074'])
-      expect(screen.queryByRole('button', { name: /^mover código/i })).not.toBeInTheDocument()
-
-      fireEvent.click(screen.getByRole('button', { name: 'Remover código 7891000315507' }))
-      expect(valorAtual()).toEqual(['96385074'])
-      expect(campoAdicionar()).toHaveFocus()
-    })
-
-    it('lê pelo leitor e avisa formato desconhecido novo', () => {
-      render(<CampoComEstado variante="compacta" />)
-
-      lerCodigo('ABC-9')
-
-      expect(valorAtual()).toEqual(['ABC-9'])
-      expect(screen.getByText(/formato não reconhecido \(não é EAN-8/i)).toBeInTheDocument()
-      expect(screen.queryByText('Nenhum código de barras cadastrado.')).not.toBeInTheDocument()
-    })
   })
 })

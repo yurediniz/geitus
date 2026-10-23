@@ -22,7 +22,7 @@ const ROTULO_FORMATO: Readonly<Record<FormatoCodigoBarras, string>> = {
   OUTRO: 'Outro formato',
 }
 
-/** Id do campo "Adicionar código" (o mesmo nas duas variantes: so uma aba fica montada). */
+/** Id do campo "Adicionar código" (destino do foco ao salvar com o codigo pendente barrado). */
 const ID_ENTRADA = 'codigosBarras'
 
 export interface CampoCodigosBarrasProps {
@@ -44,11 +44,6 @@ export interface CampoCodigosBarrasProps {
   desabilitado?: boolean
   /** Erro do formulario ou do backend (400/409) sobre os codigos. */
   erro?: string
-  /**
-   * `completa` (aba Codigos): lista com formato, reordenar e remover.
-   * `compacta` (aba Geral): so adicionar e os codigos em etiquetas, com remover.
-   */
-  variante?: 'completa' | 'compacta'
 }
 
 /** Elemento que recebe o foco depois de reordenar ou remover. */
@@ -60,7 +55,7 @@ function idBotaoMover(codigo: string, direcao: 'cima' | 'baixo'): string {
 
 /**
  * Codigos de barras do produto: adicionar (pensado para o leitor, que "digita"
- * o codigo e um Enter), remover e, na variante completa, reordenar com setas.
+ * o codigo e um Enter), remover e reordenar com setas.
  * O formato e reconhecido pelo conteudo, como no backend.
  */
 export function CampoCodigosBarras({
@@ -73,11 +68,9 @@ export function CampoCodigosBarras({
   formatosGravados,
   desabilitado = false,
   erro,
-  variante = 'completa',
 }: CampoCodigosBarrasProps) {
   const [anuncio, setAnuncio] = useState('')
   const [focoPendente, setFocoPendente] = useState<FocoPendente | null>(null)
-  const compacta = variante === 'compacta'
 
   // Foco depois do render que reordenou/removeu: o botao da seta fica
   // desabilitado nas pontas, entao cai na outra seta do mesmo codigo.
@@ -154,15 +147,13 @@ export function CampoCodigosBarras({
   const idAjuda = `${ID_ENTRADA}-ajuda`
   const idErro = `${ID_ENTRADA}-erro`
   const descricaoIds = [idAjuda, erroExibido ? idErro : null].filter(Boolean).join(' ')
-  const ajuda = compacta
-    ? 'Leia com o leitor ou digite e tecle Enter. Para reordenar, use a aba Códigos.'
-    : `Até ${MAXIMO_CODIGOS_BARRAS} códigos. O primeiro é o exibido na lista de produtos.`
+  const ajuda = `Até ${MAXIMO_CODIGOS_BARRAS} códigos. O primeiro é o exibido na lista de produtos.`
 
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
         <label htmlFor={ID_ENTRADA} className="text-sm font-medium">
-          {compacta ? 'Adicionar código de barras' : 'Adicionar código'}
+          Adicionar código
         </label>
         <div className="flex gap-2">
           <div className="relative min-w-0 flex-1">
@@ -183,7 +174,7 @@ export function CampoCodigosBarras({
               disabled={desabilitado}
               autoComplete="off"
               inputMode="text"
-              placeholder={compacta ? 'Leia ou digite o código' : 'Leia com o leitor ou digite e tecle Enter'}
+              placeholder="Leia com o leitor ou digite e tecle Enter"
               aria-invalid={erroExibido ? true : undefined}
               aria-describedby={descricaoIds}
               className="h-11 pl-9 tabular-nums"
@@ -208,9 +199,7 @@ export function CampoCodigosBarras({
         {anuncio}
       </p>
 
-      {compacta ? (
-        <EtiquetasCodigos valor={valor} ehOutroNovo={ehOutroNovo} desabilitado={desabilitado} onRemover={remover} />
-      ) : valor.length === 0 ? (
+      {valor.length === 0 ? (
         <p className="rounded-md bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
           Nenhum código de barras cadastrado.
         </p>
@@ -284,55 +273,6 @@ export function CampoCodigosBarras({
           })}
         </ol>
       )}
-    </div>
-  )
-}
-
-interface EtiquetasCodigosProps {
-  valor: string[]
-  ehOutroNovo: (codigo: string) => boolean
-  desabilitado: boolean
-  onRemover: (codigo: string) => void
-}
-
-/** Variante compacta: os codigos em etiquetas, com remover (reordenar fica na aba Codigos). */
-function EtiquetasCodigos({ valor, ehOutroNovo, desabilitado, onRemover }: EtiquetasCodigosProps) {
-  if (valor.length === 0) {
-    return null
-  }
-  const temOutroNovo = valor.some(ehOutroNovo)
-  return (
-    <div className="space-y-1.5">
-      <ul aria-label="Códigos de barras do produto" className="flex flex-wrap gap-2">
-        {valor.map((codigo) => {
-          const outro = ehOutroNovo(codigo)
-          return (
-            <li
-              key={codigo}
-              className={cn(
-                'inline-flex max-w-full items-center gap-1 rounded-md pl-3 text-sm font-medium tabular-nums',
-                outro ? 'bg-warning-soft text-warning-soft-foreground' : 'bg-muted',
-              )}
-            >
-              {outro && <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
-              <span className="min-w-0 break-all">{codigo}</span>
-              {outro && <span className="sr-only">(formato não reconhecido)</span>}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-11 shrink-0 text-muted-foreground hover:text-destructive"
-                onClick={() => onRemover(codigo)}
-                disabled={desabilitado}
-                aria-label={`Remover código ${codigo}`}
-              >
-                <X aria-hidden="true" />
-              </Button>
-            </li>
-          )
-        })}
-      </ul>
-      {temOutroNovo && <p className="text-xs text-warning-soft-foreground">{AVISO_FORMATO_OUTRO}</p>}
     </div>
   )
 }

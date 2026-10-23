@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
 import type { PaginaResponse } from '@/types/produto'
 
-interface TextosSecaoHistorico {
+interface TextosListaHistorico {
   carregando: string
   /** Falha da primeira carga (com "Tentar de novo"). */
   erroCarga: string
@@ -18,13 +18,13 @@ interface TextosSecaoHistorico {
   rotuloLista: string
 }
 
-export interface SecaoHistoricoProps<T> {
-  /** Prefixo dos ids (titulo da secao). */
+export interface ListaHistoricoProps<T> {
+  /** Prefixo dos ids (titulo da lista). */
   id: string
   titulo: string
   chave: QueryKey
   buscar: (pagina: number) => Promise<PaginaResponse<T>>
-  textos: TextosSecaoHistorico
+  textos: TextosListaHistorico
   /** Aviso sob o titulo (ex.: o produto nao controla estoque no momento). */
   nota?: ReactNode
   chaveDoItem: (item: T, indice: number) => string | number
@@ -33,12 +33,12 @@ export interface SecaoHistoricoProps<T> {
 }
 
 /**
- * Uma secao da aba Historico: lista paginada do mais recente para o mais
- * antigo, 20 por vez com "Carregar mais", com os estados de carregando, erro
- * (com nova tentativa) e vazio. Cada secao tem a propria consulta e paginacao.
- * Os botoes sao `type="button"`: a aba fica dentro do formulario do produto.
+ * Uma lista da secao Historico: paginada do mais recente para o mais antigo,
+ * 20 por vez com "Carregar mais", com os estados de carregando, erro (com nova
+ * tentativa) e vazio. Cada lista tem a propria consulta e paginacao. Os botoes
+ * sao `type="button"`: a secao fica dentro do formulario do produto.
  */
-export function SecaoHistorico<T>({
+export function ListaHistorico<T>({
   id,
   titulo,
   chave,
@@ -47,7 +47,7 @@ export function SecaoHistorico<T>({
   nota,
   chaveDoItem,
   renderizarItem,
-}: SecaoHistoricoProps<T>) {
+}: ListaHistoricoProps<T>) {
   const consulta = useInfiniteQuery({
     queryKey: chave,
     queryFn: ({ pageParam }) => buscar(pageParam),
@@ -72,7 +72,7 @@ export function SecaoHistorico<T>({
   )
 }
 
-interface ConteudoDaSecaoProps<T> extends Pick<SecaoHistoricoProps<T>, 'textos' | 'chaveDoItem' | 'renderizarItem'> {
+interface ConteudoDaSecaoProps<T> extends Pick<ListaHistoricoProps<T>, 'textos' | 'chaveDoItem' | 'renderizarItem'> {
   consulta: UseInfiniteQueryResult<InfiniteData<PaginaResponse<T>>>
 }
 

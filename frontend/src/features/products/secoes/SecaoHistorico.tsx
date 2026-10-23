@@ -1,5 +1,8 @@
+import { useRef } from 'react'
+
 import { chaveDoHistoricoDePrecos } from '@/features/catalog/catalogoQuery'
-import { SecaoHistorico } from '@/features/products/abas/SecaoHistorico'
+import { ListaHistorico } from '@/features/products/secoes/ListaHistorico'
+import { useJaApareceu } from '@/features/products/secoes/useSecaoVisivel'
 import { SecaoMovimentosEstoque } from '@/features/products/estoque/SecaoMovimentosEstoque'
 import { formatarDataHora, formatarMoeda, formatarVariacao } from '@/features/products/formatacaoProduto'
 import { listarHistoricoDePrecos } from '@/services/produtoService'
@@ -10,7 +13,7 @@ const ROTULO_CAMPO: Readonly<Record<CampoHistoricoPreco, string>> = {
   PRECO_VENDA: 'Preço de venda',
 }
 
-export interface AbaHistoricoProps {
+export interface SecaoHistoricoProps {
   produtoId: string
   /** Sigla da unidade de venda (quantidades dos movimentos de estoque). */
   sigla: string
@@ -18,18 +21,29 @@ export interface AbaHistoricoProps {
 }
 
 /**
- * Aba Historico (so na edicao), em duas secoes com paginacao propria: as
+ * Secao Historico (so na edicao), em duas listas com paginacao propria: as
  * movimentacoes de estoque (primeiro) e as alteracoes de custo e de preco de
- * venda. O conteudo da aba so monta quando ela e aberta, entao as consultas
- * tambem so rodam ai.
+ * venda. As listas so montam quando a secao se aproxima da tela, entao as
+ * consultas tambem so rodam ai (spec B2 §4).
  */
-export function AbaHistorico({ produtoId, sigla, controlaEstoque }: AbaHistoricoProps) {
+export function SecaoHistorico({ produtoId, sigla, controlaEstoque }: SecaoHistoricoProps) {
+  const ref = useRef<HTMLDivElement>(null)
+  const apareceu = useJaApareceu(ref)
+
+  if (!apareceu) {
+    return (
+      <div ref={ref} className="min-h-24">
+        <p className="text-sm text-muted-foreground">Movimentações de estoque e alterações de preço do produto.</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-8">
       <SecaoMovimentosEstoque produtoId={produtoId} sigla={sigla} controlaEstoque={controlaEstoque} />
-      <SecaoHistorico<HistoricoPreco>
+      <ListaHistorico<HistoricoPreco>
         id="historico-precos"
-        titulo="Preços"
+        titulo="Alterações de preço"
         chave={chaveDoHistoricoDePrecos(produtoId)}
         buscar={(pagina) => listarHistoricoDePrecos(produtoId, pagina)}
         textos={{

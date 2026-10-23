@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  ABAS_PRODUTO,
-  CAMPOS_POR_ABA,
+  CAMPOS_POR_SECAO,
+  SECOES_PRODUTO,
   MENSAGEM_CODIGO_REPETIDO,
   MENSAGEM_DIGITO_INVALIDO,
   MENSAGEM_LIMITE_CODIGOS,
@@ -34,41 +34,43 @@ import { CX, KG, UN, produtoAtivo, produtoSimples, resumo } from '@/test/fixture
 import type { FormatoCodigoBarras } from '@/types/produto'
 
 describe('produtoFormulario', () => {
-  it('todo campo do formulario esta em alguma aba; so os codigos de barras estao em duas (Geral e Codigos)', () => {
-    const campos = ABAS_PRODUTO.flatMap((aba) => CAMPOS_POR_ABA[aba])
-    expect([...new Set(campos)].sort()).toEqual(Object.keys(valoresIniciais()).sort())
-    const repetidos = campos.filter((campo, indice) => campos.indexOf(campo) !== indice)
-    expect(repetidos.sort()).toEqual(['codigoPendente', 'codigosBarras'])
-    for (const campo of repetidos) {
-      expect(CAMPOS_POR_ABA.geral).toContain(campo)
-      expect(CAMPOS_POR_ABA.codigos).toContain(campo)
-    }
+  it('as secoes da tela unica, na ordem (Fase B2)', () => {
+    expect(SECOES_PRODUTO).toEqual(['geral', 'codigos', 'precos', 'estoque', 'historico'])
   })
 
-  it('preco de venda fica na aba Geral (cadastro rapido), nao em Precos', () => {
-    expect(CAMPOS_POR_ABA.geral.slice(0, 6)).toEqual([
+  it('todo campo do formulario esta em exatamente uma secao', () => {
+    const campos = SECOES_PRODUTO.flatMap((secao) => CAMPOS_POR_SECAO[secao])
+    expect([...campos].sort()).toEqual(Object.keys(valoresIniciais()).sort())
+    expect(new Set(campos).size).toBe(campos.length)
+  })
+
+  it('a Geral tem os essenciais primeiro e nao tem mais o codigo de barras', () => {
+    expect(CAMPOS_POR_SECAO.geral).toEqual([
       'nome',
       'nomeCurto',
       'unidadeId',
       'precoVenda',
-      'codigoPendente',
-      'codigosBarras',
+      'categoriaId',
+      'marca',
+      'fornecedor',
+      'descricao',
     ])
-    expect(CAMPOS_POR_ABA.precos).not.toContain('precoVenda')
+    expect(CAMPOS_POR_SECAO.precos).not.toContain('precoVenda')
   })
 
-  it('primeiroCampoComErro segue a ordem das abas e dos campos', () => {
+  it('a secao Codigos tem o codigo do produto, a balanca, o SKU e os codigos de barras', () => {
+    expect(CAMPOS_POR_SECAO.codigos).toEqual(['codigo', 'vendidoBalanca', 'sku', 'codigoPendente', 'codigosBarras'])
+  })
+
+  it('primeiroCampoComErro segue a ordem das secoes e dos campos', () => {
     const comErro = new Set<keyof ProdutoFormValues>(['estoqueMaximo', 'custo', 'sku'])
-    expect(primeiroCampoComErro((campo) => comErro.has(campo))).toEqual({ aba: 'precos', campo: 'custo' })
-    expect(primeiroCampoComErro((campo) => campo === 'precoVenda')).toEqual({ aba: 'geral', campo: 'precoVenda' })
+    expect(primeiroCampoComErro((campo) => comErro.has(campo))).toEqual({ secao: 'codigos', campo: 'sku' })
+    expect(primeiroCampoComErro((campo) => campo === 'precoVenda')).toEqual({ secao: 'geral', campo: 'precoVenda' })
+    expect(primeiroCampoComErro((campo) => campo === 'fatorConversao')).toEqual({
+      secao: 'estoque',
+      campo: 'fatorConversao',
+    })
     expect(primeiroCampoComErro(() => false)).toBeNull()
-  })
-
-  it('primeiroCampoComErro fica na aba atual quando ela tambem mostra o campo', () => {
-    const codigos = (campo: keyof ProdutoFormValues) => campo === 'codigosBarras'
-    expect(primeiroCampoComErro(codigos)).toEqual({ aba: 'geral', campo: 'codigosBarras' })
-    expect(primeiroCampoComErro(codigos, 'codigos')).toEqual({ aba: 'codigos', campo: 'codigosBarras' })
-    expect(primeiroCampoComErro(codigos, 'precos')).toEqual({ aba: 'geral', campo: 'codigosBarras' })
   })
 
   it('idDoCampo: o texto pendente e focado no campo "Adicionar código"', () => {
@@ -528,13 +530,15 @@ describe('produtoFormulario', () => {
       expect(valoresIniciais()).toMatchObject({ controlaEstoque: true, estoqueInicial: '' })
     })
 
-    it('a aba Estoque tem o interruptor, o estoque inicial e os níveis, nessa ordem', () => {
-      expect(CAMPOS_POR_ABA.estoque).toEqual([
+    it('a secao Estoque tem o interruptor, o estoque inicial, os níveis e a unidade e embalagem, nessa ordem', () => {
+      expect(CAMPOS_POR_SECAO.estoque).toEqual([
         'controlaEstoque',
         'estoqueInicial',
         'estoqueMinimo',
         'pontoReposicao',
         'estoqueMaximo',
+        'unidadeCompraId',
+        'fatorConversao',
       ])
     })
 

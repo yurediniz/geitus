@@ -8,27 +8,24 @@ import {
   CampoSelect,
   CampoTexto,
   ErroDoCampo,
-  GrupoCampos,
 } from '@/features/products/CamposFormulario'
 import { CampoSugestao } from '@/features/products/CampoSugestao'
-import { CodigosBarrasDoProduto } from '@/features/products/CodigosBarrasDoProduto'
 import {
   TAMANHO_MAXIMO_NOME_CURTO,
   nomeCurtoEfetivo,
   opcoesDeUnidade,
-  textoConversao,
   type ProdutoFormValues,
 } from '@/features/products/produtoFormulario'
 import { SeletorCategoria } from '@/features/products/SeletorCategoria'
 import type { Categoria, UnidadeMedida } from '@/types/catalogo'
 import type { Produto } from '@/types/produto'
 
-export interface AbaGeralProps {
+export interface SecaoGeralProps {
   /** Produto em edicao (null no cadastro): mantem unidade/categoria atuais mesmo inativas. */
   produto: Produto | null
   unidadesQuery: UseQueryResult<UnidadeMedida[]>
   categoriasQuery: UseQueryResult<Categoria[]>
-  /** Sigla por id de unidade (lista + unidades do produto), para "1 CX = 12 UN". */
+  /** Sigla por id de unidade (lista + unidades do produto), para "Preço de venda (por KG)". */
   siglaPorId: ReadonlyMap<string, string>
   desabilitado: boolean
   somenteLeitura: boolean
@@ -65,11 +62,27 @@ function AjudaNomeCurto({ nome, nomeCurto }: { nome: string; nomeCurto: string }
 }
 
 /**
- * Aba Geral: o cadastro rapido (nome, unidade, preco de venda e codigo de
- * barras, os essenciais para vender) primeiro; depois identificacao, unidade e
- * embalagem e descricao. O status fica no cabecalho da pagina.
+ * Numero de registro do produto (so leitura): gerado pelo backend ao salvar e
+ * imutavel; no cadastro ainda nao existe.
  */
-export function AbaGeral({
+function NumeroDoProduto({ numero }: { numero: number | null }) {
+  return (
+    <dl className="space-y-0.5">
+      <dt className="text-sm text-muted-foreground">Nº do Produto</dt>
+      <dd className={numero === null ? 'text-sm text-muted-foreground' : 'text-base font-semibold tabular-nums'}>
+        {numero === null ? 'Será gerado ao salvar' : numero}
+      </dd>
+    </dl>
+  )
+}
+
+/**
+ * Secao Geral: o Nº do produto e o cadastro rapido (nome, unidade e preco de
+ * venda, os essenciais para vender) primeiro; depois identificacao e descricao.
+ * Os codigos ficam na secao Codigos e a unidade e embalagem, na Estoque. O
+ * status fica no cabecalho da pagina.
+ */
+export function SecaoGeral({
   produto,
   unidadesQuery,
   categoriasQuery,
@@ -77,7 +90,7 @@ export function AbaGeral({
   desabilitado,
   somenteLeitura,
   aoAlterarCampo,
-}: AbaGeralProps) {
+}: SecaoGeralProps) {
   const {
     control,
     register,
@@ -89,32 +102,17 @@ export function AbaGeral({
 
   const unidades = useMemo(() => unidadesQuery.data ?? [], [unidadesQuery.data])
   const categorias = useMemo(() => categoriasQuery.data ?? [], [categoriasQuery.data])
-  const [unidadeIdAtual, unidadeCompraIdAtual, fatorAtual, nomeAtual, nomeCurtoAtual, custoAtual] = watch([
-    'unidadeId',
-    'unidadeCompraId',
-    'fatorConversao',
-    'nome',
-    'nomeCurto',
-    'custo',
-  ])
+  const [unidadeIdAtual, nomeAtual, nomeCurtoAtual, custoAtual] = watch(['unidadeId', 'nome', 'nomeCurto', 'custo'])
 
   const opcoesUnidadeVenda = useMemo(
     () => opcoesDeUnidade(unidades, produto?.unidade ?? null),
     [unidades, produto],
   )
-  // A unidade de venda nao e oferecida como compra: "Mesma da venda" ja cobre esse caso.
-  const opcoesUnidadeCompra = useMemo(
-    () => opcoesDeUnidade(unidades, produto?.unidadeCompra ?? null).filter((opcao) => opcao.id !== unidadeIdAtual),
-    [unidades, produto, unidadeIdAtual],
-  )
 
   const siglaVenda = siglaPorId.get(unidadeIdAtual)
-  const siglaCompra = siglaPorId.get(unidadeCompraIdAtual)
-  const temUnidadeCompra = unidadeCompraIdAtual !== ''
-  const ajudaConversao = textoConversao(siglaCompra, siglaVenda, fatorAtual)
   const carregandoUnidades = unidadesQuery.isPending
 
-  /** Venda igual a compra deixa a compra sem sentido: limpa compra e fator. */
+  /** Venda igual a compra (secao Estoque) deixa a compra sem sentido: limpa compra e fator. */
   const aoAlterarUnidadeVenda = (event: { target: { value: string } }) => {
     if (event.target.value !== '' && event.target.value === getValues('unidadeCompraId')) {
       setValue('unidadeCompraId', '', { shouldDirty: true })
@@ -123,16 +121,9 @@ export function AbaGeral({
     aoAlterarCampo()
   }
 
-  /** Sem unidade de compra, o fator fica oculto e e descartado. */
-  const aoAlterarUnidadeCompra = (event: { target: { value: string } }) => {
-    if (event.target.value === '') {
-      setValue('fatorConversao', '', { shouldDirty: true })
-    }
-    aoAlterarCampo()
-  }
-
   return (
     <div className="space-y-6">
+      <NumeroDoProduto numero={produto?.numero ?? null} />
       <div className="grid gap-4 md:grid-cols-2">
         <CampoTexto
           id="nome"
@@ -176,19 +167,11 @@ export function AbaGeral({
           label={siglaVenda ? `Preço de venda (por ${siglaVenda})` : 'Preço de venda'}
           obrigatorio
           erro={errors.precoVenda?.message}
-          // O custo fica na aba Precos; o aviso aparece aqui tambem, junto ao preco.
+          // O custo fica na secao Precos; o aviso aparece aqui tambem, junto ao preco.
           custo={custoAtual}
           aoAlterar={aoAlterarCampo}
           disabled={desabilitado}
         />
-        <div className="md:col-span-2">
-          <CodigosBarrasDoProduto
-            variante="compacta"
-            produto={produto}
-            desabilitado={desabilitado}
-            aoAlterarCampo={aoAlterarCampo}
-          />
-        </div>
         <div className="space-y-1.5">
           <label id="categoriaId-rotulo" htmlFor="categoriaId" className="text-sm font-medium">
             Categoria (opcional)
@@ -260,38 +243,6 @@ export function AbaGeral({
           )}
         />
       </div>
-
-      <GrupoCampos
-        titulo="Unidade e embalagem"
-        descricao="Preencha se você compra em outra unidade (ex.: caixa com 12 unidades)."
-      >
-        <div className="grid gap-4 md:grid-cols-2">
-          <CampoSelect
-            id="unidadeCompraId"
-            label="Unidade de compra (opcional)"
-            erro={errors.unidadeCompraId?.message}
-            selectProps={register('unidadeCompraId', { onChange: aoAlterarUnidadeCompra })}
-            disabled={desabilitado || carregandoUnidades}
-            opcaoVazia="Mesma da venda"
-            opcoes={opcoesUnidadeCompra}
-          />
-          {/* So faz sentido com unidade de compra: ate la fica oculto. */}
-          {temUnidadeCompra && (
-            <CampoTexto
-              id="fatorConversao"
-              label={`Quantas ${siglaVenda ?? 'unidades de venda'} vêm em 1 ${siglaCompra ?? 'unidade de compra'}?`}
-              erro={errors.fatorConversao?.message}
-              ajuda={ajudaConversao ?? undefined}
-              inputProps={register('fatorConversao', { onChange: aoAlterarCampo })}
-              disabled={desabilitado}
-              type="number"
-              step="0.0001"
-              min="0"
-              placeholder="Ex.: 12"
-            />
-          )}
-        </div>
-      </GrupoCampos>
 
       <div className="space-y-1.5">
         <label htmlFor="descricao" className="text-sm font-medium">

@@ -30,7 +30,7 @@ import {
 import { cn } from '@/lib/utils'
 import type { SituacaoPromocao } from '@/types/produto'
 
-export interface AbaPrecosProps {
+export interface SecaoPrecosProps {
   /** Sigla por id de unidade, para "Quantidade mínima (UN)". */
   siglaPorId: ReadonlyMap<string, string>
   desabilitado: boolean
@@ -108,17 +108,17 @@ function BlocoComInterruptor({ id, rotulo, descricao, desabilitado, aoAlternar, 
 /** Texto quando a margem nao pode ser calculada: o que falta informar. */
 function textoSemMargem(precoVenda: string): string {
   return numeroValido(precoVenda) === null
-    ? 'Informe o preço de venda na aba Geral para ver a margem.'
+    ? 'Informe o preço de venda em Geral para ver a margem.'
     : 'Informe o custo para ver a margem.'
 }
 
 /**
- * Aba Precos: custo e preco minimo, margem/markup derivados, o preco pela
+ * Secao Precos: custo e preco minimo, margem/markup derivados, o preco pela
  * margem desejada e os blocos opcionais de promocao e atacado. O preco de
- * venda e essencial e fica na aba Geral (cadastro rapido); aqui so aparece
+ * venda e essencial e fica na secao Geral (cadastro rapido); aqui so aparece
  * como referencia.
  */
-export function AbaPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: AbaPrecosProps) {
+export function SecaoPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: SecaoPrecosProps) {
   const {
     register,
     watch,
@@ -369,7 +369,7 @@ function motivoSemCalculo(custo: string, margem: string): string | null {
 /**
  * "Calcular preco pela margem" (spec 4.2): a margem desejada nao e gravada, so
  * gera o preco de venda, que passa a contar como alterado. Fica no estado da
- * aba (e um auxilio de calculo, nao um dado do produto).
+ * secao (e um auxilio de calculo, nao um dado do produto).
  */
 function CalculoPelaMargem({ custo, desabilitado, aoAlterarCampo }: CalculoPelaMargemProps) {
   const { setValue } = useFormContext<ProdutoFormValues>()
