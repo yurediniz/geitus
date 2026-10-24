@@ -216,6 +216,8 @@ Tabela com sigla, descrição, "fracionada" (Sim/Não), em uso (nº de produtos)
 
 **Dívidas registradas:** DT-026 (teto da árvore), DT-027 (endurecimentos menores), DT-025 atualizada.
 
+> **Fase B3 (embalagens, DEC-037, V12):** a unidade de compra + fator deixou de existir e virou a embalagem "de compra" ([produtos-embalagens.md](produtos-embalagens.md)). Onde esta spec fala em unidade de compra, vale a embalagem: o uso da unidade (exclusão e contagem `emUso`) passa a contar as unidades de venda e as unidades das embalagens, com cada produto contado uma vez; desligar `fracionada` também é barrado (400, campo `fracionada`) quando um produto com essa unidade de venda tem embalagem de quantidade fracionada: "Há embalagens com quantidade fracionada nesta unidade. Ajuste-as antes de desligar o fracionamento."
+
 ## 9. Pontos em aberto (para fases seguintes)
 - Remoção das colunas de texto antigas (Fase B).
 - Revalidar `fracionada` em unidade com estoque/vendas (Fase D).

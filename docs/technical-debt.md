@@ -471,6 +471,31 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Impacto:** Nenhum risco imediato; organizacao do codigo e itens que dependem do PDV.
 - **Quando revisar:** No inicio da Fase B3 (ProdutoService) e na especificacao do PDV.
 
+## DT-035 — Pendencias e regras futuras da Fase B3 (embalagens de venda)
+
+- **ID:** DT-035
+- **Modulo:** Backend/Frontend (Catalogo — embalagens; Estoque — ajuste)
+- **Origem:** Revisoes da Fase B3 (dados, backend, seguranca, frontend, UX e QA)
+- **Prioridade:** baixa (media para os itens do PDV, na etapa 11)
+- **Status:** aberto
+- **Descricao:**
+  - **Backend:**
+    - `ProdutoService` ainda com ~1100 linhas: extrair a gravacao com o tratamento da corrida e as regras de preco especial;
+    - uma consulta por codigo de barras novo no `ValidadorDeCodigosDeBarras` (trocar por uma consulta `IN` por lista);
+    - `GlobalExceptionHandler.tratarGenerico` nao registra o erro 500 no log (sem PII);
+    - sem limite de tamanho do corpo JSON (definir no proxy reverso no deploy);
+    - indice parcial `idx_codigo_barras_embalagem WHERE embalagem_id IS NOT NULL` (ganho pequeno);
+    - mensagem do limite de casas da quantidade diferente entre frontend ("Use no maximo 3 casas decimais.") e backend.
+  - **Historico:** a linha de preco guarda so o rotulo da embalagem; um `embalagem_uuid` (sem FK) permitiria agrupar as linhas quando a unidade ou a quantidade mudam. A remocao da embalagem aparece como "R$ x → sem preco proprio", igual ao preco apagado.
+  - **Frontend:** unificar no schema as regras de fracao que ainda sao conferidas no envio (atacado e estoque inicial).
+  - **Para o PDV:**
+    - decidir se a embalagem de compra sem codigo de barras aparece como opcao de venda (hoje mostra preco calculado e margem);
+    - o atacado decidido pela quantidade total pode nao bater com a dica do preco da embalagem sem preco proprio;
+    - regra para remover ou inativar a embalagem ja vendida;
+    - sugestao "Montar 1 CX + 1 UN?".
+- **Impacto:** Organizacao do codigo, observabilidade e regras que dependem do PDV; nenhum risco imediato.
+- **Quando revisar:** Na proxima rodada de refatoracao do catalogo e na especificacao do PDV.
+
 ## DT-026 — Teto de profundidade e de quantidade na arvore de categorias
 
 - **ID:** DT-026

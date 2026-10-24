@@ -1,6 +1,6 @@
 # Produtos: Embalagens de venda (Fase B3)
 
-> **Status:** spec final, desenho aprovado em conversa em 2026-10-24. Fase intermediária da DEC-030, depois da Fase B2 ([produtos-codigo-e-balanca.md](produtos-codigo-e-balanca.md)) e antes da Fase F (imagem). Decisões na **DEC-037**.
+> **Status:** **implementada** em 2026-10-24 (migration V12; ajustes da implementação e das revisões no §10). Desenho aprovado em conversa no mesmo dia. Fase intermediária da DEC-030, depois da Fase B2 ([produtos-codigo-e-balanca.md](produtos-codigo-e-balanca.md)) e antes da Fase F (imagem). Decisões na **DEC-037**.
 
 ## 1. Motivação
 - **Caso que falta:** vender o mesmo produto em formas diferentes, cada uma com o seu código de barras e o seu preço.
@@ -270,3 +270,47 @@ Aditiva sobre a V11, que não é editada.
   - **Histórico:** as linhas de preço da embalagem e o movimento com retrato.
   - **Códigos:** a linha que aponta para Embalagens.
   - **OPERADOR:** a seção só leitura.
+
+## 10. Ajustes na implementação
+- **Banco:**
+  - o rótulo do histórico e do movimento é `VARCHAR(60)`, porque cabe até 58 caracteres;
+  - a unicidade unidade × quantidade é `DEFERRABLE` e, depois do `flush`, é conferida na hora com `SET CONSTRAINTS … IMMEDIATE`; a violação dá 409, nunca 500;
+  - o rótulo não pode ser vazio (CHECK);
+  - a V12 valida os dados antes de transformar, e a mensagem de erro traz até 10 `(empresa_id, numero)`.
+- **Salvamento:**
+  - remoções e inclusões vão ao banco em duas fases, para um código ou uma embalagem trocarem de lugar no mesmo salvamento;
+  - o `atualizadoEm` do produto só muda com alteração real nas embalagens.
+- **PATCH sem `embalagens`:** as embalagens atuais são conferidas de novo contra a unidade de venda e o preço mínimo do request. Subir o mínimo pode dar 400 em `embalagens[j].preco`.
+- **Histórico:** a linha de preço usa o rótulo da embalagem **depois** do salvamento.
+- **Ajuste por embalagem:**
+  - a chave repetida com outra embalagem (que ainda existe) dá 409 "Esta operação já foi registrada com outros dados.";
+  - "Ajustar estoque" fica bloqueado com mudanças não salvas na lista, na unidade ou na quantidade das embalagens: "Salve as mudanças de controle, unidade ou embalagens antes de ajustar o estoque.";
+  - depois de um 404 com o modal aberto, o seletor volta à unidade de venda e a quantidade é limpa: "A embalagem escolhida foi removida. Confira a quantidade e tente de novo.";
+  - o botão mostra o total: "Registrar entrada de 36 UN";
+  - a prévia fica logo abaixo da quantidade: "2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN".
+- **Unidade:** desligar `fracionada` com embalagem de quantidade fracionada dá 400 (ver [categorias-e-unidades.md](categorias-e-unidades.md)).
+- **Textos da tela** (revisão de UX):
+  - **ajuda da seção:** "Outras formas de vender ou comprar este produto, como a caixa com 3, cada uma com seu código de barras e preço. O estoque continua em {sigla}.";
+  - **campo da quantidade:** rótulo "Contém";
+  - **chave de compra:** ajuda "Como o produto chega do fornecedor. Já vem escolhida ao registrar entrada por compra. Só uma por produto." e selo "De compra" no título;
+  - **preço vazio:** "Vazio, vende por 3 × R$ 89,90 = R$ 269,70." (ou com "(promoção)"), com o preço calculado como placeholder;
+  - **preço próprio:** "Sai a R$ 69,97 por UN (avulso: R$ 269,70).";
+  - **saldo:** "55 UN" em destaque e "(18 CX + 1 UN)" menor.
+- **Mensagens novas:**
+  - "Informe a embalagem."
+  - "Informe a unidade da embalagem."
+  - "Informe a quantidade da embalagem."
+  - "O preço da embalagem deve ser maior que zero."
+  - "Limite de 5 códigos de barras atingido."
+  - "Limite de 10 embalagens atingido."
+  - "Nenhuma embalagem cadastrada." (OPERADOR)
+  - "Este código já está na unidade (UN) deste produto."
+  - "Este código já está na embalagem CX c/ 3 UN."
+- **Conferido no navegador** (2026-10-24):
+  - a seção e o scroll-spy;
+  - a dica do preço e a margem;
+  - os códigos da caixa e o aviso na seção Códigos;
+  - o modal com a caixa de compra como padrão, a prévia e o botão com o total;
+  - o saldo "36 UN (2 CX)";
+  - o Histórico "+36 UN (2 CX c/ 18 UN)" e as linhas de preço da embalagem;
+  - o celular sem rolagem lateral.
