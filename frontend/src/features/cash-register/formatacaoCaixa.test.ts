@@ -8,6 +8,7 @@ import {
   formatarHora,
   formatarReais,
   mensagemDoFechamento,
+  ROTULO_DA_FORMA,
   textoAbertoDesde,
   textoDaAbertura,
   textoDaSituacaoDoPonto,
@@ -20,8 +21,22 @@ function semNbsp(texto: string): string {
   return texto.replace(/ /g, ' ')
 }
 
-function movimento(tipo: MovimentoDeCaixa['tipo'], valor: number | null): MovimentoDeCaixa {
-  return { id: `${tipo}-${valor}`, tipo, valor, motivo: null, usuarioNome: 'Ana', criadoEm: '2026-10-24T08:02:00-03:00' }
+function movimento(
+  tipo: MovimentoDeCaixa['tipo'],
+  valor: number | null,
+  forma: MovimentoDeCaixa['forma'] = 'DINHEIRO',
+): MovimentoDeCaixa {
+  const vendaNumero = tipo === 'RECEBIMENTO' || tipo === 'ESTORNO' ? 128 : null
+  return {
+    id: `${tipo}-${forma}-${valor}`,
+    tipo,
+    forma,
+    vendaNumero,
+    valor,
+    motivo: null,
+    usuarioNome: 'Ana',
+    criadoEm: '2026-10-24T08:02:00-03:00',
+  }
 }
 
 describe('formatacaoCaixa', () => {
@@ -104,7 +119,7 @@ describe('formatacaoCaixa', () => {
         movimento('SUPRIMENTO', 0.2),
         movimento('SANGRIA', 200),
       ])
-      expect(totais).toEqual({ suprimentos: 50.3, sangrias: 200, completos: true })
+      expect(totais).toEqual({ suprimentos: 50.3, sangrias: 200, vendasEmDinheiro: 0, completos: true })
     })
 
     it('valor oculto (modo cego) nunca entra na soma e marca os totais como incompletos', () => {
@@ -113,7 +128,35 @@ describe('formatacaoCaixa', () => {
         { ...movimento('SANGRIA', 0), valor: null },
         movimento('SUPRIMENTO', 10),
       ])
-      expect(totais).toEqual({ suprimentos: 10, sangrias: 0, completos: false })
+      expect(totais).toEqual({ suprimentos: 10, sangrias: 0, vendasEmDinheiro: 0, completos: false })
+    })
+
+    it('vendas em dinheiro: recebimentos menos estornos, só do dinheiro', () => {
+      const totais = totaisDosMovimentos([
+        movimento('RECEBIMENTO', 50.1),
+        movimento('RECEBIMENTO', 0.2),
+        movimento('ESTORNO', 10),
+        movimento('RECEBIMENTO', 99, 'PIX'),
+        movimento('ESTORNO', 5, 'DEBITO'),
+      ])
+      expect(totais).toEqual({ suprimentos: 0, sangrias: 0, vendasEmDinheiro: 40.3, completos: true })
+    })
+
+    it('rótulo das formas de pagamento', () => {
+      expect(ROTULO_DA_FORMA).toEqual({ DINHEIRO: 'Dinheiro', DEBITO: 'Débito', CREDITO: 'Crédito', PIX: 'PIX' })
+    })
+
+    it('mensagem do fechamento com diferença em outra forma', () => {
+      const porForma = [
+        { forma: 'DINHEIRO' as const, esperado: 100, contado: 100, diferenca: 0 },
+        { forma: 'DEBITO' as const, esperado: 50, contado: 48, diferenca: -2 },
+        { forma: 'PIX' as const, esperado: 10, contado: 11, diferenca: 1 },
+      ]
+      expect(mensagemDoFechamento('Caixa 1', 0, porForma)).toBe('Caixa 1 fechado com diferença em Débito e PIX')
+      expect(semNbsp(mensagemDoFechamento('Caixa 1', -2, porForma.slice(0, 2)))).toBe(
+        'Caixa 1 fechado com falta de R$ 2,00 e diferença em Débito',
+      )
+      expect(mensagemDoFechamento('Caixa 1', 0, porForma.slice(0, 1))).toBe('Caixa 1 fechado')
     })
 
     it('mensagem do fechamento com o nome do ponto e a diferença', () => {

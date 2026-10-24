@@ -5,10 +5,11 @@ import {
   formatarDataHoraCaixa,
   formatarDiferenca,
   formatarReais,
+  ROTULO_DA_FORMA,
   totaisDosMovimentos,
 } from '@/features/cash-register/formatacaoCaixa'
 import { cn } from '@/lib/utils'
-import type { SessaoDeCaixa } from '@/types/caixa'
+import type { SessaoDeCaixa, ValoresPorForma } from '@/types/caixa'
 
 /** Diferenca com cor e icone: verde quando confere, ambar com sobra ou falta. */
 export function TextoDaDiferenca({ valor, className }: { valor: number; className?: string }) {
@@ -37,9 +38,56 @@ function Linha({ rotulo, children, destaque = false }: { rotulo: string; childre
   )
 }
 
+/** Valor em reais, ou o traco quando ainda nao existe (antes da contagem) ou esta oculto. */
+function reaisOuTraco(valor: number | null): string {
+  return valor === null ? '—' : formatarReais(valor)
+}
+
+/** Esperado, contado e diferenca de cada forma (spec do PDV §6.5). */
+function TabelaPorForma({ porForma }: { porForma: readonly ValoresPorForma[] }) {
+  return (
+    <table className="w-full text-sm">
+      <caption className="pb-1 text-left text-xs font-medium text-muted-foreground">
+        Conferência por forma de pagamento
+      </caption>
+      <thead>
+        <tr className="text-xs text-muted-foreground">
+          <th scope="col" className="py-1 text-left font-medium">
+            Forma
+          </th>
+          <th scope="col" className="py-1 text-right font-medium">
+            Esperado
+          </th>
+          <th scope="col" className="py-1 text-right font-medium">
+            Contado
+          </th>
+          <th scope="col" className="py-1 text-right font-medium">
+            Diferença
+          </th>
+        </tr>
+      </thead>
+      <tbody className="divide-y">
+        {porForma.map((valores) => (
+          <tr key={valores.forma}>
+            <th scope="row" className="py-1.5 text-left font-normal">
+              {ROTULO_DA_FORMA[valores.forma]}
+            </th>
+            <td className="py-1.5 text-right tabular-nums">{reaisOuTraco(valores.esperado)}</td>
+            <td className="py-1.5 text-right tabular-nums">{reaisOuTraco(valores.contado)}</td>
+            <td className="py-1.5 text-right">
+              {valores.diferenca === null ? '—' : <TextoDaDiferenca valor={valores.diferenca} className="justify-end" />}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
 /**
- * Fotografia do fechamento (spec §6.4): fundo, suprimentos, sangrias,
- * esperado, contado, diferenca e justificativa. Numa sessao ainda nao contada,
+ * Fotografia do fechamento (spec do Caixa §6.4 e do PDV §6.5): fundo,
+ * suprimentos, sangrias, vendas em dinheiro, esperado, contado, diferenca e
+ * justificativa. Com mais de uma forma contada, a tabela por forma. Numa sessao ainda nao contada,
  * mostra o que existe; no modo cego sem o esperado, so o aviso (os totais
  * permitiriam calcula-lo).
  */
@@ -54,7 +102,11 @@ export function ResumoDoFechamento({ sessao }: { sessao: SessaoDeCaixa }) {
       </p>
     )
   }
-  const { suprimentos, sangrias, completos } = totaisDosMovimentos(sessao.movimentos)
+  const { suprimentos, sangrias, vendasEmDinheiro, completos } = totaisDosMovimentos(sessao.movimentos)
+  const temVendasEmDinheiro = sessao.movimentos.some(
+    (movimento) => movimento.forma === 'DINHEIRO' && (movimento.tipo === 'RECEBIMENTO' || movimento.tipo === 'ESTORNO'),
+  )
+  const variasFormas = sessao.porForma.length > 1
 
   return (
     <div className="space-y-3 text-sm">
@@ -63,18 +115,26 @@ export function ResumoDoFechamento({ sessao }: { sessao: SessaoDeCaixa }) {
         {/* Com algum valor oculto, os totais sairiam errados: nao aparecem. */}
         {completos && <Linha rotulo="Suprimentos">{`+ ${formatarReais(suprimentos)}`}</Linha>}
         {completos && <Linha rotulo="Sangrias">{`− ${formatarReais(sangrias)}`}</Linha>}
+        {completos && temVendasEmDinheiro && (
+          <Linha rotulo="Vendas em dinheiro">
+            {vendasEmDinheiro < 0
+              ? `− ${formatarReais(Math.abs(vendasEmDinheiro))}`
+              : `+ ${formatarReais(vendasEmDinheiro)}`}
+          </Linha>
+        )}
         <Linha rotulo="Esperado na gaveta" destaque>
           {formatarReais(esperado)}
         </Linha>
-        {sessao.valorContado !== null && (
+        {!variasFormas && sessao.valorContado !== null && (
           <Linha rotulo="Contado">{formatarReais(sessao.valorContado)}</Linha>
         )}
-        {sessao.diferenca !== null && (
+        {!variasFormas && sessao.diferenca !== null && (
           <Linha rotulo="Diferença">
             <TextoDaDiferenca valor={sessao.diferenca} />
           </Linha>
         )}
       </dl>
+      {variasFormas && <TabelaPorForma porForma={sessao.porForma} />}
       {sessao.justificativa && (
         <div className="rounded-md bg-muted/60 px-3 py-2">
           <p className="text-xs font-medium text-muted-foreground">Justificativa</p>

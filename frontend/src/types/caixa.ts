@@ -9,11 +9,23 @@ export type StatusDaSessao = 'ABERTA' | 'EM_CONFERENCIA' | 'FECHADA'
 
 export const STATUS_DA_SESSAO = ['ABERTA', 'EM_CONFERENCIA', 'FECHADA'] as const satisfies readonly StatusDaSessao[]
 
-/** Movimentos da gaveta: a abertura e o fundo de troco; o sinal sai do tipo (sangria subtrai). */
-export type TipoDeMovimentoDeCaixa = 'ABERTURA' | 'SUPRIMENTO' | 'SANGRIA'
+/**
+ * Formas de pagamento (spec `docs/modules/pdv.md` §3.4 e §3.9). Abertura,
+ * suprimento e sangria sao sempre em dinheiro; recebimentos e estornos de
+ * venda podem ser de qualquer forma.
+ */
+export type FormaDePagamento = 'DINHEIRO' | 'DEBITO' | 'CREDITO' | 'PIX'
+
+export const FORMAS_DE_PAGAMENTO = ['DINHEIRO', 'DEBITO', 'CREDITO', 'PIX'] as const satisfies readonly FormaDePagamento[]
+
+/**
+ * Movimentos do caixa: a abertura e o fundo de troco; o sinal sai do tipo
+ * (sangria e estorno subtraem). `RECEBIMENTO` e `ESTORNO` vem das vendas do PDV.
+ */
+export type TipoDeMovimentoDeCaixa = 'ABERTURA' | 'SUPRIMENTO' | 'SANGRIA' | 'RECEBIMENTO' | 'ESTORNO'
 
 /** Os lancamentos que a tela registra no meio do dia. */
-export type TipoDeLancamento = Exclude<TipoDeMovimentoDeCaixa, 'ABERTURA'>
+export type TipoDeLancamento = 'SUPRIMENTO' | 'SANGRIA'
 
 /** Sessao aberta ou em conferencia num ponto; `null` no ponto livre. */
 export interface SituacaoDoPonto {
@@ -51,8 +63,12 @@ export interface MovimentoDeCaixaRequest {
   chave: string
 }
 
+/**
+ * Contagem por forma (spec do PDV §3.9): o dinheiro sempre; debito, credito e
+ * PIX so quando a forma teve movimento na sessao (`formasDaContagem`).
+ */
 export interface ContagemRequest {
-  valorContado: number
+  contagens: Partial<Record<FormaDePagamento, number>>
   /** So no modo nao cego (no cego o backend recusa a justificativa junto com a contagem). */
   justificativa: string | null
 }
@@ -64,15 +80,31 @@ export interface FechamentoRequest {
 export interface MovimentoDeCaixa {
   id: string
   tipo: TipoDeMovimentoDeCaixa
+  /** Sempre `DINHEIRO` na abertura, no suprimento e na sangria. */
+  forma: FormaDePagamento
+  /** Numero da venda do recebimento ou do estorno; null nos demais tipos. */
+  vendaNumero: number | null
   /**
    * Sempre positivo. Null para o OPERADOR no modo cego, com a sessao aberta,
-   * nos lancamentos feitos por outra pessoa (o valor aparece no fechamento).
+   * nos lancamentos feitos por outra pessoa e nos recebimentos e estornos de
+   * venda (o valor aparece no fechamento).
    */
   valor: number | null
   /** Nulo na abertura. */
   motivo: string | null
   usuarioNome: string
   criadoEm: string
+}
+
+/** Esperado, contado e diferenca de uma forma de pagamento na sessao. */
+export interface ValoresPorForma {
+  forma: FormaDePagamento
+  /** Null para o OPERADOR no modo cego enquanto a sessao esta ABERTA. */
+  esperado: number | null
+  /** Null antes da contagem. */
+  contado: number | null
+  /** Contado - esperado; null antes da contagem. */
+  diferenca: number | null
 }
 
 /** A sessao como sai no historico (sem os movimentos). */
@@ -98,6 +130,10 @@ export interface SessaoDeCaixaResumo {
   fechadaEm: string | null
   /** Se o usuario pode lancar, contar e fechar (dono ou ADMIN, sessao nao fechada). */
   podeOperar: boolean
+  /** Os valores de cada forma contada (o dinheiro primeiro). */
+  porForma: ValoresPorForma[]
+  /** As formas que a contagem pede: o dinheiro sempre e as que tiveram movimento. */
+  formasDaContagem: FormaDePagamento[]
 }
 
 /** Resposta de todas as rotas de uma sessao: com os movimentos, do mais recente para o mais antigo. */

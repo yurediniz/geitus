@@ -13,13 +13,14 @@ import {
   type MudancaDeEstado,
 } from '@/features/cash-register/errosDoCaixa'
 import { manterFocoMovidoPelaTela } from '@/features/cash-register/focoDoCaixa'
-import { diferencaEntre, formatarReais } from '@/features/cash-register/formatacaoCaixa'
+import { diferencaEntre, formatarReais, ROTULO_DA_FORMA } from '@/features/cash-register/formatacaoCaixa'
 import { TextoDaDiferenca } from '@/features/cash-register/ResumoDoFechamento'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
 import { ErroDoCampo, MarcaObrigatorio } from '@/features/products/CamposFormulario'
 import { cn } from '@/lib/utils'
 import { contar, fechar } from '@/services/caixaService'
-import type { ContagemRequest, SessaoDeCaixa } from '@/types/caixa'
+import { HttpError } from '@/services/httpClient'
+import { FORMAS_DE_PAGAMENTO, type ContagemRequest, type FormaDePagamento, type SessaoDeCaixa } from '@/types/caixa'
 
 export interface JanelaFecharCaixaProps {
   aberto: boolean
@@ -34,8 +35,8 @@ export interface JanelaFecharCaixaProps {
   aoMudarDeEstado: (mudanca: MudancaDeEstado) => void
 }
 
-type CampoFechamento = 'valorContado' | 'justificativa'
-const CAMPOS: readonly CampoFechamento[] = ['valorContado', 'justificativa']
+/** Os campos com erro: o valor contado de cada forma (`contagens.DEBITO`) e a justificativa. */
+type CampoFechamento = `contagens.${FormaDePagamento}` | 'justificativa'
 const ID_CONTADO = 'fechar-caixa-contado'
 const ID_JUSTIFICATIVA = 'fechar-caixa-justificativa'
 const ID_DIFERENCA = 'fechar-caixa-diferenca'
@@ -46,22 +47,73 @@ const FALHA_FECHAMENTO = 'Não foi possível fechar o caixa. Confira a conexão 
 const MENSAGEM_SEM_CONTADO = 'Informe o valor contado na gaveta.'
 const MENSAGEM_SEM_JUSTIFICATIVA = 'Explique a diferença para fechar o caixa.'
 
-/** Texto da janela conforme o passo, o modo e se quem fecha ve o esperado (`dinheiroNaGaveta`). */
-function descricaoDaJanela(sessao: SessaoDeCaixa, emConferencia: boolean): string {
+function campoDaForma(forma: FormaDePagamento): CampoFechamento {
+  return `contagens.${forma}`
+}
+
+/** As formas que a contagem pede, o dinheiro primeiro (sempre presente). */
+function formasDaContagem(sessao: SessaoDeCaixa): FormaDePagamento[] {
+  const pedidas = new Set<FormaDePagamento>(sessao.formasDaContagem ?? [])
+  return FORMAS_DE_PAGAMENTO.filter((forma) => forma === 'DINHEIRO' || pedidas.has(forma))
+}
+
+/** Todos os campos conhecidos, na ordem da tela (para o foco no primeiro com erro). */
+function camposDaJanela(formas: readonly FormaDePagamento[]): CampoFechamento[] {
+  return [...formas.map(campoDaForma), 'justificativa']
+}
+
+function idDoContado(forma: FormaDePagamento): string {
+  return forma === 'DINHEIRO' ? ID_CONTADO : `${ID_CONTADO}-${forma.toLowerCase()}`
+}
+
+function rotuloDoContado(forma: FormaDePagamento): string {
+  return forma === 'DINHEIRO' ? 'Dinheiro contado na gaveta' : `${ROTULO_DA_FORMA[forma]} contado`
+}
+
+function mensagemSemContado(forma: FormaDePagamento): string {
+  return forma === 'DINHEIRO' ? MENSAGEM_SEM_CONTADO : `Informe o valor contado de ${ROTULO_DA_FORMA[forma]}.`
+}
+
+/** O esperado de cada forma que quem fecha pode ver (o dinheiro vem de `dinheiroNaGaveta`). */
+function esperadoDaForma(sessao: SessaoDeCaixa, forma: FormaDePagamento): number | null {
+  if (forma === 'DINHEIRO') {
+    return sessao.dinheiroNaGaveta
+  }
+  return sessao.porForma.find((valores) => valores.forma === forma)?.esperado ?? null
+}
+
+/** Texto da janela conforme o passo, o modo, as formas e se quem fecha ve o esperado (`dinheiroNaGaveta`). */
+function descricaoDaJanela(sessao: SessaoDeCaixa, emConferencia: boolean, variasFormas: boolean): string {
   if (emConferencia) {
     return 'A contagem foi registrada. Explique a diferença para fechar o caixa.'
   }
+  const oQueContar = variasFormas ? 'o dinheiro da gaveta e os comprovantes de cada forma' : 'o dinheiro da gaveta'
   if (!sessao.fechamentoCego) {
-    return 'Conte o dinheiro da gaveta e compare com o esperado. A contagem não pode ser alterada depois.'
+    return `Conte ${oQueContar} e compare com o esperado. A contagem não pode ser alterada depois.`
   }
+  const informe = variasFormas ? 'informe os totais' : 'informe o total'
   return sessao.dinheiroNaGaveta === null
-    ? 'Conte o dinheiro da gaveta e informe o total. Se bater, o caixa fecha na hora. Depois de conferir, a contagem não pode ser alterada.'
-    : 'Conte o dinheiro da gaveta e informe o total. A diferença aparece depois de conferir. A contagem não pode ser alterada depois.'
+    ? `Conte ${oQueContar} e ${informe}. Se bater, o caixa fecha na hora. Depois de conferir, a contagem não pode ser alterada.`
+    : `Conte ${oQueContar} e ${informe}. A diferença aparece depois de conferir. A contagem não pode ser alterada depois.`
 }
 
 /** Exemplo de justificativa conforme o sentido da diferenca. */
 function exemploDeJustificativa(diferenca: number | null): string {
   return diferenca !== null && diferenca > 0 ? 'Ex.: Troco dado a menos' : 'Ex.: Troco dado a mais'
+}
+
+/** A primeira diferenca diferente de zero (o exemplo da justificativa segue o sentido dela). */
+function primeiraDiferenca(diferencas: readonly (number | null)[]): number | null {
+  return diferencas.find((diferenca) => diferenca !== null && diferenca !== 0) ?? null
+}
+
+/** Erros do servidor: `valorContado` (contrato antigo) vale como o dinheiro. */
+function normalizarErroDoServidor(erro: unknown): unknown {
+  if (erro instanceof HttpError && erro.campos?.valorContado) {
+    const { valorContado, ...demais } = erro.campos
+    return new HttpError(erro.status, erro.message, { ...demais, 'contagens.DINHEIRO': valorContado })
+  }
+  return erro
 }
 
 /**
@@ -98,30 +150,36 @@ function ConteudoFecharCaixa({
   aoMudarDeEstado,
 }: Omit<JanelaFecharCaixaProps, 'aberto'>) {
   const queryClient = useQueryClient()
-  const [contado, setContado] = useState('')
+  const formas = formasDaContagem(sessao)
+  const campos = camposDaJanela(formas)
+  const variasFormas = formas.length > 1
+  const [contados, setContados] = useState<Partial<Record<FormaDePagamento, string>>>({})
   const [justificativa, setJustificativa] = useState('')
   const [erros, setErros] = useState<Partial<Record<CampoFechamento, string>>>({})
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   /** Resultado da contagem que foi para conferencia (a resposta do servidor). */
   const [resultado, setResultado] = useState<SessaoDeCaixa | null>(null)
   const [focoPendente, setFocoPendente] = useState<CampoFechamento | null>(null)
-  const contadoRef = useRef<HTMLInputElement>(null)
+  const contadosRef = useRef<Partial<Record<FormaDePagamento, HTMLInputElement | null>>>({})
   const justificativaRef = useRef<HTMLTextAreaElement>(null)
   const enviandoRef = useRef(false)
 
   const cego = sessao.fechamentoCego
   // A conferencia vem da contagem feita aqui ou da sessao recarregada (retomada).
   const conferencia = resultado ?? (sessao.status === 'EM_CONFERENCIA' ? sessao : null)
-  const esperado = cego ? null : sessao.dinheiroNaGaveta
-  const diferencaAoVivo = esperado !== null && contado !== '' ? diferencaEntre(Number(contado), esperado) : null
-  const pedeJustificativaJunto = conferencia === null && diferencaAoVivo !== null && diferencaAoVivo !== 0
-  const mostraJustificativa = conferencia !== null || pedeJustificativaJunto
-  const campoVisivel: Readonly<Record<CampoFechamento, boolean>> = {
-    valorContado: conferencia === null,
-    justificativa: mostraJustificativa,
+  const esperadoVisivel = (forma: FormaDePagamento) => (cego ? null : esperadoDaForma(sessao, forma))
+  const diferencaAoVivoDa = (forma: FormaDePagamento): number | null => {
+    const esperado = esperadoVisivel(forma)
+    const contado = contados[forma] ?? ''
+    return esperado !== null && contado !== '' ? diferencaEntre(Number(contado), esperado) : null
   }
+  const diferencaAoVivo = primeiraDiferenca(formas.map(diferencaAoVivoDa))
+  const pedeJustificativaJunto = conferencia === null && diferencaAoVivo !== null
+  const mostraJustificativa = conferencia !== null || pedeJustificativaJunto
+  const campoVisivel = (campo: CampoFechamento) => (campo === 'justificativa' ? mostraJustificativa : conferencia === null)
 
-  const tratarErro = async (erro: unknown, falha: string) => {
+  const tratarErro = async (erroOriginal: unknown, falha: string) => {
+    const erro = normalizarErroDoServidor(erroOriginal)
     if (ehFalhaSemResposta(erro)) {
       // O envio pode ter chegado ao servidor: a janela e os valores ficam para a nova tentativa,
       // sem recarregar a sessao (a tela continua como esta).
@@ -136,10 +194,10 @@ function ConteudoFecharCaixa({
     }
     // A sessao continua neste passo (ex.: modo trocado antes da contagem): recarrega e mostra o erro.
     void queryClient.invalidateQueries({ queryKey: CAIXA_QUERY_KEY })
-    const { porCampo, geral } = lerErroDoServidor(erro, CAMPOS, falha)
+    const { porCampo, geral } = lerErroDoServidor(erro, campos, falha)
     setErros(porCampo)
     setErroGeral(geral)
-    setFocoPendente(CAMPOS.find((campo) => porCampo[campo] && campoVisivel[campo]) ?? null)
+    setFocoPendente(campos.find((campo) => porCampo[campo] && campoVisivel(campo)) ?? null)
   }
 
   const contagem = useMutation<SessaoDeCaixa, unknown, ContagemRequest>({
@@ -175,8 +233,14 @@ function ConteudoFecharCaixa({
     if (focoPendente === null || enviando) {
       return
     }
-    const alvo = focoPendente === 'valorContado' ? contadoRef : justificativaRef
-    alvo.current?.focus()
+    if (focoPendente === 'justificativa') {
+      justificativaRef.current?.focus()
+    } else {
+      const forma = FORMAS_DE_PAGAMENTO.find((item) => campoDaForma(item) === focoPendente)
+      if (forma) {
+        contadosRef.current[forma]?.focus()
+      }
+    }
     setFocoPendente(null)
   }, [focoPendente, enviando])
 
@@ -199,39 +263,51 @@ function ConteudoFecharCaixa({
       return
     }
     const novos: Partial<Record<CampoFechamento, string>> = {}
-    if (contado === '') {
-      novos.valorContado = MENSAGEM_SEM_CONTADO
+    for (const forma of formas) {
+      if ((contados[forma] ?? '') === '') {
+        novos[campoDaForma(forma)] = mensagemSemContado(forma)
+      }
     }
     if (pedeJustificativaJunto && texto === '') {
       novos.justificativa = MENSAGEM_SEM_JUSTIFICATIVA
     }
     if (Object.keys(novos).length > 0) {
       setErros(novos)
-      setFocoPendente(CAMPOS.find((campo) => novos[campo]) ?? null)
+      setFocoPendente(campos.find((campo) => novos[campo]) ?? null)
       return
     }
     enviandoRef.current = true
     setErros({})
     setErroGeral(null)
+    const contagens: Partial<Record<FormaDePagamento, number>> = {}
+    for (const forma of formas) {
+      contagens[forma] = Number(contados[forma])
+    }
     // No modo cego a justificativa nunca vai junto (o backend recusa); no nao cego, so com diferenca.
-    contagem.mutate({ valorContado: Number(contado), justificativa: pedeJustificativaJunto ? texto : null })
+    contagem.mutate({ contagens, justificativa: pedeJustificativaJunto ? texto : null })
   }
 
   // Erro de um campo que nao esta na tela neste passo (ex.: a justificativa depois que o modo mudou) vai para a mensagem geral.
-  const errosOcultos = CAMPOS.filter((campo) => !campoVisivel[campo] && erros[campo]).map((campo) => erros[campo])
+  const errosOcultos = campos.filter((campo) => !campoVisivel(campo) && erros[campo]).map((campo) => erros[campo])
   const mensagemGeral = [erroGeral, ...errosOcultos].filter(Boolean).join(' ') || null
   const rotuloConfirmar = conferencia || !cego ? 'Fechar caixa' : 'Conferir'
   const descricaoDaJustificativa =
     [conferencia && ID_RESULTADO, erros.justificativa && `${ID_JUSTIFICATIVA}-erro`].filter(Boolean).join(' ') ||
     undefined
+  const diferencaDoExemplo = conferencia
+    ? primeiraDiferenca([conferencia.diferenca, ...conferencia.porForma.map((valores) => valores.diferenca)])
+    : diferencaAoVivo
 
   return (
     <DialogContent
       showCloseButton={!enviando}
       onOpenAutoFocus={(event) => {
         event.preventDefault()
-        const alvo = conferencia ? justificativaRef : contadoRef
-        alvo.current?.focus()
+        if (conferencia) {
+          justificativaRef.current?.focus()
+        } else {
+          contadosRef.current.DINHEIRO?.focus()
+        }
       }}
       onCloseAutoFocus={manterFocoMovidoPelaTela}
       onEscapeKeyDown={(event) => enviandoRef.current && event.preventDefault()}
@@ -239,7 +315,7 @@ function ConteudoFecharCaixa({
     >
       <DialogHeader>
         <DialogTitle>{`Fechar o ${sessao.ponto.nome}`}</DialogTitle>
-        <DialogDescription>{descricaoDaJanela(sessao, conferencia !== null)}</DialogDescription>
+        <DialogDescription>{descricaoDaJanela(sessao, conferencia !== null, variasFormas)}</DialogDescription>
       </DialogHeader>
 
       {deOutraPessoa && (
@@ -255,40 +331,24 @@ function ConteudoFecharCaixa({
         {conferencia ? (
           <ResultadoDaContagem sessao={conferencia} />
         ) : (
-          <div className="space-y-1.5">
-            <label htmlFor={ID_CONTADO} className="text-sm font-medium">
-              Dinheiro contado na gaveta
-            </label>
-            <div className={cn('gap-4', esperado !== null && 'grid grid-cols-[minmax(0,1fr)_auto] items-center')}>
-              <CampoMoeda
-                ref={contadoRef}
-                id={ID_CONTADO}
-                value={contado}
-                onChange={(valor) => {
-                  setContado(valor)
-                  setErros(({ valorContado: _valorContado, ...demais }) => demais)
-                }}
-                disabled={enviando}
-                aria-invalid={erros.valorContado ? true : undefined}
-                aria-describedby={
-                  [esperado !== null && ID_DIFERENCA, erros.valorContado && `${ID_CONTADO}-erro`]
-                    .filter(Boolean)
-                    .join(' ') || undefined
-                }
-                className="h-11 text-base"
-              />
-              {esperado !== null && (
-                <div id={ID_DIFERENCA} className="space-y-0.5 text-right text-sm">
-                  <p className="text-muted-foreground tabular-nums">{`Esperado ${formatarReais(esperado)}`}</p>
-                  {/* So a diferenca e anunciada enquanto se digita. */}
-                  <p aria-live="polite" className="min-h-5">
-                    {diferencaAoVivo !== null && <TextoDaDiferenca valor={diferencaAoVivo} />}
-                  </p>
-                </div>
-              )}
-            </div>
-            <ErroDoCampo id={`${ID_CONTADO}-erro`} mensagem={erros.valorContado} />
-          </div>
+          formas.map((forma) => (
+            <CampoDaForma
+              key={forma}
+              forma={forma}
+              valor={contados[forma] ?? ''}
+              esperado={esperadoVisivel(forma)}
+              diferenca={diferencaAoVivoDa(forma)}
+              erro={erros[campoDaForma(forma)]}
+              desabilitado={enviando}
+              registrar={(elemento) => {
+                contadosRef.current[forma] = elemento
+              }}
+              aoMudar={(valor) => {
+                setContados((atuais) => ({ ...atuais, [forma]: valor }))
+                setErros(({ [campoDaForma(forma)]: _removido, ...demais }) => demais)
+              }}
+            />
+          ))
         )}
 
         {mostraJustificativa && (
@@ -314,7 +374,7 @@ function ConteudoFecharCaixa({
               }}
               rows={3}
               maxLength={TAMANHO_MAXIMO_DA_JUSTIFICATIVA}
-              placeholder={exemploDeJustificativa(conferencia ? conferencia.diferenca : diferencaAoVivo)}
+              placeholder={exemploDeJustificativa(diferencaDoExemplo)}
               disabled={enviando}
               aria-invalid={erros.justificativa ? true : undefined}
               aria-describedby={descricaoDaJustificativa}
@@ -338,7 +398,60 @@ function ConteudoFecharCaixa({
   )
 }
 
-/** Esperado, contado e diferenca de uma contagem ja registrada. */
+/** O valor contado de uma forma; no modo nao cego, o esperado e a diferenca ao lado. */
+function CampoDaForma({
+  forma,
+  valor,
+  esperado,
+  diferenca,
+  erro,
+  desabilitado,
+  registrar,
+  aoMudar,
+}: {
+  forma: FormaDePagamento
+  valor: string
+  esperado: number | null
+  diferenca: number | null
+  erro: string | undefined
+  desabilitado: boolean
+  registrar: (elemento: HTMLInputElement | null) => void
+  aoMudar: (valor: string) => void
+}) {
+  const id = idDoContado(forma)
+  const idDiferenca = forma === 'DINHEIRO' ? ID_DIFERENCA : `${ID_DIFERENCA}-${forma.toLowerCase()}`
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="text-sm font-medium">
+        {rotuloDoContado(forma)}
+      </label>
+      <div className={cn('gap-4', esperado !== null && 'grid grid-cols-[minmax(0,1fr)_auto] items-center')}>
+        <CampoMoeda
+          ref={registrar}
+          id={id}
+          value={valor}
+          onChange={aoMudar}
+          disabled={desabilitado}
+          aria-invalid={erro ? true : undefined}
+          aria-describedby={[esperado !== null && idDiferenca, erro && `${id}-erro`].filter(Boolean).join(' ') || undefined}
+          className="h-11 text-base"
+        />
+        {esperado !== null && (
+          <div id={idDiferenca} className="space-y-0.5 text-right text-sm">
+            <p className="text-muted-foreground tabular-nums">{`Esperado ${formatarReais(esperado)}`}</p>
+            {/* So a diferenca e anunciada enquanto se digita. */}
+            <p aria-live="polite" className="min-h-5">
+              {diferenca !== null && <TextoDaDiferenca valor={diferenca} />}
+            </p>
+          </div>
+        )}
+      </div>
+      <ErroDoCampo id={`${id}-erro`} mensagem={erro} />
+    </div>
+  )
+}
+
+/** Esperado, contado e diferenca de uma contagem ja registrada (por forma quando ha mais de uma). */
 function ResultadoDaContagem({ sessao }: { sessao: SessaoDeCaixa }) {
   // O titulo nomeia a regiao; a lista (sem nome proprio) descreve a justificativa pelo conteudo.
   return (
@@ -346,27 +459,64 @@ function ResultadoDaContagem({ sessao }: { sessao: SessaoDeCaixa }) {
       <h3 id={`${ID_RESULTADO}-titulo`} className="sr-only">
         Resultado da contagem
       </h3>
-      <ResultadoEmLista sessao={sessao} />
+      {sessao.porForma.length > 1 ? (
+        <div id={ID_RESULTADO} className="space-y-2">
+          {sessao.porForma.map((valores) => (
+            <div key={valores.forma} role="group" aria-label={ROTULO_DA_FORMA[valores.forma]}>
+              <ValoresDaForma
+                titulo={ROTULO_DA_FORMA[valores.forma]}
+                esperado={valores.esperado}
+                contado={valores.contado}
+                diferenca={valores.diferenca}
+              />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <ValoresDaForma
+          id={ID_RESULTADO}
+          esperado={sessao.valorEsperado}
+          contado={sessao.valorContado}
+          diferenca={sessao.diferenca}
+        />
+      )}
     </section>
   )
 }
 
-function ResultadoEmLista({ sessao }: { sessao: SessaoDeCaixa }) {
+function ValoresDaForma({
+  id,
+  titulo,
+  esperado,
+  contado,
+  diferenca,
+}: {
+  id?: string
+  titulo?: string
+  esperado: number | null
+  contado: number | null
+  diferenca: number | null
+}) {
   return (
-    <dl id={ID_RESULTADO} className="space-y-1 rounded-md bg-muted/60 px-3 py-2 text-sm">
+    <dl id={id} className="space-y-1 rounded-md bg-muted/60 px-3 py-2 text-sm">
+      {titulo && (
+        <p aria-hidden="true" className="font-medium">
+          {titulo}
+        </p>
+      )}
       <div className="flex justify-between gap-4">
         <dt className="text-muted-foreground">Esperado</dt>
-        <dd className="tabular-nums">{sessao.valorEsperado === null ? '—' : formatarReais(sessao.valorEsperado)}</dd>
+        <dd className="tabular-nums">{esperado === null ? '—' : formatarReais(esperado)}</dd>
       </div>
       <div className="flex justify-between gap-4">
         <dt className="text-muted-foreground">Contado</dt>
-        <dd className="tabular-nums">{sessao.valorContado === null ? '—' : formatarReais(sessao.valorContado)}</dd>
+        <dd className="tabular-nums">{contado === null ? '—' : formatarReais(contado)}</dd>
       </div>
-      {sessao.diferenca !== null && (
+      {diferenca !== null && (
         <div className="flex justify-between gap-4">
           <dt className="text-muted-foreground">Diferença</dt>
           <dd>
-            <TextoDaDiferenca valor={sessao.diferenca} />
+            <TextoDaDiferenca valor={diferenca} />
           </dd>
         </div>
       )}

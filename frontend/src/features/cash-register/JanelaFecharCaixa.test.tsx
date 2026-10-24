@@ -129,7 +129,7 @@ describe('JanelaFecharCaixa', () => {
       enviar()
 
       await waitFor(() =>
-        expect(contarMock).toHaveBeenCalledWith(NAO_CEGO.id, { valorContado: 318, justificativa: 'Troco dado a mais' }),
+        expect(contarMock).toHaveBeenCalledWith(NAO_CEGO.id, { contagens: { DINHEIRO: 318 }, justificativa: 'Troco dado a mais' }),
       )
       expect(fecharMock).not.toHaveBeenCalled()
       await waitFor(() => expect(aoConcluir).toHaveBeenCalledWith(expect.objectContaining({ status: 'FECHADA' })))
@@ -142,7 +142,7 @@ describe('JanelaFecharCaixa', () => {
       digitarContado('320,00')
       enviar()
 
-      await waitFor(() => expect(contarMock).toHaveBeenCalledWith(NAO_CEGO.id, { valorContado: 320, justificativa: null }))
+      await waitFor(() => expect(contarMock).toHaveBeenCalledWith(NAO_CEGO.id, { contagens: { DINHEIRO: 320 }, justificativa: null }))
       await waitFor(() => expect(aoConcluir).toHaveBeenCalled())
     })
 
@@ -156,7 +156,7 @@ describe('JanelaFecharCaixa', () => {
       expect(within(janela).getByText('Confere')).toBeInTheDocument()
       enviar()
 
-      await waitFor(() => expect(contarMock).toHaveBeenCalledWith(gavetaVazia.id, { valorContado: 0, justificativa: null }))
+      await waitFor(() => expect(contarMock).toHaveBeenCalledWith(gavetaVazia.id, { contagens: { DINHEIRO: 0 }, justificativa: null }))
       await waitFor(() => expect(aoConcluir).toHaveBeenCalled())
     })
 
@@ -175,7 +175,7 @@ describe('JanelaFecharCaixa', () => {
       enviar()
 
       const resultado = await within(janela).findByLabelText('Resultado da contagem')
-      expect(contarMock).toHaveBeenCalledWith(NAO_CEGO.id, { valorContado: 320, justificativa: null })
+      expect(contarMock).toHaveBeenCalledWith(NAO_CEGO.id, { contagens: { DINHEIRO: 320 }, justificativa: null })
       expect(resultado).toHaveTextContent('EsperadoR$ 340,00')
       expect(resultado).toHaveTextContent('Falta de R$ 20,00')
       await waitFor(() => expect(within(janela).getByLabelText(/justificativa/i)).toHaveFocus())
@@ -208,7 +208,7 @@ describe('JanelaFecharCaixa', () => {
       expect(within(janela).queryByText(/falta de|sobra de|confere/i)).not.toBeInTheDocument()
       fireEvent.click(within(janela).getByRole('button', { name: 'Conferir' }))
 
-      await waitFor(() => expect(contarMock).toHaveBeenCalledWith(CEGO.id, { valorContado: 318, justificativa: null }))
+      await waitFor(() => expect(contarMock).toHaveBeenCalledWith(CEGO.id, { contagens: { DINHEIRO: 318 }, justificativa: null }))
       const lista = await within(janela).findByLabelText('Resultado da contagem')
       expect(lista).toHaveTextContent('EsperadoR$ 320,00')
       expect(lista).toHaveTextContent('ContadoR$ 318,00')
@@ -264,7 +264,7 @@ describe('JanelaFecharCaixa', () => {
       expect(within(janela).getByLabelText(/justificativa/i)).toBeInTheDocument()
       expect(within(janela).getByRole('button', { name: 'Fechar caixa' })).toBeInTheDocument()
       expect(contarMock).toHaveBeenCalledTimes(2)
-      expect(contarMock).toHaveBeenNthCalledWith(2, CEGO.id, { valorContado: 318, justificativa: null })
+      expect(contarMock).toHaveBeenNthCalledWith(2, CEGO.id, { contagens: { DINHEIRO: 318 }, justificativa: null })
       expect(within(janela).queryByRole('alert')).not.toBeInTheDocument()
     })
   })
@@ -453,6 +453,111 @@ describe('JanelaFecharCaixa', () => {
       expect(within(janela).queryByLabelText(/justificativa/i)).not.toBeInTheDocument()
       expect(within(janela).getByRole('alert')).toHaveTextContent('Informe a justificativa depois de ver a diferença.')
       expect(within(janela).getByRole('button', { name: 'Conferir' })).toBeInTheDocument()
+    })
+  })
+
+  describe('contagem por forma (Dinheiro e Débito)', () => {
+    const COM_DEBITO = {
+      formasDaContagem: ['DINHEIRO', 'DEBITO'] as SessaoDeCaixa['formasDaContagem'],
+      porForma: [
+        { forma: 'DINHEIRO' as const, esperado: 320, contado: null, diferenca: null },
+        { forma: 'DEBITO' as const, esperado: 120, contado: null, diferenca: null },
+      ],
+    }
+    const NAO_CEGO_COM_DEBITO = sessaoDeTeste({ fechamentoCego: false, dinheiroNaGaveta: 320, ...COM_DEBITO })
+    const CEGO_COM_DEBITO = sessaoDeTeste({
+      fechamentoCego: true,
+      dinheiroNaGaveta: null,
+      formasDaContagem: COM_DEBITO.formasDaContagem,
+      porForma: COM_DEBITO.porForma.map((valores) => ({ ...valores, esperado: null })),
+    })
+
+    function contadoNoDebito() {
+      return screen.getByLabelText('Débito contado')
+    }
+
+    it('não cego: esperado e diferença ao lado de cada campo; a justificativa única aparece quando qualquer um difere', async () => {
+      contarMock.mockResolvedValue(fechada(NAO_CEGO_COM_DEBITO, 'Comprovante perdido'))
+      const janela = renderJanela(NAO_CEGO_COM_DEBITO)
+
+      expect(within(janela).getByText('Esperado R$ 320,00')).toBeInTheDocument()
+      expect(within(janela).getByText('Esperado R$ 120,00')).toBeInTheDocument()
+
+      digitarContado('320,00')
+      fireEvent.change(contadoNoDebito(), { target: { value: '120,00' } })
+      expect(within(janela).getAllByText('Confere')).toHaveLength(2)
+      expect(screen.queryByLabelText(/justificativa/i)).not.toBeInTheDocument()
+
+      // Só o débito difere: a justificativa (uma só) passa a ser pedida.
+      fireEvent.change(contadoNoDebito(), { target: { value: '118,00' } })
+      expect(within(janela).getByText('Falta de R$ 2,00')).toBeInTheDocument()
+      fireEvent.change(screen.getByLabelText(/justificativa/i), { target: { value: 'Comprovante perdido' } })
+      enviar()
+
+      await waitFor(() =>
+        expect(contarMock).toHaveBeenCalledWith(NAO_CEGO_COM_DEBITO.id, {
+          contagens: { DINHEIRO: 320, DEBITO: 118 },
+          justificativa: 'Comprovante perdido',
+        }),
+      )
+      await waitFor(() => expect(aoConcluir).toHaveBeenCalled())
+    })
+
+    it('forma sem valor não vai ao servidor: "Informe o valor contado de Débito."', async () => {
+      renderJanela(NAO_CEGO_COM_DEBITO)
+
+      digitarContado('320,00')
+      enviar()
+
+      expect(await screen.findByText('Informe o valor contado de Débito.')).toBeInTheDocument()
+      expect(contadoNoDebito()).toHaveAttribute('aria-invalid', 'true')
+      expect(contarMock).not.toHaveBeenCalled()
+    })
+
+    it('o erro do servidor em contagens.DEBITO fica no campo do débito', async () => {
+      contarMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { 'contagens.DEBITO': 'Informe o valor contado de Débito.' }),
+      )
+      renderJanela(NAO_CEGO_COM_DEBITO)
+
+      digitarContado('320,00')
+      fireEvent.change(contadoNoDebito(), { target: { value: '120,00' } })
+      enviar()
+
+      expect(await screen.findByText('Informe o valor contado de Débito.')).toBeInTheDocument()
+      expect(contadoNoDebito()).toHaveAccessibleDescription(expect.stringContaining('Informe o valor contado de Débito.'))
+    })
+
+    it('cego: nenhum esperado antes; depois de "Conferir", o resultado de cada forma', async () => {
+      contarMock.mockResolvedValue({
+        ...emConferencia(CEGO_COM_DEBITO),
+        porForma: [
+          { forma: 'DINHEIRO', esperado: 320, contado: 320, diferenca: 0 },
+          { forma: 'DEBITO', esperado: 120, contado: 118, diferenca: -2 },
+        ],
+      })
+      const janela = renderJanela(CEGO_COM_DEBITO)
+
+      expect(within(janela).queryByText(/Esperado/)).not.toBeInTheDocument()
+      digitarContado('320,00')
+      fireEvent.change(contadoNoDebito(), { target: { value: '118,00' } })
+      expect(within(janela).queryByText(/falta de|sobra de|confere/i)).not.toBeInTheDocument()
+      fireEvent.click(within(janela).getByRole('button', { name: 'Conferir' }))
+
+      await waitFor(() =>
+        expect(contarMock).toHaveBeenCalledWith(CEGO_COM_DEBITO.id, {
+          contagens: { DINHEIRO: 320, DEBITO: 118 },
+          justificativa: null,
+        }),
+      )
+      const resultado = await within(janela).findByLabelText('Resultado da contagem')
+      const dinheiro = within(resultado).getByRole('group', { name: 'Dinheiro' })
+      const debito = within(resultado).getByRole('group', { name: 'Débito' })
+      expect(dinheiro).toHaveTextContent('Confere')
+      expect(debito).toHaveTextContent('EsperadoR$ 120,00')
+      expect(debito).toHaveTextContent('ContadoR$ 118,00')
+      expect(debito).toHaveTextContent('Falta de R$ 2,00')
+      await waitFor(() => expect(within(janela).getByLabelText(/justificativa/i)).toHaveFocus())
     })
   })
 })

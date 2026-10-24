@@ -196,11 +196,13 @@ export async function apiGet<T>(
  * @param path caminho relativo a URL base (ex.: "/auth/login")
  * @param corpo objeto serializado como JSON no corpo da requisicao
  * @param opcoes.autenticada injeta o header Authorization: Bearer <token>
+ * @param opcoes.signal cancela a requisicao (ex.: o calculo do carrinho
+ *   substituido por um mais novo); o cancelamento relanca o AbortError original.
  */
 export async function apiPost<T>(
   path: string,
   corpo: unknown,
-  opcoes: { autenticada?: boolean } = {},
+  opcoes: { autenticada?: boolean; signal?: AbortSignal } = {},
 ): Promise<T> {
   return (await apiPostComStatus<T>(path, corpo, opcoes)).corpo
 }
@@ -212,7 +214,7 @@ export async function apiPost<T>(
 export async function apiPostComStatus<T>(
   path: string,
   corpo: unknown,
-  opcoes: { autenticada?: boolean } = {},
+  opcoes: { autenticada?: boolean; signal?: AbortSignal } = {},
 ): Promise<{ status: number; corpo: T }> {
   const autenticada = opcoes.autenticada ?? false
   let resposta: Response
@@ -221,8 +223,12 @@ export async function apiPostComStatus<T>(
       method: 'POST',
       headers: montarHeaders(autenticada, true),
       body: JSON.stringify(corpo),
+      signal: opcoes.signal,
     })
-  } catch {
+  } catch (erro) {
+    if (ehAborto(erro) || opcoes.signal?.aborted) {
+      throw erro
+    }
     throw new HttpError(0, 'Nao foi possivel conectar ao servidor.')
   }
 

@@ -148,6 +148,24 @@ describe('HistoricoDoCaixaPage', () => {
     expect(within(falta).getByText('Falta de R$ 2,00')).toHaveClass('text-warning-soft-foreground')
   })
 
+  it('com diferença em outra forma, a célula da diferença mostra a forma e o valor', async () => {
+    const comDebito = {
+      ...FECHADA_CONFERE,
+      porForma: [
+        { forma: 'DINHEIRO' as const, esperado: 320, contado: 320, diferenca: 0 },
+        { forma: 'DEBITO' as const, esperado: 120, contado: 118, diferenca: -2 },
+      ],
+    }
+    listarSessoesMock.mockResolvedValue(pagina([comDebito]))
+    renderPagina()
+
+    const tabela = await screen.findByRole('table', { name: 'Sessões de caixa' })
+    const [, linha] = within(tabela).getAllByRole('row')
+    const diferenca = within(linha).getAllByRole('cell')[4]
+    expect(diferenca).toHaveTextContent('Confere')
+    expect(diferenca).toHaveTextContent('Débito: Falta de R$ 2,00')
+  })
+
   it('abertura e fechamento numa coluna só, com os dois nomes e as datas inteiras; valores sem quebra', async () => {
     renderPagina()
 

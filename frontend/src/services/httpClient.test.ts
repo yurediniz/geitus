@@ -284,6 +284,22 @@ describe('httpClient', () => {
       expect(erro).toBe(aborto)
       expect(erro).not.toBeInstanceOf(HttpError)
     })
+
+    it('apiPost repassa o signal e o aborto lanca o AbortError original', async () => {
+      const aborto = new DOMException('The operation was aborted.', 'AbortError')
+      vi.mocked(globalThis.fetch).mockRejectedValue(aborto)
+      const controle = new AbortController()
+      controle.abort()
+
+      const erro = await apiPost('/pdv/calculo', { itens: [] }, { autenticada: true, signal: controle.signal }).catch(
+        (e: unknown) => e,
+      )
+
+      const init = vi.mocked(globalThis.fetch).mock.calls[0]?.[1] as RequestInit | undefined
+      expect(init?.signal).toBe(controle.signal)
+      expect(erro).toBe(aborto)
+      expect(erro).not.toBeInstanceOf(HttpError)
+    })
   })
 
   describe('respostas de sucesso', () => {

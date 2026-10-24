@@ -7,7 +7,13 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { chaveDosPontos } from '@/features/cash-register/caixaQuery'
 import { ErroAoCarregar } from '@/features/cash-register/EstadosDoCaixa'
 import type { MudancaDeEstado } from '@/features/cash-register/errosDoCaixa'
-import { abertoEmOutroDia, formatarHora, formatarReais, textoAbertoDesde } from '@/features/cash-register/formatacaoCaixa'
+import {
+  abertoEmOutroDia,
+  formatarHora,
+  formatarReais,
+  ROTULO_DA_FORMA,
+  textoAbertoDesde,
+} from '@/features/cash-register/formatacaoCaixa'
 import { JanelaFecharCaixa } from '@/features/cash-register/JanelaFecharCaixa'
 import { JanelaMovimento } from '@/features/cash-register/JanelaMovimento'
 import { ListaDeMovimentos } from '@/features/cash-register/ListaDeMovimentos'
@@ -190,29 +196,54 @@ function EmConferencia({ sessao }: { sessao: SessaoDeCaixa }) {
   return (
     <div className="space-y-2 rounded-md bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground">
       <p className="font-semibold">Contagem registrada · falta a justificativa</p>
-      <dl className="flex flex-wrap gap-x-6 gap-y-1 text-foreground">
-        {sessao.valorEsperado !== null && (
-          <div className="flex gap-1.5">
-            <dt className="text-muted-foreground">Esperado</dt>
-            <dd className="tabular-nums">{formatarReais(sessao.valorEsperado)}</dd>
+      {sessao.porForma.length > 1 ? (
+        sessao.porForma.map((valores) => (
+          <div key={valores.forma} role="group" aria-label={ROTULO_DA_FORMA[valores.forma]} className="space-y-0.5">
+            <p aria-hidden="true" className="text-xs font-medium text-foreground">
+              {ROTULO_DA_FORMA[valores.forma]}
+            </p>
+            <ValoresDaConferencia esperado={valores.esperado} contado={valores.contado} diferenca={valores.diferenca} />
           </div>
-        )}
-        {sessao.valorContado !== null && (
-          <div className="flex gap-1.5">
-            <dt className="text-muted-foreground">Contado</dt>
-            <dd className="tabular-nums">{formatarReais(sessao.valorContado)}</dd>
-          </div>
-        )}
-        {sessao.diferenca !== null && (
-          <div className="flex gap-1.5">
-            <dt className="sr-only">Diferença</dt>
-            <dd>
-              <TextoDaDiferenca valor={sessao.diferenca} />
-            </dd>
-          </div>
-        )}
-      </dl>
+        ))
+      ) : (
+        <ValoresDaConferencia esperado={sessao.valorEsperado} contado={sessao.valorContado} diferenca={sessao.diferenca} />
+      )}
     </div>
+  )
+}
+
+function ValoresDaConferencia({
+  esperado,
+  contado,
+  diferenca,
+}: {
+  esperado: number | null
+  contado: number | null
+  diferenca: number | null
+}) {
+  return (
+    <dl className="flex flex-wrap gap-x-6 gap-y-1 text-foreground">
+      {esperado !== null && (
+        <div className="flex gap-1.5">
+          <dt className="text-muted-foreground">Esperado</dt>
+          <dd className="tabular-nums">{formatarReais(esperado)}</dd>
+        </div>
+      )}
+      {contado !== null && (
+        <div className="flex gap-1.5">
+          <dt className="text-muted-foreground">Contado</dt>
+          <dd className="tabular-nums">{formatarReais(contado)}</dd>
+        </div>
+      )}
+      {diferenca !== null && (
+        <div className="flex gap-1.5">
+          <dt className="sr-only">Diferença</dt>
+          <dd>
+            <TextoDaDiferenca valor={diferenca} />
+          </dd>
+        </div>
+      )}
+    </dl>
   )
 }
 

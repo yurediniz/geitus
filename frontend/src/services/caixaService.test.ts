@@ -97,14 +97,14 @@ describe('caixaService', () => {
       const movimento = { tipo: 'SANGRIA' as const, valor: 200, motivo: 'Depósito no cofre', chave: CHAVE }
 
       await lancar(SESSAO, movimento)
-      await contar(SESSAO, { valorContado: 318, justificativa: null })
+      await contar(SESSAO, { contagens: { DINHEIRO: 318, DEBITO: 120 }, justificativa: null })
       await fechar(SESSAO, { justificativa: 'Troco dado a mais' })
 
       expect(apiPostMock).toHaveBeenNthCalledWith(1, `/caixa/sessoes/${SESSAO}/movimentos`, movimento, AUT)
       expect(apiPostMock).toHaveBeenNthCalledWith(
         2,
         `/caixa/sessoes/${SESSAO}/contagem`,
-        { valorContado: 318, justificativa: null },
+        { contagens: { DINHEIRO: 318, DEBITO: 120 }, justificativa: null },
         AUT,
       )
       expect(apiPostMock).toHaveBeenNthCalledWith(

@@ -154,6 +154,18 @@ describe('RootLayout - Caixa e Configurações', () => {
     localStorage.clear()
   })
 
+  it('PDV leva a /pdv para todos, sem "em breve"', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue({ ...usuarioFake, perfil: 'OPERADOR' })
+
+    renderLayout()
+
+    await screen.findByText('Ana Souza')
+    const pdv = screen.getByRole('link', { name: /^pdv$/i })
+    expect(pdv).toHaveAttribute('href', '/pdv')
+    expect(within(pdv).queryByText(/^em breve$/i)).not.toBeInTheDocument()
+  })
+
   it('Caixa leva a /caixa para todos, sem "em breve"', async () => {
     setStoredToken('token-valido')
     getMeMock.mockResolvedValue({ ...usuarioFake, perfil: 'OPERADOR' })

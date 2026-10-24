@@ -11,7 +11,13 @@ import { PaginacaoLista } from '@/components/ui/paginacao-lista'
 import { chaveDoHistorico, chaveDosPontos } from '@/features/cash-register/caixaQuery'
 import { DetalheDaSessao } from '@/features/cash-register/DetalheDaSessao'
 import { CarregandoCaixa, ErroAoCarregar } from '@/features/cash-register/EstadosDoCaixa'
-import { formatarDataHoraCaixa, formatarReais, ROTULO_DO_STATUS } from '@/features/cash-register/formatacaoCaixa'
+import {
+  formasComDiferenca,
+  formatarDataHoraCaixa,
+  formatarReais,
+  ROTULO_DA_FORMA,
+  ROTULO_DO_STATUS,
+} from '@/features/cash-register/formatacaoCaixa'
 import { TextoDaDiferenca } from '@/features/cash-register/ResumoDoFechamento'
 import { useFiltrosDoHistorico } from '@/features/cash-register/useFiltrosDoHistorico'
 import { useAuth } from '@/hooks/useAuth'
@@ -336,6 +342,16 @@ function TabelaDoHistorico({
                 ) : (
                   <TextoDaDiferenca valor={sessao.diferenca} className="justify-end whitespace-nowrap" />
                 )}
+                {/* As colunas sao do dinheiro; diferenca em outra forma aparece logo abaixo. */}
+                {formasComDiferenca(sessao.porForma).map((forma) => (
+                  <p key={forma} className="mt-1 text-xs">
+                    <span className="text-muted-foreground">{`${ROTULO_DA_FORMA[forma]}: `}</span>
+                    <TextoDaDiferenca
+                      valor={sessao.porForma.find((valores) => valores.forma === forma)?.diferenca ?? 0}
+                      className="whitespace-nowrap"
+                    />
+                  </p>
+                ))}
               </td>
             </tr>
           ))}

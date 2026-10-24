@@ -1,4 +1,11 @@
-import type { MovimentoDeCaixa, SituacaoDoPonto, StatusDaSessao, TipoDeMovimentoDeCaixa } from '@/types/caixa'
+import type {
+  FormaDePagamento,
+  MovimentoDeCaixa,
+  SituacaoDoPonto,
+  StatusDaSessao,
+  TipoDeMovimentoDeCaixa,
+  ValoresPorForma,
+} from '@/types/caixa'
 
 /**
  * Formatacao do caixa. Os horarios chegam com deslocamento (ISO-8601) e sao
@@ -120,17 +127,20 @@ export function formatarDiferenca(valor: number): { texto: string; tom: 'ok' | '
 }
 
 /**
- * Soma dos suprimentos e das sangrias da sessao. Valor oculto (null, modo
- * cego) nunca entra na soma: `completos` diz se todos os valores estavam
- * visiveis (sem isso, os totais nao devem ser mostrados).
+ * Soma dos suprimentos, das sangrias e das vendas em dinheiro (recebimentos
+ * menos estornos em `DINHEIRO`) da sessao. Valor oculto (null, modo cego)
+ * nunca entra na soma: `completos` diz se todos os valores estavam visiveis
+ * (sem isso, os totais nao devem ser mostrados).
  */
 export function totaisDosMovimentos(movimentos: readonly MovimentoDeCaixa[]): {
   suprimentos: number
   sangrias: number
+  vendasEmDinheiro: number
   completos: boolean
 } {
   let suprimentos = 0
   let sangrias = 0
+  let vendasEmDinheiro = 0
   let completos = true
   for (const movimento of movimentos) {
     if (movimento.valor === null) {
@@ -139,25 +149,62 @@ export function totaisDosMovimentos(movimentos: readonly MovimentoDeCaixa[]): {
       suprimentos += emCentavos(movimento.valor)
     } else if (movimento.tipo === 'SANGRIA') {
       sangrias += emCentavos(movimento.valor)
+    } else if (movimento.forma === 'DINHEIRO' && movimento.tipo === 'RECEBIMENTO') {
+      vendasEmDinheiro += emCentavos(movimento.valor)
+    } else if (movimento.forma === 'DINHEIRO' && movimento.tipo === 'ESTORNO') {
+      vendasEmDinheiro -= emCentavos(movimento.valor)
     }
   }
-  return { suprimentos: suprimentos / 100, sangrias: sangrias / 100, completos }
+  return { suprimentos: suprimentos / 100, sangrias: sangrias / 100, vendasEmDinheiro: vendasEmDinheiro / 100, completos }
 }
 
-/** "Caixa 2 fechado" ou "Caixa 2 fechado com falta de R$ 2,00" / "com sobra de R$ 2,00". */
-export function mensagemDoFechamento(nomeDoPonto: string, diferenca: number | null): string {
+/** "Débito", "Débito e PIX", "Débito, Crédito e PIX". */
+function juntarNomes(nomes: readonly string[]): string {
+  return nomes.length <= 1 ? (nomes[0] ?? '') : `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`
+}
+
+/** As formas (fora o dinheiro) com diferenca diferente de zero. */
+export function formasComDiferenca(porForma: readonly ValoresPorForma[]): FormaDePagamento[] {
+  return porForma
+    .filter((valores) => valores.forma !== 'DINHEIRO' && valores.diferenca !== null && emCentavos(valores.diferenca) !== 0)
+    .map((valores) => valores.forma)
+}
+
+/**
+ * "Caixa 2 fechado", "Caixa 2 fechado com falta de R$ 2,00" / "com sobra de
+ * R$ 2,00"; com diferenca em outra forma, "... com diferença em Débito" (ou
+ * "... com falta de R$ 2,00 e diferença em Débito").
+ */
+export function mensagemDoFechamento(
+  nomeDoPonto: string,
+  diferenca: number | null,
+  porForma: readonly ValoresPorForma[] = [],
+): string {
   const centavos = diferenca === null ? 0 : emCentavos(diferenca)
-  if (centavos === 0) {
-    return `${nomeDoPonto} fechado`
+  const partes: string[] = []
+  if (centavos !== 0) {
+    partes.push(`${centavos > 0 ? 'sobra' : 'falta'} de ${formatarReais(Math.abs(centavos) / 100)}`)
   }
-  const absoluto = formatarReais(Math.abs(centavos) / 100)
-  return `${nomeDoPonto} fechado com ${centavos > 0 ? 'sobra' : 'falta'} de ${absoluto}`
+  const outras = formasComDiferenca(porForma).map((forma) => ROTULO_DA_FORMA[forma])
+  if (outras.length > 0) {
+    partes.push(`diferença em ${juntarNomes(outras)}`)
+  }
+  return partes.length === 0 ? `${nomeDoPonto} fechado` : `${nomeDoPonto} fechado com ${partes.join(' e ')}`
+}
+
+export const ROTULO_DA_FORMA: Readonly<Record<FormaDePagamento, string>> = {
+  DINHEIRO: 'Dinheiro',
+  DEBITO: 'Débito',
+  CREDITO: 'Crédito',
+  PIX: 'PIX',
 }
 
 export const ROTULO_DO_MOVIMENTO: Readonly<Record<TipoDeMovimentoDeCaixa, string>> = {
   ABERTURA: 'Abertura',
   SUPRIMENTO: 'Suprimento',
   SANGRIA: 'Sangria',
+  RECEBIMENTO: 'Recebimento',
+  ESTORNO: 'Estorno',
 }
 
 export const ROTULO_DO_STATUS: Readonly<Record<StatusDaSessao, string>> = {

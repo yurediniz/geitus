@@ -649,6 +649,23 @@ describe('CaixaPage', () => {
       expect(within(janela).getByLabelText('Dinheiro contado na gaveta')).toHaveValue('318,00')
     })
 
+    it('em conferência com diferença no débito: a diferença de cada forma aparece', async () => {
+      sessaoAtualMock.mockResolvedValue({
+        ...emConferencia(sessaoDeTeste({ fechamentoCego: true })),
+        valorContado: 320,
+        diferenca: 0,
+        porForma: [
+          { forma: 'DINHEIRO', esperado: 320, contado: 320, diferenca: 0 },
+          { forma: 'DEBITO', esperado: 120, contado: 118, diferenca: -2 },
+        ],
+      })
+      renderPagina()
+
+      const resumo = (await screen.findByText('Contagem registrada · falta a justificativa')).parentElement as HTMLElement
+      expect(within(resumo).getByRole('group', { name: 'Dinheiro' })).toHaveTextContent('Confere')
+      expect(within(resumo).getByRole('group', { name: 'Débito' })).toHaveTextContent('Falta de R$ 2,00')
+    })
+
     it('em conferência ao abrir a tela: "Contagem registrada · falta a justificativa" e "Justificar e fechar"', async () => {
       sessaoAtualMock.mockResolvedValue(emConferencia(sessaoDeTeste({ fechamentoCego: true })))
       renderPagina()
@@ -780,7 +797,7 @@ describe('CaixaPage', () => {
       expect(within(janela).getByText('Confere')).toBeInTheDocument()
       fireEvent.click(within(janela).getByRole('button', { name: 'Fechar caixa' }))
 
-      await waitFor(() => expect(contarMock).toHaveBeenCalledWith('s-ana', { valorContado: 100, justificativa: null }))
+      await waitFor(() => expect(contarMock).toHaveBeenCalledWith('s-ana', { contagens: { DINHEIRO: 100 }, justificativa: null }))
       expect(await screen.findByRole('status')).toHaveTextContent('Caixa 2 fechado')
       const titulo = await screen.findByRole('heading', { name: 'Caixa 2 fechado' })
       await waitFor(() => expect(titulo).toHaveFocus())

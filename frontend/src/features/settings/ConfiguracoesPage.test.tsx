@@ -16,6 +16,16 @@ vi.mock('@/services/configuracaoCaixaService', () => ({
   salvar: vi.fn(),
 }))
 
+vi.mock('@/services/configuracaoPdvService', () => ({
+  buscar: vi.fn().mockResolvedValue({
+    venderSemEstoque: true,
+    descontoMaximoOperador: 10,
+    atualizadoPorNome: null,
+    atualizadoEm: null,
+  }),
+  salvar: vi.fn(),
+}))
+
 vi.mock('@/services/caixaService', () => ({
   listarPontos: vi.fn(),
   criarPonto: vi.fn(),
@@ -113,6 +123,7 @@ describe('ConfiguracoesPage', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Configurações' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 2, name: 'Caixa' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'PDV' })).toBeInTheDocument()
     const campo = await interruptor()
     expect(campo).toHaveAttribute('aria-checked', 'true')
     expect(campo).toHaveAccessibleDescription(

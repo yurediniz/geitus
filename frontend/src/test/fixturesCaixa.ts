@@ -10,6 +10,8 @@ export function movimentoDeTeste(parcial: Partial<MovimentoDeCaixa> = {}): Movim
   return {
     id: 'mov-abertura',
     tipo: 'ABERTURA',
+    forma: 'DINHEIRO',
+    vendaNumero: null,
     valor: 150,
     motivo: null,
     usuarioNome: 'Ana Souza',
@@ -18,8 +20,27 @@ export function movimentoDeTeste(parcial: Partial<MovimentoDeCaixa> = {}): Movim
   }
 }
 
-/** Sessao ABERTA no Caixa 1 por Ana Souza as 08:02, com fundo de R$ 150,00 e R$ 320,00 na gaveta. */
+/**
+ * Sessao ABERTA no Caixa 1 por Ana Souza as 08:02, com fundo de R$ 150,00 e
+ * R$ 320,00 na gaveta. Sem `porForma` no parcial, so o dinheiro, coerente com
+ * os valores da propria sessao.
+ */
 export function sessaoDeTeste(parcial: Partial<SessaoDeCaixa> = {}): SessaoDeCaixa {
+  const sessao = sessaoBase(parcial)
+  return {
+    ...sessao,
+    porForma: parcial.porForma ?? [
+      {
+        forma: 'DINHEIRO',
+        esperado: sessao.valorEsperado ?? sessao.dinheiroNaGaveta,
+        contado: sessao.valorContado,
+        diferenca: sessao.diferenca,
+      },
+    ],
+  }
+}
+
+function sessaoBase(parcial: Partial<SessaoDeCaixa>): SessaoDeCaixa {
   return {
     id: 's-ana',
     ponto: { id: 'p-1', nome: 'Caixa 1' },
@@ -42,6 +63,8 @@ export function sessaoDeTeste(parcial: Partial<SessaoDeCaixa> = {}): SessaoDeCai
       movimentoDeTeste(),
     ],
     podeOperar: true,
+    porForma: [],
+    formasDaContagem: ['DINHEIRO'],
     ...parcial,
   }
 }
