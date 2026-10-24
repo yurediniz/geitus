@@ -620,8 +620,8 @@ class CatalogoServiceIT {
         Long idInterno = idInternoDoProduto(produto);
         String inserir = """
                 INSERT INTO produto_historico_precos
-                       (empresa_id, produto_id, campo, valor_anterior, valor_novo, usuario_id, alterado_em)
-                VALUES (?, ?, 'CUSTO', NULL, ?, ?, ?)
+                       (empresa_id, produto_id, campo, valor_anterior, valor_novo, usuario_id, alterado_em, origem)
+                VALUES (?, ?, 'CUSTO', NULL, ?, ?, ?, 'EDICAO')
                 """;
         // Id menor com a data mais recente; id maior com a data mais antiga.
         jdbcTemplate.update(inserir, empresa.getId(), idInterno, new BigDecimal("5.00"), idUsuario,

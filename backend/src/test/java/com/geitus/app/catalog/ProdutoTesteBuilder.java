@@ -195,11 +195,15 @@ final class ProdutoTesteBuilder {
         return this;
     }
 
+    /** Os dados do cadastro montados ate aqui, para {@link Produto#atualizarDadosBasicos} nos testes. */
+    DadosProduto dados() {
+        return new DadosProduto(nome, nomeCurto, marca, fornecedor, descricao, unidade, categoria, precoVenda, custo,
+                precoMinimo, estoqueMinimo, estoqueMaximo, pontoReposicao, sku, precoPromocional, promocaoInicio,
+                promocaoFim, precoAtacado, quantidadeMinimaAtacado, controlaEstoque, codigoDoProduto, vendidoBalanca);
+    }
+
     Produto build() {
-        Produto produto = new Produto(empresa, numero, new DadosProduto(nome, nomeCurto, marca, fornecedor, descricao,
-                unidade, categoria, precoVenda, custo, precoMinimo, estoqueMinimo,
-                estoqueMaximo, pontoReposicao, sku, precoPromocional, promocaoInicio, promocaoFim, precoAtacado,
-                quantidadeMinimaAtacado, controlaEstoque, codigoDoProduto, vendidoBalanca));
+        Produto produto = new Produto(empresa, numero, dados());
         produto.substituirCodigos(codigos);
         List<ProdutoEmbalagem> embalagensDoProduto = new ArrayList<>();
         for (int ordem = 0; ordem < embalagens.size(); ordem++) {

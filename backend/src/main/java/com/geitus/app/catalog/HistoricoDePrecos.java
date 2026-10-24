@@ -20,17 +20,24 @@ public class HistoricoDePrecos {
         this.historicoPrecoRepository = historicoPrecoRepository;
     }
 
-    /** Preco de venda e custo do produto contra os anteriores (nulos no cadastro). */
+    /**
+     * Preco de venda e custo do produto contra os anteriores (nulos no
+     * cadastro). O custo que muda aqui veio do cadastro: origem {@code EDICAO}.
+     */
     public void registrarCustoEPrecoDeVenda(Produto produto, Long usuarioId, BigDecimal custoAnterior,
             BigDecimal precoAnterior) {
-        registrarSeMudou(produto, usuarioId, CampoHistoricoPreco.PRECO_VENDA, precoAnterior, produto.getPrecoVenda());
-        registrarSeMudou(produto, usuarioId, CampoHistoricoPreco.CUSTO, custoAnterior, produto.getCusto());
+        if (!mesmoValor(precoAnterior, produto.getPrecoVenda())) {
+            historicoPrecoRepository.save(HistoricoPreco.doPrecoDeVenda(produto, precoAnterior,
+                    produto.getPrecoVenda(), usuarioId));
+        }
+        registrarCustoSeMudou(produto, usuarioId, OrigemDoCusto.EDICAO, custoAnterior, null);
     }
 
-    public void registrarSeMudou(Produto produto, Long usuarioId, CampoHistoricoPreco campo, BigDecimal anterior,
-            BigDecimal novo) {
-        if (!mesmoValor(anterior, novo)) {
-            historicoPrecoRepository.save(new HistoricoPreco(produto, campo, anterior, novo, usuarioId));
+    private void registrarCustoSeMudou(Produto produto, Long usuarioId, OrigemDoCusto origem,
+            BigDecimal anterior, Long movimentoId) {
+        if (!mesmoValor(anterior, produto.getCusto())) {
+            historicoPrecoRepository.save(HistoricoPreco.doCusto(produto, origem, anterior, produto.getCusto(),
+                    usuarioId, movimentoId));
         }
     }
 

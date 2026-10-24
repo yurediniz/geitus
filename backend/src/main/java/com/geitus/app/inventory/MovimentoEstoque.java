@@ -90,6 +90,17 @@ public class MovimentoEstoque {
     @Column(name = "quantidade_embalagens", updatable = false)
     private Integer quantidadeEmbalagens;
 
+    /**
+     * Fase B4 (V13): so na entrada manual por compra. O valor digitado (por
+     * unidade, ou por embalagem com o retrato) e o custo por unidade de venda
+     * com 4 casas; os dois nulos ou os dois preenchidos.
+     */
+    @Column(name = "custo_informado", precision = 12, scale = 2, updatable = false)
+    private BigDecimal custoInformado;
+
+    @Column(name = "custo_unitario", precision = 14, scale = 4, updatable = false)
+    private BigDecimal custoUnitario;
+
     @Column(name = "criado_em", nullable = false, updatable = false)
     private LocalDateTime criadoEm;
 
@@ -219,6 +230,16 @@ public class MovimentoEstoque {
             return Optional.empty();
         }
         return Optional.of(new RetratoDaEmbalagem(embalagemRotulo, embalagemQuantidade, quantidadeEmbalagens));
+    }
+
+    /** Custo digitado na entrada por compra (por unidade ou por embalagem), ou {@code null}. */
+    public BigDecimal getCustoInformado() {
+        return custoInformado;
+    }
+
+    /** Custo por unidade de venda, com 4 casas, ou {@code null} sem custo. */
+    public BigDecimal getCustoUnitario() {
+        return custoUnitario;
     }
 
     public LocalDateTime getCriadoEm() {

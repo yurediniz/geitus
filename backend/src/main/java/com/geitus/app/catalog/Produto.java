@@ -21,6 +21,8 @@ import com.geitus.app.shared.busca.TextoDeBusca;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -71,6 +73,9 @@ import jakarta.persistence.Table;
  * antiga unidade de compra + fator. A colecao {@code codigosBarras} so traz os
  * codigos da unidade de venda ({@code embalagem_id IS NULL}); os das
  * embalagens ficam em cada embalagem.
+ *
+ * <p>Fase B4 (V13, docs/modules/produtos-custo-entrada.md): o produto guarda a
+ * origem do custo atual ({@link OrigemDoCusto}) e quando ela foi registrada.
  *
  * <p>Nao deve ser exposta diretamente na API: o {@code ProdutoController} usa
  * DTOs ({@code ProdutoRequest}/{@code ProdutoResponse}).
@@ -125,6 +130,18 @@ public class Produto {
 
     @Column(precision = 12, scale = 2)
     private BigDecimal custo;
+
+    /**
+     * Fase B4 (V13): de onde veio o custo atual e quando; os dois nulos sem
+     * custo ou com a origem desconhecida (produtos anteriores a V13). Mudam so
+     * por {@link #registrarCustoDeEntrada} e {@link #marcarCustoEditado}.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "custo_origem", length = 20)
+    private OrigemDoCusto custoOrigem;
+
+    @Column(name = "custo_origem_em")
+    private LocalDateTime custoOrigemEm;
 
     @Column(name = "estoque_minimo", precision = 12, scale = 3)
     private BigDecimal estoqueMinimo;
@@ -355,6 +372,35 @@ public class Produto {
         }
     }
 
+    // ---------- Origem do custo (Fase B4) ----------
+
+    /**
+     * Custo vindo de uma entrada por compra (docs/modules/produtos-custo-entrada.md,
+     * 2.2): o custo por unidade ja arredondado a centavos pelo chamador, a
+     * origem {@code ENTRADA_COMPRA} e o momento, mesmo que o valor nao mude.
+     */
+    public void registrarCustoDeEntrada(BigDecimal custoPorUnidade, LocalDateTime em) {
+        this.custo = custoPorUnidade;
+        this.custoOrigem = OrigemDoCusto.ENTRADA_COMPRA;
+        this.custoOrigemEm = em;
+    }
+
+    /**
+     * O custo mudou pelo cadastro ou pela edicao (spec 4): origem
+     * {@code EDICAO} com o momento; sem custo, origem e momento ficam nulos
+     * (V13, {@code ck_produto_custo_origem_com_custo}). Chamado pelo service so
+     * quando o custo mudou de fato.
+     */
+    public void marcarCustoEditado(LocalDateTime em) {
+        if (custo == null) {
+            this.custoOrigem = null;
+            this.custoOrigemEm = null;
+            return;
+        }
+        this.custoOrigem = OrigemDoCusto.EDICAO;
+        this.custoOrigemEm = em;
+    }
+
     /**
      * Nome usado por cupom e PDV (spec 4.1): o nome curto, ou os 30 primeiros
      * caracteres do nome, aparados.
@@ -435,6 +481,16 @@ public class Produto {
 
     public BigDecimal getCusto() {
         return custo;
+    }
+
+    /** Origem do custo atual, ou {@code null} (sem custo ou origem desconhecida). */
+    public OrigemDoCusto getCustoOrigem() {
+        return custoOrigem;
+    }
+
+    /** Quando a origem do custo foi registrada, ou {@code null} junto com a origem. */
+    public LocalDateTime getCustoOrigemEm() {
+        return custoOrigemEm;
     }
 
     public BigDecimal getEstoqueMinimo() {
