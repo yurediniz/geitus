@@ -86,8 +86,11 @@ public class SecurityConfig {
             "/api/caixa/**"
     };
 
-    /** Pontos de caixa (DEC-041): cadastro sem id e edicao, inativacao e reativacao por id. */
-    private static final String CAMINHO_PONTOS_DE_CAIXA = "/api/caixa/pontos";
+    /** Pontos de caixa (DEC-041): leitura para qualquer autenticado, qualquer escrita so ADMIN. */
+    private static final String[] CAMINHOS_PONTOS_DE_CAIXA = {
+            "/api/caixa/pontos",
+            "/api/caixa/pontos/**"
+    };
 
     /** Configuracao do caixa (DEC-041). */
     private static final String CAMINHO_CONFIGURACAO_DO_CAIXA = "/api/configuracoes/caixa";
@@ -175,17 +178,18 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, CAMINHO_ETIQUETA_BALANCA).authenticated()
                         .requestMatchers(HttpMethod.POST, CAMINHO_ETIQUETA_BALANCA + "/teste").authenticated()
                         .requestMatchers(CAMINHO_ETIQUETA_BALANCA, CAMINHO_ETIQUETA_BALANCA + "/**").hasRole("ADMIN")
-                        // Caixa (DEC-041): cadastrar ponto (POST) e renomear, inativar ou reativar
-                        // (PATCH /{id}/**) exigem ADMIN; o resto do caixa (listar pontos, abrir, lancar,
-                        // contar, fechar e historico) fica com qualquer autenticado. A regra "dono ou
-                        // ADMIN" da sessao fica no service. As regras de ADMIN precedem a geral.
-                        .requestMatchers(HttpMethod.POST, CAMINHO_PONTOS_DE_CAIXA).hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PATCH, CAMINHO_PONTOS_DE_CAIXA + "/**").hasRole("ADMIN")
+                        // Caixa (DEC-041): pontos com leitura (GET) para qualquer autenticado e qualquer
+                        // outro metodo (cadastrar, renomear, inativar, reativar) so ADMIN, com o matcher
+                        // SEM metodo, como em Fornecedores; o resto do caixa (abrir, lancar, contar, fechar
+                        // e historico) fica com qualquer autenticado, e a regra "dono ou ADMIN" da sessao
+                        // fica no service. Os services tambem conferem o perfil do banco nas escritas.
+                        .requestMatchers(HttpMethod.GET, CAMINHOS_PONTOS_DE_CAIXA).authenticated()
+                        .requestMatchers(CAMINHOS_PONTOS_DE_CAIXA).hasRole("ADMIN")
                         .requestMatchers(CAMINHOS_CAIXA).authenticated()
                         // Configuracao do caixa: leitura para qualquer autenticado (a tela do caixa precisa
-                        // do modo); alterar (PUT) exige ADMIN.
-                        .requestMatchers(HttpMethod.PUT, CAMINHO_CONFIGURACAO_DO_CAIXA).hasRole("ADMIN")
+                        // do modo); qualquer outro metodo exige ADMIN.
                         .requestMatchers(HttpMethod.GET, CAMINHO_CONFIGURACAO_DO_CAIXA).authenticated()
+                        .requestMatchers(CAMINHO_CONFIGURACAO_DO_CAIXA).hasRole("ADMIN")
                         // Todo o restante exige autenticacao (JWT valido)
                         .anyRequest().authenticated())
                 // Respostas de erro padronizadas (sem vazar detalhes internos)

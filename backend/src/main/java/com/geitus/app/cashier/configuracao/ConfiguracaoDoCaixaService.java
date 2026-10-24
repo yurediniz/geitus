@@ -49,7 +49,7 @@ public class ConfiguracaoDoCaixaService {
 
     @Transactional
     public ConfiguracaoDoCaixaResponse salvarParaUsuario(Long idUsuario, ConfiguracaoDoCaixaRequest request) {
-        UsuarioAutenticado usuario = resolvedor.resolver(idUsuario);
+        UsuarioAutenticado usuario = resolvedor.resolver(idUsuario).exigirAdmin();
         OffsetDateTime agora = OffsetDateTime.now(relogio).truncatedTo(ChronoUnit.MICROS);
         boolean fechamentoCego = request.fechamentoCego();
         configuracaoRepository.gravar(usuario.empresaId(), fechamentoCego, usuario.usuarioId(), agora);

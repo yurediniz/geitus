@@ -87,7 +87,7 @@ public class PontosDeCaixaService {
 
     @Transactional
     public PontoDeCaixaResponse cadastrarParaUsuario(Long idUsuario, PontoDeCaixaRequest request) {
-        Long empresaId = resolvedor.resolver(idUsuario).empresaId();
+        Long empresaId = resolvedor.resolver(idUsuario).exigirAdmin().empresaId();
         String nome = nomeValidado(request.nome());
         if (pontoRepository.countByEmpresaId(empresaId) >= LIMITE_DE_PONTOS) {
             throw new CaixaConflitoException(MENSAGEM_LIMITE);
@@ -99,7 +99,7 @@ public class PontosDeCaixaService {
 
     @Transactional
     public PontoDeCaixaResponse renomearParaUsuario(Long idUsuario, UUID pontoId, PontoDeCaixaRequest request) {
-        Long empresaId = resolvedor.resolver(idUsuario).empresaId();
+        Long empresaId = resolvedor.resolver(idUsuario).exigirAdmin().empresaId();
         String nome = nomeValidado(request.nome());
         PontoDeCaixa ponto = travar(empresaId, pontoId);
         garantirNomeLivre(empresaId, nome, ponto.getId());
@@ -110,7 +110,7 @@ public class PontosDeCaixaService {
     /** So sem sessao aberta ou em conferencia no ponto (409). */
     @Transactional
     public PontoDeCaixaResponse inativarParaUsuario(Long idUsuario, UUID pontoId) {
-        Long empresaId = resolvedor.resolver(idUsuario).empresaId();
+        Long empresaId = resolvedor.resolver(idUsuario).exigirAdmin().empresaId();
         PontoDeCaixa ponto = travar(empresaId, pontoId);
         if (sessoesAbertas.temSessaoAberta(empresaId, ponto.getId())) {
             throw new CaixaConflitoException(MENSAGEM_FECHE_ANTES_DE_INATIVAR);
@@ -121,7 +121,7 @@ public class PontosDeCaixaService {
 
     @Transactional
     public PontoDeCaixaResponse reativarParaUsuario(Long idUsuario, UUID pontoId) {
-        Long empresaId = resolvedor.resolver(idUsuario).empresaId();
+        Long empresaId = resolvedor.resolver(idUsuario).exigirAdmin().empresaId();
         PontoDeCaixa ponto = travar(empresaId, pontoId);
         ponto.reativar(agora());
         return respostaDe(gravar(ponto));

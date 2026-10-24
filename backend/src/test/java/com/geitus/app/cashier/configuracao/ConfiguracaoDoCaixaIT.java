@@ -3,6 +3,7 @@ package com.geitus.app.cashier.configuracao;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -63,6 +64,30 @@ class ConfiguracaoDoCaixaIT extends IntegracaoDoCaixa {
         ler(empresa.operadora()).andExpect(status().isOk());
         salvar(empresa.operadora(), "{\"fechamentoCego\":false}").andExpect(status().isForbidden());
         ler(empresa.admin()).andExpect(jsonPath("$.fechamentoCego").value(true));
+    }
+
+    /** O perfil da escrita e o do banco: o token antigo de quem foi rebaixado nao basta. */
+    @Test
+    void adminRebaixadoComTokenAntigo403() throws Exception {
+        EmpresaDeCaixa empresa = cenario.novaEmpresa();
+        String tokenDeAdmin = cenario.token(empresa.admin());
+        cenario.rebaixarParaOperador(empresa.admin());
+
+        mockMvc.perform(put("/api/configuracoes/caixa").header("Authorization", tokenDeAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"fechamentoCego\":false}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.mensagem").value("Acesso negado."));
+        ler(empresa.operadora()).andExpect(jsonPath("$.fechamentoCego").value(true));
+    }
+
+    /** Metodos sem rota na configuracao exigem ADMIN (matcher sem metodo). */
+    @Test
+    void outrosMetodosNaConfiguracaoExigemAdmin() throws Exception {
+        EmpresaDeCaixa empresa = cenario.novaEmpresa();
+
+        mockMvc.perform(post("/api/configuracoes/caixa").header("Authorization", cenario.token(empresa.operadora()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isForbidden());
     }
 
     @Test

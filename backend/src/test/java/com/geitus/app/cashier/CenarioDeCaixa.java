@@ -73,6 +73,15 @@ public class CenarioDeCaixa {
         return usuarioRepository.saveAndFlush(usuario).getId();
     }
 
+    /** Troca o perfil no banco, sem mexer nos tokens ja emitidos (o token antigo continua dizendo ADMIN). */
+    public void rebaixarParaOperador(Long usuarioId) {
+        jdbcTemplate.update("UPDATE usuario SET perfil = 'OPERADOR' WHERE id = ?", usuarioId);
+    }
+
+    public void inativarUsuario(Long usuarioId) {
+        jdbcTemplate.update("UPDATE usuario SET ativo = false WHERE id = ?", usuarioId);
+    }
+
     /** Cabecalho {@code Authorization} com o JWT do usuario. */
     public String token(Long usuarioId) {
         return "Bearer " + jwtService.gerarToken(usuarioRepository.findById(usuarioId).orElseThrow());

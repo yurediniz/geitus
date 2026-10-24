@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.geitus.app.company.Empresa;
@@ -52,6 +53,22 @@ class ResolvedorDoUsuarioAutenticadoTest {
         when(usuarioRepository.findById(USUARIO_ID)).thenReturn(Optional.of(usuario("ADMIN", true)));
 
         assertThat(resolvedor.resolver(USUARIO_ID).ehAdmin()).isTrue();
+    }
+
+    @Test
+    void exigirAdminRecusaOperadorComAcessoNegado() {
+        when(usuarioRepository.findById(USUARIO_ID)).thenReturn(Optional.of(usuario("OPERADOR", true)));
+        UsuarioAutenticado operador = resolvedor.resolver(USUARIO_ID);
+
+        assertThatThrownBy(operador::exigirAdmin).isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void exigirAdminDevolveOProprioAdmin() {
+        when(usuarioRepository.findById(USUARIO_ID)).thenReturn(Optional.of(usuario("ADMIN", true)));
+        UsuarioAutenticado admin = resolvedor.resolver(USUARIO_ID);
+
+        assertThat(admin.exigirAdmin()).isSameAs(admin);
     }
 
     @Test

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -125,6 +126,40 @@ class PontosDeCaixaIT extends IntegracaoDoCaixa {
         criar(empresa.operadora(), "Caixa 2").andExpect(status().isForbidden());
         renomear(empresa.operadora(), ponto, "Outro").andExpect(status().isForbidden());
         acao(empresa.operadora(), ponto, "inativar").andExpect(status().isForbidden());
+        cenario.inativarPonto(ponto);
+        acao(empresa.operadora(), ponto, "reativar").andExpect(status().isForbidden());
+    }
+
+    /** O perfil das escritas e o do banco: o token antigo de quem foi rebaixado nao basta. */
+    @Test
+    void adminRebaixadoComTokenAntigo403() throws Exception {
+        EmpresaDeCaixa empresa = cenario.novaEmpresa();
+        UUID ponto = cenario.novoPonto(empresa, "Caixa 1");
+        String tokenDeAdmin = cenario.token(empresa.admin());
+        cenario.rebaixarParaOperador(empresa.admin());
+
+        mockMvc.perform(post("/api/caixa/pontos").header("Authorization", tokenDeAdmin)
+                        .contentType(MediaType.APPLICATION_JSON).content(corpoComNome("Caixa 2")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.mensagem").value("Acesso negado."));
+        mockMvc.perform(patch("/api/caixa/pontos/" + ponto).header("Authorization", tokenDeAdmin)
+                .contentType(MediaType.APPLICATION_JSON).content(corpoComNome("Outro")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/caixa/pontos/" + ponto + "/inativar").header("Authorization", tokenDeAdmin))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/caixa/pontos/" + ponto + "/reativar").header("Authorization", tokenDeAdmin))
+                .andExpect(status().isForbidden());
+        assertThat(cenario.contarPontos(empresa)).isEqualTo(1);
+    }
+
+    /** Metodos sem rota em /api/caixa/pontos tambem exigem ADMIN (matcher sem metodo). */
+    @Test
+    void outrosMetodosNosPontosExigemAdmin() throws Exception {
+        EmpresaDeCaixa empresa = cenario.novaEmpresa();
+
+        mockMvc.perform(delete("/api/caixa/pontos/" + UUID.randomUUID())
+                        .header("Authorization", cenario.token(empresa.operadora())))
+                .andExpect(status().isForbidden());
     }
 
     @Test

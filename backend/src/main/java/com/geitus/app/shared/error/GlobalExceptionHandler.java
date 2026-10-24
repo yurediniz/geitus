@@ -7,6 +7,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -57,6 +58,7 @@ public class GlobalExceptionHandler {
     static final String MENSAGEM_ENVIO_GRANDE_DEMAIS = "A imagem enviada é grande demais.";
     static final String MENSAGEM_RECURSO_NAO_ENCONTRADO = "Recurso não encontrado.";
     static final String MENSAGEM_METODO_NAO_PERMITIDO = "Método não permitido para este recurso.";
+    static final String MENSAGEM_ACESSO_NEGADO = "Acesso negado.";
 
     /**
      * Erros de validacao de corpo de requisicao anotado com {@code @Valid}.
@@ -215,6 +217,23 @@ public class GlobalExceptionHandler {
                 request.getRequestURI());
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(corpo);
+    }
+
+    /**
+     * Perfil sem permissao detectado no service (o perfil do banco, mais novo
+     * que o do token; DT-032). Mesmo 403 e mesmo corpo do
+     * {@code RestAccessDeniedHandler} do filtro de seguranca; sem este
+     * tratamento cairia no generico (500).
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiError> tratarAcessoNegado(AccessDeniedException ex, HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.FORBIDDEN.value(),
+                HttpStatus.FORBIDDEN.getReasonPhrase(),
+                MENSAGEM_ACESSO_NEGADO,
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(corpo);
     }
 
     /**
