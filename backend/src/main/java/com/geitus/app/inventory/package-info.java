@@ -9,7 +9,7 @@
  *       origem, quantidade com sinal, saldo anterior e novo, usuario e chave de
  *       idempotencia;</li>
  *   <li>{@link com.geitus.app.inventory.EstoqueSaldo} — tabela
- *       {@code estoque_saldos} (V9), saldo &gt;= 0 por produto, alterado so na
+ *       {@code estoque_saldos} (V9), saldo por produto (negativo so por venda, V17), alterado so na
  *       mesma transacao do movimento, com a linha travada.</li>
  * </ul>
  *
@@ -17,6 +17,10 @@
  * autenticado e as FKs compostas garantem produto e usuario da mesma empresa.
  * O catalogo nao depende deste pacote: ele declara as interfaces que precisa e
  * este pacote as implementa.
+ *
+ * <p><b>PDV (etapa 11, DEC-042):</b> publica {@link com.geitus.app.inventory.EstoqueDaVenda}
+ * (trava dos produtos em ordem de id, baixa e estorno por item de venda); so a
+ * baixa por venda pode deixar o saldo negativo.
  *
  * <p><b>Direcao das dependencias (Fase B5):</b> {@code inventory -> supplier
  * -> catalog}; o catalogo e independente. Este pacote implementa

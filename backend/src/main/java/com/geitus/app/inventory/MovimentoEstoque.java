@@ -108,6 +108,13 @@ public class MovimentoEstoque {
     @Column(name = "fornecedor_id", updatable = false)
     private Long fornecedorId;
 
+    /**
+     * PDV (V17): id interno do item da venda da baixa ({@code VENDA}) ou do
+     * estorno ({@code CANCELAMENTO_VENDA}); {@code null} nos demais.
+     */
+    @Column(name = "item_venda_id", updatable = false)
+    private Long itemVendaId;
+
     @Column(name = "criado_em", nullable = false, updatable = false)
     private LocalDateTime criadoEm;
 
@@ -182,6 +189,18 @@ public class MovimentoEstoque {
             this.custoInformado = custo.informado();
             this.custoUnitario = custo.porUnidade();
         }
+    }
+
+    /**
+     * PDV: a baixa ou o estorno de um item de venda (origem {@code VENDA}, sem
+     * chave: a idempotencia e a da venda, DT-032).
+     */
+    static MovimentoEstoque daVenda(Produto produto, TipoMovimento tipo, MotivoMovimento motivo,
+            BigDecimal quantidade, BigDecimal saldoAnterior, BigDecimal saldoNovo, Long usuarioId, Long itemVendaId) {
+        MovimentoEstoque movimento = new MovimentoEstoque(produto, tipo, motivo, OrigemMovimento.VENDA, quantidade,
+                saldoAnterior, saldoNovo, null, usuarioId, null);
+        movimento.itemVendaId = itemVendaId;
+        return movimento;
     }
 
     @PrePersist
@@ -282,6 +301,11 @@ public class MovimentoEstoque {
     /** Id interno do fornecedor da entrada por compra, ou {@code null}. */
     public Long getFornecedorId() {
         return fornecedorId;
+    }
+
+    /** Id interno do item de venda (PDV), ou {@code null}. */
+    public Long getItemVendaId() {
+        return itemVendaId;
     }
 
     public LocalDateTime getCriadoEm() {

@@ -44,8 +44,9 @@ public class EstoqueSaldo {
 
     /**
      * Soma a variacao (com sinal) ao saldo e carimba o momento. O servico ja
-     * garantiu que o resultado nao e negativo; o CHECK
-     * {@code ck_estoque_saldo_nao_negativo} e a ultima barreira.
+     * garantiu que o resultado so fica negativo numa venda (V17); o CHECK
+     * {@code ck_movimento_estoque_saldo_nao_negativo_fora_da_venda} do
+     * movimento e a ultima barreira.
      */
     public void aplicar(BigDecimal variacao) {
         this.saldo = saldo.add(variacao);

@@ -71,6 +71,21 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
             """)
     Optional<Produto> buscarPorUuidParaAtualizar(@Param("uuid") UUID uuid, @Param("empresaId") Long empresaId);
 
+    /**
+     * PDV (DT-032): trava ({@code FOR UPDATE}) as linhas dos produtos da
+     * empresa com estes ids, em ordem de id e num comando so, e devolve os ids
+     * travados. A venda e o cancelamento travam assim, depois da sessao de
+     * caixa: dois pedidos com os mesmos produtos nunca se travam em ciclo.
+     * Exige transacao.
+     */
+    @Query(value = """
+            SELECT p.id FROM produtos p
+            WHERE p.empresa_id = :empresaId AND p.id = ANY(:ids)
+            ORDER BY p.id
+            FOR UPDATE
+            """, nativeQuery = true)
+    List<Long> travarEmOrdemDeId(@Param("empresaId") Long empresaId, @Param("ids") Long[] ids);
+
     boolean existsBySkuAndEmpresa_Id(String sku, Long empresaId);
 
     boolean existsBySkuAndEmpresa_IdAndIdNot(String sku, Long empresaId, Long id);

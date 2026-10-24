@@ -221,6 +221,31 @@ public class EstoqueService {
                 observacao, usuarioId, chave, quantidade.embalagem(), valores.custo(), valores.fornecedorId()));
     }
 
+    /**
+     * PDV (docs/modules/pdv.md, 3.6 e 3.8): a baixa ({@code SAIDA}/{@code VENDA})
+     * ou o estorno ({@code ENTRADA}/{@code CANCELAMENTO_VENDA}) de um item de
+     * venda, com a linha de saldo travada. A baixa pode deixar o saldo
+     * negativo (a regra "Vender sem estoque" e do PDV); o ajuste manual
+     * continua sem negativo. Exige a transacao de quem chama, com o produto ja
+     * travado.
+     *
+     * @param quantidade o que o item baixa ou devolve, na unidade de venda (&gt; 0)
+     */
+    MovimentoEstoque registrarMovimentoDaVenda(Produto produto, TipoMovimento tipo, MotivoMovimento motivo,
+            BigDecimal quantidade, Long usuarioId, Long itemVendaId) {
+        EstoqueSaldo saldo = travarSaldo(produto);
+        BigDecimal anterior = saldo.getSaldo();
+        BigDecimal emEscala = emEscalaDeQuantidade(quantidade);
+        BigDecimal variacao = tipo == TipoMovimento.SAIDA ? emEscala.negate() : emEscala;
+        BigDecimal novo = anterior.add(variacao);
+        if (novo.compareTo(SALDO_MAXIMO) > 0 || novo.compareTo(SALDO_MAXIMO.negate()) < 0) {
+            throw new RegraDeNegocioException(MENSAGEM_SALDO_ACIMA_DO_LIMITE, CAMPO_QUANTIDADE);
+        }
+        saldo.aplicar(variacao);
+        return movimentoRepository.save(MovimentoEstoque.daVenda(produto, tipo, motivo, variacao, anterior, novo,
+                usuarioId, itemVendaId));
+    }
+
     // ---------- Ajuste manual ----------
 
     /**

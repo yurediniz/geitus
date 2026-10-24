@@ -132,6 +132,21 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
     int apagarDoProdutoPelaOrigem(@Param("empresaId") Long empresaId, @Param("produtoId") Long produtoId,
             @Param("origem") OrigemMovimento origem);
 
+    /**
+     * PDV: a quantidade (com sinal) dos movimentos do motivo informado ligados
+     * a estes itens de venda, numa consulta (o estorno devolve o que a baixa
+     * tirou; o item sem baixa fica fora da lista).
+     */
+    @Query("""
+            SELECT new com.geitus.app.inventory.QuantidadeDoItem(m.itemVendaId, m.quantidade)
+              FROM MovimentoEstoque m
+             WHERE m.empresaId = :empresaId
+               AND m.itemVendaId IN :itemVendaIds
+               AND m.motivo = :motivo
+            """)
+    List<QuantidadeDoItem> quantidadesDosItens(@Param("empresaId") Long empresaId,
+            @Param("itemVendaIds") Collection<Long> itemVendaIds, @Param("motivo") MotivoMovimento motivo);
+
     /** Fase B5: entradas por compra registradas com o fornecedor (id interno), na empresa. */
     long countByEmpresaIdAndFornecedorId(Long empresaId, Long fornecedorId);
 }
