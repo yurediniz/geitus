@@ -110,6 +110,16 @@ public class CenarioDeCaixa {
         return uuid;
     }
 
+    /** Conta com falta de R$ 1,00 no modo cego, direto no banco: a sessao fica EM_CONFERENCIA. */
+    public void emConferenciaPorJdbc(UUID sessao, Long usuario) {
+        jdbcTemplate.update("""
+                UPDATE sessoes_caixa SET status = 'EM_CONFERENCIA', fechamento_cego = true,
+                       valor_esperado = fundo_troco, valor_contado = fundo_troco - 1, diferenca = -1,
+                       contada_por = ?, contada_em = now()
+                WHERE uuid = ?
+                """, usuario, sessao);
+    }
+
     /** Fecha sem diferenca, direto no banco, uma sessao aberta por JDBC. */
     public void fecharPorJdbc(UUID sessao, Long usuario) {
         jdbcTemplate.update("""

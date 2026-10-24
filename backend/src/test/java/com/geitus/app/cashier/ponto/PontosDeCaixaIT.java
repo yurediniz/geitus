@@ -224,6 +224,19 @@ class PontosDeCaixaIT extends IntegracaoDoCaixa {
     }
 
     @Test
+    void inativarComSessaoEmConferencia409() throws Exception {
+        EmpresaDeCaixa empresa = cenario.novaEmpresa();
+        UUID ponto = cenario.novoPonto(empresa, "Caixa 1");
+        UUID sessao = cenario.sessaoAbertaPorJdbc(empresa, ponto, empresa.operadora(), "100.00",
+                OffsetDateTime.now());
+        cenario.emConferenciaPorJdbc(sessao, empresa.operadora());
+
+        acao(empresa.admin(), ponto, "inativar")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value("Feche o caixa deste ponto antes de inativá-lo."));
+    }
+
+    @Test
     void inativaEReativa200() throws Exception {
         EmpresaDeCaixa empresa = cenario.novaEmpresa();
         UUID ponto = cenario.novoPonto(empresa, "Caixa 1");

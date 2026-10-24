@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -49,6 +50,7 @@ class SessoesDeCaixaIT extends IntegracaoDoCaixa {
                 .andExpect(jsonPath("$.abertaEm").value(endsWith("-03:00")))
                 .andExpect(jsonPath("$.fundoTroco").value(0.0))
                 .andExpect(jsonPath("$.fechamentoCego").value(true))
+                .andExpect(jsonPath("$.dinheiroNaGaveta").value(nullValue()))
                 .andExpect(jsonPath("$.valorContado").value(nullValue()))
                 .andExpect(jsonPath("$.movimentos", hasSize(1)))
                 .andExpect(jsonPath("$.movimentos[0].tipo").value("ABERTURA"))
@@ -108,6 +110,16 @@ class SessoesDeCaixaIT extends IntegracaoDoCaixa {
     }
 
     @Test
+    void adminComOutroCaixa409() throws Exception {
+        UUID caixa2 = cenario.novoPonto(empresa, "Caixa 2");
+        abrirCaixa(empresa.admin(), caixa2, "100");
+
+        abrir(empresa.admin(), caixa1, "100", UUID.randomUUID())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value("Você já tem um caixa aberto no Caixa 2."));
+    }
+
+    @Test
     void chaveRepetida200MesmaSessao() throws Exception {
         UUID chave = UUID.randomUUID();
         String primeira = abrir(empresa.operadora(), caixa1, "150.00", chave).andExpect(status().isCreated())
@@ -162,6 +174,29 @@ class SessoesDeCaixaIT extends IntegracaoDoCaixa {
                 .andExpect(jsonPath("$.movimentos[1].tipo").value("SUPRIMENTO"))
                 .andExpect(jsonPath("$.movimentos[1].motivo").value("Troco do banco"))
                 .andExpect(jsonPath("$.movimentos[2].tipo").value("ABERTURA"));
+
+        lancar(empresa.operadora(), sessao, "SANGRIA", "0.01")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value("A sangria passa do dinheiro na gaveta (R$ 0,00)."));
+        contar(empresa.operadora(), sessao, "0", null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FECHADA"))
+                .andExpect(jsonPath("$.diferenca").value(0.0));
+    }
+
+    /** Spec 3.7: a chave identifica o pedido; a repeticao depois do fechamento devolve o que foi gravado. */
+    @Test
+    void sangriaRepetidaPelaChaveDepoisDoFechamento200() throws Exception {
+        fechamentoCego(empresa, false);
+        UUID sessao = abrirCaixa(empresa.operadora(), caixa1, "100.00");
+        UUID chave = UUID.randomUUID();
+        lancar(empresa.operadora(), sessao, "SANGRIA", "30.00", "Cofre", chave).andExpect(status().isCreated());
+        contar(empresa.operadora(), sessao, "70.00", null).andExpect(jsonPath("$.status").value("FECHADA"));
+
+        lancar(empresa.operadora(), sessao, "SANGRIA", "30.00", "Cofre", chave)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FECHADA"))
+                .andExpect(jsonPath("$.movimentos", hasSize(2)));
     }
 
     @Test
@@ -340,6 +375,33 @@ class SessoesDeCaixaIT extends IntegracaoDoCaixa {
                 .andExpect(jsonPath("$.campos[0].campo").value("valorContado"));
         contar(empresa.operadora(), sessao, "null", null).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.campos[0].campo").value("valorContado"));
+        contar(empresa.operadora(), sessao, "1.005", null).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("valorContado"));
+        contar(empresa.operadora(), sessao, "10000000000.00", null).andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("valorContado"));
+        detalhe(empresa.operadora(), sessao).andExpect(jsonPath("$.status").value("ABERTA"));
+    }
+
+    /** O modo que vale e o do momento da contagem, nas duas direcoes (spec 3.4). */
+    @Test
+    void modoTrocadoAntesDaContagemValeOModoDaContagem() throws Exception {
+        UUID abertaNoCego = abrirCaixa(empresa.operadora(), caixa1, "100.00");
+        fechamentoCego(empresa, false);
+        contar(empresa.operadora(), abertaNoCego, "98.00", "Troco a mais")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FECHADA"))
+                .andExpect(jsonPath("$.fechamentoCego").value(false))
+                .andExpect(jsonPath("$.justificativa").value("Troco a mais"));
+
+        UUID abertaSemCego = abrirCaixa(empresa.operadora(), caixa1, "100.00");
+        fechamentoCego(empresa, true);
+        contar(empresa.operadora(), abertaSemCego, "98.00", "Troco a mais")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Informe a justificativa depois de ver a diferença."));
+        contar(empresa.operadora(), abertaSemCego, "98.00", null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("EM_CONFERENCIA"))
+                .andExpect(jsonPath("$.fechamentoCego").value(true));
     }
 
     // ---------- Fechamento ----------
@@ -384,7 +446,9 @@ class SessoesDeCaixaIT extends IntegracaoDoCaixa {
     void fechamentoSemContagem409() throws Exception {
         UUID sessao = abrirCaixa(empresa.operadora(), caixa1, "100.00");
 
-        fechar(empresa.operadora(), sessao, "Sem contar").andExpect(status().isConflict());
+        fechar(empresa.operadora(), sessao, "Sem contar")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value("Conte o dinheiro da gaveta antes de fechar o caixa."));
         detalhe(empresa.operadora(), sessao).andExpect(jsonPath("$.status").value("ABERTA"));
     }
 
@@ -445,6 +509,27 @@ class SessoesDeCaixaIT extends IntegracaoDoCaixa {
                 .andExpect(jsonPath("$.ponto.nome").value("Caixa 2"))
                 .andExpect(jsonPath("$.movimentos", hasSize(1)));
         atual(empresa.operadora()).andExpect(status().isNoContent());
+    }
+
+    /** Spec 3.5: usuario inativado com caixa aberto; o ADMIN fecha no lugar dele. */
+    @Test
+    void adminFechaCaixaDeUsuarioInativado() throws Exception {
+        String tokenDaAna = cenario.token(empresa.operadora());
+        UUID daAna = abrirCaixa(empresa.operadora(), caixa1, "100.00");
+        cenario.inativarUsuario(empresa.operadora());
+
+        mockMvc.perform(get("/api/caixa/sessoes/atual").header("Authorization", tokenDaAna))
+                .andExpect(status().isUnauthorized());
+        pontos(empresa.admin())
+                .andExpect(jsonPath("$[0].situacao.sessaoId").value(daAna.toString()))
+                .andExpect(jsonPath("$[0].situacao.abertaPorNome").value(ANA));
+        contar(empresa.admin(), daAna, "90.00", null)
+                .andExpect(jsonPath("$.status").value("EM_CONFERENCIA"))
+                .andExpect(jsonPath("$.abertaPorNome").value(ANA));
+        fechar(empresa.admin(), daAna, "Falta conferida pelo administrador")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FECHADA"))
+                .andExpect(jsonPath("$.fechadaPorNome").value(ADMIN));
     }
 
     @Test

@@ -42,6 +42,7 @@ class ConcorrenciaDoCaixaIT extends IntegracaoDoCaixa {
     private static final int RODADAS = 5;
     private static final long ESPERA_MAXIMA_SEGUNDOS = 30;
     private static final String CRIADO = "criado";
+    private static final String REPETIDO = "repetido";
 
     @Autowired
     private SessoesDeCaixaService sessoesService;
@@ -114,6 +115,43 @@ class ConcorrenciaDoCaixaIT extends IntegracaoDoCaixa {
         }
     }
 
+    /** Mesma chave, mesma sessao, ao mesmo tempo: a trava da sessao poe em fila e o segundo e repeticao. */
+    @Test
+    void doisLancamentosComAMesmaChaveGravamUmSo() throws Exception {
+        for (int rodada = 1; rodada <= RODADAS; rodada++) {
+            EmpresaDeCaixa empresa = cenario.novaEmpresa();
+            UUID sessao = abrirCaixa(empresa.admin(), cenario.novoPonto(empresa, "Caixa 1"), "100.00");
+            UUID chave = UUID.randomUUID();
+            CyclicBarrier largada = new CyclicBarrier(2);
+
+            List<String> resultados = aoMesmoTempo(
+                    suprimentoComChave(largada, empresa.admin(), sessao, chave),
+                    suprimentoComChave(largada, empresa.admin(), sessao, chave));
+
+            assertThat(resultados).as("rodada %d", rodada).containsExactlyInAnyOrder(CRIADO, REPETIDO);
+            assertThat(movimentos(sessao)).isEqualTo(2);
+            assertThat(esperado(sessao)).isEqualByComparingTo("110.00");
+        }
+    }
+
+    /** Mesma chave, mesmo ponto, ao mesmo tempo: a trava do ponto poe em fila e o segundo e repeticao. */
+    @Test
+    void duasAberturasComAMesmaChaveAbremUmaSo() throws Exception {
+        for (int rodada = 1; rodada <= RODADAS; rodada++) {
+            EmpresaDeCaixa empresa = cenario.novaEmpresa();
+            UUID caixa1 = cenario.novoPonto(empresa, "Caixa 1");
+            UUID chave = UUID.randomUUID();
+            CyclicBarrier largada = new CyclicBarrier(2);
+
+            List<String> resultados = aoMesmoTempo(
+                    aberturaComChave(largada, empresa.operadora(), caixa1, chave),
+                    aberturaComChave(largada, empresa.operadora(), caixa1, chave));
+
+            assertThat(resultados).as("rodada %d", rodada).containsExactlyInAnyOrder(CRIADO, REPETIDO);
+            assertThat(sessoesAbertas(empresa)).isEqualTo(1);
+        }
+    }
+
     // ---------- Apoio ----------
 
     private List<String> aoMesmoTempo(Callable<String> uma, Callable<String> outra) throws Exception {
@@ -148,6 +186,34 @@ class ConcorrenciaDoCaixaIT extends IntegracaoDoCaixa {
                 return conflito.getMessage();
             }
         };
+    }
+
+    /** {@code "criado"} (201) ou {@code "repetido"} (200, a chave ja gravada). */
+    private Callable<String> suprimentoComChave(CyclicBarrier largada, Long usuario, UUID sessao, UUID chave) {
+        return () -> {
+            largada.await(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS);
+            return comoTexto(sessoesService.lancarParaUsuario(usuario, sessao, new MovimentoDeCaixaRequest(
+                    TipoDeMovimentoDeCaixa.SUPRIMENTO, new BigDecimal("10.00"), "Troco", chave)));
+        };
+    }
+
+    private Callable<String> aberturaComChave(CyclicBarrier largada, Long usuario, UUID ponto, UUID chave) {
+        return () -> {
+            largada.await(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS);
+            return comoTexto(sessoesService.abrirParaUsuario(usuario, new AbrirCaixaRequest(ponto,
+                    new BigDecimal("10.00"), chave)));
+        };
+    }
+
+    private static String comoTexto(SessoesDeCaixaService.ResultadoDaOperacao resultado) {
+        return resultado.criada() ? CRIADO : REPETIDO;
+    }
+
+    private long movimentos(UUID sessao) {
+        return jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM movimentos_caixa m JOIN sessoes_caixa s ON s.id = m.sessao_caixa_id
+                WHERE s.uuid = ?
+                """, Long.class, sessao);
     }
 
     private BigDecimal esperado(UUID sessao) {
