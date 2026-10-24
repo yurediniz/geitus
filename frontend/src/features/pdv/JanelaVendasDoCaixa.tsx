@@ -9,6 +9,7 @@ import { CAIXA_QUERY_KEY } from '@/features/cash-register/caixaQuery'
 import { CarregandoCaixa, ErroAoCarregar } from '@/features/cash-register/EstadosDoCaixa'
 import { lerErroDoServidor } from '@/features/cash-register/errosDoCaixa'
 import { formatarDataHoraCaixa, formatarHora, formatarReais, ROTULO_DA_FORMA } from '@/features/cash-register/formatacaoCaixa'
+import { PRODUTOS_QUERY_KEY } from '@/features/catalog/catalogoQuery'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
 import { devolverFocoAoCampo } from '@/features/pdv/focoDoPdv'
 import { formatarQuantidade } from '@/features/pdv/formatacaoPdv'
@@ -32,6 +33,17 @@ const TAMANHO_MAXIMO_DO_MOTIVO = 200
 const MENSAGEM_SEM_MOTIVO = 'Informe o motivo do cancelamento.'
 const FALHA_AO_CANCELAR = 'Não foi possível cancelar a venda. Confira a conexão e tente de novo.'
 const VENDA_INDISPONIVEL = 'Esta venda não está mais disponível.'
+
+/** O que fazer depois do cancelamento: com dinheiro, quanto devolver (o recebido, sem o troco). */
+function mensagemDoCancelamento(venda: Venda): string {
+  const emDinheiro = venda.pagamentos
+    .filter((pagamento) => pagamento.forma === 'DINHEIRO')
+    .reduce((soma, pagamento) => soma + Math.round(pagamento.valor * 100), 0)
+  const devolver = emDinheiro - Math.round(venda.troco * 100)
+  return devolver > 0
+    ? `Venda nº ${venda.numero} cancelada. Devolva ${formatarReais(devolver / 100)} em dinheiro ao cliente.`
+    : `Venda nº ${venda.numero} cancelada. Estoque e caixa estornados.`
+}
 
 /**
  * Vendas do caixa (F8; spec do PDV §6.4): as da sessao atual, com no, hora,
@@ -87,7 +99,7 @@ function ConteudoDasVendas({ sessaoId, ehAdmin }: Omit<JanelaVendasDoCaixaProps,
           vendaId={vendaId}
           aoVoltar={() => setVendaId(null)}
           aoCancelar={(venda) => {
-            setAviso(`Venda nº ${venda.numero} cancelada.`)
+            setAviso(mensagemDoCancelamento(venda))
           }}
         />
       ) : (
@@ -259,8 +271,10 @@ function DetalheDaVenda({
       queryClient.setQueryData(chaveDaVenda(vendaId), venda)
       setCancelando(false)
       aoCancelar(venda)
-      // O estorno muda o caixa e a lista de vendas.
+      // O estorno muda o caixa, a lista de vendas e o saldo dos produtos.
       void queryClient.invalidateQueries({ queryKey: [...PDV_QUERY_KEY, 'vendas'] })
+      void queryClient.invalidateQueries({ queryKey: [...PDV_QUERY_KEY, 'busca'] })
+      void queryClient.invalidateQueries({ queryKey: PRODUTOS_QUERY_KEY })
       void queryClient.invalidateQueries({ queryKey: CAIXA_QUERY_KEY })
     },
     onError: (falha) => {

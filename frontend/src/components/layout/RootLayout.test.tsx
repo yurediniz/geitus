@@ -39,6 +39,7 @@ function renderLayout(entrada = '/') {
               <Route path="produtos" element={<div>Produtos</div>} />
               <Route path="produtos/categorias" element={<div>Categorias</div>} />
               <Route path="clientes" element={<div>Clientes</div>} />
+              <Route path="pdv" element={<div>Tela do PDV</div>} />
             </Route>
             <Route path="/login" element={<div>Tela de login</div>} />
           </Routes>
@@ -164,6 +165,30 @@ describe('RootLayout - Caixa e Configurações', () => {
     const pdv = screen.getByRole('link', { name: /^pdv$/i })
     expect(pdv).toHaveAttribute('href', '/pdv')
     expect(within(pdv).queryByText(/^em breve$/i)).not.toBeInTheDocument()
+  })
+
+  it('modo foco no /pdv: a barra lateral recolhe e o botão "Menu" a abre', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue({ ...usuarioFake, perfil: 'OPERADOR' })
+
+    renderLayout('/pdv')
+
+    await screen.findByText('Tela do PDV')
+    expect(screen.getByRole('complementary', { hidden: true })).toHaveClass('hidden')
+    expect(screen.getByRole('complementary', { hidden: true })).not.toHaveClass('md:flex')
+    const menu = screen.getByRole('button', { name: 'Abrir menu de navegação' })
+    expect(menu).toHaveTextContent('Menu')
+    expect(menu).not.toHaveClass('md:hidden')
+  })
+
+  it('fora do /pdv, a barra lateral fica fixa', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue({ ...usuarioFake, perfil: 'OPERADOR' })
+
+    renderLayout('/clientes')
+
+    await screen.findByText('Ana Souza')
+    expect(screen.getByRole('complementary', { hidden: true })).toHaveClass('md:flex')
   })
 
   it('Caixa leva a /caixa para todos, sem "em breve"', async () => {

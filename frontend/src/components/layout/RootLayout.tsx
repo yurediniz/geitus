@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Package,
@@ -66,6 +66,9 @@ function montarItensNavegacao(ehAdmin: boolean): NavItem[] {
  */
 export function RootLayout() {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
+  // Modo foco no PDV: a barra lateral recolhe (abre pelo botao "Menu") e a venda ganha a largura.
+  const modoFoco = pathname === '/pdv' || pathname.startsWith('/pdv/')
   const { usuario, logout } = useAuth()
   const [menuAberto, setMenuAberto] = useState(false)
 
@@ -80,7 +83,9 @@ export function RootLayout() {
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       {/* Sidebar fixa (desktop). Inalterada no comportamento md+. */}
-      <aside className="hidden w-64 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
+      <aside
+        className={cn('hidden w-64 flex-col border-r bg-sidebar text-sidebar-foreground', !modoFoco && 'md:flex')}
+      >
         <MarcaGeitus />
 
         <nav className="flex-1 space-y-1 p-3">
@@ -99,11 +104,12 @@ export function RootLayout() {
             <SheetTrigger asChild>
               <Button
                 variant="ghost"
-                size="icon"
-                className="size-11 md:hidden"
+                size={modoFoco ? 'default' : 'icon'}
+                className={modoFoco ? 'h-11 gap-2 px-3' : 'size-11 md:hidden'}
                 aria-label="Abrir menu de navegação"
               >
                 <Menu className="h-5 w-5" />
+                {modoFoco && <span>Menu</span>}
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-72 gap-0 p-0">
@@ -140,7 +146,7 @@ export function RootLayout() {
           </Button>
         </header>
 
-        <main className="flex-1 p-6">
+        <main className={cn('flex-1', modoFoco ? 'p-4' : 'p-6')}>
           <Outlet />
         </main>
       </div>

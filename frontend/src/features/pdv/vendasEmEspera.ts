@@ -36,9 +36,31 @@ export function porEmEspera(
   id: string,
 ): ResultadoDaEspera {
   if (vendas.length >= LIMITE_DE_VENDAS_EM_ESPERA) {
-    return { ok: false, erro: `Limite de ${LIMITE_DE_VENDAS_EM_ESPERA} vendas em espera.` }
+    return { ok: false, erro: `Limite de ${LIMITE_DE_VENDAS_EM_ESPERA} vendas em espera. Retome ou descarte uma (F7).` }
   }
   return { ok: true, vendas: [...vendas, { id, criadaEm: agora, itens: carrinho.linhas.length, total, carrinho }] }
+}
+
+/** "Venda em espera (2 de 5). Retome com F7." */
+export function mensagemDaVendaPostaEmEspera(quantas: number): string {
+  return `Venda em espera (${quantas} de ${LIMITE_DE_VENDAS_EM_ESPERA}). Retome com F7.`
+}
+
+function textoDosItens(itens: number): string {
+  return itens === 1 ? '1 item' : `${itens} itens`
+}
+
+/** Como a lista identifica a venda: "Maria Souza · 3 itens", ou "Ração X 1kg e mais 2" sem cliente. */
+export function descricaoDaVendaEmEspera(venda: VendaEmEspera): string {
+  const { cliente, linhas } = venda.carrinho
+  if (cliente) {
+    return `${cliente.nome} · ${textoDosItens(venda.itens)}`
+  }
+  const [primeira] = linhas
+  if (!primeira) {
+    return textoDosItens(venda.itens)
+  }
+  return linhas.length > 1 ? `${primeira.produto.nome} e mais ${linhas.length - 1}` : primeira.produto.nome
 }
 
 export function tirarDaEspera(vendas: readonly VendaEmEspera[], id: string): VendaEmEspera[] {

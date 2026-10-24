@@ -1,5 +1,8 @@
-/** Quanto uma leitura pode esperar o servidor antes de ser abortada (pedido travado). */
-export const LIMITES_DA_LEITURA = { tempoMaximoMs: 8_000 }
+/**
+ * Tempos da leitura: quanto ela pode esperar o servidor antes de ser abortada
+ * (pedido travado) e quanto o erro fica no campo sem outra recusa ou Esc.
+ */
+export const LIMITES_DA_LEITURA = { tempoMaximoMs: 8_000, tempoDoErroMs: 6_000 }
 
 /**
  * Fila das leituras do campo "Código ou nome" (Review Focus 1): cada leitura

@@ -57,6 +57,14 @@ describe('classificarFalhaDaVenda', () => {
     ).toEqual({ tipo: 'INVALIDO', mensagem: 'Cartão e PIX não podem passar do total. O troco só sai do dinheiro.' })
   })
 
+  it('409 só com campos de pagamento fica na janela como inválido (S2)', () => {
+    expect(
+      classificarFalhaDaVenda(
+        new HttpError(409, 'Requisicao falhou.', { 'pagamentos[1].valor': 'Cartão e PIX não podem passar do total.' }),
+      ),
+    ).toEqual({ tipo: 'INVALIDO', mensagem: 'Cartão e PIX não podem passar do total.' })
+  })
+
   it('rede ou 5xx: a mesma chave na nova tentativa', () => {
     expect(classificarFalhaDaVenda(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))).toEqual({ tipo: 'REDE' })
     expect(classificarFalhaDaVenda(new HttpError(503, 'Requisicao falhou (HTTP 503).'))).toEqual({ tipo: 'REDE' })

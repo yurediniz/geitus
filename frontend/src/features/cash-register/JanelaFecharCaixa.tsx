@@ -97,14 +97,24 @@ function descricaoDaJanela(sessao: SessaoDeCaixa, emConferencia: boolean, varias
     : `Conte ${oQueContar} e ${informe}. A diferença aparece depois de conferir. A contagem não pode ser alterada depois.`
 }
 
-/** Exemplo de justificativa conforme o sentido da diferenca. */
-function exemploDeJustificativa(diferenca: number | null): string {
-  return diferenca !== null && diferenca > 0 ? 'Ex.: Troco dado a menos' : 'Ex.: Troco dado a mais'
+/** A diferenca que guia o exemplo da justificativa, com a forma em que apareceu. */
+interface DiferencaDoExemplo {
+  forma: FormaDePagamento
+  valor: number
 }
 
-/** A primeira diferenca diferente de zero (o exemplo da justificativa segue o sentido dela). */
-function primeiraDiferenca(diferencas: readonly (number | null)[]): number | null {
-  return diferencas.find((diferenca) => diferenca !== null && diferenca !== 0) ?? null
+/** Exemplo de justificativa: no dinheiro, conforme o sentido da diferenca; fora dele, a forma trocada. */
+function exemploDeJustificativa(diferenca: DiferencaDoExemplo | null): string {
+  if (diferenca !== null && diferenca.forma !== 'DINHEIRO') {
+    return 'Ex.: Venda passada no crédito em vez do débito'
+  }
+  return diferenca !== null && diferenca.valor > 0 ? 'Ex.: Troco dado a menos' : 'Ex.: Troco dado a mais'
+}
+
+/** A primeira diferenca diferente de zero (o exemplo da justificativa segue o sentido e a forma dela). */
+function primeiraDiferenca(diferencas: readonly { forma: FormaDePagamento; valor: number | null }[]): DiferencaDoExemplo | null {
+  const achada = diferencas.find(({ valor }) => valor !== null && valor !== 0)
+  return achada && achada.valor !== null ? { forma: achada.forma, valor: achada.valor } : null
 }
 
 /** Erros do servidor: `valorContado` (contrato antigo) vale como o dinheiro. */
@@ -173,7 +183,7 @@ function ConteudoFecharCaixa({
     const contado = contados[forma] ?? ''
     return esperado !== null && contado !== '' ? diferencaEntre(Number(contado), esperado) : null
   }
-  const diferencaAoVivo = primeiraDiferenca(formas.map(diferencaAoVivoDa))
+  const diferencaAoVivo = primeiraDiferenca(formas.map((forma) => ({ forma, valor: diferencaAoVivoDa(forma) })))
   const pedeJustificativaJunto = conferencia === null && diferencaAoVivo !== null
   const mostraJustificativa = conferencia !== null || pedeJustificativaJunto
   const campoVisivel = (campo: CampoFechamento) => (campo === 'justificativa' ? mostraJustificativa : conferencia === null)
@@ -295,7 +305,10 @@ function ConteudoFecharCaixa({
     [conferencia && ID_RESULTADO, erros.justificativa && `${ID_JUSTIFICATIVA}-erro`].filter(Boolean).join(' ') ||
     undefined
   const diferencaDoExemplo = conferencia
-    ? primeiraDiferenca([conferencia.diferenca, ...conferencia.porForma.map((valores) => valores.diferenca)])
+    ? primeiraDiferenca([
+        { forma: 'DINHEIRO', valor: conferencia.diferenca },
+        ...conferencia.porForma.map((valores) => ({ forma: valores.forma, valor: valores.diferenca })),
+      ])
     : diferencaAoVivo
 
   return (

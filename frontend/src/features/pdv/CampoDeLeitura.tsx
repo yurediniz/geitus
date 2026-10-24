@@ -14,8 +14,13 @@ const ID_ERRO = `${ID_CAMPO_DE_LEITURA}-erro`
 const ID_AVISO = `${ID_CAMPO_DE_LEITURA}-aviso`
 const MENSAGEM_SEM_RESPOSTA = 'Sem resposta do servidor. Leia o código de novo.'
 
-/** A mensagem da leitura recusada (spec do PDV §3.1), sem detalhe tecnico. */
-function mensagemDaLeitura(erro: unknown): string {
+/** O codigo do texto lido, sem a quantidade ("542*3" -> "542"). */
+function codigoDoTexto(lido: string): string {
+  return lido.split('*')[0] || lido
+}
+
+/** A mensagem da leitura recusada (spec do PDV §3.1), com o codigo lido e sem detalhe tecnico. */
+function mensagemDaLeitura(erro: unknown, lido: string): string {
   if (erro instanceof HttpError) {
     if (erro.status === 0) {
       return 'Sem conexão com o servidor. Leia o código de novo.'
@@ -25,10 +30,11 @@ function mensagemDaLeitura(erro: unknown): string {
       if (doCampo.length > 0) {
         return doCampo.join(' ')
       }
-      if (!ehMensagemGenerica(erro.message)) {
-        return erro.message
+      if (erro.status === 404 && (ehMensagemGenerica(erro.message) || erro.message === 'Código não encontrado.')) {
+        // Com o codigo, o operador ve qual bipe falhou mesmo depois de outras leituras.
+        return `Código ${codigoDoTexto(lido)} não encontrado.`
       }
-      return erro.status === 404 ? 'Código não encontrado.' : 'Não foi possível ler o código.'
+      return ehMensagemGenerica(erro.message) ? 'Não foi possível ler o código.' : erro.message
     }
   }
   return 'Não foi possível ler o código. Tente de novo.'
@@ -55,6 +61,8 @@ export interface CampoDeLeituraProps {
   /** Aviso discreto sob o campo (ex.: "Aguarde a leitura…"). */
   aviso: string | null
   aoDigitar: () => void
+  /** Esc no campo tira o erro da leitura. */
+  aoLimparErro: () => void
   /** Sem janela aberta: uma tecla digitada fora do campo vem para ele (o foco e permanente). */
   capturarTeclas: boolean
 }
@@ -74,6 +82,7 @@ export function CampoDeLeitura({
   erro,
   aviso,
   aoDigitar,
+  aoLimparErro,
   capturarTeclas,
 }: CampoDeLeituraProps) {
   const [texto, setTexto] = useState('')
@@ -167,7 +176,8 @@ export function CampoDeLeitura({
         pedido,
         (item) => montado.current && retornos.current.aoResolver(item),
         (falha) =>
-          montado.current && retornos.current.aoRecusar(estado.estourou ? MENSAGEM_SEM_RESPOSTA : mensagemDaLeitura(falha)),
+          montado.current &&
+          retornos.current.aoRecusar(estado.estourou ? MENSAGEM_SEM_RESPOSTA : mensagemDaLeitura(falha, lido)),
       )
     } else {
       fila().enfileirar(
@@ -206,6 +216,8 @@ export function CampoDeLeitura({
             if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
               event.preventDefault()
               ler()
+            } else if (event.key === 'Escape') {
+              aoLimparErro()
             }
           }}
           aria-invalid={erro ? true : undefined}
@@ -232,6 +244,7 @@ export function CampoDeLeitura({
           {aviso}
         </p>
       )}
+      <p className="text-xs text-muted-foreground">↑ ↓ escolhe a linha · + − quantidade · Del remove</p>
     </div>
   )
 }

@@ -67,8 +67,10 @@ function definirUsuario(perfil: 'ADMIN' | 'OPERADOR' = 'OPERADOR') {
   })
 }
 
+let queryClient: QueryClient
+
 function renderPdv() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
@@ -213,11 +215,76 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
           ],
         }),
       )
-      expect(await screen.findByText('Venda nº 128 concluída · Troco R$ 5,30')).toBeInTheDocument()
+      // UX 6: a última venda e o troco grande no painel, logo abaixo do TOTAL.
+      const ultima = await screen.findByRole('status', { name: 'Última venda' })
+      expect(ultima).toHaveTextContent('Venda nº 128 concluída')
+      expect(ultima).toHaveTextContent('Troco R$ 5,30')
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
       expect(linhas()).toHaveLength(0)
       expect(guardado().linhas).toHaveLength(0)
       await waitFor(async () => expect(await campo()).toHaveFocus())
+
+      // O resumo fica até o primeiro item da próxima venda.
+      await ler('542')
+      await waitFor(() => expect(screen.queryByRole('status', { name: 'Última venda' })).not.toBeInTheDocument())
+    })
+
+    it('S9: depois de vender, a busca e os produtos são recarregados (saldo novo)', async () => {
+      finalizarMock.mockResolvedValue(venda({ numero: 140, troco: 0 }))
+      renderPdv()
+      await lancar('542')
+      const invalidar = vi.spyOn(queryClient, 'invalidateQueries')
+      const janela = await abrirPagamento()
+      await pagar(janela, '1')
+      await waitFor(() => expect(within(janela).getByRole('button', { name: /Finalizar venda/ })).toBeEnabled())
+      fireEvent.click(within(janela).getByRole('button', { name: /Finalizar venda/ }))
+
+      await screen.findByRole('status', { name: 'Última venda' })
+      expect(invalidar).toHaveBeenCalledWith({ queryKey: ['pdv', 'busca'] })
+      expect(invalidar).toHaveBeenCalledWith({ queryKey: ['produtos'] })
+    })
+
+    it('S10: abrir o pagamento não repete o cálculo do carrinho', async () => {
+      renderPdv()
+      await lancar('542')
+      const antes = calcularMock.mock.calls.length
+
+      await abrirPagamento()
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      expect(calcularMock.mock.calls.length).toBe(antes)
+    })
+
+    it('UX 7: com falta, "Falta pagar" domina; pago, o troco cresce, e o Enter aparece no Finalizar', async () => {
+      renderPdv()
+      await lancar('542')
+      const janela = await abrirPagamento()
+      expect(within(janela).getByText('Falta pagar').nextSibling).toHaveClass('text-4xl')
+      expect(within(janela).getByText('Troco').nextSibling).toHaveClass('text-muted-foreground')
+
+      await pagar(janela, '1', '30,00')
+
+      await waitFor(() => expect(within(janela).getByText('Troco').nextSibling).toHaveClass('text-4xl'))
+      expect(within(janela).getByText('Falta pagar').nextSibling).not.toHaveClass('text-4xl')
+      expect(janela).toHaveAccessibleDescription('Pagamento completo. Enter finaliza a venda.')
+      expect(within(janela).getByRole('button', { name: /Finalizar venda/ })).toHaveTextContent('Enter')
+    })
+
+    it('S12: o "Falta pagar" do servidor (campo pagamentos) não aparece como erro', async () => {
+      calcularMock.mockImplementation(async (carrinho: CarrinhoRequest) => {
+        const calculo = calculoFalso(carrinho)
+        if (calculo.faltaPagar > 0) {
+          calculo.erros.push({ campo: 'pagamentos', mensagem: 'Falta pagar R$ 24,90.' })
+        }
+        return calculo
+      })
+      renderPdv()
+      await lancar('542')
+      const janela = await abrirPagamento()
+      await pagar(janela, '1', '10,00')
+
+      await waitFor(() => expect(within(janela).getByText('Falta pagar').nextSibling).toHaveTextContent('R$ 14,90'))
+      expect(within(janela).queryByText(/Falta pagar R\$/)).not.toBeInTheDocument()
     })
 
     it('cartão acima do total: o erro do servidor aparece e "Finalizar venda" fica desabilitado', async () => {
@@ -227,17 +294,34 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
 
       await pagar(janela, '3', '30,00')
 
+      // UX 7: recusado na hora, sem ir ao servidor.
+      expect(
+        await within(janela).findByText(
+          'Crédito não pode passar do que falta pagar (R$ 24,90). O troco só sai do dinheiro.',
+        ),
+      ).toBeInTheDocument()
+      expect(within(janela).queryByRole('list', { name: 'Formas usadas' })).not.toBeInTheDocument()
+      expect(within(janela).getByRole('button', { name: /Finalizar venda/ })).toBeDisabled()
+    })
+
+    it('o erro do servidor de cartão acima do total também aparece na janela', async () => {
+      // O dinheiro paga parte; o PIX passa do total quando o servidor recalcula com outro preço.
+      calcularMock.mockImplementation(async (carrinho: CarrinhoRequest) => {
+        const calculo = calculoFalso(carrinho)
+        if (carrinho.pagamentos.some((pagamento) => pagamento.forma === 'PIX')) {
+          calculo.erros.push({ campo: 'pagamentos', mensagem: 'Cartão e PIX não podem passar do total. O troco só sai do dinheiro.' })
+        }
+        return calculo
+      })
+      renderPdv()
+      await lancar('542')
+      const janela = await abrirPagamento()
+      await pagar(janela, '4')
+
       expect(
         await within(janela).findByText('Cartão e PIX não podem passar do total. O troco só sai do dinheiro.'),
       ).toBeInTheDocument()
-      expect(within(janela).getByRole('button', { name: 'Finalizar venda' })).toBeDisabled()
-      // Remover a forma corrige.
-      fireEvent.click(within(janela).getByRole('button', { name: 'Remover Crédito' }))
-      await waitFor(() =>
-        expect(
-          within(janela).queryByText('Cartão e PIX não podem passar do total. O troco só sai do dinheiro.'),
-        ).not.toBeInTheDocument(),
-      )
+      expect(within(janela).getByRole('button', { name: /Finalizar venda/ })).toBeDisabled()
     })
 
     it('"O total da venda mudou": mostra o anterior e o novo; Confirmar reenvia com o novo total e a mesma chave', async () => {
@@ -448,9 +532,9 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
 
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
         expect(linhas()).toHaveLength(2)
-        expect(linhas()[indice]).toHaveAttribute('aria-invalid', 'true')
+        expect(linhas()[indice]).toHaveAccessibleDescription(mensagem)
         expect(within(linhas()[indice]).getByText(mensagem)).toBeInTheDocument()
-        expect(linhas()[1 - indice]).not.toHaveAttribute('aria-invalid')
+        expect(within(linhas()[1 - indice]).queryByText('com erro')).not.toBeInTheDocument()
         expect(guardado().linhas).toHaveLength(2)
         expect(screen.getByRole('button', { name: /Pagamento/ })).toBeDisabled()
       },
@@ -494,12 +578,13 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
 
       await tecla('F6')
 
-      expect(await screen.findByText('Venda em espera.')).toBeInTheDocument()
+      expect(await screen.findByText('Venda em espera (1 de 5). Retome com F7.')).toBeInTheDocument()
       expect(linhas()).toHaveLength(0)
       await tecla('F7')
       const janela = await screen.findByRole('dialog', { name: 'Vendas em espera' })
       const [item] = within(janela).getAllByRole('listitem')
-      expect(item).toHaveTextContent('1 item')
+      // UX 4: o primeiro item (ou o cliente) identifica a venda.
+      expect(item).toHaveTextContent('Ração X 1kg')
       expect(item).toHaveTextContent('R$ 74,70')
       expect(item).toHaveTextContent(/\d{2}:\d{2}/)
       fireEvent.click(within(item).getByRole('button', { name: 'Retomar' }))
@@ -527,7 +612,7 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
 
       await tecla('F6')
 
-      expect(await screen.findByText('Limite de 5 vendas em espera.')).toBeInTheDocument()
+      expect(await screen.findByText('Limite de 5 vendas em espera. Retome ou descarte uma (F7).')).toBeInTheDocument()
       expect(linhas()).toHaveLength(1)
     })
 
@@ -535,7 +620,7 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
       renderPdv()
       await lancar('542*3')
       await tecla('F6')
-      await screen.findByText('Venda em espera.')
+      await screen.findByText('Venda em espera (1 de 5). Retome com F7.')
       await lancar('900')
 
       await tecla('F7')
@@ -550,11 +635,16 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
       await tecla('F7')
       janela = await screen.findByRole('dialog', { name: 'Vendas em espera' })
       expect(within(janela).getAllByRole('listitem')).toHaveLength(1)
+      expect(within(janela).getByRole('listitem')).toHaveTextContent('Nexgard M')
       fireEvent.click(within(janela).getByRole('button', { name: 'Descartar' }))
       expect(await within(janela).findByText('Descartar esta venda em espera?')).toBeInTheDocument()
+      // UX 3: o foco fica em "Voltar" e o botão é destrutivo.
+      expect(within(janela).getByRole('button', { name: 'Voltar' })).toHaveFocus()
+      expect(within(janela).getByRole('button', { name: 'Descartar venda' })).toHaveAttribute('data-variant', 'destructive')
       fireEvent.click(within(janela).getByRole('button', { name: 'Descartar venda' }))
 
-      expect(await within(janela).findByText('Nenhuma venda em espera.')).toBeInTheDocument()
+      expect(await within(janela).findByText('Venda em espera descartada.')).toBeInTheDocument()
+      expect(within(janela).getByText('Nenhuma venda em espera.')).toBeInTheDocument()
       // A venda da tela não muda.
       expect(guardado().linhas).toHaveLength(1)
     })
@@ -614,7 +704,10 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
       fireEvent.click(within(janela).getByRole('button', { name: 'Confirmar cancelamento' }))
 
       await waitFor(() => expect(cancelarVendaMock).toHaveBeenCalledWith('v-128', 'Cliente desistiu'))
-      expect(await within(janela).findByText('Venda nº 128 cancelada.')).toBeInTheDocument()
+      // UX 15: com dinheiro, quanto devolver.
+      expect(
+        await within(janela).findByText('Venda nº 128 cancelada. Devolva R$ 74,70 em dinheiro ao cliente.'),
+      ).toBeInTheDocument()
     })
 
     it('motivo vazio não vai ao servidor; o 409 do caixa fechado mostra a mensagem', async () => {
@@ -693,5 +786,44 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
       fireEvent.click(within(janela).getByRole('button', { name: 'Tentar de novo' }))
       expect(await within(janela).findByText('Nenhuma venda neste caixa ainda.')).toBeInTheDocument()
     })
+  })
+
+  it('UX 15: cancelamento sem dinheiro avisa o estorno', async () => {
+    listarVendasMock.mockResolvedValue({ itens: [vendaResumo({ pagamentos: [{ forma: 'PIX', valor: 74.7 }] })], pagina: 0, tamanho: 50, totalItens: 1 })
+    buscarVendaMock.mockResolvedValue(venda({ pagamentos: [{ forma: 'PIX', valor: 74.7 }] }))
+    cancelarVendaMock.mockResolvedValue(venda({ status: 'CANCELADA', podeCancelar: false, pagamentos: [{ forma: 'PIX', valor: 74.7 }] }))
+    renderPdv()
+    await campo()
+    await tecla('F8')
+    const janela = await screen.findByRole('dialog', { name: 'Vendas do caixa' })
+    fireEvent.click(await within(janela).findByRole('button', { name: /Nº 128/ }))
+    fireEvent.click(await within(janela).findByRole('button', { name: 'Cancelar venda' }))
+    fireEvent.change(within(janela).getByLabelText(/Motivo do cancelamento/), { target: { value: 'Erro' } })
+    fireEvent.click(within(janela).getByRole('button', { name: 'Confirmar cancelamento' }))
+
+    expect(await within(janela).findByText('Venda nº 128 cancelada. Estoque e caixa estornados.')).toBeInTheDocument()
+  })
+
+  it('UX 8: total mudou sem cobertura: "Ajustar pagamento" fecha só a janela interna e mantém as formas', async () => {
+    finalizarMock.mockRejectedValueOnce(new HttpError(409, 'O total da venda mudou. Confira os valores.'))
+    renderPdv()
+    await lancar('542')
+    const janela = await abrirPagamento()
+    await pagar(janela, '4')
+    await waitFor(() => expect(within(janela).getByRole('button', { name: /Finalizar venda/ })).toBeEnabled())
+    calcularMock.mockImplementation(async (carrinho: CarrinhoRequest) => {
+      const calculo = calculoFalso(carrinho)
+      const pago = carrinho.pagamentos.reduce((soma, pagamento) => soma + pagamento.valor, 0)
+      return { ...calculo, total: 26.9, subtotal: 26.9, faltaPagar: Math.max(0, Math.round((26.9 - pago) * 100) / 100) }
+    })
+    fireEvent.click(within(janela).getByRole('button', { name: /Finalizar venda/ }))
+    const mudou = await screen.findByRole('dialog', { name: 'O total da venda mudou' })
+    expect(within(mudou).getByRole('button', { name: 'Confirmar e finalizar' })).toBeDisabled()
+
+    fireEvent.click(await within(mudou).findByRole('button', { name: 'Ajustar pagamento' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'O total da venda mudou' })).not.toBeInTheDocument())
+    const pagamento = screen.getByRole('dialog', { name: 'Pagamento' })
+    expect(within(pagamento).getByRole('list', { name: 'Formas usadas' })).toHaveTextContent('PIX')
   })
 })

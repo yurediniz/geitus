@@ -514,6 +514,18 @@ describe('JanelaFecharCaixa', () => {
       expect(contarMock).not.toHaveBeenCalled()
     })
 
+    it('diferença só fora do dinheiro: o exemplo da justificativa fala da forma', () => {
+      renderJanela(NAO_CEGO_COM_DEBITO)
+
+      digitarContado('320,00')
+      fireEvent.change(contadoNoDebito(), { target: { value: '118,00' } })
+
+      expect(screen.getByLabelText(/justificativa/i)).toHaveAttribute(
+        'placeholder',
+        'Ex.: Venda passada no crédito em vez do débito',
+      )
+    })
+
     it('o erro do servidor em contagens.DEBITO fica no campo do débito', async () => {
       contarMock.mockRejectedValue(
         new HttpError(400, 'Dados invalidos.', { 'contagens.DEBITO': 'Informe o valor contado de Débito.' }),

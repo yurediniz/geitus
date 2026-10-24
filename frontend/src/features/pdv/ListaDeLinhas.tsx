@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { AlertCircle, AlertTriangle, ImageIcon, ScanBarcode } from 'lucide-react'
 
 import { NativeSelect } from '@/components/ui/native-select'
@@ -10,6 +10,12 @@ import type { LinhaCalculada } from '@/types/pdv'
 
 const UNIDADE = ''
 
+/** A ultima linha lancada e quantas vezes ja foi lancada (o destaque repete a cada lancamento). */
+export interface DestaqueDaLinha {
+  linhaId: string
+  vez: number
+}
+
 export interface ListaDeLinhasProps {
   linhas: readonly LinhaDoCarrinho[]
   /** O calculo de cada linha, pelo id (ausente enquanto a linha nova nao foi calculada). */
@@ -17,8 +23,8 @@ export interface ListaDeLinhasProps {
   errosPorLinha: Readonly<Record<string, string | undefined>>
   avisosPorLinha: Readonly<Record<string, string | undefined>>
   selecionadaId: string | null
-  /** A ultima linha lancada: destacada, com a miniatura do produto. */
-  ultimaId: string | null
+  /** A ultima linha lancada: destacada a cada lancamento, com a miniatura do produto. */
+  destaque: DestaqueDaLinha | null
   aoSelecionar: (linhaId: string) => void
   aoTrocarEmbalagem: (linhaId: string, embalagemId: string | null) => void
 }
@@ -54,18 +60,22 @@ function ItemDaLista({
   errosPorLinha,
   avisosPorLinha,
   selecionadaId,
-  ultimaId,
+  destaque,
   aoSelecionar,
   aoTrocarEmbalagem,
 }: ListaDeLinhasProps & { linha: LinhaDoCarrinho; numero: number }) {
   const itemRef = useRef<HTMLLIElement>(null)
+  const idErro = useId()
+  const idAviso = useId()
   const calculada = calculoPorLinha[linha.id]
   const erro = errosPorLinha[linha.id]
   const aviso = avisosPorLinha[linha.id]
   const selecionada = linha.id === selecionadaId
-  const ultima = linha.id === ultimaId
+  const destacada = destaque?.linhaId === linha.id
   const selo = calculada ? SELO_DA_ORIGEM[calculada.origemPreco] : linha.etiqueta ? SELO_DA_ORIGEM.ETIQUETA : undefined
   const desconto = calculada ? calculada.descontoItem + calculada.descontoRateado : 0
+  // Embalagem e sempre inteira; a unidade fracionada mostra as 3 casas ("0,400 KG").
+  const fracionada = linha.produto.fracionada && linha.embalagemId === null
 
   useEffect(() => {
     if (selecionada) {
@@ -77,46 +87,57 @@ function ItemDaLista({
     <li
       ref={itemRef}
       aria-current={selecionada ? 'true' : undefined}
-      aria-invalid={erro ? true : undefined}
+      aria-describedby={[erro && idErro, aviso && idAviso].filter(Boolean).join(' ') || undefined}
       onClick={() => aoSelecionar(linha.id)}
       className={cn(
-        'grid cursor-pointer grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-start gap-x-3 gap-y-1 px-3 py-2.5 transition-colors',
+        'relative grid cursor-pointer grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-start gap-x-3 gap-y-1 px-3 py-2.5 transition-colors',
         selecionada ? 'bg-accent/60' : 'hover:bg-muted/50',
-        ultima && 'animate-[pulse_0.6s_ease-out_1]',
         erro && 'border-l-4 border-destructive bg-destructive/5',
       )}
     >
+      {destacada && (
+        // A chave muda a cada lancamento: o destaque toca de novo, mesmo quando soma na mesma linha.
+        <span
+          key={destaque.vez}
+          data-destaque={destaque.vez}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 rounded-md bg-primary/10 motion-safe:animate-[pulse_0.6s_ease-out_1] motion-reduce:hidden"
+        />
+      )}
       <span className="pt-0.5 text-sm text-muted-foreground tabular-nums">{numero}</span>
 
       <div className="flex min-w-0 items-start gap-3">
-        {ultima && <Miniatura url={linha.produto.miniaturaUrl} />}
+        {destacada && <Miniatura url={linha.produto.miniaturaUrl} />}
         <div className="min-w-0 space-y-0.5">
-          <p className="truncate font-medium">{linha.produto.nome}</p>
+          <p className="truncate font-medium">
+            {linha.produto.nome}
+            {erro && <span className="sr-only">com erro</span>}
+          </p>
           {linha.codigoLido && <p className="text-xs text-muted-foreground tabular-nums">{linha.codigoLido}</p>}
           {erro && (
             <p className="flex items-start gap-1 text-sm font-medium text-destructive">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              {erro}
+              <span id={idErro}>{erro}</span>
             </p>
           )}
           {aviso && (
             <p className="flex items-start gap-1 text-sm text-warning-soft-foreground">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              {aviso}
+              <span id={idAviso}>{aviso}</span>
             </p>
           )}
         </div>
       </div>
 
       <div className="flex items-center gap-2 text-sm">
-        <span className="font-semibold tabular-nums">{formatarQuantidade(linha.quantidade)}</span>
+        <span className="font-semibold tabular-nums">{formatarQuantidade(linha.quantidade, fracionada)}</span>
         {linha.produto.embalagens.length > 0 && !linha.etiqueta ? (
           <NativeSelect
             aria-label={`Unidade da linha ${numero}`}
             value={linha.embalagemId ?? UNIDADE}
             onClick={(event) => event.stopPropagation()}
             onChange={(event) => aoTrocarEmbalagem(linha.id, event.target.value === UNIDADE ? null : event.target.value)}
-            className="h-9 w-auto min-w-20 py-0 text-sm"
+            className="h-11 w-auto min-w-20 py-0 text-sm"
           >
             <option value={UNIDADE}>{linha.produto.unidade}</option>
             {linha.produto.embalagens.map((embalagem) => (

@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { CARRINHO_VAZIO, type Carrinho } from '@/features/pdv/carrinho'
 import {
   chaveDasVendasEmEspera,
+  descricaoDaVendaEmEspera,
   guardarVendasEmEspera,
   lerVendasEmEspera,
   LIMITE_DE_VENDAS_EM_ESPERA,
@@ -36,7 +37,25 @@ describe('vendasEmEspera', () => {
 
   it('no máximo 5', () => {
     const cinco = Array.from({ length: LIMITE_DE_VENDAS_EM_ESPERA }, (_, indice) => espera(`v-${indice}`))
-    expect(porEmEspera(cinco, CARRINHO, 10, AGORA, 'v-x')).toEqual({ ok: false, erro: 'Limite de 5 vendas em espera.' })
+    expect(porEmEspera(cinco, CARRINHO, 10, AGORA, 'v-x')).toEqual({
+      ok: false,
+      erro: 'Limite de 5 vendas em espera. Retome ou descarte uma (F7).',
+    })
+  })
+
+  it('descreve a venda pelo cliente ou pelo primeiro item', () => {
+    const tres: Carrinho = {
+      ...CARRINHO,
+      linhas: [CARRINHO.linhas[0], { ...CARRINHO.linhas[0], id: 'l-2' }, { ...CARRINHO.linhas[0], id: 'l-3' }],
+    }
+    expect(descricaoDaVendaEmEspera(espera('a'))).toBe('Ração X 1kg')
+    expect(descricaoDaVendaEmEspera({ ...espera('a'), itens: 3, carrinho: tres })).toBe('Ração X 1kg e mais 2')
+    expect(
+      descricaoDaVendaEmEspera({ ...espera('a'), itens: 3, carrinho: { ...tres, cliente: { id: 'c', nome: 'Maria Souza' } } }),
+    ).toBe('Maria Souza · 3 itens')
+    expect(
+      descricaoDaVendaEmEspera({ ...espera('a'), carrinho: { ...CARRINHO, cliente: { id: 'c', nome: 'Maria Souza' } } }),
+    ).toBe('Maria Souza · 1 item')
   })
 
   it('tira da espera pelo id', () => {

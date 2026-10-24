@@ -108,21 +108,25 @@ function ConteudoDoPagamento({
   const valorRef = useRef<HTMLInputElement>(null)
   const finalizarRef = useRef<HTMLButtonElement>(null)
 
-  const calculo = useCalculo(carrinho, pagamentos)
+  // Sem pagamento ainda, o calculo e o mesmo da tela: nada de pedido repetido (S10).
+  const calculo = useCalculo(carrinho, pagamentos, { ativo: pagamentos.length > 0 })
   const exibido = calculo.calculo ?? calculoInicial
+  const faltaDoServidor = exibido?.faltaPagar ?? 0
   const errosDoCalculo = useMemo(
     () =>
       [...(exibido?.erros ?? []), ...calculo.errosDosDados]
-        // "Falta pagar" ja aparece em destaque; nao e erro enquanto se paga.
-        .filter((mensagem) => !mensagem.mensagem.startsWith('Falta pagar'))
+        // O "Falta pagar" do servidor (campo `pagamentos`, com falta) ja aparece em destaque: nao e erro enquanto se paga.
+        .filter((mensagem) => !(mensagem.campo === 'pagamentos' && faltaDoServidor > 0))
         .map((mensagem) => mensagem.mensagem),
-    [exibido, calculo.errosDosDados],
+    [exibido, calculo.errosDosDados, faltaDoServidor],
   )
+  const pagamentoCompleto =
+    exibido !== null && calculo.atualizado && pagamentos.length > 0 && exibido.faltaPagar === 0 && errosDoCalculo.length === 0
   const podeFinalizar =
     trava === null &&
     exibido !== null &&
     calculo.atualizado &&
-    calculo.falhaDeRede === null &&
+    calculo.falhaDoCalculo === null &&
     pagamentos.length > 0 &&
     exibido.faltaPagar === 0 &&
     errosDoCalculo.length === 0 &&
@@ -265,6 +269,13 @@ function ConteudoDoPagamento({
       setErroDoValor(MENSAGEM_VALOR)
       return
     }
+    if (forma !== 'DINHEIRO' && emCentavos(numero) > faltaLocal) {
+      // Recusa na hora, sem esperar o servidor: cartao e PIX nao dao troco.
+      setErroDoValor(
+        `${ROTULO_DA_FORMA[forma]} não pode passar do que falta pagar (${formatarReais(faltaLocal / 100)}). O troco só sai do dinheiro.`,
+      )
+      return
+    }
     const existente = pagamentos.find((pagamento) => pagamento.forma === forma)
     const novos = existente
       ? pagamentos.map((pagamento) =>
@@ -329,7 +340,11 @@ function ConteudoDoPagamento({
     >
       <DialogHeader>
         <DialogTitle>Pagamento</DialogTitle>
-        <DialogDescription>Escolha a forma com as teclas 1 a 4 e confirme o valor com Enter.</DialogDescription>
+        <DialogDescription>
+          {pagamentoCompleto && trava === null
+            ? 'Pagamento completo. Enter finaliza a venda.'
+            : 'Escolha a forma com as teclas 1 a 4 e confirme o valor com Enter.'}
+        </DialogDescription>
       </DialogHeader>
 
       <dl className="grid grid-cols-3 gap-3 rounded-lg bg-muted/60 p-4">
@@ -342,16 +357,25 @@ function ConteudoDoPagamento({
           <dd
             aria-live="polite"
             className={cn(
-              'font-display text-2xl font-semibold tabular-nums',
-              (exibido?.faltaPagar ?? 0) > 0 && 'text-warning-soft-foreground',
+              'font-display font-semibold tabular-nums',
+              // Enquanto falta, o que falta e o numero que manda.
+              faltaDoServidor > 0 ? 'text-4xl text-warning-soft-foreground' : 'text-2xl',
             )}
           >
-            {formatarReais(exibido?.faltaPagar ?? 0)}
+            {formatarReais(faltaDoServidor)}
           </dd>
         </div>
         <div>
           <dt className="text-xs font-medium text-muted-foreground uppercase">Troco</dt>
-          <dd aria-live="polite" className="font-display text-2xl font-semibold tabular-nums text-success-soft-foreground">
+          <dd
+            aria-live="polite"
+            className={cn(
+              'font-display font-semibold tabular-nums',
+              faltaDoServidor === 0 && (exibido?.troco ?? 0) > 0
+                ? 'text-4xl text-success-soft-foreground'
+                : 'text-2xl text-muted-foreground',
+            )}
+          >
             {formatarReais(exibido?.troco ?? 0)}
           </dd>
         </div>
@@ -481,7 +505,7 @@ function ConteudoDoPagamento({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-11 md:size-9"
+                className="size-11"
                 aria-label={`Remover ${ROTULO_DA_FORMA[pagamento.forma]}`}
                 onClick={() => remover(pagamento.forma)}
                 disabled={travado}
@@ -498,10 +522,10 @@ function ConteudoDoPagamento({
           {mensagem}
         </p>
       ))}
-      {calculo.falhaDeRede && (
+      {calculo.falhaDoCalculo && (
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-warning-soft-foreground">{calculo.falhaDeRede}</p>
-          <Button type="button" variant="outline" size="sm" className="h-9" onClick={calculo.recalcular}>
+          <p className="text-sm text-warning-soft-foreground">{calculo.falhaDoCalculo}</p>
+          <Button type="button" variant="outline" className="h-11" onClick={calculo.recalcular}>
             Calcular de novo
           </Button>
         </div>
@@ -518,10 +542,14 @@ function ConteudoDoPagamento({
             type="button"
             className="min-h-11"
             disabled={!podeFinalizar}
+            aria-keyshortcuts="Enter"
             onClick={() => exibido && enviar(exibido.total)}
           >
             {enviando && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             Finalizar venda
+            <kbd aria-hidden="true" className="rounded bg-primary-foreground/20 px-1.5 py-0.5 font-sans text-[11px] font-semibold">
+              Enter
+            </kbd>
           </Button>
         )}
       </DialogFooter>
@@ -537,6 +565,13 @@ function ConteudoDoPagamento({
           aoMudarTentativa(null)
           aoTotalMudar()
           aoFechar()
+        }}
+        aoAjustar={() => {
+          // So a janela interna fecha: as formas lancadas ficam para o ajuste (com chave nova).
+          setTotalMudou(null)
+          aoMudarTentativa(null)
+          aoTotalMudar()
+          formasRef.current?.focus()
         }}
       />
     </DialogContent>

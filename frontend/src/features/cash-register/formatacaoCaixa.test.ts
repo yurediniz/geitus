@@ -146,17 +146,25 @@ describe('formatacaoCaixa', () => {
       expect(ROTULO_DA_FORMA).toEqual({ DINHEIRO: 'Dinheiro', DEBITO: 'Débito', CREDITO: 'Crédito', PIX: 'PIX' })
     })
 
-    it('mensagem do fechamento com diferença em outra forma', () => {
-      const porForma = [
-        { forma: 'DINHEIRO' as const, esperado: 100, contado: 100, diferenca: 0 },
-        { forma: 'DEBITO' as const, esperado: 50, contado: 48, diferenca: -2 },
-        { forma: 'PIX' as const, esperado: 10, contado: 11, diferenca: 1 },
-      ]
-      expect(mensagemDoFechamento('Caixa 1', 0, porForma)).toBe('Caixa 1 fechado com diferença em Débito e PIX')
-      expect(semNbsp(mensagemDoFechamento('Caixa 1', -2, porForma.slice(0, 2)))).toBe(
-        'Caixa 1 fechado com falta de R$ 2,00 e diferença em Débito',
+    it('mensagem do fechamento por forma: nomeia a forma e o valor', () => {
+      const valores = (forma: 'DINHEIRO' | 'DEBITO' | 'CREDITO' | 'PIX', diferenca: number) => ({
+        forma,
+        esperado: 100,
+        contado: 100 + diferenca,
+        diferenca,
+      })
+      expect(semNbsp(mensagemDoFechamento('Caixa 1', 0, [valores('DINHEIRO', 0), valores('DEBITO', -2)]))).toBe(
+        'Caixa 1 fechado com falta de R$ 2,00 no Débito',
       )
-      expect(mensagemDoFechamento('Caixa 1', 0, porForma.slice(0, 1))).toBe('Caixa 1 fechado')
+      expect(
+        semNbsp(mensagemDoFechamento('Caixa 1', -2, [valores('DINHEIRO', -2), valores('DEBITO', 0), valores('PIX', 1)])),
+      ).toBe('Caixa 1 fechado com falta de R$ 2,00 no Dinheiro e sobra de R$ 1,00 no PIX')
+      expect(
+        mensagemDoFechamento('Caixa 1', 0, [valores('DINHEIRO', 0), valores('DEBITO', -2), valores('CREDITO', 3), valores('PIX', 1)]),
+      ).toBe('Caixa 1 fechado com diferença em Débito, Crédito e PIX. Veja o resumo.')
+      expect(mensagemDoFechamento('Caixa 1', 0, [valores('DINHEIRO', 0), valores('PIX', 0)])).toBe('Caixa 1 fechado')
+      // Só o dinheiro na sessão: a mensagem de sempre, sem nomear a forma.
+      expect(semNbsp(mensagemDoFechamento('Caixa 1', -2, [valores('DINHEIRO', -2)]))).toBe('Caixa 1 fechado com falta de R$ 2,00')
     })
 
     it('mensagem do fechamento com o nome do ponto e a diferença', () => {

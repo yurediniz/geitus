@@ -10,9 +10,11 @@ export const SELO_DA_ORIGEM: Readonly<Partial<Record<OrigemPrecoDaVenda, string>
   ETIQUETA: 'Balança',
 }
 
-/** Quantidade sem zeros a direita ("0,4", "3"). */
-export function formatarQuantidade(valor: number): string {
-  return quantidadeParaTexto(valor)
+/** Quantidade: com 3 casas quando a unidade e fracionada ("0,400"); senao, sem zeros a direita ("3"). */
+export function formatarQuantidade(valor: number, fracionada = false): string {
+  return fracionada
+    ? valor.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3, useGrouping: false })
+    : quantidadeParaTexto(valor)
 }
 
 /** "5%" ou "R$ 2,00". */

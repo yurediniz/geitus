@@ -21,6 +21,8 @@ export interface AlvoDoDesconto {
 export interface JanelaDescontoProps {
   /** Null com a janela fechada. */
   desconto: AlvoDoDesconto | null
+  /** O limite percentual do OPERADOR; null para o ADMIN (sem limite). */
+  limiteDoOperador: number | null
   aoFechar: () => void
   /** Null remove o desconto. */
   aoAplicar: (alvo: string, desconto: DescontoInformado | null) => void
@@ -34,20 +36,30 @@ const MENSAGEM_PERCENTUAL = 'Informe um percentual de 0 a 100, com até 2 casas.
  * O limite do operador e o preco minimo sao conferidos pelo servidor: o erro
  * aparece na linha ou no total, e o pagamento fica bloqueado ate corrigir.
  */
-export function JanelaDesconto({ desconto, aoFechar, aoAplicar }: JanelaDescontoProps) {
+export function JanelaDesconto({ desconto, limiteDoOperador, aoFechar, aoAplicar }: JanelaDescontoProps) {
   return (
     <Dialog open={desconto !== null} onOpenChange={(aberta) => !aberta && aoFechar()}>
-      {desconto && <ConteudoDoDesconto key={desconto.alvo} desconto={desconto} aoAplicar={aoAplicar} aoFechar={aoFechar} />}
+      {desconto && (
+        <ConteudoDoDesconto
+          key={desconto.alvo}
+          desconto={desconto}
+          limiteDoOperador={limiteDoOperador}
+          aoAplicar={aoAplicar}
+          aoFechar={aoFechar}
+        />
+      )}
     </Dialog>
   )
 }
 
 function ConteudoDoDesconto({
   desconto,
+  limiteDoOperador,
   aoAplicar,
   aoFechar,
 }: {
   desconto: AlvoDoDesconto
+  limiteDoOperador: number | null
   aoAplicar: JanelaDescontoProps['aoAplicar']
   aoFechar: () => void
 }) {
@@ -100,7 +112,11 @@ function ConteudoDoDesconto({
     >
       <DialogHeader>
         <DialogTitle>{desconto.titulo}</DialogTitle>
-        <DialogDescription>{desconto.descricao}</DialogDescription>
+        <DialogDescription>
+          {desconto.descricao}
+          {limiteDoOperador !== null &&
+            ` Seu limite: até ${formatarPercentual(limiteDoOperador).replace(/,00$/, '')}% da venda.`}
+        </DialogDescription>
       </DialogHeader>
       <form onSubmit={aplicar} noValidate className="space-y-4">
         <fieldset className="space-y-1.5">
@@ -168,7 +184,7 @@ function ConteudoDoDesconto({
 
         <DialogFooter>
           <Button type="button" variant="outline" className="min-h-11" onClick={aoFechar}>
-            Cancelar
+            Voltar
           </Button>
           {desconto.atual && (
             <Button type="button" variant="outline" className="min-h-11" onClick={() => aoAplicar(desconto.alvo, null)}>

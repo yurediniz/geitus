@@ -44,7 +44,12 @@ export function classificarFalhaDaVenda(erro: unknown): FalhaDaVenda {
     const doCampo = Object.values(erro.campos ?? {})
     return { tipo: 'INVALIDO', mensagem: doCampo.length > 0 ? doCampo.join(' ') : (mensagemDoServidor ?? MENSAGEM_FALHA) }
   }
-  if ((erro.status === 404 || erro.status === 409) && erro.campos && Object.keys(erro.campos).length > 0) {
+  const campos = Object.keys(erro.campos ?? {})
+  if (erro.status === 409 && campos.length > 0 && campos.every((campo) => campo.startsWith('pagamentos'))) {
+    // So os pagamentos: a venda nao mudou, o operador ajusta na propria janela.
+    return { tipo: 'INVALIDO', mensagem: Object.values(erro.campos ?? {}).join(' ') }
+  }
+  if ((erro.status === 404 || erro.status === 409) && erro.campos && campos.length > 0) {
     return { tipo: 'DADOS', mensagens: camposParaMensagens(erro.campos) }
   }
   return { tipo: 'CAIXA', mensagem: mensagemDoServidor ?? MENSAGEM_FALHA }

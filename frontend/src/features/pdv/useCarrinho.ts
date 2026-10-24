@@ -109,6 +109,8 @@ export function useCarrinho(empresaId: number, usuarioId: number, opcoes: Opcoes
       aplicarDesconto: (alvo: string, desconto: DescontoInformado | null) =>
         aplicar((carrinho) => ({ ok: true, carrinho: aplicarDescontoNoCarrinho(carrinho, alvo, desconto) })),
       definirCliente: (cliente: ClienteDaVenda | null) => aplicar((carrinho) => ({ ok: true, carrinho: { ...carrinho, cliente } })),
+      /** Desfazer: o carrinho de antes volta, com a mesma tentativa. */
+      restaurar: (anterior: Carrinho) => aplicar(() => ({ ok: true, carrinho: anterior })),
       limpar: () => substituir(CARRINHO_VAZIO),
       substituir,
       definirTentativa: (tentativa: TentativaDeVenda | null) => gravar({ ...atualRef.current, tentativa }),

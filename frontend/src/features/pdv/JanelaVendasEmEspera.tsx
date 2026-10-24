@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { PauseCircle } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatarHora, formatarReais } from '@/features/cash-register/formatacaoCaixa'
 import { devolverFocoAoCampo } from '@/features/pdv/focoDoPdv'
-import type { VendaEmEspera } from '@/features/pdv/vendasEmEspera'
+import { descricaoDaVendaEmEspera, type VendaEmEspera } from '@/features/pdv/vendasEmEspera'
 
 export interface JanelaVendasEmEsperaProps {
   aberta: boolean
@@ -19,10 +19,6 @@ export interface JanelaVendasEmEsperaProps {
 }
 
 type Pergunta = { tipo: 'RETOMAR'; id: string } | { tipo: 'DESCARTAR'; id: string }
-
-function textoDosItens(itens: number): string {
-  return itens === 1 ? '1 item' : `${itens} itens`
-}
 
 /** Vendas em espera (F7; spec do PDV §6.4): hora, itens e total, com Retomar e Descartar. */
 export function JanelaVendasEmEspera({ aberta, aoFechar, ...props }: JanelaVendasEmEsperaProps) {
@@ -40,6 +36,8 @@ function ConteudoDaEspera({
   aoDescartar,
 }: Omit<JanelaVendasEmEsperaProps, 'aberta' | 'aoFechar'>) {
   const [pergunta, setPergunta] = useState<Pergunta | null>(null)
+  const [aviso, setAviso] = useState<string | null>(null)
+  const voltarRef = useRef<HTMLButtonElement>(null)
 
   return (
     <DialogContent onCloseAutoFocus={devolverFocoAoCampo}>
@@ -47,6 +45,12 @@ function ConteudoDaEspera({
         <DialogTitle>Vendas em espera</DialogTitle>
         <DialogDescription>Ao retomar, os preços e o estoque são os de agora.</DialogDescription>
       </DialogHeader>
+
+      {aviso && (
+        <p role="status" className="rounded-md bg-muted/60 px-3 py-2 text-sm">
+          {aviso}
+        </p>
+      )}
 
       {pergunta ? (
         <div className="space-y-4">
@@ -59,18 +63,28 @@ function ConteudoDaEspera({
               : 'Os itens desta venda saem da espera e não podem ser recuperados.'}
           </p>
           <DialogFooter>
-            <Button type="button" variant="outline" className="min-h-11" onClick={() => setPergunta(null)}>
+            <Button
+              ref={voltarRef}
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              // Descartar nao tem volta: o foco fica no caminho seguro.
+              autoFocus={pergunta.tipo === 'DESCARTAR'}
+              onClick={() => setPergunta(null)}
+            >
               Voltar
             </Button>
             <Button
               type="button"
-              autoFocus
+              variant={pergunta.tipo === 'DESCARTAR' ? 'destructive' : 'default'}
+              autoFocus={pergunta.tipo === 'RETOMAR'}
               className="min-h-11"
               onClick={() => {
                 if (pergunta.tipo === 'RETOMAR') {
                   aoRetomar(pergunta.id, true)
                 } else {
                   aoDescartar(pergunta.id)
+                  setAviso('Venda em espera descartada.')
                 }
                 setPergunta(null)
               }}
@@ -90,8 +104,8 @@ function ConteudoDaEspera({
           {vendas.map((venda) => (
             <li key={venda.id} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
               <span className="w-12 text-muted-foreground tabular-nums">{formatarHora(venda.criadaEm)}</span>
-              <span>{textoDosItens(venda.itens)}</span>
-              <span className="ml-auto font-semibold tabular-nums">{venda.total === null ? '—' : formatarReais(venda.total)}</span>
+              <span className="min-w-0 flex-1 truncate">{descricaoDaVendaEmEspera(venda)}</span>
+              <span className="font-semibold tabular-nums">{venda.total === null ? '—' : formatarReais(venda.total)}</span>
               <Button
                 type="button"
                 className="h-11 md:h-9"
@@ -103,7 +117,10 @@ function ConteudoDaEspera({
                 type="button"
                 variant="ghost"
                 className="h-11 md:h-9"
-                onClick={() => setPergunta({ tipo: 'DESCARTAR', id: venda.id })}
+                onClick={() => {
+                  setAviso(null)
+                  setPergunta({ tipo: 'DESCARTAR', id: venda.id })
+                }}
               >
                 Descartar
               </Button>

@@ -50,6 +50,7 @@ const bipeMock = vi.mocked(tocarBipeDeErro)
 
 const EMPRESA = 3
 const TEMPO_PADRAO = LIMITES_DA_LEITURA.tempoMaximoMs
+const TEMPO_DO_ERRO_PADRAO = LIMITES_DA_LEITURA.tempoDoErroMs
 const USUARIO = 7
 
 function definirUsuario(perfil: 'ADMIN' | 'OPERADOR' = 'OPERADOR') {
@@ -191,14 +192,57 @@ describe('PdvPage', () => {
 
       const entrada = await campo()
       await waitFor(() => expect(entrada).toHaveAttribute('aria-invalid', 'true'))
-      expect(entrada).toHaveAccessibleDescription('Código não encontrado.')
+      expect(entrada).toHaveAccessibleDescription('Código 123 não encontrado.')
       expect(bipeMock).toHaveBeenCalledTimes(1)
       expect(linhas()).toHaveLength(0)
       expect(calcularMock).not.toHaveBeenCalled()
 
-      // Digitar de novo limpa o erro.
-      fireEvent.change(entrada, { target: { value: '5' } })
+      // O erro fica mesmo com outra leitura certa (UX 1); Esc limpa.
+      await ler('542')
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+      expect(entrada).toHaveAttribute('aria-invalid', 'true')
+      fireEvent.keyDown(entrada, { key: 'Escape' })
       expect(entrada).not.toHaveAttribute('aria-invalid')
+    })
+
+    it('o erro da leitura some sozinho depois de alguns segundos', async () => {
+      LIMITES_DA_LEITURA.tempoDoErroMs = 50
+      try {
+        renderPdv()
+        await ler('123')
+        expect(await screen.findByText('Código 123 não encontrado.')).toBeInTheDocument()
+
+        await waitFor(() => expect(screen.queryByText('Código 123 não encontrado.')).not.toBeInTheDocument())
+      } finally {
+        LIMITES_DA_LEITURA.tempoDoErroMs = TEMPO_DO_ERRO_PADRAO
+      }
+    })
+
+    it('os atalhos da linha ficam escritos sob o campo', async () => {
+      renderPdv()
+      expect(await screen.findByText('↑ ↓ escolhe a linha · + − quantidade · Del remove')).toBeInTheDocument()
+    })
+
+    it('quantidade fracionada sempre com 3 casas', async () => {
+      renderPdv()
+      await ler('2000077010000')
+
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+      expect(linhas()[0]).toHaveTextContent('0,400')
+    })
+
+    it('o destaque da linha repete a cada lançamento, inclusive quando soma na mesma linha', async () => {
+      renderPdv()
+      await ler('542')
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+      const primeiro = linhas()[0].querySelector('[data-destaque]')?.getAttribute('data-destaque')
+
+      await ler('542')
+
+      await waitFor(() =>
+        expect(linhas()[0].querySelector('[data-destaque]')?.getAttribute('data-destaque')).not.toBe(primeiro),
+      )
+      expect(linhas()[0].querySelector('[data-destaque]')).toHaveClass('motion-safe:animate-[pulse_0.6s_ease-out_1]')
     })
 
     it('produto inativo: a mensagem do servidor no campo', async () => {
@@ -296,6 +340,13 @@ describe('PdvPage', () => {
       await tecla('Delete')
       await waitFor(() => expect(linhas()).toHaveLength(1))
       expect(linhas()[0]).toHaveTextContent('Ração X 1kg')
+
+      // UX 2: o aviso com Desfazer devolve a linha.
+      const aviso = screen.getByText('Nexgard M removido da venda.')
+      fireEvent.click(within(aviso.parentElement as HTMLElement).getByRole('button', { name: 'Desfazer' }))
+      await waitFor(() => expect(linhas()).toHaveLength(2))
+      expect(linhas()[1]).toHaveTextContent('Nexgard M')
+      expect(screen.queryByText('Nexgard M removido da venda.')).not.toBeInTheDocument()
     })
 
     it('Del numa linha com desconto pede confirmação', async () => {
@@ -330,6 +381,10 @@ describe('PdvPage', () => {
 
       await tecla('F4', { shiftKey: true })
       const desconto = await screen.findByRole('dialog', { name: 'Desconto da venda' })
+      // UX 11: para o OPERADOR, o limite; e "Voltar" no lugar de "Cancelar".
+      expect(desconto).toHaveAccessibleDescription(expect.stringContaining('Seu limite: até 10% da venda.'))
+      expect(within(desconto).getByRole('button', { name: 'Voltar' })).toBeInTheDocument()
+      expect(within(desconto).queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument()
       const valor = within(desconto).getByLabelText('Desconto (R$)')
       fireEvent.change(valor, { target: { value: '2,00' } })
       fireEvent.submit(valor.closest('form') as HTMLFormElement)
@@ -338,7 +393,7 @@ describe('PdvPage', () => {
       await tecla('F3')
       const cliente = await screen.findByRole('dialog', { name: 'Cliente da venda' })
       fireEvent.change(within(cliente).getByLabelText('Nome, CPF ou telefone'), { target: { value: 'Maria' } })
-      fireEvent.click(await within(cliente).findByRole('button', { name: /Maria Silva/ }))
+      fireEvent.click(await within(cliente).findByRole('option', { name: /Maria Silva/ }))
 
       await waitFor(() => expect(ultimoCarrinho().clienteId).toBe('c-1'))
       expect(listarClientesMock).toHaveBeenCalledWith({ busca: 'Maria', status: 'ativos' })
@@ -485,6 +540,24 @@ describe('PdvPage', () => {
 
       expect(await screen.findByRole('dialog', { name: 'Abrir o Caixa 1' })).toBeInTheDocument()
       expect(screen.queryByLabelText('Código ou nome')).not.toBeInTheDocument()
+      // UX 13: sem carrinho guardado, sem a frase.
+      expect(screen.queryByText('A venda em andamento continua guardada neste navegador.')).not.toBeInTheDocument()
+    })
+
+    it('sem caixa aberto, com carrinho guardado: avisa que a venda continua guardada', async () => {
+      sessaoAtualMock.mockResolvedValue(null)
+      listarPontosMock.mockResolvedValue([pontoDeTeste()])
+      localStorage.setItem(
+        chaveDoCarrinho(EMPRESA, USUARIO),
+        guardarCarrinho(
+          { linhas: [{ id: 'l', produto: RACAO, embalagemId: null, quantidade: 1, codigoLido: '542', etiqueta: false, desconto: null }], desconto: null, cliente: null },
+          EMPRESA,
+          USUARIO,
+        ),
+      )
+      renderPdv()
+
+      expect(await screen.findByText('A venda em andamento continua guardada neste navegador.')).toBeInTheDocument()
     })
 
     it('em conferência: "Termine o fechamento do caixa." com o link para o Caixa', async () => {
@@ -565,6 +638,94 @@ describe('PdvPage', () => {
 
       expect(sinais[0].aborted).toBe(true)
     })
+  })
+
+  describe('falhas do cálculo (S1)', () => {
+    it.each([
+      [new HttpError(503, 'Requisicao falhou (HTTP 503).'), 'O servidor não conseguiu calcular a venda. Tente de novo.'],
+      [new HttpError(403, 'Requisicao falhou (HTTP 403).'), 'Você não tem permissão para calcular esta venda.'],
+      [new HttpError(401, 'Nao autorizado.'), 'Sua sessão expirou. Entre de novo.'],
+      [new HttpError(0, 'Nao foi possivel conectar ao servidor.'), 'Não foi possível calcular a venda. Confira a conexão.'],
+    ])('%s mostra a mensagem certa', async (falha, mensagem) => {
+      calcularMock.mockRejectedValue(falha)
+      renderPdv()
+      await ler('542')
+
+      expect(await screen.findByText(mensagem)).toBeInTheDocument()
+    })
+
+    it('"Tentar de novo" limpa a falha antes de calcular de novo', async () => {
+      calcularMock.mockRejectedValueOnce(new HttpError(503, 'Requisicao falhou (HTTP 503).'))
+      renderPdv()
+      await ler('542')
+      await screen.findByText('O servidor não conseguiu calcular a venda. Tente de novo.')
+      calcularMock.mockImplementation(() => new Promise(() => undefined))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }))
+
+      await waitFor(() =>
+        expect(screen.queryByText('O servidor não conseguiu calcular a venda. Tente de novo.')).not.toBeInTheDocument(),
+      )
+      expect(screen.getByText('Calculando')).toBeInTheDocument()
+    })
+  })
+
+  it('erros das linhas: na própria linha (sem aria-invalid no item) e numa região viva', async () => {
+    calcularMock.mockImplementation(async (carrinho) =>
+      calculoFalso(carrinho, { erros: [{ campo: 'itens[0]', mensagem: 'O desconto deixa Ração X 1kg abaixo do preço mínimo.' }] }),
+    )
+    renderPdv()
+    await ler('542')
+
+    await waitFor(() => expect(within(linhas()[0]).getByText('O desconto deixa Ração X 1kg abaixo do preço mínimo.')).toBeInTheDocument())
+    expect(linhas()[0]).not.toHaveAttribute('aria-invalid')
+    expect(linhas()[0]).toHaveAccessibleDescription('O desconto deixa Ração X 1kg abaixo do preço mínimo.')
+    expect(within(linhas()[0]).getByText('com erro')).toHaveClass('sr-only')
+    expect(screen.getByRole('alert', { name: 'Erros dos itens' })).toHaveTextContent(
+      'Item 1: O desconto deixa Ração X 1kg abaixo do preço mínimo.',
+    )
+  })
+
+  it('a busca ignora o Enter enquanto o termo digitado ainda não foi buscado (S4)', async () => {
+    buscarProdutosMock.mockImplementation(async (texto) =>
+      texto === 'ração' ? [{ ...RACAO, precoVigente: 24.9 }] : [{ ...NEXGARD, precoVigente: 89.9 }],
+    )
+    renderPdv()
+    await ler('ração')
+    const janela = await screen.findByRole('dialog', { name: 'Buscar produto' })
+    const busca = within(janela).getByLabelText('Nome do produto')
+    await within(janela).findByRole('option', { name: /Ração X 1kg/ })
+
+    fireEvent.change(busca, { target: { value: 'nexgard' } })
+    fireEvent.keyDown(busca, { key: 'Enter' })
+
+    // O Enter não lançou a ração da busca anterior.
+    expect(screen.getByRole('dialog', { name: 'Buscar produto' })).toBeInTheDocument()
+    expect(await within(janela).findByRole('option', { name: /Nexgard M/ })).toBeInTheDocument()
+    fireEvent.keyDown(busca, { key: 'Enter' })
+    await waitFor(() => expect(linhas()).toHaveLength(1))
+    expect(linhas()[0]).toHaveTextContent('Nexgard M')
+  })
+
+  it('o cliente usa setas, destaque e Enter, como a busca de produto', async () => {
+    listarClientesMock.mockResolvedValue([
+      { id: 'c-1', numero: 1, nome: 'Maria Silva', cpf: null, telefone: null } as Cliente,
+      { id: 'c-2', numero: 2, nome: 'Mariana Lopes', cpf: null, telefone: null } as Cliente,
+    ])
+    renderPdv()
+    await ler('542')
+    await waitFor(() => expect(linhas()).toHaveLength(1))
+    await tecla('F3')
+    const janela = await screen.findByRole('dialog', { name: 'Cliente da venda' })
+    const campoDoCliente = within(janela).getByLabelText('Nome, CPF ou telefone')
+    fireEvent.change(campoDoCliente, { target: { value: 'Mari' } })
+    expect(await within(janela).findByRole('option', { name: /Maria Silva/ })).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.keyDown(campoDoCliente, { key: 'ArrowDown' })
+    expect(within(janela).getByRole('option', { name: /Mariana Lopes/ })).toHaveAttribute('aria-selected', 'true')
+    fireEvent.keyDown(campoDoCliente, { key: 'Enter' })
+
+    await waitFor(() => expect(screen.getByLabelText('Cliente')).toHaveTextContent('Mariana Lopes'))
   })
 
   describe('total sempre da venda atual (I2)', () => {

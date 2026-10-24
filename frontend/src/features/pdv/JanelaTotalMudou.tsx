@@ -13,6 +13,8 @@ export interface JanelaTotalMudouProps {
   enviando: boolean
   aoConfirmar: (novoTotal: number) => void
   aoVoltar: () => void
+  /** O pagamento nao cobre o novo total: fecha so esta janela e mantem as formas lancadas. */
+  aoAjustar: () => void
 }
 
 /**
@@ -20,7 +22,7 @@ export interface JanelaTotalMudouProps {
  * entre o calculo e o finalizar. Mostra o total anterior e o novo; confirmar
  * reenvia a venda com o novo total e a mesma chave.
  */
-export function JanelaTotalMudou({ anterior, novo, enviando, aoConfirmar, aoVoltar }: JanelaTotalMudouProps) {
+export function JanelaTotalMudou({ anterior, novo, enviando, aoConfirmar, aoVoltar, aoAjustar }: JanelaTotalMudouProps) {
   const naoCobre = novo !== null && novo.faltaPagar > 0
   const podeConfirmar = novo !== null && !naoCobre && novo.erros.length === 0 && !enviando
   return (
@@ -59,6 +61,11 @@ export function JanelaTotalMudou({ anterior, novo, enviando, aoConfirmar, aoVolt
             <Button type="button" variant="outline" className="min-h-11" onClick={aoVoltar} disabled={enviando}>
               Voltar à venda
             </Button>
+            {naoCobre && (
+              <Button type="button" variant="outline" className="min-h-11" onClick={aoAjustar} disabled={enviando}>
+                Ajustar pagamento
+              </Button>
+            )}
             <Button
               type="button"
               className="min-h-11"

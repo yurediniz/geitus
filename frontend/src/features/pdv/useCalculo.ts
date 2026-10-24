@@ -11,7 +11,12 @@ import type { CalculoDaVenda, CarrinhoRequest, MensagemDoCalculo, PagamentoInfor
 export const ATRASO_DO_CALCULO_MS = 150
 
 const SEM_PAGAMENTOS: readonly PagamentoInformado[] = []
-const FALHA_DE_REDE = 'Não foi possível calcular a venda. Confira a conexão.'
+
+/** As falhas sem calculo, cada uma com a sua mensagem (S1). */
+const MENSAGEM_REDE = 'Não foi possível calcular a venda. Confira a conexão.'
+const MENSAGEM_SESSAO = 'Sua sessão expirou. Entre de novo.'
+const MENSAGEM_PERMISSAO = 'Você não tem permissão para calcular esta venda.'
+const MENSAGEM_SERVIDOR = 'O servidor não conseguiu calcular a venda. Tente de novo.'
 
 interface Pedido {
   carrinho: CarrinhoRequest
@@ -29,12 +34,12 @@ interface Falha {
   assinatura: string
   /** 404/409: produto, embalagem ou cliente que nao existe mais ou foi inativado (com o campo). */
   mensagens: MensagemDoCalculo[]
-  /** Sem resposta do servidor: o calculo e pedido de novo por `recalcular`. */
-  deRede: boolean
+  /** Sem calculo (rede, sessao, permissao, servidor): a mensagem e `recalcular` tenta de novo. */
+  semCalculo: string | null
 }
 
 export interface EstadoDoCalculo {
-  /** O ultimo calculo recebido (pode ser de um carrinho anterior, enquanto o novo e calculado). */
+  /** O ultimo calculo desta venda (pode ser de um carrinho anterior dela, enquanto o novo e calculado). */
   calculo: CalculoDaVenda | null
   /** A ordem das linhas do `calculo` exibido. */
   idsDoCalculo: string[]
@@ -44,9 +49,22 @@ export interface EstadoDoCalculo {
   /** Erros de dados (404/409) do ultimo envio, no formato das mensagens do calculo. */
   errosDosDados: MensagemDoCalculo[]
   idsDosErros: string[]
-  /** Mensagem de falha sem resposta (rede). */
-  falhaDeRede: string | null
+  /** Mensagem da falha sem calculo (rede, sessao, permissao, servidor). */
+  falhaDoCalculo: string | null
   recalcular: () => void
+}
+
+function mensagemSemCalculo(erro: unknown): string {
+  if (!(erro instanceof HttpError) || erro.status === 0) {
+    return MENSAGEM_REDE
+  }
+  if (erro.status === 401) {
+    return MENSAGEM_SESSAO
+  }
+  if (erro.status === 403) {
+    return MENSAGEM_PERMISSAO
+  }
+  return erro.status >= 500 ? MENSAGEM_SERVIDOR : MENSAGEM_REDE
 }
 
 function falhaDe(erro: unknown, assinatura: string): Falha {
@@ -55,18 +73,27 @@ function falhaDe(erro: unknown, assinatura: string): Falha {
     if (mensagens.length === 0 && !ehMensagemGenerica(erro.message)) {
       mensagens.push({ campo: null, mensagem: erro.message })
     }
-    return { assinatura, mensagens, deRede: false }
+    return { assinatura, mensagens, semCalculo: null }
   }
-  return { assinatura, mensagens: [], deRede: true }
+  return { assinatura, mensagens: [], semCalculo: mensagemSemCalculo(erro) }
+}
+
+export interface OpcoesDoCalculo {
+  /** Desligado, nao pede calculo (ex.: a janela de pagamento sem pagamentos usa o calculo da tela). */
+  ativo?: boolean
 }
 
 /**
  * O calculo do servidor para o carrinho (spec do PDV §6.2): cada mudanca pede
  * `POST /api/pdv/calculo` depois de 150 ms sem mudar, e o pedido anterior e
- * cancelado (Review Focus 1). Enquanto calcula, o ultimo resultado continua
- * na tela. A tela mostra sempre o calculo do servidor.
+ * cancelado (Review Focus 1). Enquanto calcula, so o ultimo resultado da mesma
+ * venda continua na tela (nunca o de outra). A tela mostra sempre o calculo do servidor.
  */
-export function useCalculo(carrinho: Carrinho, pagamentos: readonly PagamentoInformado[] = SEM_PAGAMENTOS): EstadoDoCalculo {
+export function useCalculo(
+  carrinho: Carrinho,
+  pagamentos: readonly PagamentoInformado[] = SEM_PAGAMENTOS,
+  { ativo = true }: OpcoesDoCalculo = {},
+): EstadoDoCalculo {
   const assinatura = useMemo(() => {
     const pedido: Pedido = { carrinho: paraRequest(carrinho, pagamentos), ids: carrinho.linhas.map((linha) => linha.id) }
     return JSON.stringify(pedido)
@@ -81,6 +108,9 @@ export function useCalculo(carrinho: Carrinho, pagamentos: readonly PagamentoInf
       // Venda nova: o calculo da anterior nao pode aparecer nela.
       setResposta(null)
       setFalha(null)
+      return
+    }
+    if (!ativo) {
       return
     }
     const pedido = JSON.parse(assinatura) as Pedido
@@ -104,9 +134,13 @@ export function useCalculo(carrinho: Carrinho, pagamentos: readonly PagamentoInf
       // O carrinho mudou (ou a tela saiu): o pedido em andamento nao serve mais.
       controle.abort()
     }
-  }, [assinatura, vazio, tentativa])
+  }, [assinatura, vazio, ativo, tentativa])
 
-  const recalcular = useCallback(() => setTentativa((atual) => atual + 1), [])
+  const recalcular = useCallback(() => {
+    // A falha sai da tela antes da nova tentativa (que mostra "Calculando").
+    setFalha(null)
+    setTentativa((atual) => atual + 1)
+  }, [])
 
   const falhaAtual = falha?.assinatura === assinatura ? falha : null
   const atualizado = resposta?.assinatura === assinatura
@@ -117,10 +151,10 @@ export function useCalculo(carrinho: Carrinho, pagamentos: readonly PagamentoInf
     calculo: exibida?.calculo ?? null,
     idsDoCalculo: exibida?.ids ?? [],
     atualizado: vazio || atualizado,
-    calculando: !vazio && !atualizado && falhaAtual === null,
+    calculando: ativo && !vazio && !atualizado && falhaAtual === null,
     errosDosDados: falhaAtual?.mensagens ?? [],
     idsDosErros: falhaAtual ? (JSON.parse(falhaAtual.assinatura) as Pedido).ids : [],
-    falhaDeRede: falhaAtual?.deRede ? FALHA_DE_REDE : null,
+    falhaDoCalculo: falhaAtual?.semCalculo ?? null,
     recalcular,
   }
 }

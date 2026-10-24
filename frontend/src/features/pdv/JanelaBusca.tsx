@@ -45,6 +45,8 @@ function ConteudoDaBusca({ textoInicial, aoEscolher }: { textoInicial: string; a
     enabled: atrasado !== '',
   })
   const produtos = atrasado === '' ? [] : (consulta.data ?? [])
+  // Enter so escolhe o resultado do termo digitado: com o termo ainda sem busca (ou buscando), nada acontece.
+  const resultadosDoTermo = texto.trim() === atrasado && !consulta.isFetching
   const indiceAtivo = Math.min(ativo, Math.max(0, produtos.length - 1))
   const idDaOpcao = (indice: number) => `${idLista}-${indice}`
 
@@ -83,7 +85,7 @@ function ConteudoDaBusca({ textoInicial, aoEscolher }: { textoInicial: string; a
                 setAtivo(Math.max(indiceAtivo - 1, 0))
               } else if (event.key === 'Enter') {
                 event.preventDefault()
-                const escolhido = produtos[indiceAtivo]
+                const escolhido = resultadosDoTermo ? produtos[indiceAtivo] : undefined
                 if (escolhido) {
                   aoEscolher(escolhido)
                 }
@@ -104,7 +106,7 @@ function ConteudoDaBusca({ textoInicial, aoEscolher }: { textoInicial: string; a
       ) : consulta.isError ? (
         <div className="space-y-2">
           <ErroInline mensagem="Não foi possível buscar os produtos." />
-          <Button type="button" variant="outline" className="h-11 md:h-9" onClick={() => consulta.refetch()}>
+          <Button type="button" variant="outline" className="h-11" onClick={() => consulta.refetch()}>
             Tentar de novo
           </Button>
         </div>

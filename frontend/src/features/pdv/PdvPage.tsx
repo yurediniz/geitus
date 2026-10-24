@@ -7,6 +7,7 @@ import { CAIXA_QUERY_KEY, CHAVE_DA_SESSAO_ATUAL } from '@/features/cash-register
 import { CarregandoCaixa, ErroAoCarregar } from '@/features/cash-register/EstadosDoCaixa'
 import { PontosParaAbrir } from '@/features/cash-register/PontosParaAbrir'
 import { FeedbackCatalogo } from '@/features/catalog/FeedbackCatalogo'
+import { chaveDoCarrinho, lerCarrinhoGuardado } from '@/features/pdv/carrinho'
 import { CHAVE_DA_CONFIGURACAO_DO_PDV } from '@/features/pdv/pdvQuery'
 import { TelaDeVenda } from '@/features/pdv/TelaDeVenda'
 import { useAuth } from '@/hooks/useAuth'
@@ -14,6 +15,16 @@ import { useFeedbackDaTela } from '@/hooks/useFeedbackDaTela'
 import { sessaoAtual } from '@/services/caixaService'
 import { buscar as buscarConfiguracao } from '@/services/configuracaoPdvService'
 import type { SessaoDeCaixa } from '@/types/caixa'
+
+/** Se ha uma venda em andamento guardada neste navegador para a empresa e o usuario. */
+function temVendaGuardada(empresaId: number, usuarioId: number): boolean {
+  try {
+    const texto = localStorage.getItem(chaveDoCarrinho(empresaId, usuarioId))
+    return lerCarrinhoGuardado(texto, empresaId, usuarioId).linhas.length > 0
+  } catch {
+    return false
+  }
+}
 
 /**
  * Tela do PDV (/pdv, spec `docs/modules/pdv.md` §6.2). Sem caixa aberto,
@@ -51,7 +62,9 @@ export function PdvPage() {
               <h2 id="pdv-sem-caixa" className="font-display text-xl font-semibold">
                 Abra o caixa para vender.
               </h2>
-              <p className="text-sm text-muted-foreground">A venda em andamento continua guardada neste navegador.</p>
+              {temVendaGuardada(usuario.empresa.id, usuario.id) && (
+                <p className="text-sm text-muted-foreground">A venda em andamento continua guardada neste navegador.</p>
+              )}
             </div>
           </div>
           <PontosParaAbrir

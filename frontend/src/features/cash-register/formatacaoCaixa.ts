@@ -170,26 +170,43 @@ export function formasComDiferenca(porForma: readonly ValoresPorForma[]): FormaD
     .map((valores) => valores.forma)
 }
 
+/** "falta de R$ 2,00" ou "sobra de R$ 2,00". */
+function textoDaSobraOuFalta(centavos: number): string {
+  return `${centavos > 0 ? 'sobra' : 'falta'} de ${formatarReais(Math.abs(centavos) / 100)}`
+}
+
 /**
- * "Caixa 2 fechado", "Caixa 2 fechado com falta de R$ 2,00" / "com sobra de
- * R$ 2,00"; com diferenca em outra forma, "... com diferença em Débito" (ou
- * "... com falta de R$ 2,00 e diferença em Débito").
+ * A mensagem do fechamento:
+ * - so com o dinheiro na sessao: "Caixa 2 fechado" ou "Caixa 2 fechado com falta de R$ 2,00";
+ * - com mais formas, nomeia cada uma: "... com falta de R$ 2,00 no Débito" ou
+ *   "... com falta de R$ 2,00 no Dinheiro e sobra de R$ 1,00 no PIX";
+ * - com 3 ou mais formas com diferenca: "... com diferença em Débito, Crédito e PIX. Veja o resumo."
  */
 export function mensagemDoFechamento(
   nomeDoPonto: string,
   diferenca: number | null,
   porForma: readonly ValoresPorForma[] = [],
 ): string {
-  const centavos = diferenca === null ? 0 : emCentavos(diferenca)
-  const partes: string[] = []
-  if (centavos !== 0) {
-    partes.push(`${centavos > 0 ? 'sobra' : 'falta'} de ${formatarReais(Math.abs(centavos) / 100)}`)
+  const centavosDoDinheiro = diferenca === null ? 0 : emCentavos(diferenca)
+  if (porForma.length <= 1) {
+    return centavosDoDinheiro === 0 ? `${nomeDoPonto} fechado` : `${nomeDoPonto} fechado com ${textoDaSobraOuFalta(centavosDoDinheiro)}`
   }
-  const outras = formasComDiferenca(porForma).map((forma) => ROTULO_DA_FORMA[forma])
-  if (outras.length > 0) {
-    partes.push(`diferença em ${juntarNomes(outras)}`)
+  const comDiferenca: { forma: FormaDePagamento; centavos: number }[] = []
+  if (centavosDoDinheiro !== 0) {
+    comDiferenca.push({ forma: 'DINHEIRO', centavos: centavosDoDinheiro })
   }
-  return partes.length === 0 ? `${nomeDoPonto} fechado` : `${nomeDoPonto} fechado com ${partes.join(' e ')}`
+  for (const forma of formasComDiferenca(porForma)) {
+    const valores = porForma.find((item) => item.forma === forma)
+    comDiferenca.push({ forma, centavos: emCentavos(valores?.diferenca ?? 0) })
+  }
+  if (comDiferenca.length === 0) {
+    return `${nomeDoPonto} fechado`
+  }
+  if (comDiferenca.length >= 3) {
+    return `${nomeDoPonto} fechado com diferença em ${juntarNomes(comDiferenca.map(({ forma }) => ROTULO_DA_FORMA[forma]))}. Veja o resumo.`
+  }
+  const partes = comDiferenca.map(({ forma, centavos }) => `${textoDaSobraOuFalta(centavos)} no ${ROTULO_DA_FORMA[forma]}`)
+  return `${nomeDoPonto} fechado com ${partes.join(' e ')}`
 }
 
 export const ROTULO_DA_FORMA: Readonly<Record<FormaDePagamento, string>> = {
