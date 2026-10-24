@@ -97,7 +97,7 @@
   - `Marca implements NoDaArvore`;
   - `Fornecedor`: campos da spec §4.1, `numero`, `representantes` (`@OneToMany`, cascade, `orphanRemoval`, `@OrderBy("ordem")`) e `marcas` (`@ManyToMany` em `fornecedor_marcas`);
   - `ProdutoFornecedor(empresa, produto, fornecedorId)`. O catalog guarda o id do fornecedor, sem `@ManyToOne` para `supplier`, para não criar dependência de pacote. O nome vem pela interface da Task 5.
-- **V14:** exatamente a spec §7, inclusive a ordem da migração do texto.
+- **V14:** exatamente a spec §7, inclusive a ordem da migração do texto, mais a coluna `fornecedores.busca_normalizada TEXT COLLATE "C" NOT NULL` (Task 4), preenchida na migração com o nome normalizado como na V10.
   - Ponto de atenção para a FK composta `produtos (empresa_id, id, fornecedor_ultima_compra_id) → produto_fornecedores`: excluir o produto apaga as ligações em cascata enquanto a linha do produto ainda as referencia. Confirme no IT que a exclusão física de um produto **com** o último fornecedor funciona. Se não funcionar, use `DEFERRABLE INITIALLY DEFERRED` nessa FK.
 
 - [ ] Escrever `MigracaoV14IT`:
@@ -129,7 +129,7 @@
 **Interfaces:**
 - **Produces:**
   - `/api/marcas`, com a resposta da spec §3.2;
-  - `MarcaService.renomear(...)` atualiza `busca_normalizada` dos produtos da marca com **um** `UPDATE` em lote (Review Focus 3). O texto do produto é recalculado por `TextoDeBusca.textoDoProduto(nome, nomeCurto, sku, nomeDaMarca)`: no plano, ler os produtos da marca e gravar em lote, ou fazer um `UPDATE` com a função equivalente; escolher e testar.
+  - `MarcaService.renomear(...)` atualiza `busca_normalizada` dos produtos da marca com **um** `UPDATE` em lote (Review Focus 3). O texto do produto é recalculado em Java por `TextoDeBusca.textoDoProduto(nome, nomeCurto, sku, nomeDaMarca)`: os produtos da marca são lidos numa consulta só e gravados com `batchUpdate` do `NamedParameterJdbcTemplate`, sem carregar entidades, na transação do renomear.
 - **Exclusão:** conta submarcas, produtos **e fornecedores** (`fornecedor_marcas`) e dá 409 com a mensagem da spec §3.1.
 
 - [ ] Testes:
@@ -159,7 +159,7 @@
 - **Produces:**
   - os endpoints da spec §4.7, com request, response e item da listagem exatamente como na spec;
   - campos de erro: `razaoSocial`, `documento`, `inscricaoEstadual`, `cep`, `uf`, `email`, `telefone`, `representantes[j].nome`, `representantes` e `marcaIds`;
-  - busca sem acento por nome, fantasia, documento (só dígitos do termo), Nº (termo numérico) e nome do representante. Use uma coluna normalizada `busca_normalizada` em `fornecedores`, se a V14 a criar; senão, `EXISTS` nos representantes. Decida junto com a V14 da Task 2 e documente no javadoc.
+  - busca sem acento por nome, fantasia, documento (só dígitos do termo), Nº (termo numérico) e nome do representante. Use a coluna `fornecedores.busca_normalizada TEXT COLLATE "C" NOT NULL`, criada pela V14 (Task 2) e calculada em Java a cada gravação (razão social, nome fantasia e nomes dos representantes, normalizados com `TextoDeBusca`). O documento e o Nº são comparados nas próprias colunas.
 - **Exclusão:** 409 com a mensagem da spec §4.5, com as contagens de produtos (pela interface) e de movimentos (pela consulta ao inventory, também por interface do inventory ou do catalog).
 
 - [ ] Testes:
