@@ -885,3 +885,68 @@ Dois produtos sincronizados gerariam estoque fracionado, dois saldos e relatóri
 - O PDV lança a embalagem pelo código de barras, aceita linhas de embalagens diferentes na mesma venda e guarda o retrato da embalagem no item.
 - A regra para remover uma embalagem já vendida é decidida no PDV.
 - Promoção e atacado próprios da embalagem e embalagem inativa ficam para depois.
+
+## DEC-038 — Custo obrigatório na entrada por compra; custo do produto é o último de entrada (Fase B4)
+
+**Data:** 2026-10-24
+**Status:** Aceita
+**Contexto:**
+A entrada de estoque por compra gravava só a quantidade, e o custo do produto era digitado à parte, ficando desatualizado. O usuário pediu que a entrada por compra exija o custo, que ele atualize o custo do produto, e que a tela e o histórico mostrem a origem do custo (entrada ou edição manual).
+
+**Decisão:**
+- **Custo exigido:** na entrada manual com motivo Compra, maior que zero. Em embalagem, é o custo de 1 embalagem, como na nota; o custo por unidade é a divisão, com 4 casas no movimento.
+- **Custo do produto:** passa a ser o **último custo de entrada**, por unidade e arredondado a centavos, gravado na mesma transação do movimento. Não há custo médio.
+- **Origem no produto:** o produto guarda a origem do custo atual (`ENTRADA_COMPRA` ou `EDICAO`) e a data. A tela mostra "Último custo de entrada …" ou "Custo editado manualmente em …".
+- **Histórico de preços:** as linhas de custo ganham a origem e, na compra, a ligação com o movimento.
+- **Campo vazio:** o custo começa vazio no modal, com a dica do último custo, para obrigar a conferência com a nota.
+- **Migration V13:** a obrigação "compra exige custo" fica na aplicação, porque os movimentos antigos não têm custo e são imutáveis.
+
+**Motivo:**
+Decisões do usuário em conversa: o custo é o último preço de entrada e, em embalagem, digita-se o custo da caixa.
+
+**Impacto:**
+- O ajuste de estoque ganha `custo`; o movimento ganha `custoInformado` e `custoUnitario`.
+- O produto ganha `custoOrigem`; o histórico ganha `origem` e `entrada`.
+- Spec: `docs/modules/produtos-custo-entrada.md`.
+- Revisor obrigatório: `data-reviewer` (V13).
+
+**Observações futuras:**
+- A Fase B5 acrescenta o fornecedor na entrada por compra.
+- Compras (NF-e) reaproveita a regra do custo de entrada.
+
+## DEC-039 — Cadastros de Fornecedores e de Fabricantes/Marcas (Fase B5; amplia o escopo do MVP de Produtos)
+
+**Data:** 2026-10-24
+**Status:** Aceita
+**Contexto:**
+Marca e "Fornecedor principal" eram texto livre no produto. O usuário pediu duas abas novas em Produtos:
+- **Fornecedores:** os dados do emitente da NF-e, representantes de venda, e as marcas e os produtos que cada um vende;
+- **Fabricantes/Marcas:** com a mesma lógica das Categorias.
+
+**Decisão:**
+- **Marcas:** árvore livre igual à de Categorias (o primeiro nível costuma ser o fabricante). O produto aponta para qualquer nível (`marca_id`). As marcas em texto viram itens na raiz.
+- **Fornecedores:**
+  - cadastro com só a razão social/nome obrigatória;
+  - CNPJ/CPF validado e único quando informado, IE (ou ISENTO), endereço com busca de CEP, contato e Nº sequencial;
+  - até 10 representantes (nome, telefone e e-mail);
+  - até 200 marcas que vende;
+  - lista de produtos que vende.
+- **Fornecedores no produto:** o produto tem vários fornecedores (`produto_fornecedores`, a mesma lista vista dos dois lados), e um deles é o **"Fornecedor da última compra"**. Uma FK composta garante no banco que o último está na lista.
+- **Entrada por compra:** ganha o fornecedor opcional, que entra na lista do produto e vira o da última compra.
+- **Texto livre:** os campos de texto `marca` e `fornecedor` e as suas sugestões deixam de existir.
+- **Migration V14.**
+
+**Motivo:**
+Decisões do usuário em conversa: árvore livre, só o nome obrigatório e "Fornecedor da última compra" no lugar de "principal". Cadastrar uma vez e reutilizar (CLAUDE.md, Consistência) prepara a futura entrada de NF-e (Compras) sem implementá-la.
+
+**Impacto:**
+- **Escopo:** amplia o escopo do MVP de Produtos com o cadastro de fornecedores; Compras e NF-e continuam fora.
+- **Contrato do produto:** troca `marca` e `fornecedor` por `marcaId`, `fornecedorIds` e `fornecedorUltimaCompraId`.
+- **Endpoints novos:** `/api/marcas` e `/api/fornecedores`.
+- **Telas novas:** as abas Marcas e Fornecedores.
+- **Spec:** `docs/modules/fornecedores-e-marcas.md`.
+- **Revisores obrigatórios:** `data-reviewer` (V14 e migração do texto) e `security-reviewer` (dados de contato e documento, isolamento e perfis).
+
+**Observações futuras:**
+- **Compras:** importação de NF-e (cria ou atualiza o fornecedor pelo CNPJ), preço e código por fornecedor, e contas a pagar.
+- **Listagem de produtos:** filtro por marca e por fornecedor.
