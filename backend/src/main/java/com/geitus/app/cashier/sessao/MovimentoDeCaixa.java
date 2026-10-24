@@ -5,6 +5,8 @@ import java.time.OffsetDateTime;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.geitus.app.cashier.FormaDePagamento;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -42,6 +44,11 @@ public class MovimentoDeCaixa {
     @Column(nullable = false, length = 15, updatable = false)
     private TipoDeMovimentoDeCaixa tipo;
 
+    /** V17: a gaveta (abertura, suprimento e sangria) e sempre dinheiro. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10, updatable = false)
+    private FormaDePagamento forma;
+
     @Column(nullable = false, precision = 12, scale = 2, updatable = false)
     private BigDecimal valor;
 
@@ -70,6 +77,7 @@ public class MovimentoDeCaixa {
         this.empresaId = sessao.getEmpresaId();
         this.sessaoCaixaId = sessao.getId();
         this.tipo = lancamento.tipo();
+        this.forma = FormaDePagamento.DINHEIRO;
         this.valor = lancamento.valor();
         this.motivo = lancamento.motivo();
         this.usuarioId = usuarioId;
