@@ -262,11 +262,6 @@ function botaoSalvar(): HTMLElement {
   return screen.getByRole('button', { name: /^salvar$/i })
 }
 
-/** Campo do fator: o rotulo e dinamico ("Quantas UN vêm em 1 CX?"). */
-function campoFator(): HTMLElement {
-  return screen.getByLabelText(/^quantas .* vêm em 1 /i)
-}
-
 function rotulosDasOpcoes(select: HTMLElement): string[] {
   return within(select).getAllByRole('option').map((opcao) => opcao.textContent ?? '')
 }
@@ -278,8 +273,6 @@ const REQUEST_VAZIO: ProdutoRequest = {
   nomeCurto: null,
   unidadeId: 'un',
   categoriaId: null,
-  unidadeCompraId: null,
-  fatorConversao: null,
   marca: null,
   fornecedor: null,
   descricao: null,
@@ -294,6 +287,7 @@ const REQUEST_VAZIO: ProdutoRequest = {
   estoqueMaximo: null,
   pontoReposicao: null,
   codigosBarras: [],
+  embalagens: [],
   sku: null,
 }
 
@@ -456,7 +450,7 @@ describe('ProdutoPage', () => {
       expect(atalho(/preços/i)).toHaveAttribute('aria-current', 'true')
     })
 
-    it('distribui os campos pelas seções: Geral sem código de barras e Unidade e embalagem no Estoque', async () => {
+    it('distribui os campos pelas seções: Geral sem código de barras e o Estoque sem a unidade de compra', async () => {
       renderNovo()
       await esperarFormulario()
 
@@ -486,8 +480,9 @@ describe('ProdutoPage', () => {
       expect(within(estoque).getByLabelText(/estoque mínimo/i)).toBeInTheDocument()
       expect(within(estoque).getByLabelText(/ponto de reposição/i)).toBeInTheDocument()
       expect(within(estoque).getByLabelText(/estoque máximo/i)).toBeInTheDocument()
-      expect(within(estoque).getByRole('heading', { name: 'Unidade e embalagem' })).toBeInTheDocument()
-      expect(within(estoque).getByLabelText(/unidade de compra/i)).toBeInTheDocument()
+      // A unidade de compra virou a embalagem de compra (Fase B3).
+      expect(within(estoque).queryByRole('heading', { name: 'Unidade e embalagem' })).not.toBeInTheDocument()
+      expect(within(estoque).queryByLabelText(/unidade de compra/i)).not.toBeInTheDocument()
     })
 
     it('o Nº do produto fica na linha do título Geral, só na edição', async () => {
@@ -2210,7 +2205,7 @@ describe('ProdutoPage', () => {
     })
   })
 
-  describe('unidade, categoria e conversão de compra', () => {
+  describe('unidade e categoria', () => {
     it('o select de unidade de venda oferece só as unidades ativas no cadastro', async () => {
       renderNovo()
       await esperarFormulario()
@@ -2313,107 +2308,6 @@ describe('ProdutoPage', () => {
       })
     })
 
-    it('unidade de compra sem fator bloqueia o envio', async () => {
-      renderNovo()
-      await esperarFormulario()
-      await preencherMinimo()
-      fireEvent.change(screen.getByLabelText(/unidade de compra/i), { target: { value: 'cx' } })
-
-      fireEvent.click(botaoSalvar())
-
-      expect(await screen.findByText('Informe a unidade de compra e o fator de conversão juntos.')).toBeInTheDocument()
-      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
-    })
-
-    it('o fator fica oculto sem unidade de compra e é descartado ao limpar a compra', async () => {
-      cadastrarProdutoMock.mockResolvedValue(produtoAtivo)
-
-      renderNovo()
-      await esperarFormulario()
-      await preencherMinimo()
-      expect(screen.queryByLabelText(/^quantas/i)).not.toBeInTheDocument()
-
-      fireEvent.change(screen.getByLabelText(/unidade de compra/i), { target: { value: 'cx' } })
-      expect(screen.getByLabelText('Quantas UN vêm em 1 CX?')).toBeInTheDocument()
-      fireEvent.change(campoFator(), { target: { value: '12' } })
-
-      fireEvent.change(screen.getByLabelText(/unidade de compra/i), { target: { value: '' } })
-      expect(screen.queryByLabelText(/^quantas/i)).not.toBeInTheDocument()
-      fireEvent.click(botaoSalvar())
-
-      await waitFor(() => {
-        expect(cadastrarProdutoMock).toHaveBeenCalledWith(
-          expect.objectContaining({ unidadeCompraId: null, fatorConversao: null }),
-        )
-      })
-    })
-
-    it('fator precisa ser maior que zero', async () => {
-      renderNovo()
-      await esperarFormulario()
-      await preencherMinimo()
-      fireEvent.change(screen.getByLabelText(/unidade de compra/i), { target: { value: 'cx' } })
-      fireEvent.change(campoFator(), { target: { value: '0' } })
-
-      fireEvent.click(botaoSalvar())
-
-      expect(await screen.findByText('O fator de conversão deve ser maior que zero.')).toBeInTheDocument()
-      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
-    })
-
-    it('a unidade de venda não aparece como compra e trocar a venda para a da compra limpa a compra', async () => {
-      renderNovo()
-      await esperarFormulario()
-      await selecionarUnidadeVenda('un')
-      const compra = screen.getByLabelText(/unidade de compra/i)
-      expect(rotulosDasOpcoes(compra)).toEqual(['Mesma da venda', 'CX — Caixa', 'KG — Quilograma'])
-
-      fireEvent.change(compra, { target: { value: 'cx' } })
-      fireEvent.change(campoFator(), { target: { value: '12' } })
-      await selecionarUnidadeVenda('cx')
-
-      expect(compra).toHaveValue('')
-      expect(rotulosDasOpcoes(compra)).toEqual(['Mesma da venda', 'KG — Quilograma', 'UN — Unidade'])
-      expect(screen.queryByLabelText(/^quantas/i)).not.toBeInTheDocument()
-    })
-
-    it('mostra o texto de ajuda "1 CX = 12 UN" e envia a conversão de compra', async () => {
-      cadastrarProdutoMock.mockResolvedValue(produtoAtivo)
-
-      renderNovo()
-      await esperarFormulario()
-      await preencherMinimo('Refrigerante lata', '6')
-      fireEvent.change(screen.getByLabelText(/unidade de compra/i), { target: { value: 'cx' } })
-      fireEvent.change(campoFator(), { target: { value: '12' } })
-
-      expect(screen.getByText('1 CX = 12 UN')).toBeInTheDocument()
-      expect(campoFator()).toHaveAccessibleName('Quantas UN vêm em 1 CX?')
-      expect(campoFator()).toHaveAccessibleDescription('1 CX = 12 UN')
-
-      fireEvent.change(campoFator(), { target: { value: '1.5000' } })
-      expect(screen.getByText('1 CX = 1,5 UN')).toBeInTheDocument()
-
-      fireEvent.change(campoFator(), { target: { value: '12' } })
-      fireEvent.click(botaoSalvar())
-
-      await waitFor(() => {
-        expect(cadastrarProdutoMock).toHaveBeenCalledWith(
-          expect.objectContaining({ unidadeId: 'un', unidadeCompraId: 'cx', fatorConversao: 12 }),
-        )
-      })
-    })
-
-    it('na edição, preenche unidade de compra e fator vindos do produto', async () => {
-      renderEdicao({ ...produtoAtivo, unidadeCompra: resumo(CX), fatorConversao: 12, conversaoTexto: '1 CX = 12 UN' })
-      await esperarFormulario()
-
-      await waitFor(() => expect(screen.getByLabelText(/unidade de compra/i)).toHaveValue('cx'))
-      expect(campoFator()).toHaveValue(12)
-      expect(screen.getByLabelText(/unidade de venda/i)).toHaveValue('un')
-      expect(screen.getByRole('button', { name: /^categoria/i })).toHaveTextContent('Mercearia')
-      expect(screen.getByText('1 CX = 12 UN')).toBeInTheDocument()
-    })
-
     it('mostra a mensagem do backend quando a unidade escolhida está inativa (400)', async () => {
       cadastrarProdutoMock.mockRejectedValue(new HttpError(400, 'Esta unidade está inativa. Escolha uma unidade ativa.'))
 
@@ -2464,32 +2358,6 @@ describe('ProdutoPage', () => {
 
       await waitFor(() => {
         expect(atualizarProdutoMock).toHaveBeenCalledWith(ID_ARROZ, expect.objectContaining({ categoriaId: 'brinq' }))
-      })
-    })
-
-    it('na edição, mantém a unidade de compra atual inativa e a envia ao salvar', async () => {
-      const produto: Produto = {
-        ...produtoAtivo,
-        unidadeCompra: resumo(PCT_INATIVA),
-        fatorConversao: 6,
-        conversaoTexto: '1 PCT = 6 UN',
-      }
-      atualizarProdutoMock.mockResolvedValue(produto)
-
-      renderEdicao(produto)
-      await esperarFormulario()
-      const compra = screen.getByLabelText(/unidade de compra/i)
-      await waitFor(() => expect(compra).toBeEnabled())
-      expect(rotulosDasOpcoes(compra)).toEqual(['Mesma da venda', 'CX — Caixa', 'KG — Quilograma', 'PCT — Pacote (inativa)'])
-      expect(compra).toHaveValue('pct')
-      expect(screen.getByLabelText('Quantas UN vêm em 1 PCT?')).toHaveValue(6)
-      fireEvent.click(botaoSalvar())
-
-      await waitFor(() => {
-        expect(atualizarProdutoMock).toHaveBeenCalledWith(
-          ID_ARROZ,
-          expect.objectContaining({ unidadeId: 'un', unidadeCompraId: 'pct', fatorConversao: 6 }),
-        )
       })
     })
 
@@ -3506,6 +3374,7 @@ describe('ProdutoPage', () => {
       observacao: null,
       usuarioNome: 'Ana Souza',
       criadoEm: '2026-10-21T15:20:00',
+      embalagem: null,
     }
 
     function botaoAjustar(): HTMLElement {
@@ -3693,6 +3562,7 @@ describe('ProdutoPage', () => {
       observacao: 'Caixa amassada',
       usuarioNome: 'Carla Dias',
       criadoEm: '2026-10-21T15:20:00',
+      embalagem: null,
     }
     const INICIAL: MovimentoEstoque = {
       id: 'mov-1',
@@ -3705,6 +3575,7 @@ describe('ProdutoPage', () => {
       observacao: null,
       usuarioNome: 'Davi Reis',
       criadoEm: '2026-10-20T09:00:00',
+      embalagem: null,
     }
 
     function paginaDeMovimentos(

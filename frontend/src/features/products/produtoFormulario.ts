@@ -6,11 +6,18 @@ import { z } from 'zod'
 
 import { digitoVerificadorValido, ehCandidatoGs1, normalizarCodigo } from '@/lib/codigoBarras'
 import { interpretarCodigoProduto } from '@/lib/codigoProduto'
+import { rotuloDaEmbalagem, valorPorUnidadeAbaixoDoMinimo } from '@/lib/embalagem'
 import type { UnidadeMedida, UnidadeResumo } from '@/types/catalogo'
 import { formatarMoeda } from '@/features/products/formatacaoProduto'
 import { MAXIMO_DIGITOS_MOEDA, digitosParaValor, valorParaDigitos } from '@/lib/moeda'
 import { MENSAGEM_QUANTIDADE, interpretarQuantidade, quantidadeParaTexto, validarQuantidade } from '@/lib/quantidade'
-import type { FormatoCodigoBarras, Produto, ProdutoRequest, SituacaoPromocao } from '@/types/produto'
+import type {
+  EmbalagemRequest,
+  FormatoCodigoBarras,
+  Produto,
+  ProdutoRequest,
+  SituacaoPromocao,
+} from '@/types/produto'
 
 const textoOpcional = (max: number, mensagem: string) =>
   z.string().trim().max(max, mensagem)
@@ -34,15 +41,6 @@ const quantidadeOpcional = (mensagemNegativo: string) =>
       ctx.addIssue({ code: 'custom', message })
     }
   })
-
-// Espelha o backend: fator > 0 com ate 8 digitos inteiros e 4 casas decimais.
-const fatorConversaoSchema = z.string().trim()
-  .refine((valor) => valor === '' || Number.isFinite(Number(valor)), 'Informe um número válido.')
-  .refine((valor) => valor === '' || Number(valor) > 0, 'O fator de conversão deve ser maior que zero.')
-  .refine(
-    (valor) => valor === '' || Number(valor) <= 0 || /^\d{1,8}(\.\d{1,4})?$/.test(valor),
-    'Use até 8 dígitos inteiros e 4 casas decimais.',
-  )
 
 /** Limite de codigos de barras por produto (o backend aplica o mesmo). */
 export const MAXIMO_CODIGOS_BARRAS = 20
@@ -221,15 +219,150 @@ function validarAtacado(valores: ValoresPrecoEspecial, ctx: z.RefinementCtx) {
   }
 }
 
-export const produtoSchema = z.object({
+// --- Embalagens (Fase B3) ------------------------------------------------------
+
+/** Limites da spec B3 §2 (o backend aplica os mesmos). */
+export const MAXIMO_EMBALAGENS = 10
+export const MAXIMO_CODIGOS_POR_EMBALAGEM = 5
+
+/**
+ * Uma embalagem no formulario. A quantidade e texto com virgula (como as
+ * quantidades de estoque); o preco, a string do `CampoMoeda` ('' = sem preco
+ * proprio). `codigoPendente` e o texto de "Adicionar código" da embalagem
+ * ainda nao adicionado (nao vai no request; o salvar tenta adiciona-lo).
+ */
+export interface EmbalagemFormValues {
+  /** UUID da embalagem gravada; ausente na nova. */
+  id?: string
+  unidadeId: string
+  quantidade: string
+  preco: string
+  deCompra: boolean
+  codigosBarras: string[]
+  codigoPendente: string
+}
+
+/** Campos de uma embalagem, na ordem da tela (contagem de erros e foco). */
+export const CAMPOS_DA_EMBALAGEM = [
+  'unidadeId',
+  'quantidade',
+  'preco',
+  'deCompra',
+  'codigoPendente',
+  'codigosBarras',
+] as const
+export type CampoDaEmbalagem = (typeof CAMPOS_DA_EMBALAGEM)[number]
+
+/** Embalagem nova (botao "Adicionar embalagem"): vazia e fora da compra. */
+export function novaEmbalagem(): EmbalagemFormValues {
+  return { unidadeId: '', quantidade: '', preco: '', deCompra: false, codigosBarras: [], codigoPendente: '' }
+}
+
+const embalagemSchema = z.object({
+  id: z.string().optional(),
+  unidadeId: z.string(),
+  quantidade: z.string(),
+  preco: z.string().trim(),
+  deCompra: z.boolean(),
+  codigosBarras: z
+    .array(z.string())
+    .max(MAXIMO_CODIGOS_POR_EMBALAGEM, `Informe no máximo ${MAXIMO_CODIGOS_POR_EMBALAGEM} códigos de barras por embalagem.`),
+  codigoPendente: z.string(),
+})
+
+/** O que as regras das embalagens leem do formulario. */
+interface ValoresEmbalagens {
+  unidadeId: string
+  precoMinimo: string
+  embalagens: readonly EmbalagemFormValues[]
+}
+
+/**
+ * Regras de cada embalagem (spec B3 §2 e §3.3), com as mensagens da API e na
+ * ordem do backend: unidade diferente da de venda, quantidade > 1, fracao pela
+ * unidade de venda, repetida, uma so de compra e preco > 0 sem ficar, por
+ * unidade, abaixo do minimo. Com a unidade de venda desconhecida (lista
+ * carregando), a fracao fica para o backend.
+ */
+function validarEmbalagens(valores: ValoresEmbalagens, unidades: readonly UnidadeComFracao[], ctx: z.RefinementCtx) {
+  const venda = unidades.find((unidade) => unidade.id === valores.unidadeId)
+  const siglaDeVenda = venda?.sigla ?? ''
+  const vistas = new Set<string>()
+  let temCompra = false
+  valores.embalagens.forEach((embalagem, indice) => {
+    const erro = (campo: CampoDaEmbalagem, message: string) =>
+      ctx.addIssue({ path: ['embalagens', indice, campo], code: 'custom', message })
+    if (embalagem.unidadeId === '') {
+      erro('unidadeId', 'Selecione a unidade da embalagem.')
+    } else if (embalagem.unidadeId === valores.unidadeId) {
+      erro('unidadeId', `A embalagem precisa de uma unidade diferente da unidade de venda (${siglaDeVenda}).`)
+    } else {
+      const erroQuantidade = erroDaQuantidadeDaEmbalagem(embalagem.quantidade, venda)
+      const chave = `${embalagem.unidadeId}|${interpretarQuantidade(embalagem.quantidade)}`
+      if (erroQuantidade) {
+        erro('quantidade', erroQuantidade)
+      } else if (vistas.has(chave)) {
+        const sigla = unidades.find((unidade) => unidade.id === embalagem.unidadeId)?.sigla ?? ''
+        const rotulo = rotuloDaEmbalagem(sigla, embalagem.quantidade, siglaDeVenda)
+        erro('quantidade', `Já existe a embalagem ${rotulo} neste produto.`)
+      }
+      vistas.add(chave)
+    }
+    if (embalagem.deCompra && temCompra) {
+      erro('deCompra', 'Só uma embalagem pode ser a de compra.')
+    }
+    temCompra = temCompra || embalagem.deCompra
+    const erroPreco = erroDoPrecoDaEmbalagem(embalagem, valores.precoMinimo, siglaDeVenda)
+    if (erroPreco) {
+      erro('preco', erroPreco)
+    }
+  })
+}
+
+/** "A embalagem precisa conter mais de 1 UN." (sem a sigla enquanto a unidade nao e conhecida). */
+function mensagemMaisDeUm(venda: UnidadeComFracao | undefined): string {
+  return `A embalagem precisa conter mais de 1 ${venda?.sigla ?? 'unidade de venda'}.`
+}
+
+function erroDaQuantidadeDaEmbalagem(texto: string, venda: UnidadeComFracao | undefined): string | null {
+  const resultado = validarQuantidade(texto)
+  if ('erro' in resultado) {
+    if (resultado.erro === 'vazio') {
+      return 'Informe a quantidade da embalagem.'
+    }
+    return resultado.erro === 'negativo' ? mensagemMaisDeUm(venda) : MENSAGEM_QUANTIDADE[resultado.erro]
+  }
+  if (resultado.valor <= 1) {
+    return mensagemMaisDeUm(venda)
+  }
+  if (venda && !venda.fracionada && !Number.isInteger(resultado.valor)) {
+    return `${venda.sigla} não aceita quantidade fracionada. Informe um número inteiro.`
+  }
+  return null
+}
+
+function erroDoPrecoDaEmbalagem(embalagem: EmbalagemFormValues, precoMinimo: string, siglaDeVenda: string): string | null {
+  const preco = embalagem.preco.trim()
+  if (preco === '') {
+    return null
+  }
+  if (!(Number(preco) > 0)) {
+    return 'O preço da embalagem deve ser maior que zero.'
+  }
+  const porUnidade = valorPorUnidadeAbaixoDoMinimo(preco, embalagem.quantidade, precoMinimo)
+  if (porUnidade === null) {
+    return null
+  }
+  return `O preço da embalagem dá ${formatarMoeda(Number(porUnidade))} por ${siglaDeVenda}, abaixo do preço mínimo (${formatarMoeda(Number(precoMinimo))}).`
+}
+
+const camposDoProduto = {
   nome: z.string().trim()
     .min(1, 'Informe o nome do produto.')
     .max(150, 'Nome deve ter no máximo 150 caracteres.'),
   nomeCurto: textoOpcional(30, 'Nome curto deve ter no máximo 30 caracteres.'),
   unidadeId: z.string().min(1, 'Selecione a unidade de venda.'),
   categoriaId: z.string().nullable(),
-  unidadeCompraId: z.string(),
-  fatorConversao: fatorConversaoSchema,
   marca: textoOpcional(100, 'Marca deve ter no máximo 100 caracteres.'),
   fornecedor: textoOpcional(100, 'Fornecedor deve ter no máximo 100 caracteres.'),
   descricao: textoOpcional(1000, 'Descrição deve ter no máximo 1000 caracteres.'),
@@ -265,45 +398,39 @@ export const produtoSchema = z.object({
   atacadoAtivo: z.boolean(),
   precoAtacado: z.string().trim(),
   quantidadeMinimaAtacado: z.string().trim(),
-}).superRefine((valores, ctx) => {
-  validarPromocao(valores, ctx)
-  validarAtacado(valores, ctx)
-  validarEstoque(valores, ctx)
-  validarCodigoProduto(valores, ctx)
-  const preenchido = (valor: string) => valor.trim() !== ''
-  const temUnidadeCompra = valores.unidadeCompraId !== ''
-  const temFator = preenchido(valores.fatorConversao)
-  if (temUnidadeCompra !== temFator) {
-    ctx.addIssue({
-      path: [temUnidadeCompra ? 'fatorConversao' : 'unidadeCompraId'],
-      code: 'custom',
-      message: 'Informe a unidade de compra e o fator de conversão juntos.',
-    })
-  }
-  if (
-    temUnidadeCompra &&
-    temFator &&
-    valores.unidadeCompraId === valores.unidadeId &&
-    Number(valores.fatorConversao) !== 1
-  ) {
-    ctx.addIssue({
-      path: ['fatorConversao'],
-      code: 'custom',
-      message: 'Quando a unidade de compra é a mesma de venda, o fator deve ser 1.',
-    })
-  }
-  if (
-    preenchido(valores.precoMinimo) &&
-    preenchido(valores.precoVenda) &&
-    Number(valores.precoMinimo) > Number(valores.precoVenda)
-  ) {
-    ctx.addIssue({
-      path: ['precoMinimo'],
-      code: 'custom',
-      message: 'Preço mínimo não pode ser maior que o preço de venda.',
-    })
-  }
-})
+  /** Embalagens de venda (Fase B3), na ordem da tela. */
+  embalagens: z.array(embalagemSchema).max(MAXIMO_EMBALAGENS, `Informe no máximo ${MAXIMO_EMBALAGENS} embalagens.`),
+}
+
+/**
+ * Schema do formulario com as unidades conhecidas (lista do catalogo + a do
+ * produto): as regras das embalagens dependem da sigla e da fracao da unidade
+ * de venda. A pagina valida com a lista mais recente.
+ */
+export function produtoSchemaCom(unidades: readonly UnidadeComFracao[]) {
+  return z.object(camposDoProduto).superRefine((valores, ctx) => {
+    validarPromocao(valores, ctx)
+    validarAtacado(valores, ctx)
+    validarEstoque(valores, ctx)
+    validarCodigoProduto(valores, ctx)
+    validarEmbalagens(valores, unidades, ctx)
+    const preenchido = (valor: string) => valor.trim() !== ''
+    if (
+      preenchido(valores.precoMinimo) &&
+      preenchido(valores.precoVenda) &&
+      Number(valores.precoMinimo) > Number(valores.precoVenda)
+    ) {
+      ctx.addIssue({
+        path: ['precoMinimo'],
+        code: 'custom',
+        message: 'Preço mínimo não pode ser maior que o preço de venda.',
+      })
+    }
+  })
+}
+
+/** Schema sem a lista de unidades (as regras que dependem dela ficam para o backend). */
+export const produtoSchema = produtoSchemaCom([])
 
 export type ProdutoFormValues = z.infer<typeof produtoSchema>
 
@@ -311,13 +438,14 @@ export type ProdutoFormValues = z.infer<typeof produtoSchema>
  * Secoes da pagina do produto (tela unica, spec B2 §4), na ordem de exibicao.
  * Historico so existe na edicao.
  */
-export const SECOES_PRODUTO = ['geral', 'codigos', 'precos', 'estoque', 'historico'] as const
+export const SECOES_PRODUTO = ['geral', 'codigos', 'precos', 'embalagens', 'estoque', 'historico'] as const
 export type SecaoProduto = (typeof SECOES_PRODUTO)[number]
 
 export const ROTULO_SECAO: Readonly<Record<SecaoProduto, string>> = {
   geral: 'Geral',
   codigos: 'Códigos',
   precos: 'Preços',
+  embalagens: 'Embalagens',
   estoque: 'Estoque',
   historico: 'Histórico',
 }
@@ -348,15 +476,15 @@ export const CAMPOS_POR_SECAO: Readonly<Record<SecaoProduto, readonly (keyof Pro
     'estoqueMinimo',
     'pontoReposicao',
     'estoqueMaximo',
-    'unidadeCompraId',
-    'fatorConversao',
   ],
+  embalagens: ['embalagens'],
   historico: [],
 }
 
-/** Secao que mostra o campo. */
-export function secaoDoCampo(campo: keyof ProdutoFormValues): SecaoProduto {
-  return SECOES_PRODUTO.find((secao) => CAMPOS_POR_SECAO[secao].includes(campo)) ?? 'geral'
+/** Secao que mostra o campo (aceita o caminho de um campo de embalagem, "embalagens.0.preco"). */
+export function secaoDoCampo(caminho: string): SecaoProduto {
+  const campo = caminho.split('.')[0]
+  return SECOES_PRODUTO.find((secao) => (CAMPOS_POR_SECAO[secao] as readonly string[]).includes(campo)) ?? 'geral'
 }
 
 /** Para onde ir ao salvar com erro: o primeiro campo em erro, na ordem das secoes, e a secao dele. */
@@ -372,9 +500,51 @@ export function primeiroCampoComErro(
   return null
 }
 
-/** Id do elemento que recebe o foco de cada campo (o texto pendente e o campo "Adicionar código"). */
-export function idDoCampo(campo: keyof ProdutoFormValues): string {
-  return campo === 'codigoPendente' ? 'codigosBarras' : campo
+/**
+ * Id do elemento que recebe o foco de cada campo: o proprio caminho
+ * ("embalagens.0.quantidade"), salvo o texto pendente, que e o campo
+ * "Adicionar código" da lista (`codigosBarras` ou `embalagens.0.codigosBarras`).
+ */
+export function idDoCampo(caminho: string): string {
+  return caminho.replace(/(^|\.)codigoPendente$/, '$1codigosBarras')
+}
+
+/** Objeto com uma `message` de texto (um erro do RHF). */
+function temMensagem(valor: unknown): boolean {
+  return typeof valor === 'object' && valor !== null && 'message' in valor && typeof valor.message === 'string'
+}
+
+/**
+ * Caminhos dos campos com erro nas embalagens, na ordem da tela (embalagem a
+ * embalagem, campo a campo), para a contagem no atalho e o foco ao salvar. O
+ * texto pendente e a lista de codigos da mesma embalagem contam uma vez (vale o
+ * pendente, que e o campo focado). O erro da lista inteira (mais de 10) vem
+ * como "embalagens". Recebe o `errors.embalagens` do RHF.
+ */
+export function caminhosComErroNasEmbalagens(erros: unknown): string[] {
+  if (typeof erros !== 'object' || erros === null) {
+    return []
+  }
+  const lista = erros as Record<string, unknown>
+  const caminhos = temMensagem(lista) || temMensagem(lista.root) ? ['embalagens'] : []
+  const indices = Object.keys(lista)
+    .filter((chave) => /^\d+$/.test(chave))
+    .map(Number)
+    .sort((a, b) => a - b)
+  for (const indice of indices) {
+    const campos = lista[indice]
+    if (typeof campos !== 'object' || campos === null) {
+      continue
+    }
+    const daEmbalagem = campos as Record<string, unknown>
+    for (const campo of CAMPOS_DA_EMBALAGEM) {
+      const emDobro = campo === 'codigosBarras' && temMensagem(daEmbalagem.codigoPendente)
+      if (!emDobro && temMensagem(daEmbalagem[campo])) {
+        caminhos.push(`embalagens.${indice}.${campo}`)
+      }
+    }
+  }
+  return caminhos
 }
 
 /** Valores de um produto novo; `unidadePadraoId` ja escolhe a unidade de venda. */
@@ -384,8 +554,6 @@ export function valoresIniciais(unidadePadraoId = ''): ProdutoFormValues {
     nomeCurto: '',
     unidadeId: unidadePadraoId,
     categoriaId: null,
-    unidadeCompraId: '',
-    fatorConversao: '',
     marca: '',
     fornecedor: '',
     descricao: '',
@@ -409,6 +577,7 @@ export function valoresIniciais(unidadePadraoId = ''): ProdutoFormValues {
     atacadoAtivo: false,
     precoAtacado: '',
     quantidadeMinimaAtacado: '',
+    embalagens: [],
   }
 }
 
@@ -430,15 +599,11 @@ function numeroParaTexto(valor: number | null): string {
 
 /** Valores do formulario a partir do produto vindo da API (modo edicao). */
 export function valoresDoProduto(produto: Produto): ProdutoFormValues {
-  // Compra igual a venda (fator 1) e o mesmo que "Mesma da venda": o form mostra assim.
-  const compraPropria = produto.unidadeCompra !== null && produto.unidadeCompra.id !== produto.unidade.id
   return {
     nome: produto.nome,
     nomeCurto: produto.nomeCurto ?? '',
     unidadeId: produto.unidade.id,
     categoriaId: produto.categoria?.id ?? null,
-    unidadeCompraId: compraPropria ? (produto.unidadeCompra?.id ?? '') : '',
-    fatorConversao: compraPropria ? numeroParaTexto(produto.fatorConversao) : '',
     marca: produto.marca ?? '',
     fornecedor: produto.fornecedor ?? '',
     descricao: produto.descricao ?? '',
@@ -462,6 +627,15 @@ export function valoresDoProduto(produto: Produto): ProdutoFormValues {
     atacadoAtivo: produto.atacado !== null,
     precoAtacado: numeroParaTexto(produto.atacado?.preco ?? null),
     quantidadeMinimaAtacado: numeroParaTexto(produto.atacado?.quantidadeMinima ?? null),
+    embalagens: produto.embalagens.map((embalagem) => ({
+      id: embalagem.id,
+      unidadeId: embalagem.unidade.id,
+      quantidade: quantidadeParaTexto(embalagem.quantidade),
+      preco: numeroParaTexto(embalagem.preco),
+      deCompra: embalagem.deCompra,
+      codigosBarras: embalagem.codigosBarras.map((codigo) => codigo.codigo),
+      codigoPendente: '',
+    })),
   }
 }
 
@@ -495,8 +669,6 @@ export function montarRequest(valores: ProdutoFormValues, { novo = false }: { no
     nomeCurto: textoOuNulo(valores.nomeCurto),
     unidadeId: valores.unidadeId,
     categoriaId: valores.categoriaId,
-    unidadeCompraId: textoOuNulo(valores.unidadeCompraId),
-    fatorConversao: numeroOuNulo(valores.fatorConversao),
     marca: textoOuNulo(valores.marca),
     fornecedor: textoOuNulo(valores.fornecedor),
     descricao: textoOuNulo(valores.descricao),
@@ -516,6 +688,20 @@ export function montarRequest(valores: ProdutoFormValues, { novo = false }: { no
     atacado: valores.atacadoAtivo
       ? { preco: Number(valores.precoAtacado), quantidadeMinima: Number(valores.quantidadeMinimaAtacado) }
       : null,
+    embalagens: valores.embalagens.map(embalagemDoRequest),
+  }
+}
+
+/** Uma embalagem do request: a nova vai sem `id`; o texto pendente nunca vai. */
+function embalagemDoRequest(embalagem: EmbalagemFormValues): EmbalagemRequest {
+  return {
+    ...(embalagem.id ? { id: embalagem.id } : {}),
+    unidadeId: embalagem.unidadeId,
+    // O schema ja barrou a quantidade invalida.
+    quantidade: interpretarQuantidade(embalagem.quantidade) ?? 0,
+    preco: numeroOuNulo(embalagem.preco),
+    deCompra: embalagem.deCompra,
+    codigosBarras: embalagem.codigosBarras,
   }
 }
 
@@ -527,15 +713,26 @@ export const TAMANHO_MAXIMO_CODIGO = 50
 export const MENSAGEM_CODIGO_REPETIDO = 'Este código já está na lista.'
 export const MENSAGEM_DIGITO_INVALIDO =
   'Este código não confere (o último dígito não bate). Leia de novo ou confira os números.'
-export const MENSAGEM_LIMITE_CODIGOS = `Limite de ${MAXIMO_CODIGOS_BARRAS} códigos de barras atingido.`
+/** Codigo barrado pelo limite da lista ("Limite de 20 códigos de barras atingido."). */
+export function mensagemLimiteCodigos(limite: number): string {
+  return `Limite de ${limite} códigos de barras atingido.`
+}
+export const MENSAGEM_LIMITE_CODIGOS = mensagemLimiteCodigos(MAXIMO_CODIGOS_BARRAS)
 export const MENSAGEM_CODIGO_LONGO = `O código deve ter no máximo ${TAMANHO_MAXIMO_CODIGO} caracteres.`
 
 /** Formatos dos codigos ja gravados no produto, por codigo. */
 export type FormatosGravados = ReadonlyMap<string, FormatoCodigoBarras>
 
-/** Formatos gravados do produto em edicao (vazio no cadastro). */
+/**
+ * Formatos gravados do produto em edicao (vazio no cadastro): os da unidade e
+ * os das embalagens. Um codigo gravado pode mudar de lista sem ser rebloqueado.
+ */
 export function formatosDoProduto(produto: Produto | null): FormatosGravados {
-  return new Map((produto?.codigosBarras ?? []).map(({ codigo, formato }) => [codigo, formato]))
+  const codigos = [
+    ...(produto?.codigosBarras ?? []),
+    ...(produto?.embalagens ?? []).flatMap((embalagem) => embalagem.codigosBarras),
+  ]
+  return new Map(codigos.map(({ codigo, formato }) => [codigo, formato]))
 }
 
 /** Resultado de tentar colocar o texto digitado na lista de codigos. */
@@ -554,6 +751,7 @@ export function avaliarNovoCodigo(
   entrada: string,
   lista: readonly string[],
   formatosGravados: FormatosGravados,
+  limite: number = MAXIMO_CODIGOS_BARRAS,
 ): ResultadoNovoCodigo {
   const codigo = normalizarCodigo(entrada)
   if (codigo === '') {
@@ -562,8 +760,8 @@ export function avaliarNovoCodigo(
   if (lista.includes(codigo)) {
     return { tipo: 'bloqueado', motivo: MENSAGEM_CODIGO_REPETIDO }
   }
-  if (lista.length >= MAXIMO_CODIGOS_BARRAS) {
-    return { tipo: 'bloqueado', motivo: MENSAGEM_LIMITE_CODIGOS }
+  if (lista.length >= limite) {
+    return { tipo: 'bloqueado', motivo: mensagemLimiteCodigos(limite) }
   }
   if (codigo.length > TAMANHO_MAXIMO_CODIGO) {
     return { tipo: 'bloqueado', motivo: MENSAGEM_CODIGO_LONGO }
@@ -607,25 +805,6 @@ const SIGLA_UNIDADE_PADRAO = 'UN'
 /** Id da unidade padrao (UN ativa) ou '' se nao houver. */
 export function idUnidadePadrao(unidades: UnidadeMedida[]): string {
   return unidades.find((unidade) => unidade.ativo && unidade.sigla === SIGLA_UNIDADE_PADRAO)?.id ?? ''
-}
-
-/** Fator em pt-BR sem zeros a direita (12 -> "12", 1.5 -> "1,5"), como o `conversaoTexto` do backend. */
-function formatarFator(valor: number): string {
-  return valor.toLocaleString('pt-BR', { maximumFractionDigits: 4, useGrouping: false })
-}
-
-/** Texto de ajuda "1 CX = 12 UN"; null enquanto faltar unidade ou fator valido. */
-export function textoConversao(
-  siglaCompra: string | undefined,
-  siglaVenda: string | undefined,
-  fator: string,
-): string | null {
-  const texto = fator.trim()
-  const numero = Number(texto)
-  if (!siglaCompra || !siglaVenda || texto === '' || !Number.isFinite(numero) || numero <= 0) {
-    return null
-  }
-  return `1 ${siglaCompra} = ${formatarFator(numero)} ${siglaVenda}`
 }
 
 // --- Precos ------------------------------------------------------------------
@@ -768,13 +947,27 @@ const CAMPO_DO_FORMULARIO_POR_CHAVE: ReadonlyMap<string, keyof ProdutoFormValues
   ['atacado.quantidadeMinima', 'quantidadeMinimaAtacado'],
 ])
 
+/** Chave indexada de um campo de embalagem: `embalagens[1].quantidade` (e `...codigosBarras[2]`). */
+const CHAVE_DE_EMBALAGEM = /^embalagens\[(\d+)\]\.(\w+)/
+
 /**
  * Campo do formulario de uma chave de `campos` do backend: os aninhados de
- * promocao/atacado pelo mapa; os demais pelo nome sem indice
+ * promocao/atacado pelo mapa; os de embalagem pelo caminho
+ * (`embalagens[1].quantidade` -> `embalagens.1.quantidade`; sem um campo
+ * conhecido, a lista `embalagens`); os demais pelo nome sem indice
  * (`codigosBarras[2]` -> `codigosBarras`). Pode nao ser um campo do formulario.
  */
 export function campoDaChaveDoServidor(chave: string): string {
-  return CAMPO_DO_FORMULARIO_POR_CHAVE.get(chave) ?? chave.split(/[[.]/)[0]
+  const doMapa = CAMPO_DO_FORMULARIO_POR_CHAVE.get(chave)
+  if (doMapa) {
+    return doMapa
+  }
+  const daEmbalagem = CHAVE_DE_EMBALAGEM.exec(chave)
+  if (daEmbalagem) {
+    const [, indice, campo] = daEmbalagem
+    return (CAMPOS_DA_EMBALAGEM as readonly string[]).includes(campo) ? `embalagens.${indice}.${campo}` : 'embalagens'
+  }
+  return chave.split(/[[.]/)[0]
 }
 
 /** Interruptor do bloco a que o campo pertence (para ligar o bloco ao receber um erro nele). */

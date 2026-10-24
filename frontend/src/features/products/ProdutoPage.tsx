@@ -256,8 +256,11 @@ function mensagemErroExcluir(erro: unknown): string {
   return 'Não foi possível excluir o produto. Tente novamente.'
 }
 
+/** Secoes da edicao. Provisorio (Task 5 da B3): a secao Embalagens entra na Task 6. */
+const SECOES_DA_EDICAO = SECOES_PRODUTO.filter((secao) => secao !== 'embalagens')
+
 /** Secoes do cadastro novo: o Historico so existe para um produto ja gravado. */
-const SECOES_DO_CADASTRO = SECOES_PRODUTO.filter((secao) => secao !== 'historico')
+const SECOES_DO_CADASTRO = SECOES_DA_EDICAO.filter((secao) => secao !== 'historico')
 
 /**
  * Pagina do produto (`/produtos/novo` e `/produtos/:id`): formulario em tela
@@ -401,7 +404,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   const navigate = useNavigate()
   const modoNovo = produto === null
 
-  const secoesVisiveis = modoNovo ? SECOES_DO_CADASTRO : SECOES_PRODUTO
+  const secoesVisiveis = modoNovo ? SECOES_DO_CADASTRO : SECOES_DA_EDICAO
   const [secaoAtiva, marcarSecao] = useSecaoAtiva(secoesVisiveis)
   const digitosCodigoNaEtiqueta = useConfiguracaoEtiqueta().data?.digitosCodigo ?? null
   // O cadastro novo comeca pelo Nome.
@@ -546,10 +549,10 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     setCampoParaFocar(destino.campo)
   }
 
-  // Siglas conhecidas (lista + unidades do produto) para "1 CX = 12 UN" e "por UN".
+  // Siglas conhecidas (lista + unidades do produto e das embalagens) para "por UN" e os rotulos.
   const siglaPorId = useMemo(() => {
     const mapa = new Map((unidades ?? []).map((unidade) => [unidade.id, unidade.sigla]))
-    for (const resumo of [produto?.unidade, produto?.unidadeCompra]) {
+    for (const resumo of [produto?.unidade, ...(produto?.embalagens ?? []).map((embalagem) => embalagem.unidade)]) {
       if (resumo && !mapa.has(resumo.id)) {
         mapa.set(resumo.id, resumo.sigla)
       }
@@ -907,7 +910,6 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
           <SecaoDaPagina secao="estoque">
             <SecaoEstoque
               produto={produto}
-              unidadesQuery={unidadesQuery}
               siglaPorId={siglaPorId}
               desabilitado={desabilitado}
               somenteLeitura={somenteLeitura}

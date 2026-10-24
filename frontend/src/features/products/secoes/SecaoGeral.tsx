@@ -64,7 +64,7 @@ function AjudaNomeCurto({ nome, nomeCurto }: { nome: string; nomeCurto: string }
 /**
  * Secao Geral (o Nº do produto fica na linha do titulo, na pagina): o cadastro
  * rapido (nome, unidade e preco de venda, os essenciais para vender) primeiro; depois identificacao e descricao.
- * Os codigos ficam na secao Codigos e a unidade e embalagem, na Estoque. O
+ * Os codigos ficam na secao Codigos e as embalagens, na Embalagens. O
  * status fica no cabecalho da pagina.
  */
 export function SecaoGeral({
@@ -79,8 +79,6 @@ export function SecaoGeral({
   const {
     control,
     register,
-    getValues,
-    setValue,
     formState: { errors },
   } = useFormContext<ProdutoFormValues>()
 
@@ -98,15 +96,6 @@ export function SecaoGeral({
 
   const siglaVenda = siglaPorId.get(unidadeIdAtual)
   const carregandoUnidades = unidadesQuery.isPending
-
-  /** Venda igual a compra (secao Estoque) deixa a compra sem sentido: limpa compra e fator. */
-  const aoAlterarUnidadeVenda = (event: { target: { value: string } }) => {
-    if (event.target.value !== '' && event.target.value === getValues('unidadeCompraId')) {
-      setValue('unidadeCompraId', '', { shouldDirty: true })
-      setValue('fatorConversao', '', { shouldDirty: true })
-    }
-    aoAlterarCampo()
-  }
 
   return (
     <div className="space-y-6">
@@ -134,7 +123,7 @@ export function SecaoGeral({
             label="Unidade de venda"
             obrigatorio
             erro={errors.unidadeId?.message}
-            selectProps={register('unidadeId', { onChange: aoAlterarUnidadeVenda })}
+            selectProps={register('unidadeId', { onChange: aoAlterarCampo })}
             disabled={desabilitado || carregandoUnidades}
             opcaoVazia={carregandoUnidades ? 'Carregando unidades...' : 'Selecione a unidade'}
             opcoes={opcoesUnidadeVenda}

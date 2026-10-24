@@ -26,6 +26,7 @@ const MOVIMENTO: MovimentoEstoque = {
   observacao: 'Caixa amassada',
   usuarioNome: 'Ana Souza',
   criadoEm: '2026-10-21T15:20:00',
+  embalagem: null,
 }
 
 describe('ajusteEstoque', () => {

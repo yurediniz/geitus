@@ -3,7 +3,9 @@
  * os mocks de servico ficam em cada arquivo de teste.
  */
 import type { Categoria, UnidadeMedida, UnidadeResumo } from '@/types/catalogo'
-import type { Produto } from '@/types/produto'
+import { rotuloDaEmbalagem } from '@/lib/embalagem'
+import { detectarFormato } from '@/lib/codigoBarras'
+import type { Embalagem, Produto } from '@/types/produto'
 
 export function unidade(id: string, sigla: string, descricao: string, ativo = true): UnidadeMedida {
   return {
@@ -26,7 +28,48 @@ export const UN = unidade('un', 'UN', 'Unidade')
 export const KG = unidade('kg', 'KG', 'Quilograma')
 export const CX = unidade('cx', 'CX', 'Caixa')
 export const PCT_INATIVA = unidade('pct', 'PCT', 'Pacote', false)
+export const SC = unidade('sc', 'SC', 'Saco')
 export const UNIDADES = [CX, KG, PCT_INATIVA, UN]
+
+interface DadosEmbalagem {
+  id: string
+  unidade: UnidadeResumo
+  quantidade: number
+  preco: number | null
+  deCompra?: boolean
+  codigos?: string[]
+  /** Sigla da unidade de venda do produto, para o rotulo (padrao UN). */
+  siglaDeVenda?: string
+  /** Preco da unidade, para o preco efetivo sem preco proprio (padrao 89,90). */
+  precoDaUnidade?: number
+}
+
+/** Embalagem como a API devolve (rotulo e preco efetivo derivados como no backend; sem custo). */
+export function embalagemDaApi({
+  id,
+  unidade: unidadeDaEmbalagem,
+  quantidade,
+  preco,
+  deCompra = false,
+  codigos = [],
+  siglaDeVenda = 'UN',
+  precoDaUnidade = 89.9,
+}: DadosEmbalagem): Embalagem {
+  return {
+    id,
+    unidade: unidadeDaEmbalagem,
+    quantidade,
+    rotulo: rotuloDaEmbalagem(unidadeDaEmbalagem.sigla, quantidade, siglaDeVenda),
+    preco,
+    precoEfetivo: preco ?? Math.round(quantidade * precoDaUnidade * 100) / 100,
+    origemPreco: preco === null ? 'UNIDADE' : 'PROPRIO',
+    custo: null,
+    margem: null,
+    markup: null,
+    deCompra,
+    codigosBarras: codigos.map((codigo) => ({ codigo, formato: detectarFormato(codigo) })),
+  }
+}
 
 export function categoria(id: string, nome: string, parentId: string | null, caminho: string): Categoria {
   return {
@@ -65,9 +108,6 @@ export const produtoAtivo: Produto = {
   marca: 'Tio João',
   fornecedor: 'Distribuidora Sul',
   unidade: resumo(UN),
-  unidadeCompra: null,
-  fatorConversao: null,
-  conversaoTexto: null,
   descricao: null,
   precoVenda: 25.9,
   custo: 18,
@@ -82,6 +122,7 @@ export const produtoAtivo: Produto = {
   estoqueMaximo: 50,
   pontoReposicao: 10,
   codigosBarras: [{ codigo: '7891000315507', formato: 'EAN13' }],
+  embalagens: [],
   sku: 'SKU-ARROZ',
   ativo: true,
   podeExcluir: true,
@@ -116,9 +157,6 @@ export const produtoSimples: Produto = {
   marca: null,
   fornecedor: null,
   unidade: resumo(UN),
-  unidadeCompra: null,
-  fatorConversao: null,
-  conversaoTexto: null,
   descricao: null,
   precoVenda: 5,
   custo: null,
@@ -133,6 +171,7 @@ export const produtoSimples: Produto = {
   estoqueMaximo: null,
   pontoReposicao: null,
   codigosBarras: [],
+  embalagens: [],
   sku: null,
   ativo: true,
   podeExcluir: true,

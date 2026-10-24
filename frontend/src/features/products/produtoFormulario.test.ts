@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import {
   CAMPOS_POR_SECAO,
+  MAXIMO_CODIGOS_POR_EMBALAGEM,
+  MAXIMO_EMBALAGENS,
+  ROTULO_SECAO,
   SECOES_PRODUTO,
+  caminhosComErroNasEmbalagens,
   MENSAGEM_CODIGO_REPETIDO,
   MENSAGEM_DIGITO_INVALIDO,
   MENSAGEM_LIMITE_CODIGOS,
@@ -25,20 +29,24 @@ import {
   formatosDoProduto,
   idDoCampo,
   montarRequest,
+  novaEmbalagem,
   nomeCurtoEfetivo,
   primeiroCampoComErro,
   produtoSchema,
+  produtoSchemaCom,
+  secaoDoCampo,
   valoresDoProduto,
   valoresIniciais,
   valoresParaCadastrarOutro,
+  type EmbalagemFormValues,
   type ProdutoFormValues,
 } from '@/features/products/produtoFormulario'
-import { CX, KG, UN, produtoAtivo, produtoSimples, resumo } from '@/test/fixturesProduto'
-import type { FormatoCodigoBarras } from '@/types/produto'
+import { CX, KG, SC, UN, embalagemDaApi, produtoAtivo, produtoSimples, resumo } from '@/test/fixturesProduto'
+import type { FormatoCodigoBarras, Produto } from '@/types/produto'
 
 describe('produtoFormulario', () => {
   it('as secoes da tela unica, na ordem (Fase B2)', () => {
-    expect(SECOES_PRODUTO).toEqual(['geral', 'codigos', 'precos', 'estoque', 'historico'])
+    expect(SECOES_PRODUTO).toEqual(['geral', 'codigos', 'precos', 'embalagens', 'estoque', 'historico'])
   })
 
   it('todo campo do formulario esta em exatamente uma secao', () => {
@@ -81,9 +89,9 @@ describe('produtoFormulario', () => {
     const comErro = new Set<keyof ProdutoFormValues>(['estoqueMaximo', 'custo', 'sku'])
     expect(primeiroCampoComErro((campo) => comErro.has(campo))).toEqual({ secao: 'codigos', campo: 'sku' })
     expect(primeiroCampoComErro((campo) => campo === 'precoVenda')).toEqual({ secao: 'geral', campo: 'precoVenda' })
-    expect(primeiroCampoComErro((campo) => campo === 'fatorConversao')).toEqual({
-      secao: 'estoque',
-      campo: 'fatorConversao',
+    expect(primeiroCampoComErro((campo) => campo === 'embalagens')).toEqual({
+      secao: 'embalagens',
+      campo: 'embalagens',
     })
     expect(primeiroCampoComErro(() => false)).toBeNull()
   })
@@ -150,8 +158,6 @@ describe('produtoFormulario', () => {
       nomeCurto: 'Arroz TJ',
       unidadeId: 'un',
       categoriaId: 'mercearia',
-      unidadeCompraId: null,
-      fatorConversao: null,
       marca: 'Tio João',
       fornecedor: 'Distribuidora Sul',
       descricao: null,
@@ -166,6 +172,7 @@ describe('produtoFormulario', () => {
       sku: 'SKU-ARROZ',
       promocao: null,
       atacado: null,
+      embalagens: [],
     })
   })
 
@@ -248,16 +255,6 @@ describe('produtoFormulario', () => {
     expect(request.atacado).toBeNull()
   })
 
-  it('compra igual a venda aparece como "Mesma da venda"', () => {
-    const valores = valoresDoProduto({ ...produtoAtivo, unidadeCompra: produtoAtivo.unidade, fatorConversao: 1 })
-    expect(valores.unidadeCompraId).toBe('')
-    expect(valores.fatorConversao).toBe('')
-
-    const comCaixa = valoresDoProduto({ ...produtoAtivo, unidadeCompra: resumo(CX), fatorConversao: 12 })
-    expect(comCaixa.unidadeCompraId).toBe('cx')
-    expect(comCaixa.fatorConversao).toBe('12')
-  })
-
   it('montarRequest converte vazios em null e apara textos', () => {
     const request = montarRequest({
       ...valoresIniciais('un'),
@@ -272,8 +269,7 @@ describe('produtoFormulario', () => {
   it('"cadastrar outro" mantem unidade, categoria, marca e fornecedor e limpa o resto', () => {
     const anteriores: ProdutoFormValues = {
       ...valoresDoProduto(produtoAtivo),
-      unidadeCompraId: 'cx',
-      fatorConversao: '12',
+      embalagens: [{ ...novaEmbalagem(), unidadeId: 'cx', quantidade: '12' }],
     }
     expect(valoresParaCadastrarOutro(anteriores)).toEqual({
       ...valoresIniciais('un'),
@@ -578,15 +574,13 @@ describe('produtoFormulario', () => {
       expect(valoresIniciais()).toMatchObject({ controlaEstoque: true, estoqueInicial: '' })
     })
 
-    it('a secao Estoque tem o interruptor, o estoque inicial, os níveis e a unidade e embalagem, nessa ordem', () => {
+    it('a secao Estoque tem o interruptor, o estoque inicial e os níveis, nessa ordem (a embalagem saiu)', () => {
       expect(CAMPOS_POR_SECAO.estoque).toEqual([
         'controlaEstoque',
         'estoqueInicial',
         'estoqueMinimo',
         'pontoReposicao',
         'estoqueMaximo',
-        'unidadeCompraId',
-        'fatorConversao',
       ])
     })
 
@@ -675,6 +669,209 @@ describe('produtoFormulario', () => {
       expect(erroFracaoEstoqueInicial({ ...valores, estoqueInicial: '3' }, [UN])).toBeNull()
       expect(erroFracaoEstoqueInicial({ ...valores, controlaEstoque: false }, [UN])).toBeNull()
       expect(erroFracaoEstoqueInicial(valores, [])).toBeNull()
+    })
+  })
+
+  describe('embalagens (Fase B3)', () => {
+    const fracionadaKg = { ...KG, fracionada: true }
+    const UNIDADES = [UN, CX, fracionadaKg, resumo(SC)]
+    const schema = produtoSchemaCom(UNIDADES)
+    const base: ProdutoFormValues = { ...valoresIniciais('un'), nome: 'Nexgard Combo', precoVenda: '89.90' }
+    const caixa: EmbalagemFormValues = { ...novaEmbalagem(), unidadeId: 'cx', quantidade: '3' }
+
+    /** Erros por caminho ("embalagens.0.quantidade"), com o espaco do R$ normalizado. */
+    function erros(valores: ProdutoFormValues): Record<string, string> {
+      const resultado = schema.safeParse(valores)
+      return Object.fromEntries(
+        (resultado.error?.issues ?? []).map((issue) => [issue.path.join('.'), issue.message.replace(/ /g, ' ')]),
+      )
+    }
+
+    it('a secao Embalagens fica entre Preços e Estoque, com o rotulo e o campo da lista', () => {
+      expect(SECOES_PRODUTO.slice(2, 5)).toEqual(['precos', 'embalagens', 'estoque'])
+      expect(ROTULO_SECAO.embalagens).toBe('Embalagens')
+      expect(CAMPOS_POR_SECAO.embalagens).toEqual(['embalagens'])
+    })
+
+    it('produto novo comeca sem embalagens; a nova embalagem vem vazia e fora da compra', () => {
+      expect(valoresIniciais().embalagens).toEqual([])
+      expect(novaEmbalagem()).toEqual({
+        unidadeId: '',
+        quantidade: '',
+        preco: '',
+        deCompra: false,
+        codigosBarras: [],
+        codigoPendente: '',
+      })
+    })
+
+    it('valoresDoProduto traz as embalagens com a quantidade com virgula e o preco no formato do campo', () => {
+      const produto: Produto = {
+        ...produtoAtivo,
+        unidade: resumo(fracionadaKg),
+        embalagens: [
+          embalagemDaApi({ id: 'e1', unidade: resumo(SC), quantidade: 25.5, preco: null, deCompra: true }),
+          embalagemDaApi({ id: 'e2', unidade: resumo(CX), quantidade: 3, preco: 209.9, codigos: ['7891000315507'] }),
+        ],
+      }
+      expect(valoresDoProduto(produto).embalagens).toEqual([
+        { id: 'e1', unidadeId: 'sc', quantidade: '25,5', preco: '', deCompra: true, codigosBarras: [], codigoPendente: '' },
+        {
+          id: 'e2',
+          unidadeId: 'cx',
+          quantidade: '3',
+          preco: '209.9',
+          deCompra: false,
+          codigosBarras: ['7891000315507'],
+          codigoPendente: '',
+        },
+      ])
+    })
+
+    it('montarRequest: a nova vai sem id, a mantida com id, preco vazio vira null e "2,5" vira 2.5', () => {
+      const request = montarRequest({
+        ...base,
+        unidadeId: 'kg',
+        embalagens: [
+          { ...caixa, id: 'e1', preco: '209.90', codigosBarras: ['7891000315507'], codigoPendente: '123' },
+          { ...novaEmbalagem(), unidadeId: 'sc', quantidade: '2,5', deCompra: true },
+        ],
+      })
+      expect(request.embalagens).toEqual([
+        { id: 'e1', unidadeId: 'cx', quantidade: 3, preco: 209.9, deCompra: false, codigosBarras: ['7891000315507'] },
+        { unidadeId: 'sc', quantidade: 2.5, preco: null, deCompra: true, codigosBarras: [] },
+      ])
+      expect(request.embalagens[1]).not.toHaveProperty('id')
+      expect(request).not.toHaveProperty('unidadeCompraId')
+      expect(request).not.toHaveProperty('fatorConversao')
+    })
+
+    it('embalagem valida passa', () => {
+      expect(erros({ ...base, embalagens: [caixa, { ...caixa, quantidade: '12', preco: '899.00' }] })).toEqual({})
+    })
+
+    it('unidade obrigatoria e diferente da unidade de venda', () => {
+      expect(erros({ ...base, embalagens: [{ ...caixa, unidadeId: '' }] })).toEqual({
+        'embalagens.0.unidadeId': 'Selecione a unidade da embalagem.',
+      })
+      expect(erros({ ...base, embalagens: [{ ...caixa, unidadeId: 'un' }] })).toEqual({
+        'embalagens.0.unidadeId': 'A embalagem precisa de uma unidade diferente da unidade de venda (UN).',
+      })
+    })
+
+    it('quantidade informada, maior que 1 e inteira se a unidade de venda nao e fracionada', () => {
+      expect(erros({ ...base, embalagens: [{ ...caixa, quantidade: '' }] })).toEqual({
+        'embalagens.0.quantidade': 'Informe a quantidade da embalagem.',
+      })
+      expect(erros({ ...base, embalagens: [{ ...caixa, quantidade: '1' }] })).toEqual({
+        'embalagens.0.quantidade': 'A embalagem precisa conter mais de 1 UN.',
+      })
+      expect(erros({ ...base, embalagens: [{ ...caixa, quantidade: '2,5' }] })).toEqual({
+        'embalagens.0.quantidade': 'UN não aceita quantidade fracionada. Informe um número inteiro.',
+      })
+      expect(erros({ ...base, embalagens: [{ ...caixa, quantidade: '2,5555' }] })).toEqual({
+        'embalagens.0.quantidade': 'Use no máximo 3 casas decimais.',
+      })
+      // KG e fracionada: 25,5 passa.
+      expect(erros({ ...base, unidadeId: 'kg', embalagens: [{ ...caixa, unidadeId: 'sc', quantidade: '25,5' }] })).toEqual({})
+    })
+
+    it('com a unidade de venda desconhecida (lista carregando), a fracao fica para o backend', () => {
+      const valores = { ...base, unidadeId: 'outra', embalagens: [{ ...caixa, quantidade: '2,5' }] }
+      expect(erros(valores)).toEqual({})
+    })
+
+    it('embalagem repetida (mesma unidade e quantidade) na segunda ocorrencia', () => {
+      expect(erros({ ...base, embalagens: [caixa, { ...caixa, quantidade: '3,000' }] })).toEqual({
+        'embalagens.1.quantidade': 'Já existe a embalagem CX c/ 3 UN neste produto.',
+      })
+    })
+
+    it('so uma embalagem de compra', () => {
+      expect(
+        erros({ ...base, embalagens: [{ ...caixa, deCompra: true }, { ...caixa, quantidade: '12', deCompra: true }] }),
+      ).toEqual({ 'embalagens.1.deCompra': 'Só uma embalagem pode ser a de compra.' })
+    })
+
+    it('preco proprio maior que zero e, por unidade, nao abaixo do minimo', () => {
+      expect(erros({ ...base, embalagens: [{ ...caixa, preco: '0.00' }] })).toEqual({
+        'embalagens.0.preco': 'O preço da embalagem deve ser maior que zero.',
+      })
+      const comMinimo = { ...base, precoMinimo: '70.00' }
+      expect(erros({ ...comMinimo, embalagens: [{ ...caixa, preco: '210.00' }] })).toEqual({})
+      expect(erros({ ...comMinimo, embalagens: [{ ...caixa, preco: '209.99' }] })).toEqual({
+        'embalagens.0.preco': 'O preço da embalagem dá R$ 69,99 por UN, abaixo do preço mínimo (R$ 70,00).',
+      })
+      expect(erros({ ...comMinimo, embalagens: [{ ...caixa, preco: '209.90' }] })).toEqual({
+        'embalagens.0.preco': 'O preço da embalagem dá R$ 69,96 por UN, abaixo do preço mínimo (R$ 70,00).',
+      })
+      // Sem preco proprio, o calculado parte do preco da unidade: nada a conferir.
+      expect(erros({ ...comMinimo, embalagens: [caixa] })).toEqual({})
+    })
+
+    it('ate 10 embalagens e ate 5 codigos por embalagem', () => {
+      const onze = Array.from({ length: 11 }, (_, i) => ({ ...caixa, quantidade: String(i + 2) }))
+      expect(erros({ ...base, embalagens: onze })).toEqual({ embalagens: 'Informe no máximo 10 embalagens.' })
+      const seis = Array.from({ length: 6 }, (_, i) => `COD-${i}`)
+      expect(erros({ ...base, embalagens: [{ ...caixa, codigosBarras: seis }] })).toEqual({
+        'embalagens.0.codigosBarras': 'Informe no máximo 5 códigos de barras por embalagem.',
+      })
+      expect(MAXIMO_EMBALAGENS).toBe(10)
+      expect(MAXIMO_CODIGOS_POR_EMBALAGEM).toBe(5)
+    })
+
+    it('o erro indexado da API vira o caminho do campo no formulario', () => {
+      expect(campoDaChaveDoServidor('embalagens[1].quantidade')).toBe('embalagens.1.quantidade')
+      expect(campoDaChaveDoServidor('embalagens[0].codigosBarras[2]')).toBe('embalagens.0.codigosBarras')
+      expect(campoDaChaveDoServidor('embalagens[0].unidadeId')).toBe('embalagens.0.unidadeId')
+      expect(campoDaChaveDoServidor('embalagens')).toBe('embalagens')
+      expect(campoDaChaveDoServidor('embalagens[3]')).toBe('embalagens')
+      expect(campoDaChaveDoServidor('embalagens[0].outra')).toBe('embalagens')
+      // Os demais continuam iguais.
+      expect(campoDaChaveDoServidor('codigosBarras[2]')).toBe('codigosBarras')
+      expect(campoDaChaveDoServidor('promocao.preco')).toBe('precoPromocional')
+    })
+
+    it('caminhos com erro nas embalagens, na ordem da tela; pendente e lista contam uma vez', () => {
+      const comErro = {
+        1: { quantidade: { message: 'a' }, preco: { message: 'b' } },
+        0: { codigoPendente: { message: 'c' }, codigosBarras: { message: 'd' } },
+      }
+      expect(caminhosComErroNasEmbalagens(comErro)).toEqual([
+        'embalagens.0.codigoPendente',
+        'embalagens.1.quantidade',
+        'embalagens.1.preco',
+      ])
+      expect(caminhosComErroNasEmbalagens({ root: { message: 'Informe no máximo 10 embalagens.' } })).toEqual([
+        'embalagens',
+      ])
+      expect(caminhosComErroNasEmbalagens({ message: 'Informe no máximo 10 embalagens.' })).toEqual(['embalagens'])
+      expect(caminhosComErroNasEmbalagens(undefined)).toEqual([])
+    })
+
+    it('idDoCampo e secaoDoCampo entendem o caminho de uma embalagem', () => {
+      expect(idDoCampo('embalagens.2.quantidade')).toBe('embalagens.2.quantidade')
+      expect(idDoCampo('embalagens.2.codigoPendente')).toBe('embalagens.2.codigosBarras')
+      expect(secaoDoCampo('embalagens.2.preco')).toBe('embalagens')
+      expect(secaoDoCampo('custo')).toBe('precos')
+    })
+
+    it('os codigos das embalagens tambem contam como gravados (nao sao rebloqueados)', () => {
+      const gravados = formatosDoProduto({
+        ...produtoAtivo,
+        embalagens: [embalagemDaApi({ id: 'e1', unidade: resumo(CX), quantidade: 3, preco: null, codigos: ['X-1'] })],
+      })
+      expect(gravados.get('X-1')).toBe('OUTRO')
+      expect(gravados.get('7891000315507')).toBe('EAN13')
+    })
+
+    it('o limite do "Adicionar código" e por parametro (5 nas embalagens)', () => {
+      const cinco = Array.from({ length: 5 }, (_, i) => `C${i}`)
+      expect(avaliarNovoCodigo('X1', cinco, new Map(), 5)).toEqual({
+        tipo: 'bloqueado',
+        motivo: 'Limite de 5 códigos de barras atingido.',
+      })
+      expect(avaliarNovoCodigo('X1', cinco, new Map())).toMatchObject({ tipo: 'aceito' })
     })
   })
 })

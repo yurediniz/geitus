@@ -36,8 +36,6 @@ const produtoRequest: ProdutoRequest = {
   nomeCurto: null,
   unidadeId: '6f1c2b8e-0000-4000-8000-000000000001',
   categoriaId: null,
-  unidadeCompraId: null,
-  fatorConversao: null,
   marca: null,
   fornecedor: null,
   descricao: null,
@@ -51,6 +49,7 @@ const produtoRequest: ProdutoRequest = {
   estoqueMaximo: null,
   pontoReposicao: null,
   codigosBarras: ['7891000315507'],
+  embalagens: [],
   sku: 'SKU-1',
 }
 

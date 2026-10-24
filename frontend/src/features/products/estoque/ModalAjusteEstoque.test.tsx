@@ -26,6 +26,7 @@ const MOVIMENTO: MovimentoEstoque = {
   observacao: null,
   usuarioNome: 'Ana Souza',
   criadoEm: '2026-10-21T15:20:00',
+  embalagem: null,
 }
 
 const CHAVE_DO_PRODUTO = [...PRODUTOS_QUERY_KEY, 'detalhe', ID_ARROZ]

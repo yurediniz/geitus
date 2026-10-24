@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
 import { Controller, useFormContext, useWatch } from 'react-hook-form'
-import type { UseQueryResult } from '@tanstack/react-query'
 import { Info, SlidersHorizontal } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -11,16 +10,12 @@ import { SeloSituacaoEstoque } from '@/features/products/estoque/SeloSituacaoEst
 import { mensagemDeSucesso } from '@/features/products/estoque/ajusteEstoque'
 import { formatarQuantidade } from '@/features/products/formatacaoProduto'
 import type { ProdutoFormValues } from '@/features/products/produtoFormulario'
-import { BlocoUnidadeEmbalagem } from '@/features/products/secoes/BlocoUnidadeEmbalagem'
-import type { UnidadeMedida } from '@/types/catalogo'
 import type { Produto } from '@/types/produto'
 
 export interface SecaoEstoqueProps {
   /** Produto gravado (saldo e situacao); null no cadastro. */
   produto: Produto | null
-  /** Unidades do catalogo, para a unidade de compra do bloco "Unidade e embalagem". */
-  unidadesQuery: UseQueryResult<UnidadeMedida[]>
-  /** Sigla por id de unidade, para o estoque inicial ("em UN") e o "1 CX = 12 UN". */
+  /** Sigla por id de unidade, para o estoque inicial ("em UN") e os niveis. */
   siglaPorId: ReadonlyMap<string, string>
   desabilitado: boolean
   /** OPERADOR: ve o saldo, sem o botao de ajuste. */
@@ -41,14 +36,13 @@ const DICA_AJUSTE_BLOQUEADO = 'Salve a mudança de controle ou de unidade antes 
 
 /**
  * Secao Estoque: o interruptor "Controlar estoque", o saldo atual (so leitura,
- * derivado das movimentacoes) ou, no cadastro, o estoque inicial, os niveis
- * de referencia e o bloco "Unidade e embalagem". Com o controle desligado,
+ * derivado das movimentacoes) ou, no cadastro, o estoque inicial, e os niveis
+ * de referencia. As embalagens ficam na secao Embalagens. Com o controle desligado,
  * saldo e niveis saem da tela; os niveis voltam se tiverem erro, para o erro
  * nao ficar escondido.
  */
 export function SecaoEstoque({
   produto,
-  unidadesQuery,
   siglaPorId,
   desabilitado,
   somenteLeitura,
@@ -207,13 +201,6 @@ export function SecaoEstoque({
           </div>
         </section>
       )}
-      <BlocoUnidadeEmbalagem
-        produto={produto}
-        unidadesQuery={unidadesQuery}
-        siglaPorId={siglaPorId}
-        desabilitado={desabilitado}
-        aoAlterarCampo={aoAlterarCampo}
-      />
       {produto && !somenteLeitura && (
         <ModalAjusteEstoque
           aberto={ajustando}

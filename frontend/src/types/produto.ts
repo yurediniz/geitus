@@ -45,6 +45,54 @@ export interface AtacadoProduto {
 /** Promocao enviada no POST/PATCH (a situacao e sempre derivada pelo backend). */
 export type PromocaoRequest = Omit<PromocaoProduto, 'situacao'>
 
+/**
+ * De onde vem o preco efetivo da embalagem (spec B3 §3.1): o preco proprio, a
+ * quantidade x preco de venda da unidade ou x preco promocional vigente dela.
+ */
+export type OrigemPrecoEmbalagem = 'PROPRIO' | 'UNIDADE' | 'PROMOCAO_DA_UNIDADE'
+
+/**
+ * Embalagem de venda do produto (Fase B3): outra forma de vender ou comprar o
+ * mesmo produto, com estoque unico na unidade de venda.
+ */
+export interface Embalagem {
+  /** UUID publico da embalagem. */
+  id: string
+  /** Unidade da embalagem (CX, FD, PCT...), diferente da de venda. */
+  unidade: UnidadeResumo
+  /** Quantas unidades de venda a embalagem contem (> 1). */
+  quantidade: number
+  /** Derivado: "CX c/ 3 UN". Só-leitura. */
+  rotulo: string
+  /** Preco proprio; null = vale o calculado. */
+  preco: number | null
+  /** Preco que vale hoje (proprio ou calculado). Só-leitura. */
+  precoEfetivo: number
+  origemPreco: OrigemPrecoEmbalagem
+  /** Quantidade x custo da unidade; null sem custo. Só-leitura. */
+  custo: number | null
+  /** Margem do preco efetivo sobre o custo da embalagem (%); null sem custo. Só-leitura. */
+  margem: number | null
+  /** Markup sobre o custo da embalagem (%); null sem custo ou com custo 0. Só-leitura. */
+  markup: number | null
+  /** Embalagem de compra (no maximo uma por produto). */
+  deCompra: boolean
+  /** De 0 a 5 codigos, na ordem de exibicao. */
+  codigosBarras: CodigoBarras[]
+}
+
+/** Embalagem enviada no POST/PATCH do produto. */
+export interface EmbalagemRequest {
+  /** UUID da embalagem que continua; ausente na embalagem nova. */
+  id?: string
+  unidadeId: string
+  quantidade: number
+  /** null = sem preco proprio (vale o calculado). */
+  preco: number | null
+  deCompra: boolean
+  codigosBarras: string[]
+}
+
 /** Campos de texto livre com sugestoes dos valores ja usados na empresa. */
 export type CampoSugestaoProduto = 'marca' | 'fornecedor'
 
@@ -70,12 +118,6 @@ export interface Produto {
   fornecedor: string | null
   /** Unidade de venda (obrigatoria). */
   unidade: UnidadeResumo
-  /** Unidade de compra; null quando o produto e comprado na mesma unidade de venda. */
-  unidadeCompra: UnidadeResumo | null
-  /** Quantas unidades de venda cabem em 1 unidade de compra; null sem unidade de compra. */
-  fatorConversao: number | null
-  /** Texto derivado pelo backend, ex.: "1 CX = 12 UN"; null sem unidade de compra. Só-leitura. */
-  conversaoTexto: string | null
   descricao: string | null
   precoVenda: number
   custo: number | null
@@ -98,8 +140,10 @@ export interface Produto {
   estoqueMinimo: number | null
   estoqueMaximo: number | null
   pontoReposicao: number | null
-  /** De 0 a 20 codigos, na ordem de exibicao. */
+  /** De 0 a 20 codigos da unidade de venda, na ordem de exibicao (os das embalagens ficam nelas). */
   codigosBarras: CodigoBarras[]
+  /** Embalagens de venda (ate 10), na ordem gravada. */
+  embalagens: Embalagem[]
   sku: string | null
   ativo: boolean
   /** Se o produto pode ser excluido fisicamente (nunca teve venda nem movimentacao). */
@@ -130,9 +174,6 @@ export interface ProdutoRequest {
   unidadeId: string
   /** UUID da categoria; null = sem categoria. */
   categoriaId: string | null
-  /** UUID da unidade de compra; enviado sempre junto com `fatorConversao`. */
-  unidadeCompraId: string | null
-  fatorConversao: number | null
   marca: string | null
   fornecedor: string | null
   descricao: string | null
@@ -154,6 +195,11 @@ export interface ProdutoRequest {
   pontoReposicao: number | null
   /** Lista completa e ordenada: o PATCH substitui a lista gravada (removidos sao apagados). */
   codigosBarras: string[]
+  /**
+   * Lista completa e ordenada das embalagens: o PATCH substitui a gravada (a
+   * ausente da lista e removida com os seus codigos; a sem `id` e nova).
+   */
+  embalagens: EmbalagemRequest[]
   sku: string | null
 }
 

@@ -48,6 +48,18 @@ export interface MovimentoEstoque {
   usuarioNome: string
   /** Momento da gravacao (yyyy-mm-ddThh:mm:ss, horario do servidor). */
   criadoEm: string
+  /** Retrato da embalagem do ajuste informado em embalagens; null quando foi na unidade de venda. */
+  embalagem: RetratoEmbalagemMovimento | null
+}
+
+/** Embalagem como estava no ajuste (o movimento e imutavel e sobrevive a remocao dela). */
+export interface RetratoEmbalagemMovimento {
+  /** "CX c/ 18 UN" */
+  rotulo: string
+  /** Unidades de venda por embalagem (18). */
+  quantidadePorEmbalagem: number
+  /** Quantas embalagens entraram ou sairam (2). */
+  quantidadeDeEmbalagens: number
 }
 
 /** Corpo do ajuste manual de estoque. */
@@ -60,4 +72,9 @@ export interface AjusteEstoqueRequest {
   observacao: string | null
   /** UUID gerado ao abrir o modal: a mesma chave nunca grava dois movimentos. */
   chave: string
+  /**
+   * UUID da embalagem, so em entrada e saida: a `quantidade` passa a ser o
+   * numero (inteiro) de embalagens. Ausente = quantidade na unidade de venda.
+   */
+  embalagemId?: string
 }

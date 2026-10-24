@@ -1085,6 +1085,7 @@ describe('ProdutosListaPage', () => {
         observacao: null,
         usuarioNome: 'Ana Souza',
         criadoEm: '2026-10-21T15:20:00',
+        embalagem: null,
       }
       listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
       ajustarEstoqueMock.mockResolvedValue(SAIDA)
