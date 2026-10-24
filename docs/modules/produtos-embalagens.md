@@ -51,7 +51,7 @@
 | Mais de uma de compra | "Só uma embalagem pode ser a de compra." |
 | Mais de 10 embalagens | "Informe no máximo 10 embalagens." |
 | Mais de 5 códigos na embalagem | "Informe no máximo 5 códigos de barras por embalagem." |
-| Código já usado na unidade de outro produto | "Este código já está em uso no produto {nome}." (como hoje) |
+| Código já usado na unidade de outro produto | "O código de barras {código} já está cadastrado no produto "{nome}"." (a mensagem atual, mantida) |
 | Código já usado numa embalagem | "Este código já está em uso na embalagem {rótulo} do produto {nome}." |
 | Preço abaixo do mínimo | "O preço da embalagem dá {R$ x} por {sigla}, abaixo do preço mínimo ({R$ mínimo})." |
 
@@ -104,7 +104,7 @@ Aditiva sobre a V11, que não é editada.
     - `(empresa_id, produto_id) → produtos (empresa_id, id) ON DELETE CASCADE`;
     - `(empresa_id, unidade_id) → unidades_medida (empresa_id, id)` (RESTRICT).
   - **Unicidades:**
-    - `UNIQUE (produto_id, unidade_id, quantidade)`;
+    - `UNIQUE (produto_id, unidade_id, quantidade)` `DEFERRABLE INITIALLY DEFERRED`, para duas embalagens poderem trocar unidade e quantidade no mesmo salvamento (a aplicação recusa a repetição antes);
     - índice único parcial `(produto_id) WHERE de_compra`;
     - `UNIQUE (empresa_id, produto_id, id)`, alvo da FK dos códigos.
   - **Índice:** `(unidade_id)`, para a regra "unidade em uso" do cadastro de unidades.
@@ -124,15 +124,15 @@ Aditiva sobre a V11, que não é editada.
     - `quantidade = fator_conversao` (de NUMERIC(12,4) para NUMERIC(12,3), sem perda, pois a regra exige até 3 casas; se houver a 4ª casa, também para com erro);
     - `de_compra = true`, `preco = NULL` e `ordem = 0`;
     - `uuid` gerado.
-  - **Produtos com unidade de compra igual à de venda** (fator 1): não geram embalagem, porque a informação é vazia.
+  - **Produtos com unidade de compra igual à de venda** e fator 1: não geram embalagem, porque a informação é vazia. Com fator diferente de 1, a migration também para com erro.
   - **Depois:** saem `unidade_compra_id`, `fator_conversao`, as constraints `fk_produto_unidade_compra`, `ck_produto_fator_positivo` e `ck_produto_compra_coerente`, e o índice `idx_produto_unidade_compra`.
 - **`produto_historico_precos`:**
-  - nova coluna `embalagem_rotulo VARCHAR(40) NULL`;
+  - nova coluna `embalagem_rotulo VARCHAR(60) NULL`;
   - o CHECK do campo passa a aceitar `PRECO_EMBALAGEM`;
   - CHECK nova: `(campo = 'PRECO_EMBALAGEM') = (embalagem_rotulo IS NOT NULL)`.
   - Sem FK para a embalagem, porque a linha precisa sobreviver à remoção dela.
 - **`movimentos_estoque`** (retrato da embalagem no ajuste, §6):
-  - novas colunas `embalagem_rotulo VARCHAR(40)`, `embalagem_quantidade NUMERIC(12,3)` (unidades por embalagem) e `quantidade_embalagens INTEGER`, todas `NULL`;
+  - novas colunas `embalagem_rotulo VARCHAR(60)`, `embalagem_quantidade NUMERIC(12,3)` (unidades por embalagem) e `quantidade_embalagens INTEGER`, todas `NULL`;
   - CHECK: as três nulas ou as três preenchidas, com `embalagem_quantidade > 1` e `quantidade_embalagens > 0`;
   - CHECK: preenchidas só com `tipo IN ('ENTRADA','SAIDA')`;
   - CHECK: preenchidas, `abs(quantidade) = quantidade_embalagens * embalagem_quantidade`.
