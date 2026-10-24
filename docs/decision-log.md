@@ -981,3 +981,47 @@ A DEC-030 previu a Fase F (imagem do produto no PostgreSQL, comprimida no navega
 - O PDV usa a mesma `miniaturaUrl`.
 - Armazenamento externo (S3) quando o volume justificar: acompanhar `pg_total_relation_size('produto_imagens')` e avaliar acima de 5 GB. Backups em `pg_dump -Fc`.
 - Encerra as 6 fases da DEC-030.
+
+## DEC-041 — Módulo Caixa: pontos de caixa, sessões com movimentos imutáveis e fechamento cego configurável (etapa 10)
+
+**Data:** 2026-10-24
+**Status:** Aceita
+**Contexto:**
+O Caixa é a etapa 10 do MVP e a base do PDV: a venda só será finalizada com caixa aberto e ficará ligada a ele. O `CLAUDE.md` pede abertura, fechamento e comparação entre o esperado e o informado. A visão de domínio (§3.6) prevê a sessão de caixa e os movimentos imutáveis. Ainda não há vendas, então nesta fase só dinheiro passa pela gaveta.
+
+**Decisão:**
+- **O caixa pertence a um ponto de caixa**, não ao usuário (decisão do usuário):
+  - cada ponto tem no máximo uma sessão aberta, e cada usuário também;
+  - o "Caixa 1" nasce sozinho;
+  - ponto não é excluído, só inativado.
+- **Movimentos imutáveis e esperado calculado pela soma** (abordagem A):
+  - movimentos `ABERTURA`, `SUPRIMENTO` e `SANGRIA` (sangria e suprimento já nesta fase, decisão do usuário);
+  - o fechamento é uma fotografia na sessão (esperado, contado, diferença, justificativa, quem e quando);
+  - gatilhos no banco proíbem alterar movimentos e sessões fechadas.
+- **Fechamento cego e com o esperado visível:** existem os dois, e o ADMIN escolhe em Configurações (decisão do usuário). Vem ligado.
+  - **Cego:** a contagem é gravada uma vez e não muda; com diferença, a sessão passa por `EM_CONFERENCIA` até a justificativa.
+  - **OPERADOR no modo cego:** não recebe o esperado enquanto a sessão está aberta.
+- **Diferença exige justificativa**, e caixa fechado não reabre (decisão do usuário).
+- **Permissões:** o OPERADOR opera o caixa que abriu; o ADMIN opera qualquer caixa e cuida dos pontos e da configuração (decisão do usuário).
+- **Tela Configurações** criada agora, só ADMIN, com a seção Caixa (decisão do usuário). Antecipa parte do módulo Configurações básicas.
+- **Horários em `TIMESTAMPTZ`** nas tabelas novas, preenchidos pelo `Clock` `America/Sao_Paulo`. É a primeira parte da DT-030.
+- **Concorrência e repetição:** trava pessimista da sessão em lançamentos e fechamento; chave de idempotência nos movimentos, como no estoque.
+
+**Motivo:**
+- **Ponto de caixa:** o dinheiro está na gaveta do balcão, não com a pessoa, e o ponto prepara o terminal do PDV.
+- **Saldo pela soma:** segue o princípio "saldo só existe a partir do histórico" (DEC-023), já usado no estoque. Para uma sessão de um dia, somar é barato, e não há duas fontes da verdade.
+- **Contagem que não muda:** é o que dá valor ao fechamento cego.
+- **`TIMESTAMPTZ`:** caixa é o primeiro módulo em que a hora errada vira problema de dinheiro.
+
+**Impacto:**
+- Domínio novo `cashier` e migration `V16__caixa.sql`.
+- Endpoints `/api/caixa/**` e `/api/configuracoes/caixa`.
+- Rotas `/caixa`, `/caixa/historico` e `/configuracoes`.
+- Resolvedor compartilhado da empresa do usuário em `iam` (DT-025) e `Paginacao`/`PaginaResponse` em `shared` (DT-032).
+- Spec: `docs/modules/caixa.md`.
+- Revisores obrigatórios: `data-reviewer` (V16, gatilhos, índices parciais, fuso) e `security-reviewer` (perfis, regra do dono, esperado escondido no modo cego).
+
+**Observações futuras:**
+- O PDV acrescenta o tipo `RECEBIMENTO` com forma de pagamento e a conferência por forma.
+- Impressão do fechamento, relatório de caixa e integração da sangria com o Financeiro ficam para os módulos próprios.
+- As tabelas antigas continuam na DT-030.

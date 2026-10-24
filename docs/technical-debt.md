@@ -304,6 +304,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Descricao:** `resolverEmpresaId(idUsuario)` esta duplicado em 4 services: `ProdutoService`, `ClienteService`, `UnidadeMedidaService` e `CategoriaService` (Fase A, DEC-031). Ja divergem: quando a empresa nao existe, unidade/categoria lancam `CredenciaisInvalidasException` e produto lanca `RegraDeNegocioException("Empresa informada não encontrada.")`.
 - **Impacto:** Duplicacao de regra de isolamento (DEC-016) que tende a divergir a cada modulo novo.
 - **Quando revisar:** Antes do terceiro modulo de negocio (Caixa).
+- **Caixa (DEC-041):** a spec do Caixa cria o resolvedor compartilhado em `iam` e o usa no `cashier`; migrar os 4 services antigos fica opcional.
 - **Observacoes:** Componente em `iam` (ex.: resolvedor da empresa do usuario autenticado) reutilizado pelos services; relaciona-se com a futura empresa ativa da DEC-024.
 
 ## DT-028 — Auditoria e integridade da exclusao de produto (Fases C/D)
@@ -364,6 +365,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Impacto:** Hora errada exibida e gravada em historico, auditoria, caixa e vendas.
 - **Quando revisar:** Antes do primeiro deploy e antes de Caixa/PDV.
 - **Observacoes:** Decisao unica para o projeto inteiro, uma destas: fixar `user.timezone`/`hibernate.jdbc.time_zone`, ou gerar os carimbos com `LocalDateTime.now(clock)`, ou migrar para `TIMESTAMPTZ`. Tambem: `updatable = false` em `Usuario.empresa`, porque a FK composta do historico (V8) faz a troca de empresa falhar no banco.
+  - **Caixa (DEC-041):** escolhe `TIMESTAMPTZ` preenchido pelo `Clock` nas tabelas novas (V16). Fica como o padrao para as tabelas antigas, que continuam abertas aqui.
 
 ## DT-031 — Endurecimentos menores da Fase C
 

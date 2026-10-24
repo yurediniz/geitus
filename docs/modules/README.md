@@ -18,7 +18,7 @@ Conforme o escopo definido no [CLAUDE.md](../../CLAUDE.md):
 - [Clientes](clientes.md) ✔
 - [Fornecedores](fornecedores-e-marcas.md) ✔ — cadastro com representantes, marcas e produtos que vende (Fase B5, DEC-039; amplia o escopo do MVP de Produtos)
 - PDV
-- Caixa
+- [Caixa](caixa.md) — em especificação (DEC-041; inclui a tela Configurações com a seção Caixa)
 - Estoque básico
 - Financeiro básico
 - Dashboard básico
