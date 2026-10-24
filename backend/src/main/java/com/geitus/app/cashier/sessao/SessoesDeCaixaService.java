@@ -6,7 +6,9 @@ import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.time.ZoneId;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,6 +21,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.geitus.app.cashier.CaixaConflitoException;
 import com.geitus.app.cashier.CaixaNaoEncontradoException;
 import com.geitus.app.cashier.DadosDoCaixaInvalidosException;
+import com.geitus.app.cashier.FormaDePagamento;
 import com.geitus.app.cashier.ViolacaoDeConstraint;
 import com.geitus.app.cashier.configuracao.ConfiguracaoDoCaixaService;
 import com.geitus.app.cashier.ponto.PontoDeCaixa;
@@ -90,6 +93,7 @@ public class SessoesDeCaixaService {
     private final SessaoDeCaixaRepository sessaoRepository;
     private final ConsultaDeSessoes consultaDeSessoes;
     private final MovimentoDeCaixaRepository movimentoRepository;
+    private final ContagemDeCaixaPorFormaRepository contagemRepository;
     private final PontosDeCaixaService pontosService;
     private final PontoDeCaixaRepository pontoRepository;
     private final ConfiguracaoDoCaixaService configuracaoService;
@@ -99,13 +103,15 @@ public class SessoesDeCaixaService {
     private final TransactionTemplate transacao;
 
     public SessoesDeCaixaService(SessaoDeCaixaRepository sessaoRepository, ConsultaDeSessoes consultaDeSessoes,
-            MovimentoDeCaixaRepository movimentoRepository, PontosDeCaixaService pontosService,
+            MovimentoDeCaixaRepository movimentoRepository, ContagemDeCaixaPorFormaRepository contagemRepository,
+            PontosDeCaixaService pontosService,
             PontoDeCaixaRepository pontoRepository, ConfiguracaoDoCaixaService configuracaoService,
             ResolvedorDoUsuarioAutenticado resolvedor, RespostasDaSessao respostas, Clock relogio,
             PlatformTransactionManager gerenciadorDeTransacoes) {
         this.sessaoRepository = sessaoRepository;
         this.consultaDeSessoes = consultaDeSessoes;
         this.movimentoRepository = movimentoRepository;
+        this.contagemRepository = contagemRepository;
         this.pontosService = pontosService;
         this.pontoRepository = pontoRepository;
         this.configuracaoService = configuracaoService;
@@ -117,15 +123,6 @@ public class SessoesDeCaixaService {
 
     /** Sessao da resposta e se foi gravada agora ({@code true}, 201) ou ja existia pela chave (200). */
     public record ResultadoDaOperacao(SessaoDeCaixaResponse sessao, boolean criada) {
-    }
-
-    // ---------- Uso de outros modulos (PDV) ----------
-
-    /** A sessao {@code ABERTA} aberta pelo usuario, onde a venda vai registrar os recebimentos (spec 9). */
-    @Transactional(readOnly = true)
-    public Optional<SessaoDeCaixa> sessaoAbertaDoUsuario(Long empresaId, Long usuarioId) {
-        return sessaoRepository.emAndamentoDoUsuario(empresaId, usuarioId)
-                .filter(sessao -> sessao.getStatus() == StatusDaSessao.ABERTA);
     }
 
     // ---------- Consultas ----------
@@ -332,33 +329,65 @@ public class SessoesDeCaixaService {
     // ---------- Contagem e fechamento (spec 3.4) ----------
 
     /**
-     * Grava a contagem uma vez. Repetir com o mesmo valor devolve o resultado
-     * gravado (a rede caiu depois da contagem, Review Focus 1); outro valor,
-     * 409. No modo cego a justificativa so vem depois, no fechamento, com ou
-     * sem diferenca: aceitar so quando ha diferenca revelaria o esperado.
+     * Grava a contagem uma vez, por forma (docs/modules/pdv.md, 3.9): o
+     * dinheiro sempre e as outras formas que tiveram movimento. Repetir com os
+     * mesmos valores devolve o resultado gravado (a rede caiu depois da
+     * contagem, Review Focus 1); outros valores, 409. No modo cego a
+     * justificativa so vem depois, no fechamento, com ou sem diferenca: aceitar
+     * so quando ha diferenca revelaria o esperado.
+     *
+     * <p>As contagens de Debito, Credito e PIX vao ao banco antes da mudanca de
+     * situacao da sessao: o gatilho da V17 confere, ao sair de {@code ABERTA},
+     * que toda forma com movimento foi contada e se ha diferenca em alguma.
      */
     @Transactional
     public SessaoDeCaixaResponse contarParaUsuario(Long idUsuario, UUID sessaoId, ContagemRequest request) {
         UsuarioAutenticado usuario = resolvedor.resolver(idUsuario);
         SessaoDeCaixa sessao = travarDoUsuario(usuario, sessaoId);
-        BigDecimal contado = emReais(request.valorContado());
         if (sessao.contada()) {
-            if (sessao.getValorContado().compareTo(contado) != 0) {
-                throw new CaixaConflitoException(MENSAGEM_CONTAGEM_REGISTRADA, "valorContado");
-            }
-            return respostas.completa(sessao, usuario);
+            return contagemRepetida(usuario, sessao, request);
         }
+        Map<FormaDePagamento, BigDecimal> esperados = EsperadoPorForma.daSessao(movimentoRepository,
+                sessao.getEmpresaId(), sessao.getId());
+        esperados.putIfAbsent(FormaDePagamento.DINHEIRO, BigDecimal.ZERO.setScale(CASAS_DO_DINHEIRO));
+        Map<FormaDePagamento, BigDecimal> contados = ContagemInformada.validar(request.contagens(),
+                esperados.keySet());
         boolean cego = configuracaoService.fechamentoCego(usuario.empresaId());
         String justificativa = textoOuNulo(request.justificativa());
         if (cego && justificativa != null) {
             throw new DadosDoCaixaInvalidosException(MENSAGEM_JUSTIFICATIVA_NO_CEGO, CAMPO_JUSTIFICATIVA);
         }
+        boolean outrasFormasComDiferenca = false;
+        for (Map.Entry<FormaDePagamento, BigDecimal> contado : contados.entrySet()) {
+            if (contado.getKey() != FormaDePagamento.DINHEIRO) {
+                outrasFormasComDiferenca |= contagemRepository.saveAndFlush(new ContagemDeCaixaPorForma(sessao,
+                        contado.getKey(), esperados.get(contado.getKey()), contado.getValue())).temDiferenca();
+            }
+        }
         Registro registro = new Registro(usuario.usuarioId(), agora());
-        sessao.registrarContagem(esperado(sessao), contado, cego, registro);
+        sessao.registrarContagem(esperados.get(FormaDePagamento.DINHEIRO), contados.get(FormaDePagamento.DINHEIRO),
+                outrasFormasComDiferenca, cego, registro);
         if (sessao.getStatus() == StatusDaSessao.EM_CONFERENCIA && justificativa != null) {
             sessao.fechar(justificativa, registro);
         }
         return respostas.completa(sessaoRepository.saveAndFlush(sessao), usuario);
+    }
+
+    /** Sessao ja contada: os mesmos valores (10 = 10,00) devolvem o gravado; outros, 409. */
+    private SessaoDeCaixaResponse contagemRepetida(UsuarioAutenticado usuario, SessaoDeCaixa sessao,
+            ContagemRequest request) {
+        Map<FormaDePagamento, BigDecimal> gravados = new EnumMap<>(FormaDePagamento.class);
+        gravados.put(FormaDePagamento.DINHEIRO, sessao.getValorContado());
+        contagemRepository.findByEmpresaIdAndSessaoCaixaId(sessao.getEmpresaId(), sessao.getId())
+                .forEach(contagem -> gravados.put(contagem.getForma(), contagem.getValorContado()));
+        Map<FormaDePagamento, BigDecimal> contados = ContagemInformada.validar(request.contagens(),
+                gravados.keySet());
+        boolean mesmosValores = gravados.entrySet().stream()
+                .allMatch(gravado -> gravado.getValue().compareTo(contados.get(gravado.getKey())) == 0);
+        if (!mesmosValores) {
+            throw new CaixaConflitoException(MENSAGEM_CONTAGEM_REGISTRADA, ContagemInformada.CAMPO);
+        }
+        return respostas.completa(sessao, usuario);
     }
 
     /** So em conferencia; repetir com a mesma justificativa numa sessao fechada devolve 200. */
@@ -408,10 +437,9 @@ public class SessoesDeCaixaService {
         }
     }
 
-    /** Esperado na gaveta, lido com a sessao travada. */
+    /** Dinheiro esperado na gaveta, lido com a sessao travada. */
     private BigDecimal esperado(SessaoDeCaixa sessao) {
-        return movimentoRepository.esperado(sessao.getEmpresaId(), sessao.getId())
-                .setScale(CASAS_DO_DINHEIRO, RoundingMode.UNNECESSARY);
+        return EsperadoPorForma.dinheiro(movimentoRepository, sessao.getEmpresaId(), sessao.getId());
     }
 
     /** Valor ja validado com ate 2 casas ({@code @Digits}): nunca arredonda. */

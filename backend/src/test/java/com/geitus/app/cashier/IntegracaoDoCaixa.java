@@ -89,10 +89,17 @@ public abstract class IntegracaoDoCaixa {
         return lancar(usuario, sessao, tipo, valor, "Motivo do teste", UUID.randomUUID());
     }
 
-    protected ResultActions contar(Long usuario, UUID sessao, String valorContado, String justificativa)
+    /** Contagem so do dinheiro (sessao sem movimento em outra forma), no contrato por forma. */
+    protected ResultActions contar(Long usuario, UUID sessao, String dinheiroContado, String justificativa)
+            throws Exception {
+        return contarPorForma(usuario, sessao, "{\"DINHEIRO\":" + dinheiroContado + "}", justificativa);
+    }
+
+    /** Contagem por forma: {@code contagensJson} e o objeto {@code {"DINHEIRO": 100, "DEBITO": 20}}. */
+    protected ResultActions contarPorForma(Long usuario, UUID sessao, String contagensJson, String justificativa)
             throws Exception {
         String justificativaJson = justificativa == null ? "null" : "\"" + justificativa + "\"";
-        return enviar(usuario, "/api/caixa/sessoes/" + sessao + "/contagem", "{\"valorContado\":" + valorContado
+        return enviar(usuario, "/api/caixa/sessoes/" + sessao + "/contagem", "{\"contagens\":" + contagensJson
                 + ",\"justificativa\":" + justificativaJson + "}");
     }
 

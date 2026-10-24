@@ -15,6 +15,14 @@
  *       uma fotografia gravada na sessao.</li>
  * </ul>
  *
+ * <p>PDV (etapa 11, DEC-042): os movimentos tem forma de pagamento; a venda
+ * entra por {@link com.geitus.app.cashier.RecebimentosDoCaixa} (trava da
+ * sessao, recebimentos e estornos) e le as sessoes por
+ * {@link com.geitus.app.cashier.SessoesParaVendas}, ambas implementadas aqui;
+ * o numero da venda nos movimentos vem de
+ * {@link com.geitus.app.cashier.NumerosDasVendas}, implementada pelo PDV. O
+ * caixa nao depende do {@code sales}.
+ *
  * <p>Dependencias: {@code iam} (usuario autenticado) e {@code company}
  * (empresa). O pacote de ponto nao depende do de sessao: le a situacao dos
  * pontos pela interface {@code SessoesAbertasPorPonto}.

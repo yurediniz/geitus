@@ -108,18 +108,23 @@ public class SessaoDeCaixa {
     }
 
     /**
-     * Grava a fotografia da contagem. Sem diferenca, a sessao fecha na hora;
-     * com diferenca, fica {@code EM_CONFERENCIA} esperando a justificativa.
-     * So em sessao {@code ABERTA} (quem chama confere o estado).
+     * Grava a fotografia da contagem do dinheiro (as outras formas ficam em
+     * {@link ContagemDeCaixaPorForma}, gravadas antes). Sem diferenca em
+     * nenhuma forma, a sessao fecha na hora; com diferenca em alguma, fica
+     * {@code EM_CONFERENCIA} esperando a justificativa (docs/modules/pdv.md,
+     * 3.9). So em sessao {@code ABERTA} (quem chama confere o estado).
+     *
+     * @param outrasFormasComDiferenca se Debito, Credito ou PIX tiveram diferenca
      */
-    public void registrarContagem(BigDecimal esperado, BigDecimal contado, boolean cego, Registro registro) {
+    public void registrarContagem(BigDecimal esperado, BigDecimal contado, boolean outrasFormasComDiferenca,
+            boolean cego, Registro registro) {
         this.fechamentoCego = cego;
         this.valorEsperado = esperado;
         this.valorContado = contado;
         this.diferenca = contado.subtract(esperado);
         this.contadaPor = registro.usuarioId();
         this.contadaEm = registro.em();
-        if (diferenca.signum() == 0) {
+        if (diferenca.signum() == 0 && !outrasFormasComDiferenca) {
             fecharCom(null, registro);
         } else {
             this.status = StatusDaSessao.EM_CONFERENCIA;

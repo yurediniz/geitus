@@ -372,13 +372,13 @@ class SessoesDeCaixaIT extends IntegracaoDoCaixa {
         UUID sessao = abrirCaixa(empresa.operadora(), caixa1, "100.00");
 
         contar(empresa.operadora(), sessao, "-1", null).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.campos[0].campo").value("valorContado"));
+                .andExpect(jsonPath("$.campos[0].campo").value("contagens.DINHEIRO"));
         contar(empresa.operadora(), sessao, "null", null).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.campos[0].campo").value("valorContado"));
+                .andExpect(jsonPath("$.campos[0].campo").value("contagens.DINHEIRO"));
         contar(empresa.operadora(), sessao, "1.005", null).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.campos[0].campo").value("valorContado"));
+                .andExpect(jsonPath("$.campos[0].campo").value("contagens.DINHEIRO"));
         contar(empresa.operadora(), sessao, "10000000000.00", null).andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.campos[0].campo").value("valorContado"));
+                .andExpect(jsonPath("$.campos[0].campo").value("contagens.DINHEIRO"));
         detalhe(empresa.operadora(), sessao).andExpect(jsonPath("$.status").value("ABERTA"));
     }
 

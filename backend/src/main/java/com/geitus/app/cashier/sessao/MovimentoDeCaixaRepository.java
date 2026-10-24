@@ -23,13 +23,29 @@ public interface MovimentoDeCaixaRepository extends Repository<MovimentoDeCaixa,
     List<MovimentoDeCaixa> findByEmpresaIdAndSessaoCaixaIdOrderByCriadoEmDescIdDesc(Long empresaId, Long sessaoId);
 
     /**
-     * Dinheiro esperado na gaveta: abertura + suprimentos - sangrias. Nao e
-     * coluna: e sempre esta soma (spec 2).
+     * Dinheiro esperado na gaveta: abertura + suprimentos + recebimentos -
+     * sangrias - estornos, so em dinheiro. Nao e coluna: e sempre esta soma
+     * (spec 2; docs/modules/pdv.md, 3.9).
      */
     @Query(value = """
-            SELECT COALESCE(SUM(CASE WHEN tipo = 'SANGRIA' THEN -valor ELSE valor END), 0)
+            SELECT COALESCE(SUM(CASE WHEN tipo IN ('SANGRIA', 'ESTORNO') THEN -valor ELSE valor END), 0)
             FROM movimentos_caixa
-            WHERE empresa_id = :empresaId AND sessao_caixa_id = :sessaoId
+            WHERE empresa_id = :empresaId AND sessao_caixa_id = :sessaoId AND forma = 'DINHEIRO'
             """, nativeQuery = true)
     BigDecimal esperado(@Param("empresaId") Long empresaId, @Param("sessaoId") Long sessaoId);
+
+    /**
+     * Esperado de cada forma com movimento nas sessoes, numa consulta: linhas
+     * {@code [sessao_caixa_id, forma, esperado]}. Os ids vao num unico
+     * parametro de array ({@code = ANY}); atende o {@code ix_movimento_caixa_sessao}.
+     * Use {@code EsperadoPorForma}.
+     */
+    @Query(value = """
+            SELECT sessao_caixa_id, forma,
+                   COALESCE(SUM(CASE WHEN tipo IN ('SANGRIA', 'ESTORNO') THEN -valor ELSE valor END), 0)
+            FROM movimentos_caixa
+            WHERE empresa_id = :empresaId AND sessao_caixa_id = ANY(:sessaoIds)
+            GROUP BY sessao_caixa_id, forma
+            """, nativeQuery = true)
+    List<Object[]> esperadosPorForma(@Param("empresaId") Long empresaId, @Param("sessaoIds") Long[] sessaoIds);
 }
