@@ -593,7 +593,8 @@ export function valoresParaCadastrarOutro(
   }
 }
 
-function numeroParaTexto(valor: number | null): string {
+/** Numero da API no formato do campo do formulario ("9.5"; null -> ''). */
+export function numeroParaTexto(valor: number | null): string {
   return valor === null ? '' : String(valor)
 }
 

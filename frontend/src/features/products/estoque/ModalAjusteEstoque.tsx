@@ -26,7 +26,7 @@ import {
   rotuloConfirmar,
   rotuloDoCusto,
   textoDaPrevia,
-  textoDaPreviaComCusto,
+  textoDoCustoNaPrevia,
   textoDoCustoPorUnidade,
   validarAjuste,
   type CampoAjuste,
@@ -70,8 +70,9 @@ export interface ModalAjusteEstoqueProps {
 }
 
 /**
- * Modal "Ajustar estoque" (spec 6.2): tipo, quantidade, motivo, observacao, a
- * previa do saldo e o atalho "Zerar estoque". O conteudo monta a cada
+ * Modal "Ajustar estoque" (spec 6.2): tipo, quantidade, o custo da entrada por
+ * compra (spec B4 §7.1), motivo, observacao, a previa do saldo e o atalho
+ * "Zerar estoque". O conteudo monta a cada
  * abertura, e com ele a `chave` de idempotencia: novas tentativas na mesma
  * abertura (ex.: depois de um erro de rede) reaproveitam a chave, e o backend
  * nao grava o movimento duas vezes.
@@ -101,6 +102,7 @@ const ID_CAMPO: Readonly<Record<CampoAjuste, string>> = {
 }
 const ID_ERRO_GERAL = 'ajuste-erro-geral'
 const ID_PREVIA = 'ajuste-previa'
+const ID_PREVIA_CUSTO = 'ajuste-previa-custo'
 const ID_AJUDA_CONTAGEM = 'ajuste-quantidade-ajuda'
 const ID_DICA_CUSTO = 'ajuste-custo-dica'
 const ID_CUSTO_POR_UNIDADE = 'ajuste-custo-por-unidade'
@@ -124,7 +126,8 @@ function primeiroCampoComErro(erros: Partial<Record<CampoAjuste, string>>): Camp
 }
 
 const MENSAGEM_FALHA = 'Não foi possível registrar o ajuste. Confira a conexão e tente de novo.'
-const MENSAGEM_EMBALAGEM_REMOVIDA = 'A embalagem escolhida foi removida. Confira a quantidade e tente de novo.'
+const MENSAGEM_EMBALAGEM_REMOVIDA =
+  'A embalagem escolhida foi removida. Confira a quantidade e o custo e tente de novo.'
 const MENSAGEM_CONFLITO =
   'Um ajuste deste produto já foi registrado agora há pouco. Confira o saldo atual antes de confirmar de novo.'
 
@@ -233,14 +236,14 @@ function ConteudoAjuste({
   const enviando = mutation.isPending
 
   // A embalagem escolhida saiu do produto (ex.: 404 e a recarga sem ela): o seletor volta a
-  // unidade de venda e a quantidade, que estava em embalagens, fica para ser informada de novo.
+  // unidade de venda, e a quantidade e o custo, que estavam em embalagens, ficam para ser informados de novo.
   const embalagemSumiu =
     Boolean(dados.embalagemId) && !embalagens.some((embalagem) => embalagem.id === dados.embalagemId)
   useEffect(() => {
     if (!embalagemSumiu) {
       return
     }
-    setDados((atuais) => ({ ...atuais, embalagemId: '', quantidade: '' }))
+    setDados((atuais) => ({ ...atuais, embalagemId: '', quantidade: '', custo: '' }))
     setEmbalagemEscolhida(false)
     setFocoPendente(embalagens.length > 0 ? 'embalagemId' : 'quantidade')
   }, [embalagemSumiu, embalagens.length])
@@ -272,10 +275,11 @@ function ConteudoAjuste({
   }
 
   const escolherEmbalagem = (embalagemId: string) => {
-    setDados((atuais) => ({ ...atuais, embalagemId }))
+    // O custo digitado era o de 1 unidade ou de 1 embalagem: com outra escolha, e descartado (com o erro dele).
+    setDados((atuais) => (atuais.embalagemId === embalagemId ? atuais : { ...atuais, embalagemId, custo: '' }))
     setEmbalagemEscolhida(true)
-    // A quantidade muda de sentido (unidades ou embalagens).
-    setErrosEnvio(({ quantidade: _quantidade, embalagemId: _embalagem, ...demais }) => demais)
+    // A quantidade e o custo mudam de sentido (unidades ou embalagens).
+    setErrosEnvio(({ quantidade: _quantidade, embalagemId: _embalagem, custo: _custo, ...demais }) => demais)
   }
 
   const trocarTipo = (tipo: TipoMovimento) => {
@@ -350,8 +354,9 @@ function ConteudoAjuste({
   // Custo por unidade de venda do custo digitado (a conta do backend); null sem custo valido.
   const custoUnidade = comCusto ? custoPorUnidade(dados.custo ?? '', embalagem?.quantidade ?? null) : null
   const previaDoSaldo = previa && quantidadeAceita ? textoDaPrevia(dados.tipo, saldo, previa, sigla, emEmbalagem) : null
-  const textoPrevia = comCusto ? textoDaPreviaComCusto(previaDoSaldo, custoUnidade, custoAtual, sigla) : previaDoSaldo
-  const dicaCusto = dicaDoUltimoCusto(custoAtual, sigla)
+  // O custo vai numa linha propria, fora da regiao viva (o campo de custo ja e anunciado), so junto da previa do saldo.
+  const custoDaPrevia = previaDoSaldo ? textoDoCustoNaPrevia(custoUnidade, custoAtual, sigla) : null
+  const dicaCusto = dicaDoUltimoCusto(custoAtual, sigla, embalagem)
   // So na embalagem: na unidade de venda o custo digitado ja e por unidade.
   const custoPorUnidadeTexto = embalagem && custoUnidade !== null ? textoDoCustoPorUnidade(custoUnidade, sigla) : null
   const erroCusto = errosEnvio.custo
@@ -521,11 +526,20 @@ function ConteudoAjuste({
           </div>
         )}
 
-        {/* Regiao viva, logo abaixo da quantidade: a previa, o erro de saldo (antes do envio) ou a contagem que confere. */}
-        <div id={ID_PREVIA} aria-live="polite" className="min-h-5 text-sm tabular-nums">
-          {erroDaPrevia && <p className="font-medium text-destructive">{erroDaPrevia}</p>}
-          {previa?.confere && <p className="text-muted-foreground">{previa.confere}</p>}
-          {textoPrevia && !erroQuantidade && <p className="font-medium">{textoPrevia}</p>}
+        <div className="space-y-0.5">
+          {/* Regiao viva, logo abaixo da quantidade (e do custo, na compra): a previa do saldo, o erro de
+              saldo (antes do envio) ou a contagem que confere. */}
+          <div id={ID_PREVIA} aria-live="polite" className="min-h-5 text-sm tabular-nums">
+            {erroDaPrevia && <p className="font-medium text-destructive">{erroDaPrevia}</p>}
+            {previa?.confere && <p className="text-muted-foreground">{previa.confere}</p>}
+            {previaDoSaldo && !erroQuantidade && <p className="font-medium">{previaDoSaldo}</p>}
+          </div>
+          {/* O custo na previa (spec B4 §7.1), fora da regiao viva: anunciar a cada digito do custo atrapalharia. */}
+          {custoDaPrevia && !erroQuantidade && (
+            <p id={ID_PREVIA_CUSTO} className="text-sm font-medium tabular-nums">
+              {custoDaPrevia}
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5">

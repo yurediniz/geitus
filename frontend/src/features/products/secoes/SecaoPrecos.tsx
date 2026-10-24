@@ -36,6 +36,11 @@ import type { Produto, SituacaoPromocao } from '@/types/produto'
 export interface SecaoPrecosProps {
   /** Produto gravado (custo e a origem dele, para a nota abaixo do campo); null no cadastro. */
   produto: Produto | null
+  /**
+   * Custo de uma entrada por compra registrada com o campo Custo ja alterado na
+   * tela (o valor digitado ficou); null sem isso.
+   */
+  custoDaCompraNaoAplicado?: number | null
   /** Sigla por id de unidade, para "Quantidade mínima (UN)". */
   siglaPorId: ReadonlyMap<string, string>
   desabilitado: boolean
@@ -172,6 +177,38 @@ function ExplicacaoMargemMarkup() {
   )
 }
 
+/**
+ * O que acontece ao salvar com o campo Custo diferente do gravado: se uma
+ * entrada por compra mudou o custo depois que o campo foi alterado, que vale o
+ * valor do campo; senao, que o custo passa a contar como editado manualmente.
+ * Null com o campo igual ao gravado.
+ */
+function textoDoCustoAlterado(
+  custoDoCampo: string,
+  custoGravado: number | null,
+  custoDaCompraNaoAplicado: number | null,
+): string | null {
+  const doCampo = numeroValido(custoDoCampo)
+  const centavos = (valor: number | null) => (valor === null ? null : Math.round(valor * 100))
+  if (centavos(doCampo) === centavos(custoGravado)) {
+    return null
+  }
+  return custoDaCompraNaoAplicado === null
+    ? 'Ao salvar, o custo passa a contar como editado manualmente.'
+    : `A entrada de compra mudou o custo para ${formatarMoeda(custoDaCompraNaoAplicado)}. Ao salvar, vale o valor deste campo.`
+}
+
+/** Ajuda do campo Custo: a nota da origem e, com o campo alterado, o aviso do que salvar faz. */
+function AjudaDoCusto({ nota, aviso }: { nota: string | null; aviso: string | null }) {
+  return (
+    <>
+      {nota && <span className="block">{nota}</span>}
+      {nota && aviso && ' '}
+      {aviso && <span className="block font-medium text-warning-soft-foreground">{aviso}</span>}
+    </>
+  )
+}
+
 /** Texto quando a margem nao pode ser calculada: o que falta informar. */
 function textoSemMargem(precoVenda: string): string {
   return numeroValido(precoVenda) === null
@@ -185,7 +222,13 @@ function textoSemMargem(precoVenda: string): string {
  * venda e essencial e fica na secao Geral (cadastro rapido); aqui so aparece
  * como referencia.
  */
-export function SecaoPrecos({ produto, siglaPorId, desabilitado, aoAlterarCampo }: SecaoPrecosProps) {
+export function SecaoPrecos({
+  produto,
+  custoDaCompraNaoAplicado = null,
+  siglaPorId,
+  desabilitado,
+  aoAlterarCampo,
+}: SecaoPrecosProps) {
   const {
     control,
     register,
@@ -227,7 +270,8 @@ export function SecaoPrecos({ produto, siglaPorId, desabilitado, aoAlterarCampo 
   const avisoPrecoVenda = textoAbaixoDoCusto(precoVenda, custo)
   const siglaVenda = siglaPorId.get(unidadeId)
   // De onde veio o custo gravado (spec B4 §4): vem do backend, entao so muda depois de salvar ou ajustar.
-  const notaDoCusto = produto ? notaDaOrigemDoCusto(produto.custo, produto.custoOrigem) : null
+  const notaDoCusto = produto ? notaDaOrigemDoCusto(produto.custo, produto.custoOrigem, produto.unidade.sigla) : null
+  const avisoDoCusto = produto ? textoDoCustoAlterado(custo, produto.custo, custoDaCompraNaoAplicado) : null
 
   const hoje = dataHojeSaoPaulo()
   const situacao = situacaoPromocaoLocal(promocaoInicio, promocaoFim, hoje)
@@ -277,7 +321,8 @@ export function SecaoPrecos({ produto, siglaPorId, desabilitado, aoAlterarCampo 
           id="custo"
           label="Custo (opcional)"
           erro={errors.custo?.message}
-          ajuda={notaDoCusto}
+          // Sem nota nem aviso, sem ajuda (o campo fica sem descricao).
+          ajuda={notaDoCusto || avisoDoCusto ? <AjudaDoCusto nota={notaDoCusto} aviso={avisoDoCusto} /> : undefined}
           aoAlterar={aoAlterarCampo}
           disabled={desabilitado}
         />

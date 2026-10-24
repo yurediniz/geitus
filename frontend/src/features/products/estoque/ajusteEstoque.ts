@@ -4,6 +4,7 @@
  * historico. O backend aplica as mesmas regras; aqui elas evitam o envio.
  */
 import { formatarMoeda, formatarQuantidade } from '@/features/products/formatacaoProduto'
+import { textoEmEmbalagens } from '@/lib/embalagem'
 import { digitosParaValor, valorParaDigitos } from '@/lib/moeda'
 import { MENSAGEM_QUANTIDADE, validarQuantidade } from '@/lib/quantidade'
 import type { MotivoMovimento, MovimentoEstoque, TipoMovimento } from '@/types/estoque'
@@ -125,7 +126,7 @@ export function textoDaPrevia(
   const texto = `Saldo: ${formatarQuantidade(saldo, sigla)} → ${formatarQuantidade(previa.saldoNovo, sigla)}`
   if (emEmbalagem) {
     const variacao = formatarVariacaoQuantidade(previa.variacao, sigla)
-    return `${numero(emEmbalagem.quantidade)} ${emEmbalagem.rotulo} = ${variacao} · ${texto}`
+    return `${textoEmEmbalagens(emEmbalagem.quantidade, emEmbalagem.rotulo)} = ${variacao} · ${texto}`
   }
   return tipo === 'AJUSTE' ? `${texto} (${formatarVariacaoQuantidade(previa.variacao, sigla)})` : texto
 }
@@ -369,14 +370,33 @@ export function custoPorUnidade(custoInformado: string, quantidadePorEmbalagem: 
   return digitosParaValor(dividirArredondando(quatroCasas, 100n).toString())
 }
 
-/** Rotulo do campo: "Custo por UN" na unidade de venda; "Custo da CX c/ 18 UN" na embalagem. */
+/** Rotulo do campo: "Custo por UN" na unidade de venda; "Custo de 1 CX c/ 18 UN" na embalagem. */
 export function rotuloDoCusto(sigla: string, embalagem?: { rotulo: string }): string {
-  return embalagem ? `Custo da ${embalagem.rotulo}` : `Custo por ${sigla}`
+  return embalagem ? `Custo de 1 ${embalagem.rotulo}` : `Custo por ${sigla}`
 }
 
-/** "Último custo: R$ 9,50 por UN."; null sem custo no produto. */
-export function dicaDoUltimoCusto(custoAtual: number | null, sigla: string): string | null {
-  return custoAtual === null ? null : `Último custo: ${formatarMoeda(custoAtual)} por ${sigla}.`
+/**
+ * "Último custo: R$ 9,50 por UN."; em embalagem, com o custo dela (custo x
+ * quantidade, a centavos com meio para cima): "Último custo: R$ 9,50 por UN
+ * (R$ 171,00 a CX c/ 18 UN).". Null sem custo no produto.
+ */
+export function dicaDoUltimoCusto(
+  custoAtual: number | null,
+  sigla: string,
+  embalagem?: { rotulo: string; quantidade: number },
+): string | null {
+  if (custoAtual === null) {
+    return null
+  }
+  const porUnidade = `${formatarMoeda(custoAtual)} por ${sigla}`
+  if (!embalagem) {
+    return `Último custo: ${porUnidade}.`
+  }
+  // Em milesimos (NUMERIC(12,3)): centavos x milesimos / 1000.
+  const milesimos = BigInt(Math.round(embalagem.quantidade * 1000))
+  const centavosDaEmbalagem = dividirArredondando(centavosDe(custoAtual) * milesimos, 1000n)
+  const daEmbalagem = formatarMoeda(Number(centavosDaEmbalagem) / 100)
+  return `Último custo: ${porUnidade} (${daEmbalagem} a ${embalagem.rotulo}).`
 }
 
 /** "= R$ 10,00 por UN": o custo por unidade de uma compra em embalagem. */
@@ -385,26 +405,21 @@ export function textoDoCustoPorUnidade(custoUnidade: string, sigla: string): str
 }
 
 /**
- * Previa do saldo com o custo (spec B4 §7.1): "... · Custo: R$ 9,50 → R$ 10,00
- * por UN", "... · Custo: R$ 10,00 por UN (sem mudança)" com o custo igual ao
- * atual, e "... · Custo: R$ 10,00 por UN" no produto ainda sem custo. Sem custo
- * digitado, a previa fica como era; sem previa, null.
+ * O custo na previa do ajuste (spec B4 §7.1), numa linha propria abaixo da do
+ * saldo: "Custo: R$ 9,50 → R$ 10,00 por UN", "Custo: R$ 10,00 por UN (sem
+ * mudança)" com o custo igual ao atual e "Custo: R$ 10,00 por UN" no produto
+ * ainda sem custo. Null sem custo digitado.
  */
-export function textoDaPreviaComCusto(
-  previa: string | null,
-  custoUnidade: string | null,
-  custoAtual: number | null,
-  sigla: string,
-): string | null {
-  if (previa === null || custoUnidade === null) {
-    return previa
+export function textoDoCustoNaPrevia(custoUnidade: string | null, custoAtual: number | null, sigla: string): string | null {
+  if (custoUnidade === null) {
+    return null
   }
   const novo = `${formatarMoeda(Number(custoUnidade))} por ${sigla}`
   if (custoAtual === null) {
-    return `${previa} · Custo: ${novo}`
+    return `Custo: ${novo}`
   }
   const igual = centavosDe(custoAtual) === BigInt(valorParaDigitos(custoUnidade) || '0')
-  return igual ? `${previa} · Custo: ${novo} (sem mudança)` : `${previa} · Custo: ${formatarMoeda(custoAtual)} → ${novo}`
+  return igual ? `Custo: ${novo} (sem mudança)` : `Custo: ${formatarMoeda(custoAtual)} → ${novo}`
 }
 
 /** Sigla da embalagem pelo rotulo ("CX c/ 18 UN" -> "CX"), como o backend o monta. */
@@ -447,7 +462,7 @@ export interface TextoMovimento {
 /** " (2 CX c/ 18 UN)" do movimento informado em embalagens; '' sem o retrato. */
 function textoDoRetrato(movimento: MovimentoEstoque): string {
   const { embalagem } = movimento
-  return embalagem ? ` (${numero(embalagem.quantidadeDeEmbalagens)} ${embalagem.rotulo})` : ''
+  return embalagem ? ` (${textoEmEmbalagens(embalagem.quantidadeDeEmbalagens, embalagem.rotulo)})` : ''
 }
 
 /** Textos de uma linha de movimento no historico. */

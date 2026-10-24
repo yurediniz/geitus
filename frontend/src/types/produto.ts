@@ -108,6 +108,8 @@ export interface CustoOrigem {
   quantidade: number | null
   /** Rotulo da embalagem da ultima compra ("CX c/ 18 UN"); null em `EDICAO` ou com a compra em unidades. */
   embalagemRotulo: string | null
+  /** Quantas embalagens entraram na ultima compra (2); null junto com `embalagemRotulo`. */
+  quantidadeDeEmbalagens: number | null
 }
 
 /** Campos de texto livre com sugestoes dos valores ja usados na empresa. */
@@ -292,6 +294,8 @@ export interface EntradaDoHistoricoPreco {
   quantidade: number
   /** "CX c/ 18 UN"; null com a compra em unidades. */
   embalagemRotulo: string | null
+  /** Quantas embalagens entraram (2); null junto com `embalagemRotulo`. */
+  quantidadeDeEmbalagens: number | null
 }
 
 /** Pagina de uma consulta paginada do backend (`pagina` comeca em 0). */

@@ -147,6 +147,11 @@ export function conversaoDoSaldo(
     : `${saldo.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${siglaDeVenda} (${emEmbalagens})`
 }
 
+/** Quantas embalagens e qual: 2 e "CX c/ 18 UN" -> "2 CX c/ 18 UN" (movimento, nota do custo e historico). */
+export function textoEmEmbalagens(quantidadeDeEmbalagens: number, rotulo: string): string {
+  return `${quantidadeDeEmbalagens.toLocaleString('pt-BR')} ${rotulo}`
+}
+
 /** Embalagem principal (spec §2.2): a de compra, se houver; senao, a primeira da lista. */
 export function embalagemPrincipal<T extends { deCompra: boolean }>(lista: readonly T[]): T | undefined {
   return lista.find((embalagem) => embalagem.deCompra) ?? lista[0]

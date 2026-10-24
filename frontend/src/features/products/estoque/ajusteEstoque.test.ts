@@ -18,7 +18,7 @@ import {
   rotuloConfirmar,
   rotuloDoCusto,
   textoDaPrevia,
-  textoDaPreviaComCusto,
+  textoDoCustoNaPrevia,
   textoDoCustoPorUnidade,
   textoMovimento,
   validarAjuste,
@@ -386,12 +386,26 @@ describe('ajusteEstoque', () => {
 
     it('rótulo do campo: por unidade de venda ou da embalagem', () => {
       expect(rotuloDoCusto('UN')).toBe('Custo por UN')
-      expect(rotuloDoCusto('UN', { rotulo: 'CX c/ 18 UN' })).toBe('Custo da CX c/ 18 UN')
+      expect(rotuloDoCusto('UN', { rotulo: 'CX c/ 18 UN' })).toBe('Custo de 1 CX c/ 18 UN')
     })
 
     it('dica do último custo só com custo no produto (Review Focus 5)', () => {
       expect(semNbsp(dicaDoUltimoCusto(9.5, 'UN'))).toBe('Último custo: R$ 9,50 por UN.')
       expect(dicaDoUltimoCusto(null, 'UN')).toBeNull()
+      expect(dicaDoUltimoCusto(null, 'UN', { rotulo: 'CX c/ 18 UN', quantidade: 18 })).toBeNull()
+    })
+
+    it('em embalagem, a dica diz também o custo da embalagem (custo x quantidade, a centavos)', () => {
+      expect(semNbsp(dicaDoUltimoCusto(9.5, 'UN', { rotulo: 'CX c/ 18 UN', quantidade: 18 }))).toBe(
+        'Último custo: R$ 9,50 por UN (R$ 171,00 a CX c/ 18 UN).',
+      )
+      expect(semNbsp(dicaDoUltimoCusto(33.33, 'UN', { rotulo: 'CX c/ 3 UN', quantidade: 3 }))).toBe(
+        'Último custo: R$ 33,33 por UN (R$ 99,99 a CX c/ 3 UN).',
+      )
+      // 25,5 KG a R$ 1,99: 50,745 -> 50,75 (meio para cima).
+      expect(semNbsp(dicaDoUltimoCusto(1.99, 'KG', { rotulo: 'SC c/ 25,5 KG', quantidade: 25.5 }))).toBe(
+        'Último custo: R$ 1,99 por KG (R$ 50,75 a SC c/ 25,5 KG).',
+      )
     })
 
     it('custo por unidade da embalagem: "= R$ 10,00 por UN"', () => {
@@ -399,21 +413,14 @@ describe('ajusteEstoque', () => {
       expect(semNbsp(textoDoCustoPorUnidade('33.33', 'UN'))).toBe('= R$ 33,33 por UN')
     })
 
-    it('prévia com o custo: a mudança, "(sem mudança)" e o primeiro custo', () => {
-      const base = '2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN'
-      expect(semNbsp(textoDaPreviaComCusto(base, '10.00', 9.5, 'UN'))).toBe(
-        '2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN · Custo: R$ 9,50 → R$ 10,00 por UN',
-      )
-      expect(semNbsp(textoDaPreviaComCusto(base, '10.00', 10, 'UN'))).toBe(
-        '2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN · Custo: R$ 10,00 por UN (sem mudança)',
-      )
+    it('o custo na prévia: a mudança, "(sem mudança)" e o primeiro custo', () => {
+      expect(semNbsp(textoDoCustoNaPrevia('10.00', 9.5, 'UN'))).toBe('Custo: R$ 9,50 → R$ 10,00 por UN')
+      expect(semNbsp(textoDoCustoNaPrevia('10.00', 10, 'UN'))).toBe('Custo: R$ 10,00 por UN (sem mudança)')
+      expect(semNbsp(textoDoCustoNaPrevia('33.33', 33.33, 'UN'))).toBe('Custo: R$ 33,33 por UN (sem mudança)')
       // Sem custo no produto, nao ha de onde vir a seta.
-      expect(semNbsp(textoDaPreviaComCusto(base, '10.00', null, 'UN'))).toBe(
-        '2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN · Custo: R$ 10,00 por UN',
-      )
-      // Sem custo digitado, a previa fica como era; sem previa, nada.
-      expect(textoDaPreviaComCusto(base, null, 9.5, 'UN')).toBe(base)
-      expect(textoDaPreviaComCusto(null, '10.00', 9.5, 'UN')).toBeNull()
+      expect(semNbsp(textoDoCustoNaPrevia('10.00', null, 'UN'))).toBe('Custo: R$ 10,00 por UN')
+      // Sem custo digitado, nada.
+      expect(textoDoCustoNaPrevia(null, 9.5, 'UN')).toBeNull()
     })
 
     it('a mensagem de sucesso diz o custo novo só quando ele mudou', () => {

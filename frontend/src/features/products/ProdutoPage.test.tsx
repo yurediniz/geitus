@@ -36,6 +36,7 @@ import {
   categoria,
   embalagemDaApi,
   produtoAtivo,
+  produtoSimples,
   resumo,
   unidade,
 } from '@/test/fixturesProduto'
@@ -3593,37 +3594,180 @@ describe('ProdutoPage', () => {
     const COMPRA_EM_CAIXAS: Produto = {
       ...produtoAtivo,
       custo: 10,
-      custoOrigem: { tipo: 'ENTRADA_COMPRA', em: '2026-10-24T10:15:00', quantidade: 36, embalagemRotulo: 'CX c/ 18 UN' },
+      custoOrigem: {
+        tipo: 'ENTRADA_COMPRA',
+        em: '2026-10-24T10:15:00',
+        quantidade: 36,
+        embalagemRotulo: 'CX c/ 18 UN',
+        quantidadeDeEmbalagens: 2,
+      },
     }
 
     function campoCusto(): HTMLElement {
       return screen.getByLabelText(/^custo/i)
     }
 
+    /** Movimento da compra em UN a R$ 10,00 (resposta do ajuste). */
+    function compraADez(saldoAnterior: number): MovimentoEstoque {
+      return {
+        id: 'mov-compra',
+        tipo: 'ENTRADA',
+        motivo: 'COMPRA',
+        origem: 'AJUSTE_MANUAL',
+        quantidade: 5,
+        saldoAnterior,
+        saldoNovo: saldoAnterior + 5,
+        observacao: null,
+        usuarioNome: 'Ana Souza',
+        criadoEm: '2026-10-24T10:15:00',
+        embalagem: null,
+        custoInformado: 10,
+        custoUnitario: 10,
+      }
+    }
+
+    /** O produto como o backend o devolve depois da compra a R$ 10,00. */
+    function depoisDaCompra(produto: Produto): Produto {
+      return {
+        ...produto,
+        estoqueAtual: produto.estoqueAtual + 5,
+        custo: 10,
+        custoOrigem: {
+          tipo: 'ENTRADA_COMPRA',
+          em: '2026-10-24T10:15:00',
+          quantidade: 5,
+          embalagemRotulo: null,
+          quantidadeDeEmbalagens: null,
+        },
+      }
+    }
+
+    /** Abre o modal e registra a entrada por compra de 5 UN a R$ 10,00; devolve o modal. */
+    function comprarCincoADez(): HTMLElement {
+      fireEvent.click(screen.getByRole('button', { name: 'Ajustar estoque' }))
+      const modal = screen.getByRole('dialog', { name: 'Ajustar estoque' })
+      fireEvent.change(within(modal).getByRole('textbox', { name: /^quantidade/i }), { target: { value: '5' } })
+      fireEvent.change(within(modal).getByRole('textbox', { name: /^custo por UN/i }), { target: { value: '10,00' } })
+      return modal
+    }
+
+    function confirmarModal(modal: HTMLElement) {
+      fireEvent.click(modal.querySelector('button[type="submit"]') as HTMLElement)
+    }
+
+    it('a compra pela página atualiza o campo Custo (sem alteração), e salvar envia o custo novo', async () => {
+      const produto: Produto = { ...produtoAtivo, custo: 9.5 }
+      ajustarEstoqueMock.mockResolvedValue(compraADez(produto.estoqueAtual))
+      atualizarProdutoMock.mockResolvedValue(depoisDaCompra(produto))
+      renderEdicao(produto)
+      await esperarFormulario()
+      expect(campoCusto()).toHaveValue('9,50')
+
+      const modal = comprarCincoADez()
+      buscarProdutoMock.mockResolvedValue(depoisDaCompra(produto))
+      confirmarModal(modal)
+
+      expect(await screen.findByText(/Custo atualizado para R\$\s10,00\./)).toBeInTheDocument()
+      await waitFor(() => expect(campoCusto()).toHaveValue('10,00'))
+      expect(campoCusto()).toHaveAccessibleDescription(/^Último custo de entrada: R\$\s10,00 por UN, em 24\/10\/2026\.$/)
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(ID_ARROZ, expect.objectContaining({ custo: 10 })),
+      )
+    })
+
+    it('com o Custo alterado na tela, a compra mantém o valor digitado e avisa', async () => {
+      const produto: Produto = { ...produtoAtivo, custo: 9.5 }
+      ajustarEstoqueMock.mockResolvedValue(compraADez(produto.estoqueAtual))
+      renderEdicao(produto)
+      await esperarFormulario()
+      fireEvent.change(campoCusto(), { target: { value: '12,00' } })
+
+      const modal = comprarCincoADez()
+      buscarProdutoMock.mockResolvedValue(depoisDaCompra(produto))
+      confirmarModal(modal)
+
+      await waitFor(() =>
+        expect(campoCusto()).toHaveAccessibleDescription(
+          /^Último custo de entrada: R\$\s10,00 por UN, em 24\/10\/2026\.\s*A entrada de compra mudou o custo para R\$\s10,00\. Ao salvar, vale o valor deste campo\.$/,
+        ),
+      )
+      expect(campoCusto()).toHaveValue('12,00')
+
+      // Com o valor igual ao gravado, nao ha o que avisar.
+      fireEvent.change(campoCusto(), { target: { value: '10,00' } })
+      expect(screen.queryByText(/A entrada de compra mudou o custo/)).not.toBeInTheDocument()
+    })
+
+    it('Preços: o custo alterado (diferente do gravado) avisa que passa a contar como editado', async () => {
+      renderEdicao(COMPRA_EM_CAIXAS)
+      await esperarFormulario()
+
+      fireEvent.change(campoCusto(), { target: { value: '11,00' } })
+
+      expect(campoCusto()).toHaveAccessibleDescription(
+        /^Último custo de entrada: R\$\s10,00 por UN, em 24\/10\/2026 \(compra de 2 CX c\/ 18 UN\)\.\s*Ao salvar, o custo passa a contar como editado manualmente\.$/,
+      )
+
+      fireEvent.change(campoCusto(), { target: { value: '10,00' } })
+      expect(screen.queryByText(/passa a contar como editado/)).not.toBeInTheDocument()
+    })
+
+    it('produto sem custo: a prévia mostra só o custo novo e o sucesso avisa o custo atualizado (Review Focus 5)', async () => {
+      ajustarEstoqueMock.mockResolvedValue(compraADez(produtoSimples.estoqueAtual))
+      renderEdicao(produtoSimples)
+      await esperarFormulario()
+
+      const modal = comprarCincoADez()
+      expect(within(modal).queryByText(/Último custo/)).not.toBeInTheDocument()
+      expect(within(modal).getByText(/^Custo: R\$\s10,00 por UN$/)).toBeInTheDocument()
+      buscarProdutoMock.mockResolvedValue(depoisDaCompra(produtoSimples))
+      confirmarModal(modal)
+
+      expect(
+        await screen.findByText(/^Entrada de 5 UN registrada\. Saldo: 5 UN\. Custo atualizado para R\$\s10,00\.$/),
+      ).toBeInTheDocument()
+    })
+
+
     it('Preços: após uma entrada por compra em embalagem, a nota diz o custo, a data e as embalagens', async () => {
       renderEdicao(COMPRA_EM_CAIXAS)
       await esperarFormulario()
 
       expect(campoCusto()).toHaveAccessibleDescription(
-        /^Último custo de entrada: R\$\s10,00 em 24\/10\/2026 \(2 CX c\/ 18 UN\)\.$/,
+        /^Último custo de entrada: R\$\s10,00 por UN, em 24\/10\/2026 \(compra de 2 CX c\/ 18 UN\)\.$/,
       )
     })
 
     it('Preços: na compra em unidades, a nota fica sem a embalagem', async () => {
       renderEdicao({
         ...COMPRA_EM_CAIXAS,
-        custoOrigem: { tipo: 'ENTRADA_COMPRA', em: '2026-10-24T10:15:00', quantidade: 10, embalagemRotulo: null },
+        custoOrigem: {
+          tipo: 'ENTRADA_COMPRA',
+          em: '2026-10-24T10:15:00',
+          quantidade: 10,
+          embalagemRotulo: null,
+          quantidadeDeEmbalagens: null,
+        },
       })
       await esperarFormulario()
 
-      expect(campoCusto()).toHaveAccessibleDescription(/^Último custo de entrada: R\$\s10,00 em 24\/10\/2026\.$/)
+      expect(campoCusto()).toHaveAccessibleDescription(/^Último custo de entrada: R\$\s10,00 por UN, em 24\/10\/2026\.$/)
     })
 
     it('Preços: com o custo editado à mão, "Custo editado manualmente em …"', async () => {
       renderEdicao({
         ...produtoAtivo,
         custo: 10.5,
-        custoOrigem: { tipo: 'EDICAO', em: '2026-10-24T11:00:00', quantidade: null, embalagemRotulo: null },
+        custoOrigem: {
+          tipo: 'EDICAO',
+          em: '2026-10-24T11:00:00',
+          quantidade: null,
+          embalagemRotulo: null,
+          quantidadeDeEmbalagens: null,
+        },
       })
       await esperarFormulario()
 
@@ -3645,7 +3789,7 @@ describe('ProdutoPage', () => {
         valorNovo: 10,
         embalagemRotulo: null,
         origem: 'ENTRADA_COMPRA',
-        entrada: { quantidade: 36, embalagemRotulo: 'CX c/ 18 UN' },
+        entrada: { quantidade: 36, embalagemRotulo: 'CX c/ 18 UN', quantidadeDeEmbalagens: 2 },
         usuarioNome: 'Ana Souza',
         alteradoEm: '2026-10-24T10:15:00',
       }

@@ -35,6 +35,7 @@ import {
   interruptorDoCampo,
   idUnidadePadrao,
   montarRequest,
+  numeroParaTexto,
   primeiroCampoComErro,
   produtoSchemaCom,
   secaoDoCampo,
@@ -572,6 +573,28 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     return () => assinatura.unsubscribe()
   }, [camposDoErroSalvar, watch])
 
+  // O custo gravado mudou com a pagina aberta (entrada por compra pelo modal de estoque, spec B4):
+  // com o campo intocado, ele passa a mostrar o custo novo (salvar nao o desfaz como "editado");
+  // alterado pelo usuario, o valor digitado fica, e a secao Precos avisa a diferenca.
+  const custoGravado = produto?.custo ?? null
+  const custoGravadoEm = produto?.custoOrigem?.em ?? null
+  const custoDaCompra = produto?.custoOrigem?.tipo === 'ENTRADA_COMPRA' ? custoGravado : null
+  const custoSincronizadoRef = useRef({ custo: custoGravado, em: custoGravadoEm })
+  const [custoDaCompraNaoAplicado, setCustoDaCompraNaoAplicado] = useState<number | null>(null)
+  useEffect(() => {
+    const sincronizado = custoSincronizadoRef.current
+    if (sincronizado.custo === custoGravado && sincronizado.em === custoGravadoEm) {
+      return
+    }
+    custoSincronizadoRef.current = { custo: custoGravado, em: custoGravadoEm }
+    if (getFieldState('custo').isDirty) {
+      setCustoDaCompraNaoAplicado(custoDaCompra)
+    } else {
+      resetField('custo', { defaultValue: numeroParaTexto(custoGravado) })
+      setCustoDaCompraNaoAplicado(null)
+    }
+  }, [custoGravado, custoGravadoEm, custoDaCompra, getFieldState, resetField])
+
   // Produto novo ja vem com UN (a unidade mais comum), se existir e estiver ativa.
   // Vira o valor padrao do campo: escolher a UN sozinha nao conta como alteracao.
   const padraoAplicadoRef = useRef(false)
@@ -1026,6 +1049,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
           <SecaoDaPagina secao="precos">
             <SecaoPrecos
               produto={produto}
+              custoDaCompraNaoAplicado={custoDaCompraNaoAplicado}
               siglaPorId={siglaPorId}
               desabilitado={desabilitado}
               aoAlterarCampo={aoAlterarCampo}

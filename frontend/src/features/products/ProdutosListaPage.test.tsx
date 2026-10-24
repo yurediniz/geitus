@@ -1112,5 +1112,43 @@ describe('ProdutosListaPage', () => {
         expect(within(card).getByRole('button', { name: 'Ajustar estoque de Arroz 5kg' })).toHaveFocus(),
       )
     })
+
+    it('a compra pela lista avisa o custo atualizado (Fase B4)', async () => {
+      const COMPRA: MovimentoEstoque = {
+        id: 'mov-2',
+        tipo: 'ENTRADA',
+        motivo: 'COMPRA',
+        origem: 'AJUSTE_MANUAL',
+        quantidade: 5,
+        saldoAnterior: 12,
+        saldoNovo: 17,
+        observacao: null,
+        usuarioNome: 'Ana Souza',
+        criadoEm: '2026-10-24T10:15:00',
+        embalagem: null,
+        custoInformado: 10,
+        custoUnitario: 10,
+      }
+      // O Arroz custa R$ 18,00: a compra a R$ 10,00 muda o custo.
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
+      ajustarEstoqueMock.mockResolvedValue(COMPRA)
+      renderLista()
+      const card = await cardDoProduto('Arroz 5kg')
+
+      fireEvent.click(within(card).getByRole('button', { name: 'Ajustar estoque de Arroz 5kg' }))
+      const modal = await screen.findByRole('dialog', { name: 'Ajustar estoque' })
+      const campoCusto = within(modal).getByRole('textbox', { name: /^custo por UN/i })
+      expect(campoCusto).toHaveAccessibleDescription(/^Último custo: R\$\s18,00 por UN\.$/)
+      fireEvent.change(within(modal).getByRole('textbox', { name: /^quantidade/i }), { target: { value: '5' } })
+      fireEvent.change(campoCusto, { target: { value: '10,00' } })
+      fireEvent.click(modal.querySelector('button[type="submit"]') as HTMLElement)
+
+      expect(
+        await screen.findByText(
+          /^Arroz 5kg: entrada de 5 UN registrada\. Saldo: 17 UN\. Custo atualizado para R\$\s10,00\.$/,
+        ),
+      ).toBeInTheDocument()
+      expect(ajustarEstoqueMock).toHaveBeenCalledWith(ID_ARROZ, expect.objectContaining({ custo: 10 }))
+    })
   })
 })

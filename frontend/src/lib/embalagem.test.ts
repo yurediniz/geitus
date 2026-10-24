@@ -7,6 +7,7 @@ import {
   precoCalculadoDaEmbalagem,
   precoVigenteDaUnidade,
   rotuloDaEmbalagem,
+  textoEmEmbalagens,
   valorPorUnidade,
   valorPorUnidadeAbaixoDoMinimo,
 } from '@/lib/embalagem'
@@ -142,5 +143,12 @@ describe('embalagemPrincipal', () => {
     expect(embalagemPrincipal([a, b])).toBe(b)
     expect(embalagemPrincipal([a, { ...b, deCompra: false }])).toBe(a)
     expect(embalagemPrincipal([])).toBeUndefined()
+  })
+})
+
+describe('textoEmEmbalagens', () => {
+  it('quantas embalagens e qual: "2 CX c/ 18 UN"', () => {
+    expect(textoEmEmbalagens(2, 'CX c/ 18 UN')).toBe('2 CX c/ 18 UN')
+    expect(textoEmEmbalagens(1200, 'SC c/ 25,5 KG')).toBe('1.200 SC c/ 25,5 KG')
   })
 })

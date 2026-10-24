@@ -665,9 +665,12 @@ describe('ModalAjusteEstoque', () => {
       confirmar()
 
       expect(
-        await within(dialogo()).findByText('A embalagem escolhida foi removida. Confira a quantidade e tente de novo.'),
+        await within(dialogo()).findByText(
+          'A embalagem escolhida foi removida. Confira a quantidade e o custo e tente de novo.',
+        ),
       ).toBeInTheDocument()
       expect(seletorEm()).toHaveValue('emb-cx18')
+      expect(campoCusto()).toHaveValue('180,00')
 
       // O produto recarregado ja nao tem a caixa.
       rerender(
@@ -678,6 +681,8 @@ describe('ModalAjusteEstoque', () => {
 
       await waitFor(() => expect(seletorEm()).toHaveValue(''))
       expect(campoQuantidade()).toHaveValue('')
+      // O custo era o de 1 caixa: tambem e descartado.
+      expect(campoCusto()).toHaveValue('')
       await waitFor(() => expect(seletorEm()).toHaveFocus())
       expect(rotulosDe(seletorEm())).toEqual(['UN', 'FD c/ 6 UN'])
     })
@@ -751,7 +756,7 @@ describe('ModalAjusteEstoque', () => {
     it('em embalagem, o rótulo é o da embalagem; na unidade de venda, "por UN"', () => {
       renderModal({ saldo: 10, embalagens: [CAIXA_18] })
 
-      expect(campoCusto()).toHaveAccessibleName(/^Custo da CX c\/ 18 UN\s*\(obrigatório\)$/)
+      expect(campoCusto()).toHaveAccessibleName(/^Custo de 1 CX c\/ 18 UN\s*\(obrigatório\)$/)
       fireEvent.change(seletorEm(), { target: { value: '' } })
       expect(campoCusto()).toHaveAccessibleName(/^Custo por UN\s*\(obrigatório\)$/)
     })
@@ -782,19 +787,65 @@ describe('ModalAjusteEstoque', () => {
       expect(within(dialogo()).queryByText(/^= R\$/)).not.toBeInTheDocument()
     })
 
-    it('a prévia inclui a mudança de custo, ou "(sem mudança)" com o custo igual ao atual', () => {
+    it('o custo vai numa linha própria da prévia, fora da região viva: a mudança ou "(sem mudança)"', () => {
       renderModal({ saldo: 10, embalagens: [CAIXA_18], custo: 9.5 })
       fireEvent.change(campoQuantidade(), { target: { value: '2' } })
-      expect(regiaoDaPrevia()).toHaveTextContent(/^2 CX c\/ 18 UN = \+36 UN · Saldo: 10 UN → 46 UN$/)
+      expect(within(dialogo()).queryByText(/^Custo: /)).not.toBeInTheDocument()
 
       preencherCusto('180,00')
 
-      expect(regiaoDaPrevia()).toHaveTextContent(
-        '2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN · Custo: R$ 9,50 → R$ 10,00 por UN',
-      )
+      // A regiao viva anuncia so o saldo (o custo e anunciado pelo proprio campo).
+      expect(regiaoDaPrevia()).toHaveTextContent(/^2 CX c\/ 18 UN = \+36 UN · Saldo: 10 UN → 46 UN$/)
+      const linhaDoCusto = within(dialogo()).getByText(/^Custo: R\$\s9,50 → R\$\s10,00 por UN$/)
+      expect(regiaoDaPrevia().contains(linhaDoCusto)).toBe(false)
+      expect(linhaDoCusto.closest('[aria-live]')).toBeNull()
 
       preencherCusto('171,00')
-      expect(regiaoDaPrevia()).toHaveTextContent('Custo: R$ 9,50 por UN (sem mudança)')
+      expect(within(dialogo()).getByText(/^Custo: R\$\s9,50 por UN \(sem mudança\)$/)).toBeInTheDocument()
+    })
+
+    it('CX c/ 3 a R$ 100,00 com o custo atual de R$ 33,33: "(sem mudança)" e o envio de custo: 100 (Review Focus 3)', async () => {
+      ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
+      renderModal({ saldo: 10, embalagens: [CAIXA_3], custo: 33.33 })
+      fireEvent.change(campoQuantidade(), { target: { value: '1' } })
+      preencherCusto('100,00')
+
+      expect(within(dialogo()).getByText(/^Custo: R\$\s33,33 por UN \(sem mudança\)$/)).toBeInTheDocument()
+
+      confirmar()
+
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
+      expect(ultimoAjuste()).toMatchObject({ quantidade: 1, embalagemId: 'emb-cx3', custo: 100 })
+    })
+
+    it('produto sem custo: a prévia mostra só o custo novo, sem seta', () => {
+      renderModal({ custo: null })
+      fireEvent.change(campoQuantidade(), { target: { value: '5' } })
+      preencherCusto('10,00')
+
+      expect(within(dialogo()).getByText(/^Custo: R\$\s10,00 por UN$/)).toBeInTheDocument()
+    })
+
+    it('em embalagem, a dica do último custo diz também o custo da embalagem', () => {
+      renderModal({ saldo: 10, embalagens: [CAIXA_18], custo: 9.5 })
+
+      expect(campoCusto()).toHaveAccessibleDescription(/^Último custo: R\$\s9,50 por UN \(R\$\s171,00 a CX c\/ 18 UN\)\.$/)
+      fireEvent.change(seletorEm(), { target: { value: '' } })
+      expect(campoCusto()).toHaveAccessibleDescription(/^Último custo: R\$\s9,50 por UN\.$/)
+    })
+
+    it('trocar o "Em" descarta o custo digitado e o erro dele', async () => {
+      renderModal({ saldo: 10, embalagens: [CAIXA_18] })
+      fireEvent.change(campoQuantidade(), { target: { value: '2' } })
+      confirmar()
+      expect(await screen.findByText('Informe o custo da compra.')).toBeInTheDocument()
+
+      fireEvent.change(seletorEm(), { target: { value: '' } })
+      expect(screen.queryByText('Informe o custo da compra.')).not.toBeInTheDocument()
+
+      preencherCusto('10,00')
+      fireEvent.change(seletorEm(), { target: { value: 'emb-cx18' } })
+      expect(campoCusto()).toHaveValue('')
     })
 
     it('confirmar sem custo mostra "Informe o custo da compra." no campo, com o foco nele, sem enviar', async () => {
