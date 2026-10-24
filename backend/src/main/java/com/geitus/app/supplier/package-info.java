@@ -6,10 +6,13 @@
  * emitente da NF-e de compra, ate 10 representantes de venda e ate 200 marcas
  * que vende. So a razao social/nome e obrigatoria.
  *
- * <p>Fronteiras: este pacote usa o catalogo (marcas, e os produtos que o
- * fornecedor vende pela interface {@code catalog.ProdutosDoFornecedor}); o
- * catalogo NAO depende daqui — obtem nome e numero dos fornecedores pela
- * interface {@code catalog.NomesDeFornecedores}, implementada neste pacote.
+ * <p><b>Direcao das dependencias:</b> {@code inventory -> supplier -> catalog};
+ * o catalogo e independente. Este pacote usa o catalogo (marcas, e os produtos
+ * que o fornecedor vende pela interface {@code catalog.ProdutosDoFornecedor})
+ * e implementa {@code catalog.NomesDeFornecedores}, pela qual o catalogo e o
+ * estoque obtem numero, nome e status dos fornecedores. Do estoque, so declara
+ * {@link com.geitus.app.supplier.EntradasDoFornecedor}, implementada la: este
+ * pacote nao depende do {@code inventory}.
  * API {@code /api/fornecedores}: leitura para autenticados, escrita so ADMIN.
  */
 package com.geitus.app.supplier;

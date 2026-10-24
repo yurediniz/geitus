@@ -17,5 +17,11 @@
  * autenticado e as FKs compostas garantem produto e usuario da mesma empresa.
  * O catalogo nao depende deste pacote: ele declara as interfaces que precisa e
  * este pacote as implementa.
+ *
+ * <p><b>Direcao das dependencias (Fase B5):</b> {@code inventory -> supplier
+ * -> catalog}; o catalogo e independente. Este pacote implementa
+ * {@code supplier.EntradasDoFornecedor} e le a entidade {@code Fornecedor} nas
+ * consultas de movimentos (o nome do fornecedor da compra); resolve o
+ * fornecedor do ajuste pela {@code catalog.NomesDeFornecedores}.
  */
 package com.geitus.app.inventory;

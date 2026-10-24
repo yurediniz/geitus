@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.geitus.app.catalog.LigacaoDoProduto;
 import com.geitus.app.catalog.Paginacao;
+import com.geitus.app.catalog.RegraDeNegocioException;
 import com.geitus.app.catalog.ProdutosDoFornecedor;
 import com.geitus.app.catalog.arvore.Arvore;
 import com.geitus.app.catalog.dto.MarcaResumo;
@@ -60,6 +61,10 @@ import com.geitus.app.supplier.listagem.FiltroDeFornecedores;
 public class FornecedorService {
 
     static final int MAXIMO_DE_MARCAS = 200;
+    /** O mesmo limite da busca de produtos (ParametrosDaListagem). */
+    static final int TAMANHO_MAXIMO_DA_BUSCA = 200;
+    static final String MENSAGEM_BUSCA_LONGA = "A busca deve ter no máximo 200 caracteres.";
+    static final String CAMPO_BUSCA = "busca";
 
     static final String MENSAGEM_DOCUMENTO_REPETIDO = "Já existe o fornecedor %s com este %s.";
     static final String MENSAGEM_EXCLUSAO_BLOQUEADA =
@@ -106,6 +111,9 @@ public class FornecedorService {
     @Transactional(readOnly = true)
     public PaginaResponse<FornecedorItemResponse> listarParaUsuario(Long idUsuario, String busca, String status,
             int pagina, int tamanho) {
+        if (busca != null && busca.length() > TAMANHO_MAXIMO_DA_BUSCA) {
+            throw new RegraDeNegocioException(MENSAGEM_BUSCA_LONGA, CAMPO_BUSCA);
+        }
         Paginacao.validar(pagina, tamanho);
         StatusFiltro statusFiltro = StatusFiltro.doParametro(status);
         Long empresaId = resolverEmpresaId(idUsuario);
@@ -144,8 +152,9 @@ public class FornecedorService {
     @Transactional
     public FornecedorResponse atualizarParaUsuario(Long idUsuario, UUID id, FornecedorRequest request) {
         Long empresaId = resolverEmpresaId(idUsuario);
-        Fornecedor fornecedor = buscarDaEmpresa(empresaId, id);
-        DadosFornecedor dados = ValidacaoDoFornecedor.dados(request);
+        Fornecedor fornecedor = buscarParaAtualizar(empresaId, id);
+        // Sem tipoPessoa no PATCH, vale o tipo atual (e nao o padrao PJ do cadastro).
+        DadosFornecedor dados = ValidacaoDoFornecedor.dados(request, fornecedor.getTipoPessoa());
         List<DadosRepresentante> representantes = representantesDoRequest(request, fornecedor);
         Set<Long> marcaIds = request.marcaIds() == null ? null
                 : marcasDoRequest(empresaId, request.marcaIds(), fornecedor.getMarcaIds());
@@ -163,14 +172,14 @@ public class FornecedorService {
 
     @Transactional
     public FornecedorResponse inativarParaUsuario(Long idUsuario, UUID id) {
-        Fornecedor fornecedor = buscarDaEmpresa(resolverEmpresaId(idUsuario), id);
+        Fornecedor fornecedor = buscarParaAtualizar(resolverEmpresaId(idUsuario), id);
         fornecedor.inativar();
         return responderAposGravar(fornecedor);
     }
 
     @Transactional
     public FornecedorResponse reativarParaUsuario(Long idUsuario, UUID id) {
-        Fornecedor fornecedor = buscarDaEmpresa(resolverEmpresaId(idUsuario), id);
+        Fornecedor fornecedor = buscarParaAtualizar(resolverEmpresaId(idUsuario), id);
         fornecedor.ativar();
         return responderAposGravar(fornecedor);
     }
@@ -184,7 +193,7 @@ public class FornecedorService {
     @Transactional
     public void excluirParaUsuario(Long idUsuario, UUID id) {
         Long empresaId = resolverEmpresaId(idUsuario);
-        Fornecedor fornecedor = buscarDaEmpresa(empresaId, id);
+        Fornecedor fornecedor = buscarParaAtualizar(empresaId, id);
         long produtos = produtosDoFornecedor.contar(empresaId, fornecedor.getId());
         long entradas = entradasDoFornecedor.contar(empresaId, fornecedor.getId());
         if (produtos > 0 || entradas > 0) {
@@ -207,26 +216,24 @@ public class FornecedorService {
 
     /**
      * Liga um produto da empresa ao fornecedor (a mesma lista do produto),
-     * idempotente. Como no produto, um fornecedor inativo nao ganha produtos
-     * novos (400); o que ja estava ligado continua.
+     * idempotente. O fornecedor inativo e conferido antes (400): ele nao ganha
+     * produtos pela tela dele; os que ja estavam ligados continuam.
      */
     @Transactional
     public LigacaoDoProduto ligarProdutoParaUsuario(Long idUsuario, UUID id, UUID produtoId) {
         Long empresaId = resolverEmpresaId(idUsuario);
-        Fornecedor fornecedor = buscarDaEmpresa(empresaId, id);
-        LigacaoDoProduto ligacao = produtosDoFornecedor.ligar(empresaId, fornecedor.getId(), produtoId);
-        // A ligacao nova de um inativo e desfeita junto com a transacao (rollback pela excecao).
-        if (ligacao.criada() && !fornecedor.isAtivo()) {
+        Fornecedor fornecedor = buscarParaAtualizar(empresaId, id);
+        if (!fornecedor.isAtivo()) {
             throw new DadosFornecedorInvalidosException(MENSAGEM_FORNECEDOR_INATIVO, null);
         }
-        return ligacao;
+        return produtosDoFornecedor.ligar(empresaId, fornecedor.getId(), produtoId);
     }
 
     /** Tira o produto do fornecedor; se ele era o da ultima compra, o campo do produto e limpo (Review Focus 1). */
     @Transactional
     public void desligarProdutoParaUsuario(Long idUsuario, UUID id, UUID produtoId) {
         Long empresaId = resolverEmpresaId(idUsuario);
-        Fornecedor fornecedor = buscarDaEmpresa(empresaId, id);
+        Fornecedor fornecedor = buscarParaAtualizar(empresaId, id);
         produtosDoFornecedor.desligar(empresaId, fornecedor.getId(), produtoId);
     }
 
@@ -235,6 +242,12 @@ public class FornecedorService {
     /** Fornecedor da empresa pelo UUID publico; de outra empresa ou inexistente, 404. */
     Fornecedor buscarDaEmpresa(Long empresaId, UUID id) {
         return fornecedorRepository.findByUuidAndEmpresa_Id(id, empresaId)
+                .orElseThrow(FornecedorNaoEncontradoException::new);
+    }
+
+    /** Como {@link #buscarDaEmpresa}, com a trava de escrita do fornecedor ate o fim da transacao. */
+    Fornecedor buscarParaAtualizar(Long empresaId, UUID id) {
+        return fornecedorRepository.buscarPorUuidParaAtualizar(id, empresaId)
                 .orElseThrow(FornecedorNaoEncontradoException::new);
     }
 

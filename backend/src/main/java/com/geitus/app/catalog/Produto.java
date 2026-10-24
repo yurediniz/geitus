@@ -204,7 +204,9 @@ public class Produto {
     /**
      * Fase B5 (V14): fornecedores que vendem o produto. Alterada so pelo
      * {@code FornecedoresDoProduto}, que limpa o da ultima compra antes de
-     * apagar a ligacao dele (FK imediata da V14).
+     * apagar a ligacao dele (FK imediata da V14). A tabela nao guarda ordem:
+     * a lista nao tem {@code @OrderBy} e a resposta do produto ordena os
+     * fornecedores pelo nome (e o numero, no empate).
      */
     @OneToMany(mappedBy = "produto", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ProdutoFornecedor> fornecedores = new ArrayList<>();

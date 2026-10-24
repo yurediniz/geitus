@@ -12,13 +12,20 @@ import com.geitus.app.shared.validation.Documentos;
  * Filtro da listagem de fornecedores (docs/modules/fornecedores-e-marcas.md,
  * 4.7), ja tratado: as palavras normalizadas do termo (nome, nome fantasia e
  * representantes), os digitos do documento (so quando o termo e um documento,
- * com ou sem mascara), o termo numerico (o Nº) e o status.
+ * com ou sem mascara, e com ao menos 4 digitos), o termo numerico (o Nº,
+ * sempre exato) e o status. O tamanho do termo (ate 200) e conferido antes,
+ * no service.
  */
 public record FiltroDeFornecedores(Long empresaId, List<String> palavras, String digitosDoDocumento,
         Long termoNumerico, StatusFiltro status) {
 
-    /** O termo parece um documento: so digitos e os separadores da mascara de CNPJ/CPF. */
-    private static final Pattern DOCUMENTO_DIGITADO = Pattern.compile("[0-9./\\-\\s]*[0-9][0-9./\\-\\s]*");
+    /**
+     * O termo parece um documento: so digitos e os separadores da mascara de
+     * CNPJ/CPF. Uma classe so com {@code +}: casamento linear, sem retrocesso.
+     */
+    private static final Pattern DOCUMENTO_DIGITADO = Pattern.compile("[0-9./\\-\\s]+");
+    /** Com menos digitos o documento nao e comparado ("3" acha o Nº 3, nao todo CNPJ com 3). */
+    static final int MINIMO_DE_DIGITOS_DO_DOCUMENTO = 4;
 
     public FiltroDeFornecedores {
         Objects.requireNonNull(empresaId, "empresaId");
@@ -31,6 +38,9 @@ public record FiltroDeFornecedores(Long empresaId, List<String> palavras, String
         String digitos = busca != null && DOCUMENTO_DIGITADO.matcher(busca.strip()).matches()
                 ? Documentos.somenteDigitos(busca)
                 : null;
+        if (digitos != null && digitos.length() < MINIMO_DE_DIGITOS_DO_DOCUMENTO) {
+            digitos = null;
+        }
         return new FiltroDeFornecedores(empresaId, TextoDeBusca.palavras(busca), digitos,
                 TextoDeBusca.termoNumerico(busca), status);
     }

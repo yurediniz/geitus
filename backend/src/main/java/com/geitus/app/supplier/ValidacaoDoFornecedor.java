@@ -68,9 +68,14 @@ final class ValidacaoDoFornecedor {
     private ValidacaoDoFornecedor() {
     }
 
-    /** Os dados do cadastro, sem as listas (representantes e marcas). */
+    /** Os dados do cadastro, sem as listas (representantes e marcas); sem tipo de pessoa, PJ. */
     static DadosFornecedor dados(FornecedorRequest request) {
-        TipoPessoaFornecedor tipo = Objects.requireNonNullElse(request.tipoPessoa(), TipoPessoaFornecedor.PJ);
+        return dados(request, TipoPessoaFornecedor.PJ);
+    }
+
+    /** Como {@link #dados(FornecedorRequest)}, com o tipo usado quando o request nao traz o seu (edicao). */
+    static DadosFornecedor dados(FornecedorRequest request, TipoPessoaFornecedor tipoSeAusente) {
+        TipoPessoaFornecedor tipo = Objects.requireNonNullElse(request.tipoPessoa(), tipoSeAusente);
         return new DadosFornecedor(
                 tipo,
                 documento(tipo, request.documento()),

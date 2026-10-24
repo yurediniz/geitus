@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -225,6 +226,41 @@ class FornecedorServiceTest {
     }
 
     @Test
+    void edicaoSemTipoDePessoaMantemOTipoAtual() {
+        Fornecedor fornecedor = existente();
+        fornecedor.atualizarDados(ValidacaoDoFornecedor.dados(ValidacaoDoFornecedorTest.request()
+                .tipoPessoa(TipoPessoaFornecedor.PF).build()));
+
+        FornecedorResponse resposta = service.atualizarParaUsuario(ID_USUARIO, fornecedor.getUuid(),
+                ValidacaoDoFornecedorTest.request().documento("111.444.777-35").build());
+
+        assertThat(resposta.tipoPessoa()).isEqualTo(TipoPessoaFornecedor.PF);
+    }
+
+    @Test
+    void edicaoEExclusaoTravamOFornecedor() {
+        Fornecedor fornecedor = existente();
+
+        service.atualizarParaUsuario(ID_USUARIO, fornecedor.getUuid(), ValidacaoDoFornecedorTest.request().build());
+        service.excluirParaUsuario(ID_USUARIO, fornecedor.getUuid());
+
+        verify(fornecedorRepository, times(2)).buscarPorUuidParaAtualizar(fornecedor.getUuid(), ID_EMPRESA);
+        verify(fornecedorRepository, never()).findByUuidAndEmpresa_Id(any(), any());
+    }
+
+    @Test
+    void ligarComFornecedorInativoE400AntesDeTocarNoProduto() {
+        Fornecedor fornecedor = existente();
+        fornecedor.inativar();
+
+        assertThatThrownBy(() -> service.ligarProdutoParaUsuario(ID_USUARIO, fornecedor.getUuid(),
+                UUID.randomUUID()))
+                .isInstanceOf(DadosFornecedorInvalidosException.class)
+                .hasMessage("Este fornecedor está inativo.");
+        verify(produtosDoFornecedor, never()).ligar(any(), any(), any());
+    }
+
+    @Test
     void documentoDoProprioFornecedorNaoConflita() {
         Fornecedor fornecedor = existente();
 
@@ -296,6 +332,8 @@ class FornecedorServiceTest {
                 ValidacaoDoFornecedorTest.request().build()));
         ReflectionTestUtils.setField(fornecedor, "id", 30L);
         lenient().when(fornecedorRepository.findByUuidAndEmpresa_Id(fornecedor.getUuid(), ID_EMPRESA))
+                .thenReturn(Optional.of(fornecedor));
+        lenient().when(fornecedorRepository.buscarPorUuidParaAtualizar(fornecedor.getUuid(), ID_EMPRESA))
                 .thenReturn(Optional.of(fornecedor));
         return fornecedor;
     }

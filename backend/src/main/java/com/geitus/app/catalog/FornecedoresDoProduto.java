@@ -45,7 +45,12 @@ public class FornecedoresDoProduto implements ProdutosDoFornecedor {
     static final String MENSAGEM_FORNECEDOR_INATIVO = "Este fornecedor está inativo.";
     static final String MENSAGEM_ULTIMO_FORA_DA_LISTA =
             "O fornecedor da última compra precisa estar na lista de fornecedores.";
+    static final String MENSAGEM_PRODUTO_COM_FORNECEDORES_DEMAIS =
+            "Este produto já tem 20 fornecedores. Tire um da lista do produto para ligar outro.";
+    static final String MENSAGEM_LISTA_AUSENTE = "Informe a lista de fornecedores.";
     static final String CAMPO_FORNECEDORES = "fornecedorIds";
+    static final String CAMPO_PRODUTO = "produtoId";
+    static final String CAMPO_FORNECEDOR_DA_COMPRA = "fornecedorId";
     static final String CAMPO_ULTIMA_COMPRA = "fornecedorUltimaCompraId";
 
     private final ProdutoFornecedorRepository ligacaoRepository;
@@ -66,15 +71,15 @@ public class FornecedoresDoProduto implements ProdutosDoFornecedor {
      * {@value #MAXIMO_DE_FORNECEDORES} (400), cada um da empresa (404), o
      * inativo so se ja estiver ligado (400) e o da ultima compra na lista
      * (400). {@code informados} {@code null}: no PATCH mantem a lista e o da
-     * ultima compra; no cadastro, nenhum.
+     * ultima compra; no cadastro, nenhum; com o da ultima compra informado, 400.
      */
     PlanoDeFornecedores planejar(Long empresaId, Produto produtoAtual, List<UUID> informados, UUID ultimaCompra) {
         if (informados == null) {
-            if (produtoAtual != null) {
-                return PlanoDeFornecedores.MANTER;
+            // O da ultima compra so vale junto com a lista (no PATCH, nao e ignorado em silencio).
+            if (ultimaCompra != null) {
+                throw new RegraDeNegocioException(MENSAGEM_LISTA_AUSENTE, CAMPO_FORNECEDORES);
             }
-            ultimaCompraNaLista(ultimaCompra, Map.of(), Set.of());
-            return PlanoDeFornecedores.NENHUM;
+            return produtoAtual == null ? PlanoDeFornecedores.NENHUM : PlanoDeFornecedores.MANTER;
         }
         if (informados.size() > MAXIMO_DE_FORNECEDORES) {
             throw new RegraDeNegocioException(MENSAGEM_FORNECEDORES_DEMAIS, CAMPO_FORNECEDORES);
@@ -121,6 +126,7 @@ public class FornecedoresDoProduto implements ProdutosDoFornecedor {
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void registrarCompra(Produto produto, Long fornecedorId) {
+        exigirVagaNaLista(produto, fornecedorId, CAMPO_FORNECEDOR_DA_COMPRA);
         produto.ligarFornecedor(fornecedorId);
         produto.definirFornecedorDaUltimaCompra(fornecedorId);
     }
@@ -156,6 +162,7 @@ public class FornecedoresDoProduto implements ProdutosDoFornecedor {
     @Transactional(propagation = Propagation.MANDATORY)
     public LigacaoDoProduto ligar(Long empresaId, Long fornecedorId, UUID produtoId) {
         Produto produto = produtoTravado(empresaId, produtoId);
+        exigirVagaNaLista(produto, fornecedorId, CAMPO_PRODUTO);
         boolean criada = produto.ligarFornecedor(fornecedorId);
         produtoRepository.flush();
         return new LigacaoDoProduto(item(produto, fornecedorId), criada);
@@ -181,6 +188,18 @@ public class FornecedoresDoProduto implements ProdutosDoFornecedor {
     }
 
     // ---------- Apoio ----------
+
+    /**
+     * Decisao do CTO: a ligacao nova (pela tela do fornecedor ou pela compra)
+     * nao passa do limite de {@value #MAXIMO_DE_FORNECEDORES} do produto; o
+     * fornecedor que ja esta na lista continua aceito.
+     */
+    private static void exigirVagaNaLista(Produto produto, Long fornecedorId, String campo) {
+        Set<Long> atuais = produto.idsDosFornecedores();
+        if (!atuais.contains(fornecedorId) && atuais.size() >= MAXIMO_DE_FORNECEDORES) {
+            throw new RegraDeNegocioException(MENSAGEM_PRODUTO_COM_FORNECEDORES_DEMAIS, campo);
+        }
+    }
 
     private static Long ultimaCompraNaLista(UUID ultimaCompra, Map<UUID, FornecedorResumido> encontrados,
             Set<UUID> lista) {

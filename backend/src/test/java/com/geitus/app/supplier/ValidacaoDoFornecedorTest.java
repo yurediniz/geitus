@@ -37,6 +37,15 @@ class ValidacaoDoFornecedorTest {
     }
 
     @Test
+    void tipoAusenteUsaOPadraoInformado() {
+        DadosFornecedor dados = ValidacaoDoFornecedor.dados(request().documento("111.444.777-35").build(),
+                TipoPessoaFornecedor.PF);
+
+        assertThat(dados.tipoPessoa()).isEqualTo(TipoPessoaFornecedor.PF);
+        assertThat(dados.documento()).isEqualTo("11144477735");
+    }
+
+    @Test
     void semRazaoSocialNoPjENomeNoPf() {
         assertInvalido(request().razaoSocial("   "), "Informe a razão social.", "razaoSocial");
         assertInvalido(request().tipoPessoa(TipoPessoaFornecedor.PF).razaoSocial(null), "Informe o nome.",

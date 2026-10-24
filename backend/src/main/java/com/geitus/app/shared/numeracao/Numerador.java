@@ -9,8 +9,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Gera o numero de registro sequencial por empresa (1, 2, 3...) de produtos e
- * clientes (docs/modules/produtos-codigo-e-balanca.md, 2.2; DEC-036).
+ * Gera o numero de registro sequencial por empresa (1, 2, 3...) de produtos,
+ * clientes e fornecedores (Fase B5, V14) (docs/modules/produtos-codigo-e-balanca.md, 2.2; DEC-036).
  *
  * <p>O incremento e um {@code UPDATE ... RETURNING} na tabela
  * {@code numeracoes}, que trava a linha da empresa e do tipo ate o fim da
@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
  * na primeira vez com {@code INSERT ... ON CONFLICT DO NOTHING}, seguro tambem
  * entre transacoes concorrentes.
  *
- * <p><b>Toda criacao de produto ou de cliente precisa passar por aqui</b>
+ * <p><b>Toda criacao de produto, de cliente ou de fornecedor precisa passar por aqui</b>
  * (inclusive cargas e scripts): um registro gravado com numero escolhido por
  * fora deixa {@code numeracoes} para tras, e o proximo cadastro bate na
  * UNIQUE {@code (empresa_id, numero)}. Se isso acontecer, a ressincronizacao e:
@@ -30,6 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
  *  WHERE p.empresa_id = n.empresa_id) WHERE tipo = 'PRODUTO';
  * UPDATE numeracoes n SET ultimo_numero = (SELECT coalesce(max(numero), 0) FROM clientes c
  *  WHERE c.empresa_id = n.empresa_id) WHERE tipo = 'CLIENTE';
+ * UPDATE numeracoes n SET ultimo_numero = (SELECT coalesce(max(numero), 0) FROM fornecedores f
+ *  WHERE f.empresa_id = n.empresa_id) WHERE tipo = 'FORNECEDOR';
  * </pre>
  * (empresa sem linha em {@code numeracoes} e criada no primeiro cadastro e
  * comeca do 1; se ela ja tiver registros, insira a linha com o maximo antes).

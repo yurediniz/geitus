@@ -7,7 +7,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -167,6 +169,30 @@ class FornecedorNaEntradaPorCompraIT {
                 .isInstanceOf(CatalogoNaoEncontradoException.class)
                 .hasMessage("Fornecedor não encontrado.");
         assertThat(movimentos(arroz)).isZero();
+    }
+
+    /** Decisao do CTO: a compra com fornecedor novo nao passa do limite de 20 fornecedores do produto. */
+    @Test
+    void compraComFornecedorNovoNumProdutoComVinteE400EOJaLigadoContinua() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        UUID arroz = cenario.novoProduto(empresa, "UN", "Arroz");
+        List<UUID> vinte = IntStream.rangeClosed(1, 20).mapToObj(numero -> fornecedor(empresa, "F" + numero))
+                .toList();
+        UUID vigesimoPrimeiro = fornecedor(empresa, "F21");
+        ajustar(empresa, arroz, compra("1", "10.00", vinte.get(0), UUID.randomUUID()));
+        for (UUID fornecedor : vinte.subList(1, 20)) {
+            ajustar(empresa, arroz, compra("1", "10.00", fornecedor, UUID.randomUUID()));
+        }
+
+        assertThatThrownBy(() -> ajustar(empresa, arroz, compra("1", "10.00", vigesimoPrimeiro, UUID.randomUUID())))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Este produto já tem 20 fornecedores. Tire um da lista do produto para ligar outro.")
+                .satisfies(erro -> assertThat(((RegraDeNegocioException) erro).campo()).contains(CAMPO_FORNECEDOR));
+        assertThat(movimentos(arroz)).isEqualTo(20);
+        ajustar(empresa, arroz, compra("1", "10.00", vinte.get(3), UUID.randomUUID()));
+        assertThat(produtoService.buscarPorIdParaUsuario(empresa.admin(), arroz).fornecedorUltimaCompra().id())
+                .isEqualTo(vinte.get(3));
+        assertThat(ligacoes(arroz)).isEqualTo(20);
     }
 
     // ---------- Idempotencia (Review Focus 5) ----------

@@ -9,6 +9,8 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,6 +26,8 @@ import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoDoFornecedorResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.listagem.ParametrosDaListagem;
+import com.geitus.app.catalog.marca.MarcaService;
+import com.geitus.app.catalog.marca.dto.MarcaRequest;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaResponse;
 import com.geitus.app.company.Empresa;
@@ -36,6 +40,8 @@ import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.supplier.DadosFornecedorInvalidosException;
 import com.geitus.app.supplier.FornecedorService;
 import com.geitus.app.supplier.dto.FornecedorRequest;
+
+import jakarta.persistence.EntityManagerFactory;
 
 /**
  * Fornecedores no produto e produtos do fornecedor (Fase B5) com o contexto
@@ -64,6 +70,7 @@ class ProdutoFornecedoresIT {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
+        registry.add("spring.jpa.properties.hibernate.generate_statistics", () -> "true");
     }
 
     @Autowired
@@ -83,6 +90,12 @@ class ProdutoFornecedoresIT {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
+
+    @Autowired
+    private MarcaService marcaService;
 
     // ---------- No produto (spec 5) ----------
 
@@ -277,14 +290,68 @@ class ProdutoFornecedoresIT {
         UUID atacado = fornecedor(loja, "Atacado Sul");
         ProdutoResponse daOutra = cadastrar(novaLoja(), "Da outra", null, null);
         ProdutoResponse produto = cadastrar(loja, "Ração", null, null);
-        fornecedorService.inativarParaUsuario(loja.admin(), atacado);
-
         assertThatThrownBy(() -> fornecedorService.ligarProdutoParaUsuario(loja.admin(), atacado, daOutra.id()))
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
+        fornecedorService.inativarParaUsuario(loja.admin(), atacado);
+
         assertThatThrownBy(() -> fornecedorService.ligarProdutoParaUsuario(loja.admin(), atacado, produto.id()))
                 .isInstanceOf(DadosFornecedorInvalidosException.class)
                 .hasMessage("Este fornecedor está inativo.");
         assertThat(ligacoes(produto.id())).isZero();
+    }
+
+    /** Decisao do CTO: a tela do fornecedor nao passa do limite de 20 fornecedores do produto. */
+    @Test
+    void ligarNumProdutoComVinteFornecedoresE400EOJaLigadoContinua() {
+        Loja loja = novaLoja();
+        List<UUID> vinte = IntStream.rangeClosed(1, 20).mapToObj(numero -> fornecedor(loja, "F" + numero)).toList();
+        UUID vigesimoPrimeiro = fornecedor(loja, "F21");
+        ProdutoResponse produto = cadastrar(loja, "Ração", vinte, null);
+
+        assertThatThrownBy(() -> fornecedorService.ligarProdutoParaUsuario(loja.admin(), vigesimoPrimeiro,
+                produto.id()))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Este produto já tem 20 fornecedores. Tire um da lista do produto para ligar outro.")
+                .satisfies(erro -> assertThat(((RegraDeNegocioException) erro).campo()).contains("produtoId"));
+        assertThat(fornecedorService.ligarProdutoParaUsuario(loja.admin(), vinte.get(0), produto.id()).criada())
+                .isFalse();
+        assertThat(ligacoes(produto.id())).isEqualTo(20);
+    }
+
+    @Test
+    void ultimaCompraSemAListaE400NoCadastroENoPatch() {
+        Loja loja = novaLoja();
+        UUID atacado = fornecedor(loja, "Atacado Sul");
+        ProdutoResponse produto = cadastrar(loja, "Ração", List.of(atacado), null);
+
+        assertThatThrownBy(() -> cadastrar(loja, "Feijão", null, atacado))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Informe a lista de fornecedores.");
+        assertThatThrownBy(() -> atualizar(loja, produto.id(), null, atacado))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Informe a lista de fornecedores.")
+                .satisfies(erro -> assertThat(((RegraDeNegocioException) erro).campo()).contains("fornecedorIds"));
+        assertThat(produtoService.buscarPorIdParaUsuario(loja.admin(), produto.id()).fornecedorUltimaCompra())
+                .isNull();
+    }
+
+    /** Sem N+1: a listagem com marca e dois fornecedores em cada produto faz os mesmos comandos com 3 ou 25. */
+    @Test
+    void listagemComMarcaEFornecedoresNaoDependeDoTamanhoDaPagina() {
+        Loja loja = novaLoja();
+        UUID marca = marcaService.cadastrarParaUsuario(loja.admin(), new MarcaRequest("Golden", null)).id();
+        UUID atacado = fornecedor(loja, "Atacado Sul");
+        UUID zebra = fornecedor(loja, "Zebra");
+        for (int numero = 1; numero <= 30; numero++) {
+            produtoService.cadastrarParaUsuario(loja.admin(), ProdutoRequestBuilder.comUnidade(loja.un())
+                    .nome("Produto " + numero).marcaId(marca).fornecedorIds(List.of(atacado, zebra))
+                    .fornecedorUltimaCompraId(zebra).build());
+        }
+
+        long comTres = comandosDaListagem(loja, 3);
+        long comVinteECinco = comandosDaListagem(loja, 25);
+
+        assertThat(comVinteECinco).isEqualTo(comTres);
     }
 
     @Test
@@ -323,6 +390,19 @@ class ProdutoFornecedoresIT {
         return produtoService.atualizarDadosBasicosParaUsuario(loja.admin(), produto,
                 ProdutoRequestBuilder.comUnidade(loja.un()).nome("Ração").fornecedorIds(fornecedores)
                         .fornecedorUltimaCompraId(ultimaCompra).build());
+    }
+
+    private long comandosDaListagem(Loja loja, int tamanho) {
+        Statistics estatisticas = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        estatisticas.clear();
+        List<ProdutoResponse> itens = produtoService.listarParaUsuario(loja.admin(),
+                ParametrosDaListagem.daRequisicao(null, null, null, null, null, null, 0, tamanho)).itens();
+        assertThat(itens).hasSize(tamanho).allSatisfy(item -> {
+            assertThat(item.marca().nome()).isEqualTo("Golden");
+            assertThat(item.fornecedores()).hasSize(2);
+            assertThat(item.fornecedorUltimaCompra().nome()).isEqualTo("Zebra");
+        });
+        return estatisticas.getPrepareStatementCount();
     }
 
     private long ligacoes(UUID produto) {

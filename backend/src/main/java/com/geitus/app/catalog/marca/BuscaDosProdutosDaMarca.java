@@ -21,6 +21,9 @@ import com.geitus.app.shared.busca.TextoDeBusca;
  * marca sao lidos numa consulta so, o texto pesquisavel e montado em Java pelo
  * mesmo {@link TextoDeBusca#textoDoProduto} da entidade (a normalizacao fica
  * num lugar so) e gravado num {@code UPDATE} em lote ({@code batchUpdate}).
+ * O {@code SELECT} trava as linhas lidas ({@code FOR NO KEY UPDATE}, sem
+ * bloquear as FKs que apontam para o produto): uma edicao simultanea de um
+ * desses produtos espera, e nenhuma das duas grava a busca com dados velhos.
  * Exige a transacao do renomear ({@link Propagation#MANDATORY}): a marca e a
  * busca mudam juntas ou nada muda.
  *
@@ -33,7 +36,8 @@ class BuscaDosProdutosDaMarca {
             SELECT p.id, p.nome, p.nome_curto, p.sku
               FROM produtos p
              WHERE p.empresa_id = :empresaId
-               AND p.marca_id = :marcaId""";
+               AND p.marca_id = :marcaId
+               FOR NO KEY UPDATE""";
     private static final String ATUALIZAR_BUSCA = """
             UPDATE produtos
                SET busca_normalizada = :busca

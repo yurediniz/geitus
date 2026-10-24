@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -34,6 +36,8 @@ import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.supplier.dto.FornecedorItemResponse;
 import com.geitus.app.supplier.dto.FornecedorResponse;
 import com.geitus.app.supplier.dto.RepresentanteRequest;
+
+import jakarta.persistence.EntityManagerFactory;
 
 /**
  * Fornecedores (Fase B5) com o contexto Spring completo e um PostgreSQL real
@@ -66,6 +70,7 @@ class FornecedorIT {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
+        registry.add("spring.jpa.properties.hibernate.generate_statistics", () -> "true");
     }
 
     @Autowired
@@ -85,6 +90,9 @@ class FornecedorIT {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
 
     // ---------- Cadastro ----------
 
@@ -167,10 +175,77 @@ class FornecedorIT {
         assertThat(nomes(listar(loja, "AMIGO", null))).containsExactly("Comercial Ltda");
         assertThat(nomes(listar(loja, "11.222.333", null))).containsExactly("Comercial Ltda");
         assertThat(nomes(listar(loja, "0001-81", null))).containsExactly("Comercial Ltda");
-        assertThat(nomes(listar(loja, "3", null))).containsExactly("Comercial Ltda", "Zebra Pet");
+        // So o Nº 3 (Zebra): com menos de 4 digitos o documento nao e comparado (o CNPJ tem "3").
+        assertThat(nomes(listar(loja, "3", null))).containsExactly("Zebra Pet");
+        assertThat(nomes(listar(loja, "333", null))).isEmpty();
+        assertThat(nomes(listar(loja, "2333", null))).containsExactly("Comercial Ltda");
         assertThat(nomes(listar(loja, "joaquim bras", null))).containsExactly("Comercial Ltda");
         assertThat(nomes(listar(loja, "pet", null))).containsExactly("Comercial Ltda", "Zebra Pet");
         assertThat(nomes(listar(loja, "50%", null))).isEmpty();
+    }
+
+    @Test
+    void buscaComMaisDe200CaracteresE400() {
+        Loja loja = novaLoja();
+
+        assertThatThrownBy(() -> listar(loja, "a".repeat(201), null))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("A busca deve ter no máximo 200 caracteres.")
+                .satisfies(erro -> assertThat(((RegraDeNegocioException) erro).campo()).contains("busca"));
+        assertThat(listar(loja, "1".repeat(200), null).totalItens()).isZero();
+    }
+
+    @Test
+    void edicaoMantemOProprioCnpjEOTipoQuandoAusente() {
+        Loja loja = novaLoja();
+        FornecedorResponse pj = fornecedorService.cadastrarParaUsuario(loja.admin(), request("Atacado Sul")
+                .documento(CNPJ).build());
+        FornecedorResponse pf = fornecedorService.cadastrarParaUsuario(loja.admin(), request("João da Silva")
+                .tipoPessoa(TipoPessoaFornecedor.PF).documento("111.444.777-35").build());
+
+        FornecedorResponse pjEditado = fornecedorService.atualizarParaUsuario(loja.admin(), pj.id(),
+                request("Atacado Sul Ltda").documento("11222333000181").build());
+        FornecedorResponse pfEditado = fornecedorService.atualizarParaUsuario(loja.admin(), pf.id(),
+                request("João da Silva Jr").documento("11144477735").build());
+
+        assertThat(pjEditado.documento()).isEqualTo("11222333000181");
+        assertThat(pfEditado.tipoPessoa()).isEqualTo(TipoPessoaFornecedor.PF);
+        assertThat(pfEditado.documento()).isEqualTo("11144477735");
+    }
+
+    @Test
+    void reordenarOsRepresentantesTrocaOPrincipalDaListagem() {
+        Loja loja = novaLoja();
+        FornecedorResponse fornecedor = fornecedorService.cadastrarParaUsuario(loja.admin(), request("Distribuidora")
+                .representantes(new RepresentanteRequest(null, "Ana", "11987654321", null),
+                        new RepresentanteRequest(null, "Bruno", "11912345678", null))
+                .build());
+        UUID ana = fornecedor.representantes().get(0).id();
+        UUID bruno = fornecedor.representantes().get(1).id();
+        assertThat(listar(loja, null, null).itens().get(0).representantePrincipal().nome()).isEqualTo("Ana");
+
+        fornecedorService.atualizarParaUsuario(loja.admin(), fornecedor.id(), request("Distribuidora")
+                .representantes(new RepresentanteRequest(bruno, "Bruno", "11912345678", null),
+                        new RepresentanteRequest(ana, "Ana", "11987654321", null))
+                .build());
+
+        FornecedorItemResponse item = listar(loja, null, null).itens().get(0);
+        assertThat(item.representantePrincipal().nome()).isEqualTo("Bruno");
+        assertThat(item.representantePrincipal().telefone()).isEqualTo("11912345678");
+    }
+
+    /** Sem N+1: a listagem com dois representantes por fornecedor faz os mesmos comandos com 3 ou 25. */
+    @Test
+    void listagemComRepresentantesNaoDependeDoTamanhoDaPagina() {
+        Loja loja = novaLoja();
+        for (int numero = 1; numero <= 30; numero++) {
+            fornecedorService.cadastrarParaUsuario(loja.admin(), request("Fornecedor " + numero)
+                    .representantes(new RepresentanteRequest(null, "Ana " + numero, null, null),
+                            new RepresentanteRequest(null, "Bruno " + numero, null, null))
+                    .build());
+        }
+
+        assertThat(comandosDaListagem(loja, 25)).isEqualTo(comandosDaListagem(loja, 3));
     }
 
     @Test
@@ -282,6 +357,16 @@ class FornecedorIT {
 
     private static List<String> nomes(PaginaResponse<FornecedorItemResponse> pagina) {
         return pagina.itens().stream().map(FornecedorItemResponse::razaoSocial).toList();
+    }
+
+    private long comandosDaListagem(Loja loja, int tamanho) {
+        Statistics estatisticas = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        estatisticas.clear();
+        PaginaResponse<FornecedorItemResponse> pagina = fornecedorService.listarParaUsuario(loja.admin(), null, null,
+                0, tamanho);
+        assertThat(pagina.itens()).hasSize(tamanho)
+                .allSatisfy(item -> assertThat(item.representantePrincipal().nome()).startsWith("Ana"));
+        return estatisticas.getPrepareStatementCount();
     }
 
     private long contar(String tabela, Loja loja) {

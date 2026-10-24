@@ -6,10 +6,13 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.geitus.app.catalog.FornecedorResumido;
+
+import jakarta.persistence.LockModeType;
 
 /**
  * Acesso a dados da entidade {@link Fornecedor}. Toda consulta filtra pela
@@ -19,6 +22,20 @@ import com.geitus.app.catalog.FornecedorResumido;
 public interface FornecedorRepository extends JpaRepository<Fornecedor, Long> {
 
     Optional<Fornecedor> findByUuidAndEmpresa_Id(UUID uuid, Long empresaId);
+
+    /**
+     * O fornecedor da empresa com trava de escrita ({@code SELECT ... FOR
+     * UPDATE}) ate o fim da transacao: edicao, status, exclusao e ligar ou
+     * desligar produtos ficam em fila, sem uma sobrescrever a outra (lost
+     * update) nem excluir entre a contagem dos vinculos e o {@code DELETE}.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT f FROM Fornecedor f
+            WHERE f.uuid = :uuid
+              AND f.empresa.id = :empresaId
+            """)
+    Optional<Fornecedor> buscarPorUuidParaAtualizar(@Param("uuid") UUID uuid, @Param("empresaId") Long empresaId);
 
     /**
      * Razao social do fornecedor da empresa que ja tem este documento,
