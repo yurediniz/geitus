@@ -72,6 +72,9 @@ function renderPagina(entrada = '/caixa/historico') {
   )
 }
 
+/** O id do ponto e um UUID (a URL so aceita esse formato). */
+const PONTO_2 = '7c0e8f3a-2b1d-4c5e-9f6a-0b1c2d3e4f50'
+
 function semMovimentos({ movimentos: _movimentos, ...resumo }: SessaoDeCaixa): SessaoDeCaixaResumo {
   return resumo
 }
@@ -90,7 +93,7 @@ const FECHADA_CONFERE = semMovimentos(
 const FECHADA_COM_FALTA = semMovimentos(
   sessaoDeTeste({
     id: 's-2',
-    ponto: { id: 'p-2', nome: 'Caixa 2' },
+    ponto: { id: PONTO_2, nome: 'Caixa 2' },
     status: 'FECHADA',
     abertaPorNome: 'Beto Lima',
     valorEsperado: 200,
@@ -120,7 +123,7 @@ describe('HistoricoDoCaixaPage', () => {
     listarSessoesMock.mockReset()
     buscarSessaoMock.mockReset()
     definirPerfil('ADMIN')
-    listarPontosMock.mockResolvedValue([pontoDeTeste(), pontoDeTeste({ id: 'p-2', nome: 'Caixa 2', ativo: false })])
+    listarPontosMock.mockResolvedValue([pontoDeTeste(), pontoDeTeste({ id: PONTO_2, nome: 'Caixa 2', ativo: false })])
     listarSessoesMock.mockResolvedValue(pagina([FECHADA_CONFERE, FECHADA_COM_FALTA, ABERTA, EM_CONFERENCIA]))
   })
 
@@ -156,14 +159,14 @@ describe('HistoricoDoCaixaPage', () => {
   })
 
   it('lê os filtros da URL e os manda na consulta', async () => {
-    renderPagina('/caixa/historico?ponto=p-2&situacao=FECHADA&de=2026-10-01&ate=2026-10-24&pagina=2')
+    renderPagina(`/caixa/historico?ponto=${PONTO_2}&situacao=FECHADA&de=2026-10-01&ate=2026-10-24&pagina=2`)
 
     await screen.findByRole('table', { name: 'Sessões de caixa' })
     expect(listarSessoesMock).toHaveBeenCalledWith(
-      { pontoId: 'p-2', status: 'FECHADA', de: '2026-10-01', ate: '2026-10-24', pagina: 2 },
+      { pontoId: PONTO_2, status: 'FECHADA', de: '2026-10-01', ate: '2026-10-24', pagina: 2 },
       expect.any(AbortSignal),
     )
-    expect(await screen.findByLabelText('Ponto')).toHaveValue('p-2')
+    expect(await screen.findByLabelText('Ponto')).toHaveValue(PONTO_2)
     expect(screen.getByLabelText('Situação')).toHaveValue('FECHADA')
     expect(screen.getByLabelText('De')).toHaveValue('2026-10-01')
     expect(screen.getByLabelText('Até')).toHaveValue('2026-10-24')
@@ -176,17 +179,17 @@ describe('HistoricoDoCaixaPage', () => {
     const ponto = await screen.findByLabelText('Ponto')
     await within(ponto).findByRole('option', { name: 'Caixa 2 (inativo)' })
 
-    fireEvent.change(ponto, { target: { value: 'p-2' } })
-    expect(url()).toBe('/caixa/historico?ponto=p-2')
+    fireEvent.change(ponto, { target: { value: PONTO_2 } })
+    expect(url()).toBe(`/caixa/historico?ponto=${PONTO_2}`)
 
     fireEvent.change(screen.getByLabelText('Situação'), { target: { value: 'EM_CONFERENCIA' } })
     fireEvent.change(screen.getByLabelText('De'), { target: { value: '2026-10-01' } })
     fireEvent.change(screen.getByLabelText('Até'), { target: { value: '2026-10-24' } })
-    expect(url()).toBe('/caixa/historico?ponto=p-2&situacao=EM_CONFERENCIA&de=2026-10-01&ate=2026-10-24')
+    expect(url()).toBe(`/caixa/historico?ponto=${PONTO_2}&situacao=EM_CONFERENCIA&de=2026-10-01&ate=2026-10-24`)
 
     await waitFor(() =>
       expect(listarSessoesMock).toHaveBeenLastCalledWith(
-        { pontoId: 'p-2', status: 'EM_CONFERENCIA', de: '2026-10-01', ate: '2026-10-24', pagina: 1 },
+        { pontoId: PONTO_2, status: 'EM_CONFERENCIA', de: '2026-10-01', ate: '2026-10-24', pagina: 1 },
         expect.any(AbortSignal),
       ),
     )
@@ -254,12 +257,64 @@ describe('HistoricoDoCaixaPage', () => {
     expect(await within(painel).findByRole('list', { name: 'Movimentos do caixa' })).toBeInTheDocument()
   })
 
-  it('vazio: "Nenhum caixa neste período."', async () => {
+  it('vazio sem filtro: "Nenhum caixa registrado ainda."', async () => {
     listarSessoesMock.mockResolvedValue(pagina([]))
     renderPagina()
 
-    expect(await screen.findByText('Nenhum caixa neste período.')).toBeInTheDocument()
+    expect(await screen.findByText('Nenhum caixa registrado ainda.')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Limpar filtros' })).not.toBeInTheDocument()
+  })
+
+  it('vazio com filtro: "Nenhum caixa com esses filtros." e "Limpar filtros"', async () => {
+    listarSessoesMock.mockResolvedValue(pagina([]))
+    renderPagina('/caixa/historico?situacao=EM_CONFERENCIA')
+
+    expect(await screen.findByText('Nenhum caixa com esses filtros.')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Limpar filtros' }).length).toBeGreaterThan(0)
+  })
+
+  it('?ponto= que não é UUID é ignorado', async () => {
+    renderPagina('/caixa/historico?ponto=abc&situacao=FECHADA')
+
+    await screen.findByRole('table', { name: 'Sessões de caixa' })
+    expect(listarSessoesMock).toHaveBeenCalledWith(
+      { pontoId: '', status: 'FECHADA', de: '', ate: '', pagina: 1 },
+      expect.any(AbortSignal),
+    )
+  })
+
+  it('o clique em qualquer lugar da linha também abre o detalhe', async () => {
+    buscarSessaoMock.mockResolvedValue(sessaoDeTeste({ ...FECHADA_CONFERE }))
+    renderPagina()
+
+    const tabela = await screen.findByRole('table', { name: 'Sessões de caixa' })
+    const [, primeira] = within(tabela).getAllByRole('row')
+    expect(primeira).toHaveClass('cursor-pointer')
+    // A celula do esperado (fora do botao do nome).
+    fireEvent.click(within(primeira).getAllByRole('cell')[3])
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    await waitFor(() => expect(buscarSessaoMock).toHaveBeenCalledTimes(1))
+  })
+
+  it('detalhe de caixa aberto: subtítulo "Aberto por …" e, no modo cego sem o esperado, só os movimentos', async () => {
+    const abertaCega = sessaoDeTeste({ id: 's-3', fechamentoCego: true, dinheiroNaGaveta: null })
+    listarSessoesMock.mockResolvedValue(pagina([semMovimentos(abertaCega)]))
+    buscarSessaoMock.mockResolvedValue(abertaCega)
+    renderPagina()
+
+    const tabela = await screen.findByRole('table', { name: 'Sessões de caixa' })
+    fireEvent.click(within(tabela).getByRole('button', { name: /Caixa 1/ }))
+
+    const painel = await screen.findByRole('dialog')
+    expect(painel).toHaveAccessibleDescription('Aberto por Ana Souza em 24/10/2026 às 08:02')
+    expect(await within(painel).findByRole('list', { name: 'Movimentos do caixa' })).toBeInTheDocument()
+    // Fundo e totais permitiriam calcular o esperado: nao aparecem.
+    expect(within(painel).queryByText('Suprimentos')).not.toBeInTheDocument()
+    expect(within(painel).queryByText('Sangrias')).not.toBeInTheDocument()
+    expect(within(painel).queryByText('Fundo de troco')).not.toBeInTheDocument()
+    expect(within(painel).getByText('Fechamento cego: o valor esperado aparece depois da contagem.')).toBeInTheDocument()
   })
 
   it('erro: mensagem e "Tentar de novo"', async () => {

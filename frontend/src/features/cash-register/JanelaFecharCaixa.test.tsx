@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { JanelaFecharCaixa } from '@/features/cash-register/JanelaFecharCaixa'
-import { contar, fechar } from '@/services/caixaService'
+import { buscarSessao, contar, fechar } from '@/services/caixaService'
 import { HttpError } from '@/services/httpClient'
 import { sessaoDeTeste } from '@/test/fixturesCaixa'
 import type { SessaoDeCaixa } from '@/types/caixa'
@@ -11,10 +11,12 @@ import type { SessaoDeCaixa } from '@/types/caixa'
 vi.mock('@/services/caixaService', () => ({
   contar: vi.fn(),
   fechar: vi.fn(),
+  buscarSessao: vi.fn(),
 }))
 
 const contarMock = vi.mocked(contar)
 const fecharMock = vi.mocked(fechar)
+const buscarSessaoMock = vi.mocked(buscarSessao)
 
 const NAO_CEGO = sessaoDeTeste({ fechamentoCego: false, dinheiroNaGaveta: 320 })
 // OPERADOR no modo cego: o backend nao manda o esperado enquanto a sessao esta aberta.
@@ -45,11 +47,11 @@ function fechada(base: SessaoDeCaixa, justificativa: string | null = null): Sess
 
 const aoConcluir = vi.fn()
 const aoFechar = vi.fn()
-const aoConflitoDeEstado = vi.fn()
+const aoMudarDeEstado = vi.fn()
+let queryClient: QueryClient
 
-function renderJanela(sessao: SessaoDeCaixa, deOutraPessoa = false) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  render(
+function arvore(sessao: SessaoDeCaixa, deOutraPessoa: boolean) {
+  return (
     <QueryClientProvider client={queryClient}>
       <JanelaFecharCaixa
         aberto
@@ -57,11 +59,19 @@ function renderJanela(sessao: SessaoDeCaixa, deOutraPessoa = false) {
         deOutraPessoa={deOutraPessoa}
         aoFechar={aoFechar}
         aoConcluir={aoConcluir}
-        aoConflitoDeEstado={aoConflitoDeEstado}
+        aoMudarDeEstado={aoMudarDeEstado}
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   )
-  return screen.getByRole('dialog')
+}
+
+function renderJanela(sessao: SessaoDeCaixa, deOutraPessoa = false) {
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  const { rerender } = render(arvore(sessao, deOutraPessoa))
+  return Object.assign(screen.getByRole('dialog'), {
+    /** A sessao recarregada pela tela (ex.: o modo trocado). */
+    trocarSessao: (nova: SessaoDeCaixa) => rerender(arvore(nova, deOutraPessoa)),
+  })
 }
 
 function campoContado() {
@@ -81,6 +91,7 @@ describe('JanelaFecharCaixa', () => {
     vi.clearAllMocks()
     contarMock.mockReset()
     fecharMock.mockReset()
+    buscarSessaoMock.mockReset()
   })
 
   describe('modo não cego', () => {
@@ -245,13 +256,166 @@ describe('JanelaFecharCaixa', () => {
     expect(within(janela).getByText('Você está fechando o caixa aberto por Ana Souza.')).toBeInTheDocument()
   })
 
-  it('caixa já fechado em outro lugar: avisa quem abriu a janela', async () => {
-    contarMock.mockRejectedValue(new HttpError(409, 'Este caixa já foi fechado.'))
-    renderJanela(NAO_CEGO)
+  describe('textos conforme o modo e quem fecha', () => {
+    it('modo cego, sem ver o esperado', () => {
+      const janela = renderJanela(CEGO)
+      expect(janela).toHaveAccessibleDescription(
+        'Conte o dinheiro da gaveta e informe o total. Se bater, o caixa fecha na hora. Depois de conferir, a contagem não pode ser alterada.',
+      )
+    })
 
-    digitarContado('320,00')
-    enviar()
+    it('modo cego, para quem vê o esperado (ADMIN)', () => {
+      const janela = renderJanela({ ...CEGO, dinheiroNaGaveta: 320 })
+      expect(janela).toHaveAccessibleDescription(
+        'Conte o dinheiro da gaveta e informe o total. A diferença aparece depois de conferir. A contagem não pode ser alterada depois.',
+      )
+      // Mesmo vendo o esperado na tela, a janela segue o modo cego.
+      expect(within(janela).queryByText('Esperado R$ 320,00')).not.toBeInTheDocument()
+    })
 
-    await waitFor(() => expect(aoConflitoDeEstado).toHaveBeenCalledWith('Este caixa já foi fechado.'))
+    it('modo não cego', () => {
+      const janela = renderJanela(NAO_CEGO)
+      expect(janela).toHaveAccessibleDescription(
+        'Conte o dinheiro da gaveta e compare com o esperado. A contagem não pode ser alterada depois.',
+      )
+    })
+
+    it('em conferência: "Justificar depois" no lugar de "Cancelar", e o exemplo segue o sentido da diferença', () => {
+      const janela = renderJanela(emConferencia(CEGO))
+      expect(within(janela).getByRole('button', { name: 'Justificar depois' })).toBeInTheDocument()
+      expect(within(janela).queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument()
+      expect(within(janela).getByLabelText(/justificativa/i)).toHaveAttribute('placeholder', 'Ex.: Troco dado a mais')
+    })
+
+    it('com sobra, o exemplo é "Troco dado a menos"', () => {
+      renderJanela(NAO_CEGO)
+      digitarContado('325,00')
+      expect(screen.getByLabelText(/justificativa/i)).toHaveAttribute('placeholder', 'Ex.: Troco dado a menos')
+    })
+  })
+
+  describe('acessibilidade', () => {
+    it('só a diferença é anunciada enquanto se digita', () => {
+      const janela = renderJanela(NAO_CEGO)
+      digitarContado('318,00')
+
+      const regioesVivas = janela.querySelectorAll('[aria-live]')
+      expect(regioesVivas).toHaveLength(1)
+      expect(regioesVivas[0]).toHaveTextContent('Falta de R$ 2,00')
+      expect(regioesVivas[0]).not.toHaveTextContent('Esperado')
+    })
+
+    it('no passo da justificativa, ela é descrita pelo resultado da contagem', () => {
+      renderJanela(emConferencia(CEGO))
+      expect(screen.getByLabelText(/justificativa/i)).toHaveAccessibleDescription(
+        // O "R$" do Intl vem com espaco nao separavel.
+        expect.stringMatching(/Contado R\$\s318,00 Diferença Falta de R\$\s2,00/),
+      )
+    })
+  })
+
+  describe('falhas e mudanças de estado', () => {
+    it('rede cai no fechamento: a janela e a justificativa ficam, nada é recarregado e o retry fecha', async () => {
+      fecharMock.mockRejectedValueOnce(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
+      fecharMock.mockResolvedValueOnce(fechada(CEGO, 'Troco dado a mais'))
+      const janela = renderJanela(emConferencia(CEGO))
+      const invalidar = vi.spyOn(queryClient, 'invalidateQueries')
+
+      fireEvent.change(within(janela).getByLabelText(/justificativa/i), { target: { value: 'Troco dado a mais' } })
+      enviar()
+
+      expect(await within(janela).findByRole('alert')).toHaveTextContent(
+        'Não foi possível fechar o caixa. Confira a conexão e tente de novo.',
+      )
+      expect(within(janela).getByLabelText(/justificativa/i)).toHaveValue('Troco dado a mais')
+      expect(invalidar).not.toHaveBeenCalled()
+      expect(buscarSessaoMock).not.toHaveBeenCalled()
+
+      enviar()
+      await waitFor(() => expect(aoConcluir).toHaveBeenCalledWith(expect.objectContaining({ status: 'FECHADA' })))
+      expect(fecharMock).toHaveBeenNthCalledWith(2, CEGO.id, { justificativa: 'Troco dado a mais' })
+    })
+
+    it('a aba B conta outro valor (409): relê a sessão e, em conferência, avisa quem abriu a janela', async () => {
+      contarMock.mockRejectedValue(new HttpError(409, 'A contagem deste caixa já foi registrada.'))
+      const contadaNaOutraAba = emConferencia(CEGO)
+      buscarSessaoMock.mockResolvedValue(contadaNaOutraAba)
+      renderJanela(CEGO)
+
+      digitarContado('300,00')
+      enviar()
+
+      await waitFor(() =>
+        expect(aoMudarDeEstado).toHaveBeenCalledWith({
+          situacao: 'EM_CONFERENCIA',
+          sessao: contadaNaOutraAba,
+          mensagem: 'A contagem deste caixa já foi registrada.',
+        }),
+      )
+      expect(buscarSessaoMock).toHaveBeenCalledWith(CEGO.id)
+    })
+
+    it('a outra aba contou sem diferença (409): a sessão relida está fechada', async () => {
+      contarMock.mockRejectedValue(new HttpError(409, 'A contagem deste caixa já foi registrada.'))
+      buscarSessaoMock.mockResolvedValue(fechada(CEGO))
+      renderJanela(CEGO)
+
+      digitarContado('300,00')
+      enviar()
+
+      await waitFor(() => expect(aoMudarDeEstado).toHaveBeenCalledWith(expect.objectContaining({ situacao: 'FECHADA' })))
+    })
+
+    it('a releitura falha: decide pelo texto do 409 (fallback)', async () => {
+      contarMock.mockRejectedValue(new HttpError(409, 'A contagem deste caixa já foi registrada.'))
+      buscarSessaoMock.mockRejectedValue(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
+      renderJanela(CEGO)
+
+      digitarContado('300,00')
+      enviar()
+
+      await waitFor(() =>
+        expect(aoMudarDeEstado).toHaveBeenCalledWith({
+          situacao: 'EM_CONFERENCIA',
+          sessao: null,
+          mensagem: 'A contagem deste caixa já foi registrada.',
+        }),
+      )
+    })
+
+    it('404 na contagem: a sessão não está mais acessível', async () => {
+      contarMock.mockRejectedValue(new HttpError(404, 'Requisicao falhou (HTTP 404).'))
+      renderJanela(NAO_CEGO)
+
+      digitarContado('320,00')
+      enviar()
+
+      await waitFor(() =>
+        expect(aoMudarDeEstado).toHaveBeenCalledWith({
+          situacao: 'INDISPONIVEL',
+          mensagem: 'Este caixa não está mais disponível. A tela foi atualizada.',
+        }),
+      )
+      expect(buscarSessaoMock).not.toHaveBeenCalled()
+    })
+
+    it('modo trocado antes da contagem: o 400 da justificativa aparece mesmo com o campo fora da tela', async () => {
+      contarMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { justificativa: 'Informe a justificativa depois de ver a diferença.' }),
+      )
+      const janela = renderJanela(NAO_CEGO)
+
+      digitarContado('318,00')
+      fireEvent.change(within(janela).getByLabelText(/justificativa/i), { target: { value: 'Troco' } })
+      enviar()
+      expect(await within(janela).findByText('Informe a justificativa depois de ver a diferença.')).toBeInTheDocument()
+
+      // A tela recarrega a sessao: agora no modo cego, sem o campo da justificativa.
+      janela.trocarSessao(CEGO)
+
+      expect(within(janela).queryByLabelText(/justificativa/i)).not.toBeInTheDocument()
+      expect(within(janela).getByRole('alert')).toHaveTextContent('Informe a justificativa depois de ver a diferença.')
+      expect(within(janela).getByRole('button', { name: 'Conferir' })).toBeInTheDocument()
+    })
   })
 })

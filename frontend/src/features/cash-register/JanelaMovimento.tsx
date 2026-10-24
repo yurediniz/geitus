@@ -7,7 +7,13 @@ import { CampoMoeda } from '@/components/ui/campo-moeda'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { CAIXA_QUERY_KEY } from '@/features/cash-register/caixaQuery'
-import { lerErroDoServidor, mensagemDeConflitoDeEstado } from '@/features/cash-register/errosDoCaixa'
+import {
+  ehFalhaSemResposta,
+  lerErroDoServidor,
+  verificarMudancaDeEstado,
+  type MudancaDeEstado,
+} from '@/features/cash-register/errosDoCaixa'
+import { manterFocoMovidoPelaTela } from '@/features/cash-register/focoDoCaixa'
 import { formatarReais } from '@/features/cash-register/formatacaoCaixa'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
 import { ErroDoCampo, MarcaObrigatorio } from '@/features/products/CamposFormulario'
@@ -24,7 +30,7 @@ export interface JanelaMovimentoProps {
   /** Lancamento gravado (201, ou 200 com a chave repetida). */
   aoConcluir: (lancamento: MovimentoDeCaixaRequest, sessao: SessaoDeCaixa) => void
   /** A sessao mudou em outro lugar (fechada, em conferencia, fora da vista): quem abriu fecha a janela e avisa. */
-  aoConflitoDeEstado: (mensagem: string) => void
+  aoMudarDeEstado: (mudanca: MudancaDeEstado) => void
 }
 
 type CampoMovimento = 'valor' | 'motivo'
@@ -36,14 +42,14 @@ const TEXTOS: Readonly<
 > = {
   SANGRIA: {
     titulo: 'Sangria',
-    descricao: 'Retirada de dinheiro da gaveta.',
+    descricao: 'Retirada de dinheiro da gaveta do',
     exemplo: 'Ex.: Depósito no cofre',
     confirmar: 'Registrar sangria',
     falha: 'Não foi possível registrar a sangria. Confira a conexão e tente de novo.',
   },
   SUPRIMENTO: {
     titulo: 'Suprimento',
-    descricao: 'Dinheiro colocado na gaveta.',
+    descricao: 'Dinheiro colocado na gaveta do',
     exemplo: 'Ex.: Reforço de troco',
     confirmar: 'Registrar suprimento',
     falha: 'Não foi possível registrar o suprimento. Confira a conexão e tente de novo.',
@@ -75,7 +81,7 @@ function ConteudoMovimento({
   tipo,
   aoFechar,
   aoConcluir,
-  aoConflitoDeEstado,
+  aoMudarDeEstado,
 }: Omit<JanelaMovimentoProps, 'tipo'> & { tipo: TipoDeLancamento }) {
   const queryClient = useQueryClient()
   const textos = TEXTOS[tipo]
@@ -95,18 +101,23 @@ function ConteudoMovimento({
   const mutation = useMutation<SessaoDeCaixa, unknown, MovimentoDeCaixaRequest>({
     mutationFn: (dados) => lancar(sessao.id, dados),
     onSuccess: (atualizada, dados) => aoConcluir(dados, atualizada),
-    onError: (erro) => {
-      const conflito = mensagemDeConflitoDeEstado(erro)
-      if (conflito) {
-        // Quem abriu a janela avisa e recarrega a sessao.
-        aoConflitoDeEstado(conflito)
-        return
+    onError: async (erro) => {
+      if (!ehFalhaSemResposta(erro)) {
+        // 409/404: decide pela situacao real da sessao, relida do servidor.
+        const mudanca = await verificarMudancaDeEstado(erro, sessao.id)
+        if (mudanca) {
+          // Quem abriu a janela avisa e recarrega a sessao.
+          aoMudarDeEstado(mudanca)
+          return
+        }
+        // A sessao continua aberta: o esperado pode ter mudado.
+        void queryClient.invalidateQueries({ queryKey: CAIXA_QUERY_KEY })
       }
-      // O esperado pode ter mudado, ou o lancamento pode ter chegado ao servidor.
-      void queryClient.invalidateQueries({ queryKey: CAIXA_QUERY_KEY })
       if (erro instanceof HttpError && erro.status === 409) {
+        // A chave pode ja ter gravado outra operacao ("registrada com outros dados"): a proxima e nova.
         setChave(gerarUuid())
       }
+      // Falha de rede: a mesma chave vai na nova tentativa (o backend nao grava duas vezes).
       const { porCampo, geral } = lerErroDoServidor(erro, CAMPOS, textos.falha)
       setErros(porCampo)
       setErroGeral(geral)
@@ -163,6 +174,7 @@ function ConteudoMovimento({
         event.preventDefault()
         valorRef.current?.focus()
       }}
+      onCloseAutoFocus={manterFocoMovidoPelaTela}
       onEscapeKeyDown={(event) => enviandoRef.current && event.preventDefault()}
       onInteractOutside={(event) => enviandoRef.current && event.preventDefault()}
     >

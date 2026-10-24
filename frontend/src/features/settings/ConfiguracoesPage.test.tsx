@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -99,6 +99,13 @@ describe('ConfiguracoesPage', () => {
     definirPerfil('ADMIN')
     buscarMock.mockResolvedValue(CONFIGURACAO_PADRAO)
     listarPontosMock.mockResolvedValue([CAIXA_1, CAIXA_2, BALCAO])
+    // "Hoje" fixo (a situacao do ponto mostra a hora da abertura): so o Date e falso.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-24T12:00:00-03:00'))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('mostra a seção Caixa com o interruptor do fechamento cego e a frase da spec', async () => {
@@ -109,11 +116,12 @@ describe('ConfiguracoesPage', () => {
     const campo = await interruptor()
     expect(campo).toHaveAttribute('aria-checked', 'true')
     expect(campo).toHaveAccessibleDescription(
-      'Quem fecha o caixa informa o valor contado sem ver o esperado. A diferença aparece depois da contagem.',
+      'Quem fecha o caixa informa o valor contado sem ver o esperado. A diferença aparece depois da contagem. ' +
+        'Administradores continuam vendo o esperado. A mudança vale também para os caixas abertos que ainda não foram contados.',
     )
   })
 
-  it('o interruptor salva ao alternar e mostra "Configuração salva"', async () => {
+  it('o interruptor salva ao alternar e mostra "Fechamento cego desligado"', async () => {
     const salva: ConfiguracaoDoCaixa = {
       fechamentoCego: false,
       atualizadoPorNome: 'Carlos Lima',
@@ -129,7 +137,7 @@ describe('ConfiguracoesPage', () => {
     fireEvent.click(await interruptor())
 
     await waitFor(() => expect(salvarMock).toHaveBeenCalledWith({ fechamentoCego: false }))
-    expect(await screen.findByRole('status')).toHaveTextContent('Configuração salva')
+    expect(await screen.findByRole('status')).toHaveTextContent('Fechamento cego desligado')
     expect(await interruptor()).toHaveAttribute('aria-checked', 'false')
     expect(screen.getByText('Alterado por Carlos Lima em 24/10/2026 às 09:15.')).toBeInTheDocument()
   })
@@ -143,7 +151,7 @@ describe('ConfiguracoesPage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível salvar a configuração. Tente de novo.')
     await waitFor(() => expect(campo).toHaveAttribute('aria-checked', 'true'))
-    expect(screen.queryByText('Configuração salva')).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
   it('falha ao carregar a configuração: mensagem e "Tentar de novo"', async () => {
@@ -161,9 +169,10 @@ describe('ConfiguracoesPage', () => {
     renderPagina()
 
     const caixa1 = await screen.findByRole('listitem', { name: 'Caixa 1' })
-    expect(within(caixa1).getByText('Livre')).toBeInTheDocument()
+    // A mesma frase da tela do caixa (a primeira letra fica maiuscula pelo CSS).
+    expect(within(caixa1).getByText('livre')).toBeInTheDocument()
     const caixa2 = screen.getByRole('listitem', { name: 'Caixa 2' })
-    expect(within(caixa2).getByText('Aberto por Ana Souza')).toBeInTheDocument()
+    expect(within(caixa2).getByText('aberto por Ana Souza às 08:02')).toBeInTheDocument()
     const balcao = screen.getByRole('listitem', { name: 'Balcão' })
     expect(within(balcao).getByText('Inativo')).toBeInTheDocument()
     expect(within(balcao).getByRole('button', { name: 'Reativar Balcão' })).toBeInTheDocument()
@@ -247,6 +256,18 @@ describe('ConfiguracoesPage', () => {
 
     await waitFor(() => expect(inativarPontoMock).toHaveBeenCalledWith('p-2'))
     expect(await screen.findByRole('alert')).toHaveTextContent('Feche o caixa deste ponto antes de inativá-lo.')
+  })
+
+  it('ligar o fechamento cego avisa "Fechamento cego ligado"', async () => {
+    buscarMock.mockResolvedValue({ ...CONFIGURACAO_PADRAO, fechamentoCego: false })
+    salvarMock.mockResolvedValue({ ...CONFIGURACAO_PADRAO, fechamentoCego: true })
+    renderPagina()
+
+    const campo = await interruptor()
+    expect(campo).toHaveAttribute('aria-checked', 'false')
+    fireEvent.click(campo)
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Fechamento cego ligado')
   })
 
   it('inativa e reativa', async () => {

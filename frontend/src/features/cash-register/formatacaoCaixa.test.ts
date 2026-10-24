@@ -10,6 +10,7 @@ import {
   mensagemDoFechamento,
   textoAbertoDesde,
   textoDaAbertura,
+  textoDaSituacaoDoPonto,
   totaisDosMovimentos,
 } from '@/features/cash-register/formatacaoCaixa'
 import type { MovimentoDeCaixa } from '@/types/caixa'
@@ -106,11 +107,22 @@ describe('formatacaoCaixa', () => {
       expect(totais).toEqual({ suprimentos: 50.3, sangrias: 200 })
     })
 
-    it('mensagem do fechamento com a diferença', () => {
-      expect(mensagemDoFechamento(0)).toBe('Caixa fechado')
-      expect(mensagemDoFechamento(null)).toBe('Caixa fechado')
-      expect(semNbsp(mensagemDoFechamento(-2))).toBe('Caixa fechado com falta de R$ 2,00')
-      expect(semNbsp(mensagemDoFechamento(3.5))).toBe('Caixa fechado com sobra de R$ 3,50')
+    it('mensagem do fechamento com o nome do ponto e a diferença', () => {
+      expect(mensagemDoFechamento('Caixa 2', 0)).toBe('Caixa 2 fechado')
+      expect(mensagemDoFechamento('Caixa 1', null)).toBe('Caixa 1 fechado')
+      expect(semNbsp(mensagemDoFechamento('Caixa 2', -2))).toBe('Caixa 2 fechado com falta de R$ 2,00')
+      expect(semNbsp(mensagemDoFechamento('Caixa 1', 3.5))).toBe('Caixa 1 fechado com sobra de R$ 3,50')
+    })
+
+    it('situação do ponto: livre, aberto (com a hora ou desde o outro dia) e em conferência', () => {
+      const hoje = new Date('2026-10-24T12:00:00-03:00')
+      const aberta = { status: 'ABERTA' as const, sessaoId: 's', abertaPorNome: 'Ana Souza', abertaEm: '2026-10-24T08:02:00-03:00' }
+      expect(textoDaSituacaoDoPonto(null, hoje)).toBe('livre')
+      expect(textoDaSituacaoDoPonto(aberta, hoje)).toBe('aberto por Ana Souza às 08:02')
+      expect(textoDaSituacaoDoPonto({ ...aberta, abertaEm: '2026-10-23T08:02:00-03:00' }, hoje)).toBe(
+        'aberto por Ana Souza desde 23/10 às 08:02',
+      )
+      expect(textoDaSituacaoDoPonto({ ...aberta, status: 'EM_CONFERENCIA' }, hoje)).toBe('em conferência · Ana Souza')
     })
   })
 })

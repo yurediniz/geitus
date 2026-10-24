@@ -6,7 +6,13 @@ import { Button } from '@/components/ui/button'
 import { CampoMoeda } from '@/components/ui/campo-moeda'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { CAIXA_QUERY_KEY } from '@/features/cash-register/caixaQuery'
-import { lerErroDoServidor, mensagemDeConflitoDeEstado } from '@/features/cash-register/errosDoCaixa'
+import {
+  ehFalhaSemResposta,
+  lerErroDoServidor,
+  verificarMudancaDeEstado,
+  type MudancaDeEstado,
+} from '@/features/cash-register/errosDoCaixa'
+import { manterFocoMovidoPelaTela } from '@/features/cash-register/focoDoCaixa'
 import { diferencaEntre, formatarReais } from '@/features/cash-register/formatacaoCaixa'
 import { TextoDaDiferenca } from '@/features/cash-register/ResumoDoFechamento'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
@@ -24,8 +30,8 @@ export interface JanelaFecharCaixaProps {
   aoFechar: () => void
   /** Sessao FECHADA (direto pela contagem ou depois da justificativa). */
   aoConcluir: (sessao: SessaoDeCaixa) => void
-  /** A sessao mudou em outro lugar: quem abriu fecha a janela e avisa. */
-  aoConflitoDeEstado: (mensagem: string) => void
+  /** A sessao mudou em outro lugar (fechada, contada, fora da vista): quem abriu fecha a janela e avisa. */
+  aoMudarDeEstado: (mudanca: MudancaDeEstado) => void
 }
 
 type CampoFechamento = 'valorContado' | 'justificativa'
@@ -33,11 +39,30 @@ const CAMPOS: readonly CampoFechamento[] = ['valorContado', 'justificativa']
 const ID_CONTADO = 'fechar-caixa-contado'
 const ID_JUSTIFICATIVA = 'fechar-caixa-justificativa'
 const ID_DIFERENCA = 'fechar-caixa-diferenca'
+const ID_RESULTADO = 'fechar-caixa-resultado'
 const TAMANHO_MAXIMO_DA_JUSTIFICATIVA = 500
 const FALHA_CONTAGEM = 'Não foi possível registrar a contagem. Confira a conexão e tente de novo.'
 const FALHA_FECHAMENTO = 'Não foi possível fechar o caixa. Confira a conexão e tente de novo.'
 const MENSAGEM_SEM_CONTADO = 'Informe o valor contado na gaveta.'
 const MENSAGEM_SEM_JUSTIFICATIVA = 'Explique a diferença para fechar o caixa.'
+
+/** Texto da janela conforme o passo, o modo e se quem fecha ve o esperado (`dinheiroNaGaveta`). */
+function descricaoDaJanela(sessao: SessaoDeCaixa, emConferencia: boolean): string {
+  if (emConferencia) {
+    return 'A contagem foi registrada. Explique a diferença para fechar o caixa.'
+  }
+  if (!sessao.fechamentoCego) {
+    return 'Conte o dinheiro da gaveta e compare com o esperado. A contagem não pode ser alterada depois.'
+  }
+  return sessao.dinheiroNaGaveta === null
+    ? 'Conte o dinheiro da gaveta e informe o total. Se bater, o caixa fecha na hora. Depois de conferir, a contagem não pode ser alterada.'
+    : 'Conte o dinheiro da gaveta e informe o total. A diferença aparece depois de conferir. A contagem não pode ser alterada depois.'
+}
+
+/** Exemplo de justificativa conforme o sentido da diferenca. */
+function exemploDeJustificativa(diferenca: number | null): string {
+  return diferenca !== null && diferenca > 0 ? 'Ex.: Troco dado a menos' : 'Ex.: Troco dado a mais'
+}
 
 /**
  * Janela "Fechar caixa" (spec §6.4). O modo vem de `sessao.fechamentoCego`:
@@ -46,7 +71,9 @@ const MENSAGEM_SEM_JUSTIFICATIVA = 'Explique a diferença para fechar o caixa.'
  * - cego: so o contado e "Conferir"; depois, o resultado e, com diferenca, a
  *   justificativa e "Fechar caixa".
  * Com a sessao em conferencia (retomada, ou a contagem repetida depois de uma
- * falha de rede), a janela ja abre no passo da justificativa.
+ * falha de rede), a janela ja abre no passo da justificativa. Numa falha sem
+ * resposta (rede), a janela e o que foi digitado ficam: a nova tentativa
+ * recebe o resultado gravado (idempotente pelo estado no backend).
  */
 export function JanelaFecharCaixa({ aberto, aoFechar, ...props }: JanelaFecharCaixaProps) {
   return (
@@ -68,7 +95,7 @@ function ConteudoFecharCaixa({
   deOutraPessoa,
   aoFechar,
   aoConcluir,
-  aoConflitoDeEstado,
+  aoMudarDeEstado,
 }: Omit<JanelaFecharCaixaProps, 'aberto'>) {
   const queryClient = useQueryClient()
   const [contado, setContado] = useState('')
@@ -83,25 +110,36 @@ function ConteudoFecharCaixa({
   const enviandoRef = useRef(false)
 
   const cego = sessao.fechamentoCego
-  // A conferencia vem da contagem feita aqui ou da sessao recarregada (retomada, 409 da contagem).
+  // A conferencia vem da contagem feita aqui ou da sessao recarregada (retomada).
   const conferencia = resultado ?? (sessao.status === 'EM_CONFERENCIA' ? sessao : null)
   const esperado = cego ? null : sessao.dinheiroNaGaveta
   const diferencaAoVivo = esperado !== null && contado !== '' ? diferencaEntre(Number(contado), esperado) : null
   const pedeJustificativaJunto = conferencia === null && diferencaAoVivo !== null && diferencaAoVivo !== 0
+  const mostraJustificativa = conferencia !== null || pedeJustificativaJunto
+  const campoVisivel: Readonly<Record<CampoFechamento, boolean>> = {
+    valorContado: conferencia === null,
+    justificativa: mostraJustificativa,
+  }
 
-  const tratarErro = (erro: unknown, falha: string) => {
-    const conflito = mensagemDeConflitoDeEstado(erro)
-    if (conflito) {
-      // Quem abriu a janela avisa e recarrega a sessao.
-      aoConflitoDeEstado(conflito)
+  const tratarErro = async (erro: unknown, falha: string) => {
+    if (ehFalhaSemResposta(erro)) {
+      // O envio pode ter chegado ao servidor: a janela e os valores ficam para a nova tentativa,
+      // sem recarregar a sessao (a tela continua como esta).
+      setErroGeral(lerErroDoServidor(erro, [], falha).geral)
       return
     }
-    // A contagem pode ter chegado ao servidor (a sessao recarregada leva ao passo certo).
+    const mudanca = await verificarMudancaDeEstado(erro, sessao.id)
+    if (mudanca && !(mudanca.situacao === 'EM_CONFERENCIA' && conferencia)) {
+      // Quem abriu a janela avisa e recarrega a sessao.
+      aoMudarDeEstado(mudanca)
+      return
+    }
+    // A sessao continua neste passo (ex.: modo trocado antes da contagem): recarrega e mostra o erro.
     void queryClient.invalidateQueries({ queryKey: CAIXA_QUERY_KEY })
     const { porCampo, geral } = lerErroDoServidor(erro, CAMPOS, falha)
     setErros(porCampo)
     setErroGeral(geral)
-    setFocoPendente(CAMPOS.find((campo) => porCampo[campo]) ?? null)
+    setFocoPendente(CAMPOS.find((campo) => porCampo[campo] && campoVisivel[campo]) ?? null)
   }
 
   const contagem = useMutation<SessaoDeCaixa, unknown, ContagemRequest>({
@@ -114,6 +152,7 @@ function ConteudoFecharCaixa({
       }
       // Em conferencia: o resultado aparece e falta a justificativa.
       setResultado(resposta)
+      setErroGeral(null)
       setFocoPendente('justificativa')
     },
     onError: (erro) => tratarErro(erro, FALHA_CONTAGEM),
@@ -178,8 +217,13 @@ function ConteudoFecharCaixa({
     contagem.mutate({ valorContado: Number(contado), justificativa: pedeJustificativaJunto ? texto : null })
   }
 
-  const mostraJustificativa = conferencia !== null || pedeJustificativaJunto
+  // Erro de um campo que nao esta na tela neste passo (ex.: a justificativa depois que o modo mudou) vai para a mensagem geral.
+  const errosOcultos = CAMPOS.filter((campo) => !campoVisivel[campo] && erros[campo]).map((campo) => erros[campo])
+  const mensagemGeral = [erroGeral, ...errosOcultos].filter(Boolean).join(' ') || null
   const rotuloConfirmar = conferencia || !cego ? 'Fechar caixa' : 'Conferir'
+  const descricaoDaJustificativa =
+    [conferencia && ID_RESULTADO, erros.justificativa && `${ID_JUSTIFICATIVA}-erro`].filter(Boolean).join(' ') ||
+    undefined
 
   return (
     <DialogContent
@@ -189,18 +233,13 @@ function ConteudoFecharCaixa({
         const alvo = conferencia ? justificativaRef : contadoRef
         alvo.current?.focus()
       }}
+      onCloseAutoFocus={manterFocoMovidoPelaTela}
       onEscapeKeyDown={(event) => enviandoRef.current && event.preventDefault()}
       onInteractOutside={(event) => enviandoRef.current && event.preventDefault()}
     >
       <DialogHeader>
         <DialogTitle>{`Fechar o ${sessao.ponto.nome}`}</DialogTitle>
-        <DialogDescription>
-          {conferencia
-            ? 'A contagem foi registrada. Explique a diferença para fechar o caixa.'
-            : cego
-              ? 'Conte o dinheiro da gaveta e informe o valor. O esperado aparece depois da contagem.'
-              : 'Conte o dinheiro da gaveta e compare com o esperado.'}
-        </DialogDescription>
+        <DialogDescription>{descricaoDaJanela(sessao, conferencia !== null)}</DialogDescription>
       </DialogHeader>
 
       {deOutraPessoa && (
@@ -211,7 +250,7 @@ function ConteudoFecharCaixa({
       )}
 
       <form onSubmit={confirmar} noValidate className="space-y-4">
-        {erroGeral && <ErroInline mensagem={erroGeral} />}
+        {mensagemGeral && <ErroInline mensagem={mensagemGeral} />}
 
         {conferencia ? (
           <ResultadoDaContagem sessao={conferencia} />
@@ -239,9 +278,12 @@ function ConteudoFecharCaixa({
                 className="h-11 text-base"
               />
               {esperado !== null && (
-                <div id={ID_DIFERENCA} aria-live="polite" className="space-y-0.5 text-right text-sm">
+                <div id={ID_DIFERENCA} className="space-y-0.5 text-right text-sm">
                   <p className="text-muted-foreground tabular-nums">{`Esperado ${formatarReais(esperado)}`}</p>
-                  <p className="min-h-5">{diferencaAoVivo !== null && <TextoDaDiferenca valor={diferencaAoVivo} />}</p>
+                  {/* So a diferenca e anunciada enquanto se digita. */}
+                  <p aria-live="polite" className="min-h-5">
+                    {diferencaAoVivo !== null && <TextoDaDiferenca valor={diferencaAoVivo} />}
+                  </p>
                 </div>
               )}
             </div>
@@ -272,10 +314,10 @@ function ConteudoFecharCaixa({
               }}
               rows={3}
               maxLength={TAMANHO_MAXIMO_DA_JUSTIFICATIVA}
-              placeholder="Ex.: Troco dado a mais"
+              placeholder={exemploDeJustificativa(conferencia ? conferencia.diferenca : diferencaAoVivo)}
               disabled={enviando}
               aria-invalid={erros.justificativa ? true : undefined}
-              aria-describedby={erros.justificativa ? `${ID_JUSTIFICATIVA}-erro` : undefined}
+              aria-describedby={descricaoDaJustificativa}
               className="w-full min-w-0 rounded-md border border-input bg-background px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 md:text-sm"
             />
             <ErroDoCampo id={`${ID_JUSTIFICATIVA}-erro`} mensagem={erros.justificativa} />
@@ -284,7 +326,7 @@ function ConteudoFecharCaixa({
 
         <DialogFooter>
           <Button type="button" variant="outline" className="min-h-11" onClick={aoFechar} disabled={enviando}>
-            Cancelar
+            {conferencia ? 'Justificar depois' : 'Cancelar'}
           </Button>
           <Button type="submit" className="min-h-11" disabled={enviando}>
             {enviando && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
@@ -298,8 +340,20 @@ function ConteudoFecharCaixa({
 
 /** Esperado, contado e diferenca de uma contagem ja registrada. */
 function ResultadoDaContagem({ sessao }: { sessao: SessaoDeCaixa }) {
+  // O titulo nomeia a regiao; a lista (sem nome proprio) descreve a justificativa pelo conteudo.
   return (
-    <dl aria-label="Resultado da contagem" className="space-y-1 rounded-md bg-muted/60 px-3 py-2 text-sm">
+    <section aria-labelledby={`${ID_RESULTADO}-titulo`}>
+      <h3 id={`${ID_RESULTADO}-titulo`} className="sr-only">
+        Resultado da contagem
+      </h3>
+      <ResultadoEmLista sessao={sessao} />
+    </section>
+  )
+}
+
+function ResultadoEmLista({ sessao }: { sessao: SessaoDeCaixa }) {
+  return (
+    <dl id={ID_RESULTADO} className="space-y-1 rounded-md bg-muted/60 px-3 py-2 text-sm">
       <div className="flex justify-between gap-4">
         <dt className="text-muted-foreground">Esperado</dt>
         <dd className="tabular-nums">{sessao.valorEsperado === null ? '—' : formatarReais(sessao.valorEsperado)}</dd>

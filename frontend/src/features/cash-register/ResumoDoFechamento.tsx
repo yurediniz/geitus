@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, EyeOff } from 'lucide-react'
 
 import {
   formatarDataHoraCaixa,
@@ -40,11 +40,21 @@ function Linha({ rotulo, children, destaque = false }: { rotulo: string; childre
 /**
  * Fotografia do fechamento (spec §6.4): fundo, suprimentos, sangrias,
  * esperado, contado, diferenca e justificativa. Numa sessao ainda nao contada,
- * mostra o que existe (o esperado so com ele visivel; no modo cego, o aviso).
+ * mostra o que existe; no modo cego sem o esperado, so o aviso (os totais
+ * permitiriam calcula-lo).
  */
 export function ResumoDoFechamento({ sessao }: { sessao: SessaoDeCaixa }) {
-  const { suprimentos, sangrias } = totaisDosMovimentos(sessao.movimentos)
   const esperado = sessao.valorEsperado ?? sessao.dinheiroNaGaveta
+  if (esperado === null) {
+    // Modo cego, antes da contagem: fundo e totais revelariam o esperado. So a lista de movimentos fica.
+    return (
+      <p className="flex items-start gap-2 rounded-md bg-muted/60 px-3 py-2 text-sm">
+        <EyeOff className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        Fechamento cego: o valor esperado aparece depois da contagem.
+      </p>
+    )
+  }
+  const { suprimentos, sangrias } = totaisDosMovimentos(sessao.movimentos)
 
   return (
     <div className="space-y-3 text-sm">
@@ -53,11 +63,7 @@ export function ResumoDoFechamento({ sessao }: { sessao: SessaoDeCaixa }) {
         <Linha rotulo="Suprimentos">{`+ ${formatarReais(suprimentos)}`}</Linha>
         <Linha rotulo="Sangrias">{`− ${formatarReais(sangrias)}`}</Linha>
         <Linha rotulo="Esperado na gaveta" destaque>
-          {esperado === null ? (
-            <span className="font-normal text-muted-foreground">Aparece depois da contagem</span>
-          ) : (
-            formatarReais(esperado)
-          )}
+          {formatarReais(esperado)}
         </Linha>
         {sessao.valorContado !== null && (
           <Linha rotulo="Contado">{formatarReais(sessao.valorContado)}</Linha>

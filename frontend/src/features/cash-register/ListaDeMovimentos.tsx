@@ -12,6 +12,11 @@ const ESTILO_DO_TIPO: Readonly<Record<TipoDeMovimentoDeCaixa, { icone: LucideIco
   SANGRIA: { icone: ArrowUpFromLine, classe: 'bg-warning-soft text-warning-soft-foreground' },
 }
 
+/** Sangria tira da gaveta, suprimento poe; a abertura e o fundo (sem sinal). */
+function sinalDoMovimento(tipo: TipoDeMovimentoDeCaixa): string {
+  return tipo === 'SANGRIA' ? '− ' : tipo === 'SUPRIMENTO' ? '+ ' : ''
+}
+
 /** Movimentos da sessao (do mais recente para o mais antigo): hora, tipo, valor, motivo e quem lancou. */
 export function ListaDeMovimentos({ movimentos }: { movimentos: readonly MovimentoDeCaixa[] }) {
   if (movimentos.length === 0) {
@@ -21,7 +26,6 @@ export function ListaDeMovimentos({ movimentos }: { movimentos: readonly Movimen
     <ul aria-label="Movimentos do caixa" className="divide-y">
       {movimentos.map((movimento) => {
         const { icone: Icone, classe } = ESTILO_DO_TIPO[movimento.tipo]
-        const sangria = movimento.tipo === 'SANGRIA'
         return (
           <li key={movimento.id} className="flex items-start gap-3 py-2.5 text-sm">
             <span className="w-11 shrink-0 pt-0.5 text-muted-foreground tabular-nums">
@@ -38,7 +42,8 @@ export function ListaDeMovimentos({ movimentos }: { movimentos: readonly Movimen
               <p className="text-xs text-muted-foreground">{movimento.usuarioNome}</p>
             </div>
             <span className="shrink-0 pt-0.5 font-semibold tabular-nums">
-              {sangria ? `− ${formatarReais(movimento.valor)}` : formatarReais(movimento.valor)}
+              {sinalDoMovimento(movimento.tipo)}
+              {formatarReais(movimento.valor)}
             </span>
           </li>
         )

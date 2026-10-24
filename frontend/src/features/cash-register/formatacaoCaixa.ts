@@ -79,7 +79,12 @@ export function textoDaAbertura(abertaEm: string, hoje: Date): string {
   return abertoEmOutroDia(abertaEm, hoje) ? `desde ${formatarDiaEHora(abertaEm)}` : `às ${formatarHora(abertaEm)}`
 }
 
-/** Situacao do ponto na escolha: "livre", "aberto por Ana Souza às 08:02" ou "em conferência · Ana Souza". */
+/**
+ * Situacao do ponto, a mesma em todas as listas (escolha do ponto, outros
+ * caixas abertos e Configuracoes): "livre", "aberto por Ana Souza às 08:02"
+ * (ou "desde 23/10 às 08:02") ou "em conferência · Ana Souza". Minuscula: vem
+ * depois do nome do ponto ("Caixa 1 · livre").
+ */
 export function textoDaSituacaoDoPonto(situacao: SituacaoDoPonto | null, hoje: Date): string {
   if (!situacao) {
     return 'livre'
@@ -128,14 +133,14 @@ export function totaisDosMovimentos(movimentos: readonly MovimentoDeCaixa[]): { 
   return { suprimentos: suprimentos / 100, sangrias: sangrias / 100 }
 }
 
-/** "Caixa fechado" ou "Caixa fechado com falta de R$ 2,00" / "com sobra de R$ 2,00". */
-export function mensagemDoFechamento(diferenca: number | null): string {
+/** "Caixa 2 fechado" ou "Caixa 2 fechado com falta de R$ 2,00" / "com sobra de R$ 2,00". */
+export function mensagemDoFechamento(nomeDoPonto: string, diferenca: number | null): string {
   const centavos = diferenca === null ? 0 : emCentavos(diferenca)
   if (centavos === 0) {
-    return 'Caixa fechado'
+    return `${nomeDoPonto} fechado`
   }
   const absoluto = formatarReais(Math.abs(centavos) / 100)
-  return centavos > 0 ? `Caixa fechado com sobra de ${absoluto}` : `Caixa fechado com falta de ${absoluto}`
+  return `${nomeDoPonto} fechado com ${centavos > 0 ? 'sobra' : 'falta'} de ${absoluto}`
 }
 
 export const ROTULO_DO_MOVIMENTO: Readonly<Record<TipoDeMovimentoDeCaixa, string>> = {

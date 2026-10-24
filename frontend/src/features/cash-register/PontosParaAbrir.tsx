@@ -1,14 +1,15 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Eye, Wallet } from 'lucide-react'
+import { Clock, Eye, Wallet } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { chaveDosPontos } from '@/features/cash-register/caixaQuery'
 import { CarregandoCaixa, ErroAoCarregar } from '@/features/cash-register/EstadosDoCaixa'
-import { textoDaSituacaoDoPonto } from '@/features/cash-register/formatacaoCaixa'
+import { abertoEmOutroDia, textoDaSituacaoDoPonto } from '@/features/cash-register/formatacaoCaixa'
 import { JanelaAbrirCaixa } from '@/features/cash-register/JanelaAbrirCaixa'
+import { cn } from '@/lib/utils'
 import { listarPontos } from '@/services/caixaService'
 import type { PontoDeCaixa, SessaoDeCaixa } from '@/types/caixa'
 
@@ -28,6 +29,8 @@ interface PontosParaAbrirProps {
  */
 export function PontosParaAbrir({ ehAdmin, aoAbrir, aoVerCaixa }: PontosParaAbrirProps) {
   const [pontoParaAbrir, setPontoParaAbrir] = useState<PontoDeCaixa | null>(null)
+  const idTitulo = useId()
+  const idSemPontos = useId()
   const consulta = useQuery({ queryKey: chaveDosPontos(true), queryFn: () => listarPontos(true) })
   const hoje = new Date()
 
@@ -42,12 +45,12 @@ export function PontosParaAbrir({ ehAdmin, aoAbrir, aoVerCaixa }: PontosParaAbri
     />
   )
 
-  if (consulta.isPending) {
-    return <CarregandoCaixa rotulo="Carregando os pontos de caixa" />
-  }
-  if (consulta.isError) {
-    return (
+  // Com dados, uma recarga que falha nao tira a lista (nem a janela aberta) da tela.
+  if (consulta.data === undefined) {
+    return consulta.isError ? (
       <ErroAoCarregar mensagem="Não foi possível carregar os pontos de caixa." aoTentarDeNovo={() => consulta.refetch()} />
+    ) : (
+      <CarregandoCaixa rotulo="Carregando os pontos de caixa" />
     )
   }
 
@@ -57,12 +60,12 @@ export function PontosParaAbrir({ ehAdmin, aoAbrir, aoVerCaixa }: PontosParaAbri
   if (pontos.length === 0) {
     return (
       <section
-        aria-labelledby="caixa-sem-pontos"
+        aria-labelledby={idSemPontos}
         className="flex max-w-xl flex-col items-start gap-3 rounded-md bg-muted/50 p-4 sm:flex-row"
       >
         <Wallet className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <div className="space-y-2">
-          <p id="caixa-sem-pontos" className="text-sm font-medium">
+          <p id={idSemPontos} className="text-sm font-medium">
             Nenhum ponto de caixa ativo
           </p>
           {ehAdmin ? (
@@ -99,24 +102,37 @@ export function PontosParaAbrir({ ehAdmin, aoAbrir, aoVerCaixa }: PontosParaAbri
     )
   }
 
+  const temPontoLivre = pontos.some((ponto) => ponto.situacao === null)
+
   return (
     <Card>
       <CardContent className="space-y-3">
         <div>
-          <h2 id="caixa-pontos" className="font-display text-lg font-semibold">
-            Escolha o ponto de caixa
+          <h2 id={idTitulo} className="font-display text-lg font-semibold">
+            {temPontoLivre ? 'Escolha o ponto de caixa' : 'Todos os caixas estão em uso'}
           </h2>
-          <p className="text-sm text-muted-foreground">Abra o caixa num ponto livre.</p>
+          {temPontoLivre ? (
+            <p className="text-sm text-muted-foreground">Abra o caixa num ponto livre.</p>
+          ) : ehAdmin ? (
+            <p className="text-sm text-muted-foreground">
+              Você pode ver os caixas abertos ou cadastrar outro ponto em{' '}
+              <Link to="/configuracoes" className="font-medium text-primary underline underline-offset-4">
+                Configurações
+              </Link>
+              .
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Peça para fecharem um caixa ou peça ao administrador para cadastrar outro ponto.
+            </p>
+          )}
         </div>
-        <ul aria-labelledby="caixa-pontos" className="divide-y">
+        <ul aria-labelledby={idTitulo} className="divide-y">
           {pontos.map((ponto) => {
             const { situacao } = ponto
             return (
               <li key={ponto.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
-                <p className="text-sm">
-                  <span className="font-medium">{ponto.nome}</span>
-                  <span className="text-muted-foreground">{` · ${textoDaSituacaoDoPonto(situacao, hoje)}`}</span>
-                </p>
+                <LinhaDoPonto ponto={ponto} hoje={hoje} />
                 {situacao === null ? (
                   <Button
                     type="button"
@@ -136,6 +152,28 @@ export function PontosParaAbrir({ ehAdmin, aoAbrir, aoVerCaixa }: PontosParaAbri
       </CardContent>
       {janela}
     </Card>
+  )
+}
+
+/**
+ * "Caixa 1 · livre" / "Caixa 2 · aberto por Ana Souza às 08:02". O caixa
+ * esquecido aberto (aberto em outro dia) aparece em ambar, com o relogio.
+ */
+export function LinhaDoPonto({ ponto, hoje }: { ponto: PontoDeCaixa; hoje: Date }) {
+  const esquecido = ponto.situacao !== null && abertoEmOutroDia(ponto.situacao.abertaEm, hoje)
+  return (
+    <p className="text-sm">
+      <span className="font-medium">{ponto.nome}</span>
+      {' · '}
+      <span
+        className={cn(
+          esquecido ? 'inline-flex items-center gap-1 font-medium text-warning-soft-foreground' : 'text-muted-foreground',
+        )}
+      >
+        {esquecido && <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+        {textoDaSituacaoDoPonto(ponto.situacao, hoje)}
+      </span>
+    </p>
   )
 }
 

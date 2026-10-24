@@ -23,7 +23,8 @@ const PARAMETRO: Readonly<Record<keyof FiltrosDoHistoricoDeCaixa, string>> = {
   pagina: 'pagina',
 }
 
-const ID_VALIDO = /^[\w-]{1,64}$/
+/** O id do ponto e um UUID: outro valor na URL e ignorado. */
+const ID_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DATA_VALIDA = /^\d{4}-\d{2}-\d{2}$/
 
 function lerData(valor: string | null): string {

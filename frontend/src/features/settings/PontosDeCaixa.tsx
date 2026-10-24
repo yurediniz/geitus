@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CAIXA_QUERY_KEY, chaveDosPontos } from '@/features/cash-register/caixaQuery'
 import { lerErroDoServidor } from '@/features/cash-register/errosDoCaixa'
+import { textoDaSituacaoDoPonto } from '@/features/cash-register/formatacaoCaixa'
 import { ErroDoCampo } from '@/features/products/CamposFormulario'
 import type { AvisosDaTela } from '@/hooks/useFeedbackDaTela'
 import { cn } from '@/lib/utils'
@@ -16,16 +17,6 @@ import type { PontoDeCaixa } from '@/types/caixa'
 const TAMANHO_MAXIMO_DO_NOME = 40
 const ALTURA_DO_CONTROLE = 'h-11 md:h-9'
 const MENSAGEM_NOME_VAZIO = 'Informe o nome do ponto.'
-
-/** Situacao do ponto na lista ("Livre", "Aberto por Ana Souza"); inativo nao tem sessao. */
-function textoDaSituacao(ponto: PontoDeCaixa): string | null {
-  if (ponto.situacao) {
-    return ponto.situacao.status === 'EM_CONFERENCIA'
-      ? `Em conferência · ${ponto.situacao.abertaPorNome}`
-      : `Aberto por ${ponto.situacao.abertaPorNome}`
-  }
-  return ponto.ativo ? 'Livre' : null
-}
 
 /**
  * Pontos de caixa (spec §6.7): lista com nome e situacao, "Adicionar ponto",
@@ -155,7 +146,8 @@ function ItemDoPonto({
   aoAlterarStatus,
 }: ItemDoPontoProps) {
   const idNome = useId()
-  const situacao = textoDaSituacao(ponto)
+  // A mesma frase da tela do caixa; inativo nunca tem sessao, e "livre" so vale para ativo.
+  const situacao = ponto.ativo || ponto.situacao ? textoDaSituacaoDoPonto(ponto.situacao, new Date()) : null
   const botaoRenomear = useRef<HTMLButtonElement>(null)
   const voltarFoco = useRef(false)
 
@@ -198,7 +190,7 @@ function ItemDoPonto({
         <p id={idNome} className={cn('truncate text-sm font-medium', !ponto.ativo && 'text-muted-foreground')}>
           {ponto.nome}
         </p>
-        {situacao && <p className="text-xs text-muted-foreground">{situacao}</p>}
+        {situacao && <p className="text-xs text-muted-foreground first-letter:uppercase">{situacao}</p>}
       </div>
       {!ponto.ativo && (
         <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">Inativo</span>

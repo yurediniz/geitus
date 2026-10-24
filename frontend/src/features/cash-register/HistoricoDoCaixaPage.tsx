@@ -74,7 +74,11 @@ export function HistoricoDoCaixaPage() {
     }
     const pagina = consulta.data
     if (pagina.itens.length === 0) {
-      return <Vazio mensagem="Nenhum caixa neste período." aoLimpar={temFiltroAtivo ? limpar : undefined} />
+      return temFiltroAtivo ? (
+        <Vazio mensagem="Nenhum caixa com esses filtros." aoLimpar={limpar} />
+      ) : (
+        <Vazio mensagem="Nenhum caixa registrado ainda." />
+      )
     }
     return (
       <div
@@ -290,11 +294,19 @@ function TabelaDoHistorico({
         </thead>
         <tbody className="divide-y">
           {sessoes.map((sessao) => (
-            <tr key={sessao.id} className="align-top transition-colors hover:bg-muted/50">
+            <tr
+              key={sessao.id}
+              // A linha inteira abre o detalhe com o mouse; o botao no nome e o alvo do teclado e do leitor de tela.
+              onClick={() => aoAbrir(sessao)}
+              className="cursor-pointer align-top transition-colors hover:bg-muted/50"
+            >
               <td className="py-2.5 pr-3">
                 <button
                   type="button"
-                  onClick={() => aoAbrir(sessao)}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    aoAbrir(sessao)
+                  }}
                   className="min-h-11 rounded-sm text-left font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 md:min-h-0"
                 >
                   {sessao.ponto.nome}

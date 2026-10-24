@@ -1,10 +1,13 @@
 import { ehMensagemGenerica } from '@/features/catalog/catalogoQuery'
+import { buscarSessao } from '@/services/caixaService'
 import { HttpError } from '@/services/httpClient'
+import type { SessaoDeCaixa } from '@/types/caixa'
 
 /** Mensagens do backend (spec §3) que dizem que a sessao mudou de estado em outro lugar. */
 export const MENSAGEM_CAIXA_JA_FECHADO = 'Este caixa já foi fechado.'
 export const MENSAGEM_CAIXA_EM_CONFERENCIA = 'O caixa está em conferência. Termine o fechamento.'
-/** 404 numa sessao: removida da vista do usuario (outra empresa, ou de outra pessoa para o OPERADOR). */
+export const MENSAGEM_CONTAGEM_JA_REGISTRADA = 'A contagem deste caixa já foi registrada.'
+/** 404 numa sessao: fora da vista do usuario (outra empresa, ou de outra pessoa para o OPERADOR). */
 export const MENSAGEM_SESSAO_INDISPONIVEL = 'Este caixa não está mais disponível. A tela foi atualizada.'
 
 export interface ErroDoServidor<C extends string> {
@@ -49,19 +52,64 @@ export function lerErroDoServidor<C extends string>(
 }
 
 /**
- * A sessao nao aceita mais a acao porque mudou em outro lugar (fechada ou em
- * conferencia em outra aba, ou fora da vista do usuario): a tela deve fechar a
- * janela, mostrar a mensagem e recarregar a sessao (Review Focus 4).
+ * A sessao saiu do estado em que a acao foi tentada (Review Focus 4):
+ * - `FECHADA` ou `INDISPONIVEL` (404): a tela sai da sessao;
+ * - `EM_CONFERENCIA`: a tela fica na sessao, recarregada.
+ * `sessao` e a sessao relida do servidor (null quando so o texto do erro permitiu decidir).
  */
-export function mensagemDeConflitoDeEstado(erro: unknown): string | null {
+export type MudancaDeEstado =
+  | { situacao: 'INDISPONIVEL'; mensagem: string }
+  | { situacao: 'FECHADA' | 'EM_CONFERENCIA'; sessao: SessaoDeCaixa | null; mensagem: string }
+
+/** Falha em que o envio pode ter chegado ao servidor sem a resposta voltar (rede, 5xx). */
+export function ehFalhaSemResposta(erro: unknown): boolean {
+  return !(erro instanceof HttpError) || erro.status === 0 || erro.status >= 500
+}
+
+const INDISPONIVEL: MudancaDeEstado = { situacao: 'INDISPONIVEL', mensagem: MENSAGEM_SESSAO_INDISPONIVEL }
+
+/** So quando nao foi possivel reler a sessao: decide pelo texto do 409 (spec §3). */
+function mudancaPeloTexto(mensagem: string): MudancaDeEstado | null {
+  if (mensagem === MENSAGEM_CAIXA_JA_FECHADO) {
+    return { situacao: 'FECHADA', sessao: null, mensagem }
+  }
+  if (mensagem === MENSAGEM_CAIXA_EM_CONFERENCIA || mensagem === MENSAGEM_CONTAGEM_JA_REGISTRADA) {
+    return { situacao: 'EM_CONFERENCIA', sessao: null, mensagem }
+  }
+  return null
+}
+
+/**
+ * Depois de um 409 ou 404 num lancamento, contagem ou fechamento, decide pela
+ * situacao real da sessao, relida do servidor, e nao pelo texto do erro:
+ * - 404 (ou a releitura em 404): a sessao nao esta mais acessivel;
+ * - FECHADA ou EM_CONFERENCIA: a sessao mudou em outro lugar;
+ * - ABERTA (ou outro erro): `null`, e o erro fica na janela.
+ * O texto do 409 so decide quando a releitura falha.
+ */
+export async function verificarMudancaDeEstado(erro: unknown, sessaoId: string): Promise<MudancaDeEstado | null> {
   if (!(erro instanceof HttpError)) {
     return null
   }
   if (erro.status === 404) {
-    return MENSAGEM_SESSAO_INDISPONIVEL
+    return INDISPONIVEL
   }
-  if (erro.status === 409 && (erro.message === MENSAGEM_CAIXA_JA_FECHADO || erro.message === MENSAGEM_CAIXA_EM_CONFERENCIA)) {
-    return erro.message
+  if (erro.status !== 409) {
+    return null
   }
-  return null
+  const doServidor = ehMensagemGenerica(erro.message) ? null : erro.message
+  let atual: SessaoDeCaixa
+  try {
+    atual = await buscarSessao(sessaoId)
+  } catch (falha) {
+    if (falha instanceof HttpError && falha.status === 404) {
+      return INDISPONIVEL
+    }
+    return doServidor ? mudancaPeloTexto(doServidor) : null
+  }
+  if (atual.status === 'ABERTA') {
+    return null
+  }
+  const padrao = atual.status === 'FECHADA' ? MENSAGEM_CAIXA_JA_FECHADO : MENSAGEM_CAIXA_EM_CONFERENCIA
+  return { situacao: atual.status, sessao: atual, mensagem: doServidor ?? padrao }
 }

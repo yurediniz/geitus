@@ -1,22 +1,17 @@
 import { useId, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, Clock, EyeOff, Lock } from 'lucide-react'
+import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, Clock, EyeOff, Info, Lock } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { chaveDosPontos } from '@/features/cash-register/caixaQuery'
 import { ErroAoCarregar } from '@/features/cash-register/EstadosDoCaixa'
-import {
-  abertoEmOutroDia,
-  formatarHora,
-  formatarReais,
-  textoAbertoDesde,
-  textoDaSituacaoDoPonto,
-} from '@/features/cash-register/formatacaoCaixa'
+import type { MudancaDeEstado } from '@/features/cash-register/errosDoCaixa'
+import { abertoEmOutroDia, formatarHora, formatarReais, textoAbertoDesde } from '@/features/cash-register/formatacaoCaixa'
 import { JanelaFecharCaixa } from '@/features/cash-register/JanelaFecharCaixa'
 import { JanelaMovimento } from '@/features/cash-register/JanelaMovimento'
 import { ListaDeMovimentos } from '@/features/cash-register/ListaDeMovimentos'
-import { VerCaixa } from '@/features/cash-register/PontosParaAbrir'
+import { LinhaDoPonto, VerCaixa } from '@/features/cash-register/PontosParaAbrir'
 import { TextoDaDiferenca } from '@/features/cash-register/ResumoDoFechamento'
 import { listarPontos } from '@/services/caixaService'
 import type { MovimentoDeCaixaRequest, SessaoDeCaixa, TipoDeLancamento } from '@/types/caixa'
@@ -32,7 +27,8 @@ export interface CaixaAbertoProps {
   ehAdmin: boolean
   aoLancado: (lancamento: MovimentoDeCaixaRequest) => void
   aoFechado: (sessao: SessaoDeCaixa) => void
-  aoConflitoDeEstado: (mensagem: string) => void
+  /** A sessao mudou em outro lugar (fechada, contada, fora da vista). */
+  aoMudarDeEstado: (mudanca: MudancaDeEstado) => void
   /** Volta ao proprio caixa (ou a escolha de ponto) quando vendo o caixa de outra pessoa. */
   aoVoltar?: () => void
   /** ADMIN no proprio caixa: abre o caixa de outra pessoa. */
@@ -52,7 +48,7 @@ export function CaixaAberto({
   ehAdmin,
   aoLancado,
   aoFechado,
-  aoConflitoDeEstado,
+  aoMudarDeEstado,
   aoVoltar,
   aoVerCaixa,
 }: CaixaAbertoProps) {
@@ -61,6 +57,15 @@ export function CaixaAberto({
   const hoje = new Date()
   const emConferencia = sessao.status === 'EM_CONFERENCIA'
   const quem = deOutraPessoa ? sessao.abertaPorNome : 'você'
+  // Caixa esquecido aberto: o titulo fica sem a hora e o aviso diz desde quando (spec §3.5).
+  const esquecido = abertoEmOutroDia(sessao.abertaEm, hoje)
+  const titulo = esquecido
+    ? `${sessao.ponto.nome} · aberto por ${quem}`
+    : `${sessao.ponto.nome} · aberto por ${quem} às ${formatarHora(sessao.abertaEm)}`
+  const fecharJanelaE = (mudanca: MudancaDeEstado) => {
+    setJanela(null)
+    aoMudarDeEstado(mudanca)
+  }
 
   return (
     <div className="space-y-6">
@@ -73,13 +78,19 @@ export function CaixaAberto({
 
       <Card>
         <CardHeader className="gap-2">
+          {deOutraPessoa && (
+            <p className="flex items-start gap-2 rounded-md bg-info-soft px-3 py-2 text-sm text-info-soft-foreground">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              {`Você está no caixa de ${sessao.abertaPorNome}. O que você lançar fica registrado no seu nome.`}
+            </p>
+          )}
           <h2 id={idTitulo} className="font-display text-lg font-semibold leading-tight">
-            {`${sessao.ponto.nome} · aberto por ${quem} às ${formatarHora(sessao.abertaEm)}`}
+            {titulo}
           </h2>
-          {abertoEmOutroDia(sessao.abertaEm, hoje) && (
-            <p className="flex w-fit items-center gap-2 rounded-md bg-warning-soft px-3 py-1.5 text-sm font-medium text-warning-soft-foreground">
-              <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
-              {textoAbertoDesde(sessao.abertaEm)}
+          {esquecido && (
+            <p className="flex w-fit items-start gap-2 rounded-md bg-warning-soft px-3 py-1.5 text-sm font-medium text-warning-soft-foreground">
+              <Clock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              {`${textoAbertoDesde(sessao.abertaEm)}. Feche este caixa e abra um novo para hoje.`}
             </p>
           )}
         </CardHeader>
@@ -90,17 +101,17 @@ export function CaixaAberto({
             <div className="flex flex-wrap gap-2">
               {emConferencia ? (
                 <Button type="button" className="h-11" onClick={() => setJanela('FECHAR')}>
-                  Informar justificativa
+                  Justificar e fechar
                 </Button>
               ) : (
                 <>
-                  <Button type="button" variant="outline" className="h-11" onClick={() => setJanela('SUPRIMENTO')}>
-                    <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
-                    Suprimento
-                  </Button>
                   <Button type="button" variant="outline" className="h-11" onClick={() => setJanela('SANGRIA')}>
                     <ArrowUpFromLine className="h-4 w-4" aria-hidden="true" />
                     Sangria
+                  </Button>
+                  <Button type="button" variant="outline" className="h-11" onClick={() => setJanela('SUPRIMENTO')}>
+                    <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
+                    Suprimento
                   </Button>
                   <Button type="button" className="h-11 sm:ml-auto" onClick={() => setJanela('FECHAR')}>
                     <Lock className="h-4 w-4" aria-hidden="true" />
@@ -136,10 +147,7 @@ export function CaixaAberto({
           setJanela(null)
           aoLancado(lancamento)
         }}
-        aoConflitoDeEstado={(mensagem) => {
-          setJanela(null)
-          aoConflitoDeEstado(mensagem)
-        }}
+        aoMudarDeEstado={fecharJanelaE}
       />
       <JanelaFecharCaixa
         aberto={janela === 'FECHAR'}
@@ -150,10 +158,7 @@ export function CaixaAberto({
           setJanela(null)
           aoFechado(fechada)
         }}
-        aoConflitoDeEstado={(mensagem) => {
-          setJanela(null)
-          aoConflitoDeEstado(mensagem)
-        }}
+        aoMudarDeEstado={fecharJanelaE}
       />
     </div>
   )
@@ -223,16 +228,13 @@ function OutrosCaixasAbertos({
   const consulta = useQuery({ queryKey: chaveDosPontos(true), queryFn: () => listarPontos(true) })
   const hoje = new Date()
 
-  if (consulta.isPending) {
-    return null
-  }
-  if (consulta.isError) {
-    return (
+  if (consulta.data === undefined) {
+    return consulta.isError ? (
       <ErroAoCarregar
         mensagem="Não foi possível carregar os outros caixas abertos."
         aoTentarDeNovo={() => consulta.refetch()}
       />
-    )
+    ) : null
   }
   const outros = consulta.data.filter(
     (ponto) => ponto.situacao !== null && ponto.situacao.sessaoId !== sessaoPropriaId,
@@ -253,10 +255,7 @@ function OutrosCaixasAbertos({
           }
           return (
             <li key={ponto.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
-              <p className="text-sm">
-                <span className="font-medium">{ponto.nome}</span>
-                <span className="text-muted-foreground">{` · ${textoDaSituacaoDoPonto(situacao, hoje)}`}</span>
-              </p>
+              <LinhaDoPonto ponto={ponto} hoje={hoje} />
               <VerCaixa ponto={ponto} aoVerCaixa={() => aoVerCaixa(situacao.sessaoId)} />
             </li>
           )

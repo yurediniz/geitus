@@ -14,7 +14,8 @@ import { buscar, salvar } from '@/services/configuracaoCaixaService'
 import type { ConfiguracaoDoCaixa } from '@/types/caixa'
 
 const FRASE_DO_FECHAMENTO_CEGO =
-  'Quem fecha o caixa informa o valor contado sem ver o esperado. A diferença aparece depois da contagem.'
+  'Quem fecha o caixa informa o valor contado sem ver o esperado. A diferença aparece depois da contagem. ' +
+  'Administradores continuam vendo o esperado. A mudança vale também para os caixas abertos que ainda não foram contados.'
 const MENSAGEM_FALHA_AO_SALVAR = 'Não foi possível salvar a configuração. Tente de novo.'
 
 /** Secao Caixa das Configuracoes: o modo do fechamento e os pontos de caixa. */
@@ -63,7 +64,7 @@ function FechamentoCego({ avisos }: { avisos: AvisosDaTela }) {
     },
     onSuccess: (configuracao) => {
       queryClient.setQueryData(CHAVE_DA_CONFIGURACAO_DO_CAIXA, configuracao)
-      avisos.sucesso('Configuração salva')
+      avisos.sucesso(configuracao.fechamentoCego ? 'Fechamento cego ligado' : 'Fechamento cego desligado')
     },
     onError: (erro, _pedido, contexto) => {
       if (contexto?.anterior) {

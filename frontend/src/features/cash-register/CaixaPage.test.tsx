@@ -79,6 +79,19 @@ function enviarJanela() {
   fireEvent.submit(screen.getByRole('dialog').querySelector('form') as HTMLFormElement)
 }
 
+/** Abre a janela de sangria e preenche valor e motivo. */
+async function prepararSangria(valor: string) {
+  fireEvent.click(await screen.findByRole('button', { name: 'Sangria' }))
+  const janela = screen.getByRole('dialog')
+  fireEvent.change(within(janela).getByLabelText(/valor/i), { target: { value: valor } })
+  fireEvent.change(within(janela).getByLabelText(/motivo/i), { target: { value: 'Depósito no cofre' } })
+  return janela
+}
+
+function aviso() {
+  return document.getElementById('caixa-aviso') as HTMLElement
+}
+
 const CAIXA_2_DA_ANA = pontoDeTeste({
   id: 'p-2',
   nome: 'Caixa 2',
@@ -86,11 +99,23 @@ const CAIXA_2_DA_ANA = pontoDeTeste({
   situacao: { status: 'ABERTA', sessaoId: 's-ana', abertaPorNome: 'Ana Souza', abertaEm: ABERTA_AS_0802 },
 })
 
+function emConferencia(sessao: SessaoDeCaixa): SessaoDeCaixa {
+  return {
+    ...sessao,
+    status: 'EM_CONFERENCIA',
+    valorEsperado: 320,
+    valorContado: 318,
+    diferenca: -2,
+    contadaPorNome: 'Ana Souza',
+    contadaEm: '2026-10-24T18:00:00-03:00',
+  }
+}
+
 function fechadaCom(sessao: SessaoDeCaixa, contado: number, diferenca: number, justificativa: string | null) {
   return {
     ...sessao,
     status: 'FECHADA' as const,
-    valorEsperado: sessao.dinheiroNaGaveta,
+    valorEsperado: sessao.dinheiroNaGaveta ?? sessao.valorEsperado,
     valorContado: contado,
     diferenca,
     contadaPorNome: 'Ana Souza',
@@ -114,10 +139,19 @@ describe('CaixaPage', () => {
     definirPerfil('OPERADOR')
     sessaoAtualMock.mockResolvedValue(null)
     listarPontosMock.mockResolvedValue([pontoDeTeste()])
+    // Releitura da sessao depois de um 409: por padrao ela continua aberta.
+    buscarSessaoMock.mockResolvedValue(sessaoDeTeste())
   })
 
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('subtítulo da página e link para o histórico', async () => {
+    renderPagina()
+
+    expect(screen.getByText('O dinheiro da gaveta do seu turno.')).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: 'Histórico' })).toHaveAttribute('href', '/caixa/historico')
   })
 
   describe('sem caixa aberto', () => {
@@ -135,10 +169,41 @@ describe('CaixaPage', () => {
       expect(listarPontosMock).toHaveBeenCalledWith(true)
     })
 
-    it('tem o link para o histórico', async () => {
+    it('caixa esquecido aberto de outro dia aparece em âmbar, com o relógio', async () => {
+      listarPontosMock.mockResolvedValue([
+        pontoDeTeste(),
+        {
+          ...CAIXA_2_DA_ANA,
+          situacao: { status: 'ABERTA', sessaoId: 's-ana', abertaPorNome: 'Ana Souza', abertaEm: '2026-10-23T08:02:00-03:00' },
+        },
+      ])
       renderPagina()
 
-      expect(await screen.findByRole('link', { name: 'Histórico' })).toHaveAttribute('href', '/caixa/historico')
+      const situacao = await screen.findByText('aberto por Ana Souza desde 23/10 às 08:02')
+      expect(situacao).toHaveClass('text-warning-soft-foreground')
+      expect(situacao.querySelector('svg')).not.toBeNull()
+      expect(screen.getByText('livre')).toHaveClass('text-muted-foreground')
+    })
+
+    it('todos os caixas em uso: o OPERADOR é orientado', async () => {
+      listarPontosMock.mockResolvedValue([CAIXA_2_DA_ANA])
+      renderPagina()
+
+      expect(await screen.findByRole('heading', { name: 'Todos os caixas estão em uso' })).toBeInTheDocument()
+      expect(
+        screen.getByText('Peça para fecharem um caixa ou peça ao administrador para cadastrar outro ponto.'),
+      ).toBeInTheDocument()
+    })
+
+    it('todos os caixas em uso: o ADMIN pode ver os caixas ou ir para Configurações', async () => {
+      definirPerfil('ADMIN', 'Carlos Lima')
+      listarPontosMock.mockResolvedValue([CAIXA_2_DA_ANA])
+      renderPagina()
+
+      expect(await screen.findByRole('heading', { name: 'Todos os caixas estão em uso' })).toBeInTheDocument()
+      expect(screen.getByText(/Você pode ver os caixas abertos ou cadastrar outro ponto em/)).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Configurações' })).toHaveAttribute('href', '/configuracoes')
+      expect(screen.getByRole('button', { name: 'Ver caixa do Caixa 2' })).toBeInTheDocument()
     })
 
     it('um único ponto ativo e livre: "Abrir o Caixa 1" direto', async () => {
@@ -155,9 +220,10 @@ describe('CaixaPage', () => {
       renderPagina()
 
       fireEvent.click(await screen.findByRole('button', { name: 'Abrir o Caixa 1' }))
-      const fundo = within(screen.getByRole('dialog')).getByLabelText('Fundo de troco')
+      const fundo = within(screen.getByRole('dialog')).getByLabelText(/fundo de troco/i)
       expect(fundo).toHaveValue('150,00')
       expect(fundo).toHaveFocus()
+      expect(within(screen.getByRole('dialog')).getByText('(obrigatório)')).toBeInTheDocument()
       enviarJanela()
 
       await waitFor(() =>
@@ -168,6 +234,7 @@ describe('CaixaPage', () => {
         await screen.findByRole('heading', { name: 'Caixa 1 · aberto por você às 08:02' }),
       ).toBeInTheDocument()
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      await waitFor(() => expect(aviso()).toHaveFocus())
     })
 
     it('sem abertura anterior, o fundo vem vazio e é obrigatório (zero é aceito)', async () => {
@@ -176,7 +243,7 @@ describe('CaixaPage', () => {
       renderPagina()
 
       fireEvent.click(await screen.findByRole('button', { name: 'Abrir o Caixa 1' }))
-      const fundo = within(screen.getByRole('dialog')).getByLabelText('Fundo de troco')
+      const fundo = within(screen.getByRole('dialog')).getByLabelText(/fundo de troco/i)
       expect(fundo).toHaveValue('')
       enviarJanela()
       expect(await screen.findByText('Informe o fundo de troco. Pode ser R$ 0,00.')).toBeInTheDocument()
@@ -206,6 +273,8 @@ describe('CaixaPage', () => {
         'Não foi possível abrir o caixa. Confira a conexão e tente de novo.',
       )
       expect(within(janela).getByRole('button', { name: 'Abrir caixa' })).toBeEnabled()
+      // Falha de rede: a tela nao recarrega (a janela e a chave ficam).
+      expect(listarPontosMock).toHaveBeenCalledTimes(1)
 
       enviarJanela()
       await waitFor(() => expect(abrirMock).toHaveBeenCalledTimes(2))
@@ -255,19 +324,23 @@ describe('CaixaPage', () => {
   })
 
   describe('com caixa aberto', () => {
-    it('destaca "Dinheiro na gaveta R$ 320,00" e lista os movimentos', async () => {
+    it('destaca "Dinheiro na gaveta R$ 320,00", com Sangria antes de Suprimento, e lista os movimentos com sinal', async () => {
       sessaoAtualMock.mockResolvedValue(sessaoDeTeste())
       renderPagina()
 
       const destaque = await screen.findByRole('region', { name: 'Dinheiro na gaveta' })
       expect(destaque).toHaveTextContent('R$ 320,00')
+      const botoes = screen.getAllByRole('button').map((botao) => botao.textContent)
+      expect(botoes.indexOf('Sangria')).toBeLessThan(botoes.indexOf('Suprimento'))
       const movimentos = screen.getByRole('list', { name: 'Movimentos do caixa' })
       const [suprimento, abertura] = within(movimentos).getAllByRole('listitem')
       expect(suprimento).toHaveTextContent('10:15')
       expect(suprimento).toHaveTextContent('Suprimento')
       expect(suprimento).toHaveTextContent('Reforço de troco')
-      expect(suprimento).toHaveTextContent('R$ 170,00')
+      expect(suprimento).toHaveTextContent('+ R$ 170,00')
       expect(abertura).toHaveTextContent('Abertura')
+      expect(abertura).toHaveTextContent('R$ 150,00')
+      expect(abertura).not.toHaveTextContent(/[+−] R\$/)
       expect(screen.queryByText(/aberto desde/i)).not.toBeInTheDocument()
     })
 
@@ -281,11 +354,14 @@ describe('CaixaPage', () => {
       expect(screen.queryByRole('region', { name: 'Dinheiro na gaveta' })).not.toBeInTheDocument()
     })
 
-    it('aberto em outro dia: aviso "Aberto desde 23/10 às 08:02"', async () => {
+    it('aberto em outro dia: título sem hora e o aviso para fechar e abrir um novo', async () => {
       sessaoAtualMock.mockResolvedValue(sessaoDeTeste({ abertaEm: '2026-10-23T08:02:00-03:00' }))
       renderPagina()
 
-      expect(await screen.findByText('Aberto desde 23/10 às 08:02')).toBeInTheDocument()
+      expect(await screen.findByRole('heading', { name: 'Caixa 1 · aberto por você' })).toBeInTheDocument()
+      expect(
+        screen.getByText('Aberto desde 23/10 às 08:02. Feche este caixa e abra um novo para hoje.'),
+      ).toBeInTheDocument()
     })
 
     it('sangria registrada: avisa "Sangria de R$ 200,00 registrada" e recarrega a sessão', async () => {
@@ -296,6 +372,7 @@ describe('CaixaPage', () => {
 
       fireEvent.click(await screen.findByRole('button', { name: 'Sangria' }))
       const janela = screen.getByRole('dialog')
+      expect(janela).toHaveAccessibleDescription('Retirada de dinheiro da gaveta do Caixa 1.')
       const valor = within(janela).getByLabelText(/valor/i)
       expect(valor).toHaveFocus()
       expect(within(janela).getByText('Na gaveta: R$ 320,00')).toBeInTheDocument()
@@ -323,6 +400,7 @@ describe('CaixaPage', () => {
 
       fireEvent.click(await screen.findByRole('button', { name: 'Suprimento' }))
       const janela = screen.getByRole('dialog')
+      expect(janela).toHaveAccessibleDescription('Dinheiro colocado na gaveta do Caixa 1.')
       fireEvent.change(within(janela).getByLabelText(/valor/i), { target: { value: '50,00' } })
       fireEvent.change(within(janela).getByLabelText(/motivo/i), { target: { value: 'Reforço de troco' } })
       enviarJanela()
@@ -343,32 +421,47 @@ describe('CaixaPage', () => {
       expect(lancarMock).not.toHaveBeenCalled()
     })
 
-    it('sangria acima do esperado: a janela mostra o 409 do servidor', async () => {
+    it('sangria acima do esperado: relê a sessão (ainda aberta) e a janela mostra o 409 do servidor', async () => {
       sessaoAtualMock.mockResolvedValue(sessaoDeTeste({ dinheiroNaGaveta: 50 }))
       lancarMock.mockRejectedValue(new HttpError(409, 'A sangria passa do dinheiro na gaveta (R$ 50,00).'))
       renderPagina()
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Sangria' }))
-      const janela = screen.getByRole('dialog')
-      fireEvent.change(within(janela).getByLabelText(/valor/i), { target: { value: '50,01' } })
-      fireEvent.change(within(janela).getByLabelText(/motivo/i), { target: { value: 'Depósito no cofre' } })
+      const janela = await prepararSangria('50,01')
       enviarJanela()
 
       expect(await within(janela).findByRole('alert')).toHaveTextContent(
         'A sangria passa do dinheiro na gaveta (R$ 50,00).',
       )
+      expect(buscarSessaoMock).toHaveBeenCalledWith('s-ana')
       expect(screen.getByRole('dialog')).toBeInTheDocument()
     })
 
-    it('aba B com o caixa fechado na aba A: mostra a mensagem, recarrega a sessão e volta à escolha do ponto', async () => {
-      sessaoAtualMock.mockResolvedValueOnce(sessaoDeTeste()).mockResolvedValue(null)
-      lancarMock.mockRejectedValue(new HttpError(409, 'Este caixa já foi fechado.'))
+    it('409 "registrada com outros dados": a nova tentativa vai com outra chave', async () => {
+      sessaoAtualMock.mockResolvedValue(sessaoDeTeste())
+      lancarMock
+        .mockRejectedValueOnce(new HttpError(409, 'Esta operação já foi registrada com outros dados.'))
+        .mockResolvedValueOnce(sessaoDeTeste())
       renderPagina()
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Sangria' }))
-      const janela = screen.getByRole('dialog')
-      fireEvent.change(within(janela).getByLabelText(/valor/i), { target: { value: '10,00' } })
-      fireEvent.change(within(janela).getByLabelText(/motivo/i), { target: { value: 'Depósito no cofre' } })
+      const janela = await prepararSangria('20,00')
+      enviarJanela()
+      expect(await within(janela).findByRole('alert')).toHaveTextContent(
+        'Esta operação já foi registrada com outros dados.',
+      )
+
+      enviarJanela()
+      await waitFor(() => expect(lancarMock).toHaveBeenCalledTimes(2))
+      const [primeiraChave, segundaChave] = lancarMock.mock.calls.map(([, dados]) => dados.chave)
+      expect(segundaChave).not.toBe(primeiraChave)
+    })
+
+    it('aba B com o caixa fechado na aba A: relê a sessão (fechada), avisa e volta à escolha do ponto', async () => {
+      sessaoAtualMock.mockResolvedValueOnce(sessaoDeTeste()).mockResolvedValue(null)
+      lancarMock.mockRejectedValue(new HttpError(409, 'Este caixa já foi fechado.'))
+      buscarSessaoMock.mockResolvedValue(fechadaCom(sessaoDeTeste(), 320, 0, null))
+      renderPagina()
+
+      await prepararSangria('10,00')
       enviarJanela()
 
       expect(await screen.findByRole('alert')).toHaveTextContent('Este caixa já foi fechado.')
@@ -376,35 +469,125 @@ describe('CaixaPage', () => {
       expect(await screen.findByRole('button', { name: 'Abrir o Caixa 1' })).toBeInTheDocument()
       expect(sessaoAtualMock).toHaveBeenCalledTimes(2)
       expect(screen.getByRole('alert')).toHaveTextContent('Este caixa já foi fechado.')
+      await waitFor(() => expect(aviso()).toHaveFocus())
     })
 
-    it('em conferência ao abrir a tela: "Contagem registrada · falta a justificativa" e a janela abre na justificativa', async () => {
-      sessaoAtualMock.mockResolvedValue(
-        sessaoDeTeste({
-          status: 'EM_CONFERENCIA',
-          fechamentoCego: true,
-          valorEsperado: 320,
-          valorContado: 318,
-          diferenca: -2,
-          contadaPorNome: 'Ana Souza',
-          contadaEm: '2026-10-24T18:00:00-03:00',
-        }),
+    it('404 na sangria: volta à tela inicial com a mensagem', async () => {
+      sessaoAtualMock.mockResolvedValueOnce(sessaoDeTeste()).mockResolvedValue(null)
+      lancarMock.mockRejectedValue(new HttpError(404, 'Requisicao falhou (HTTP 404).'))
+      renderPagina()
+
+      await prepararSangria('10,00')
+      enviarJanela()
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Este caixa não está mais disponível. A tela foi atualizada.',
       )
+      expect(await screen.findByRole('button', { name: 'Abrir o Caixa 1' })).toBeInTheDocument()
+      expect(buscarSessaoMock).not.toHaveBeenCalled()
+    })
+
+    it('a aba B conta outro valor (409): fecha a janela, avisa no topo e mostra a conferência', async () => {
+      const sessao = sessaoDeTeste({ fechamentoCego: true, dinheiroNaGaveta: null })
+      sessaoAtualMock.mockResolvedValueOnce(sessao).mockResolvedValue(emConferencia(sessao))
+      contarMock.mockRejectedValue(new HttpError(409, 'A contagem deste caixa já foi registrada.'))
+      buscarSessaoMock.mockResolvedValue(emConferencia(sessao))
+      renderPagina()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Fechar caixa' }))
+      const janela = screen.getByRole('dialog')
+      fireEvent.change(within(janela).getByLabelText('Dinheiro contado na gaveta'), { target: { value: '300,00' } })
+      enviarJanela()
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('A contagem deste caixa já foi registrada.')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(await screen.findByText('Contagem registrada · falta a justificativa')).toBeInTheDocument()
+      await waitFor(() => expect(aviso()).toHaveFocus())
+    })
+
+    it('modo trocado antes da contagem: o 400 "Informe a justificativa depois de ver a diferença." aparece', async () => {
+      const naoCego = sessaoDeTeste({ fechamentoCego: false, dinheiroNaGaveta: 320 })
+      // Depois do 400 a tela relê a sessao, agora no modo cego (o OPERADOR deixa de ver o esperado).
+      sessaoAtualMock
+        .mockResolvedValueOnce(naoCego)
+        .mockResolvedValue({ ...naoCego, fechamentoCego: true, dinheiroNaGaveta: null })
+      contarMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { justificativa: 'Informe a justificativa depois de ver a diferença.' }),
+      )
+      renderPagina()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Fechar caixa' }))
+      const janela = screen.getByRole('dialog')
+      fireEvent.change(within(janela).getByLabelText('Dinheiro contado na gaveta'), { target: { value: '318,00' } })
+      fireEvent.change(within(janela).getByLabelText(/justificativa/i), { target: { value: 'Troco' } })
+      enviarJanela()
+
+      expect(await within(janela).findByRole('button', { name: 'Conferir' })).toBeInTheDocument()
+      expect(within(janela).getByRole('alert')).toHaveTextContent('Informe a justificativa depois de ver a diferença.')
+      expect(within(janela).getByLabelText('Dinheiro contado na gaveta')).toHaveValue('318,00')
+    })
+
+    it('em conferência ao abrir a tela: "Contagem registrada · falta a justificativa" e "Justificar e fechar"', async () => {
+      sessaoAtualMock.mockResolvedValue(emConferencia(sessaoDeTeste({ fechamentoCego: true })))
       renderPagina()
 
       expect(await screen.findByText('Contagem registrada · falta a justificativa')).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Sangria' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Suprimento' })).not.toBeInTheDocument()
 
-      fireEvent.click(screen.getByRole('button', { name: 'Informar justificativa' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Justificar e fechar' }))
       const janela = screen.getByRole('dialog')
       expect(within(janela).queryByLabelText('Dinheiro contado na gaveta')).not.toBeInTheDocument()
       expect(within(janela).getByLabelText(/justificativa/i)).toHaveFocus()
+      expect(within(janela).getByRole('button', { name: 'Justificar depois' })).toBeInTheDocument()
     })
 
-    it('fechar o próprio caixa: resumo do fechamento e "Abrir novo caixa"', async () => {
-      const sessao = sessaoDeTeste()
+    it('rede cai no fechamento: a janela fica sem recarregar, e o retry mostra "Caixa 1 fechado…" e o resumo', async () => {
+      const sessao = emConferencia(sessaoDeTeste({ fechamentoCego: true }))
       sessaoAtualMock.mockResolvedValueOnce(sessao).mockResolvedValue(null)
+      fecharMock
+        .mockRejectedValueOnce(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
+        .mockResolvedValueOnce(fechadaCom(sessao, 318, -2, 'Troco dado a mais'))
+      renderPagina()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Justificar e fechar' }))
+      const janela = screen.getByRole('dialog')
+      fireEvent.change(within(janela).getByLabelText(/justificativa/i), { target: { value: 'Troco dado a mais' } })
+      enviarJanela()
+
+      expect(await within(janela).findByRole('alert')).toHaveTextContent(
+        'Não foi possível fechar o caixa. Confira a conexão e tente de novo.',
+      )
+      expect(within(janela).getByLabelText(/justificativa/i)).toHaveValue('Troco dado a mais')
+      expect(sessaoAtualMock).toHaveBeenCalledTimes(1)
+
+      enviarJanela()
+
+      expect(await screen.findByRole('status')).toHaveTextContent('Caixa 1 fechado com falta de R$ 2,00')
+      expect(screen.getByRole('heading', { name: 'Caixa 1 fechado' })).toBeInTheDocument()
+      expect(screen.getByText('Troco dado a mais')).toBeInTheDocument()
+    })
+
+    it('404 no fechamento: volta à tela inicial com a mensagem', async () => {
+      sessaoAtualMock.mockResolvedValueOnce(emConferencia(sessaoDeTeste({ fechamentoCego: true }))).mockResolvedValue(null)
+      fecharMock.mockRejectedValue(new HttpError(404, 'Requisicao falhou (HTTP 404).'))
+      renderPagina()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Justificar e fechar' }))
+      const janela = screen.getByRole('dialog')
+      fireEvent.change(within(janela).getByLabelText(/justificativa/i), { target: { value: 'Troco' } })
+      enviarJanela()
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Este caixa não está mais disponível. A tela foi atualizada.',
+      )
+      expect(await screen.findByRole('button', { name: 'Abrir o Caixa 1' })).toBeInTheDocument()
+    })
+
+    it('fechar o próprio caixa: resumo com o foco no título e "Abrir novo caixa", mesmo antes da recarga', async () => {
+      const sessao = sessaoDeTeste()
+      // Depois de fechar, a recarga da sessao atual fica pendente: a tela usa o cache ja limpo.
+      sessaoAtualMock.mockResolvedValueOnce(sessao).mockReturnValue(new Promise<SessaoDeCaixa | null>(() => {}))
       contarMock.mockResolvedValue(fechadaCom(sessao, 318, -2, 'Troco dado a mais'))
       renderPagina()
 
@@ -414,8 +597,9 @@ describe('CaixaPage', () => {
       fireEvent.change(within(janela).getByLabelText(/justificativa/i), { target: { value: 'Troco dado a mais' } })
       enviarJanela()
 
-      expect(await screen.findByRole('status')).toHaveTextContent('Caixa fechado com falta de R$ 2,00')
-      expect(screen.getByRole('heading', { name: 'Caixa 1 fechado' })).toBeInTheDocument()
+      expect(await screen.findByRole('status')).toHaveTextContent('Caixa 1 fechado com falta de R$ 2,00')
+      const titulo = screen.getByRole('heading', { name: 'Caixa 1 fechado' })
+      await waitFor(() => expect(titulo).toHaveFocus())
       expect(screen.getByText('Troco dado a mais')).toBeInTheDocument()
       expect(screen.getByText('Falta de R$ 2,00')).toBeInTheDocument()
 
@@ -425,7 +609,7 @@ describe('CaixaPage', () => {
   })
 
   describe('ADMIN', () => {
-    it('sem caixa próprio, vê "Ver caixa" no ponto aberto por outra pessoa', async () => {
+    it('sem caixa próprio, vê "Ver caixa" no ponto aberto por outra pessoa, com o aviso de que lança no próprio nome', async () => {
       definirPerfil('ADMIN', 'Carlos Lima')
       listarPontosMock.mockResolvedValue([pontoDeTeste(), CAIXA_2_DA_ANA])
       buscarSessaoMock.mockResolvedValue(sessaoDeTeste({ ponto: { id: 'p-2', nome: 'Caixa 2' } }))
@@ -437,12 +621,16 @@ describe('CaixaPage', () => {
       expect(
         await screen.findByRole('heading', { name: 'Caixa 2 · aberto por Ana Souza às 08:02' }),
       ).toBeInTheDocument()
+      expect(
+        screen.getByText('Você está no caixa de Ana Souza. O que você lançar fica registrado no seu nome.'),
+      ).toHaveClass('bg-info-soft')
     })
 
-    it('com o próprio caixa aberto, fecha o caixa da OPERADORA e volta ao próprio caixa', async () => {
+    it('com o próprio caixa aberto, fecha o caixa da OPERADORA: resumo "Caixa 2 fechado" e "Voltar" ao próprio caixa', async () => {
       definirPerfil('ADMIN', 'Carlos Lima')
       const propria = sessaoDeTeste({ id: 's-carlos', abertaPorNome: 'Carlos Lima', dinheiroNaGaveta: 500 })
       const daAna = sessaoDeTeste({ id: 's-ana', ponto: { id: 'p-2', nome: 'Caixa 2' }, dinheiroNaGaveta: 100 })
+      const daAnaFechada = { ...fechadaCom(daAna, 100, 0, null), fechadaPorNome: 'Carlos Lima' }
       sessaoAtualMock.mockResolvedValue(propria)
       listarPontosMock.mockResolvedValue([
         pontoDeTeste({
@@ -450,8 +638,8 @@ describe('CaixaPage', () => {
         }),
         CAIXA_2_DA_ANA,
       ])
-      buscarSessaoMock.mockResolvedValue(daAna)
-      contarMock.mockResolvedValue({ ...fechadaCom(daAna, 100, 0, null), fechadaPorNome: 'Carlos Lima' })
+      buscarSessaoMock.mockResolvedValueOnce(daAna).mockResolvedValue(daAnaFechada)
+      contarMock.mockResolvedValue(daAnaFechada)
       renderPagina()
 
       // O proprio caixa, com os outros caixas abertos logo abaixo (sem o proprio).
@@ -471,13 +659,37 @@ describe('CaixaPage', () => {
       fireEvent.click(within(janela).getByRole('button', { name: 'Fechar caixa' }))
 
       await waitFor(() => expect(contarMock).toHaveBeenCalledWith('s-ana', { valorContado: 100, justificativa: null }))
-      expect(await screen.findByRole('status')).toHaveTextContent('Caixa fechado')
+      expect(await screen.findByRole('status')).toHaveTextContent('Caixa 2 fechado')
+      const titulo = await screen.findByRole('heading', { name: 'Caixa 2 fechado' })
+      await waitFor(() => expect(titulo).toHaveFocus())
+      expect(screen.getByText('Fechado por Carlos Lima em 24/10/2026 às 18:00.')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Voltar' }))
       expect(await screen.findByRole('heading', { name: 'Caixa 1 · aberto por você às 08:02' })).toBeInTheDocument()
       expect(screen.getByRole('region', { name: 'Dinheiro na gaveta' })).toHaveTextContent('R$ 500,00')
       // Nada foi feito na sessao do ADMIN.
       expect(contarMock).toHaveBeenCalledTimes(1)
       expect(fecharMock).not.toHaveBeenCalled()
       expect(lancarMock).not.toHaveBeenCalled()
+    })
+
+    it('no caixa de outra pessoa, um 409 de conferência mantém o ADMIN nele, recarregado', async () => {
+      definirPerfil('ADMIN', 'Carlos Lima')
+      listarPontosMock.mockResolvedValue([pontoDeTeste(), CAIXA_2_DA_ANA])
+      const daAna = sessaoDeTeste({ id: 's-ana', ponto: { id: 'p-2', nome: 'Caixa 2' } })
+      buscarSessaoMock.mockResolvedValueOnce(daAna).mockResolvedValue(emConferencia(daAna))
+      lancarMock.mockRejectedValue(new HttpError(409, 'O caixa está em conferência. Termine o fechamento.'))
+      renderPagina()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Ver caixa do Caixa 2' }))
+      await screen.findByRole('heading', { name: 'Caixa 2 · aberto por Ana Souza às 08:02' })
+      await prepararSangria('10,00')
+      enviarJanela()
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('O caixa está em conferência. Termine o fechamento.')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(await screen.findByText('Contagem registrada · falta a justificativa')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Caixa 2 · aberto por Ana Souza às 08:02' })).toBeInTheDocument()
     })
 
     it('"Voltar" sai do caixa da outra pessoa', async () => {

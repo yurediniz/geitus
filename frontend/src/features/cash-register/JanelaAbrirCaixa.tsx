@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button'
 import { CampoMoeda } from '@/components/ui/campo-moeda'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { CAIXA_QUERY_KEY } from '@/features/cash-register/caixaQuery'
-import { lerErroDoServidor } from '@/features/cash-register/errosDoCaixa'
+import { ehFalhaSemResposta, lerErroDoServidor } from '@/features/cash-register/errosDoCaixa'
+import { manterFocoMovidoPelaTela } from '@/features/cash-register/focoDoCaixa'
+import { ErroDoCampo, MarcaObrigatorio } from '@/features/products/CamposFormulario'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
-import { ErroDoCampo } from '@/features/products/CamposFormulario'
 import { gerarUuid } from '@/lib/uuid'
 import { abrir } from '@/services/caixaService'
 import { HttpError } from '@/services/httpClient'
@@ -63,8 +64,11 @@ function ConteudoAbrirCaixa({ ponto, aoFechar, aoConcluir }: JanelaAbrirCaixaPro
     mutationFn: (dados) => abrir(dados),
     onSuccess: (sessao) => aoConcluir(sessao),
     onError: (erro) => {
-      // O ponto pode ter sido ocupado ou inativado, ou a abertura pode ter chegado ao servidor.
-      void queryClient.invalidateQueries({ queryKey: CAIXA_QUERY_KEY })
+      // O ponto pode ter sido ocupado ou inativado. Numa falha de rede a tela fica como esta
+      // (a nova tentativa reenvia a mesma chave).
+      if (!ehFalhaSemResposta(erro)) {
+        void queryClient.invalidateQueries({ queryKey: CAIXA_QUERY_KEY })
+      }
       if (erro instanceof HttpError && erro.status === 409) {
         setChave(gerarUuid())
       }
@@ -114,6 +118,7 @@ function ConteudoAbrirCaixa({ ponto, aoFechar, aoConcluir }: JanelaAbrirCaixaPro
         event.preventDefault()
         campoRef.current?.focus()
       }}
+      onCloseAutoFocus={manterFocoMovidoPelaTela}
       // Durante o envio a janela nao fecha: o resultado precisa chegar a tela.
       onEscapeKeyDown={(event) => enviandoRef.current && event.preventDefault()}
       onInteractOutside={(event) => enviandoRef.current && event.preventDefault()}
@@ -129,6 +134,7 @@ function ConteudoAbrirCaixa({ ponto, aoFechar, aoConcluir }: JanelaAbrirCaixaPro
         <div className="space-y-1.5">
           <label htmlFor={ID_CAMPO} className="text-sm font-medium">
             Fundo de troco
+            <MarcaObrigatorio />
           </label>
           <CampoMoeda
             ref={campoRef}

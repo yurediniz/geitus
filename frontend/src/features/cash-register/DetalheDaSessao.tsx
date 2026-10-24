@@ -34,7 +34,9 @@ export function DetalheDaSessao({ sessao, aoFechar }: DetalheDaSessaoProps) {
           <SheetHeader className="pr-12">
             <SheetTitle className="font-display text-lg">{sessao.ponto.nome}</SheetTitle>
             <SheetDescription>
-              {`${ROTULO_DO_STATUS[sessao.status]} · aberto por ${sessao.abertaPorNome} em ${formatarDataHoraCaixa(sessao.abertaEm)}`}
+              {sessao.status === 'ABERTA'
+                ? `Aberto por ${sessao.abertaPorNome} em ${formatarDataHoraCaixa(sessao.abertaEm)}`
+                : `${ROTULO_DO_STATUS[sessao.status]} · aberto por ${sessao.abertaPorNome} em ${formatarDataHoraCaixa(sessao.abertaEm)}`}
             </SheetDescription>
           </SheetHeader>
           <ConteudoDoDetalhe sessaoId={sessao.id} />
