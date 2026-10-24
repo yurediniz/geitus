@@ -38,6 +38,7 @@ import com.geitus.app.company.DadosEmpresaInvalidosException;
 import com.geitus.app.customer.ClienteConflitoException;
 import com.geitus.app.customer.ClienteNaoEncontradoException;
 import com.geitus.app.customer.DadosClienteInvalidosException;
+import com.geitus.app.shared.paginacao.PaginacaoInvalidaException;
 import com.geitus.app.supplier.DadosFornecedorInvalidosException;
 import com.geitus.app.supplier.FornecedorConflitoException;
 import com.geitus.app.supplier.FornecedorNaoEncontradoException;
@@ -264,6 +265,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RegraDeNegocioException.class)
     public ResponseEntity<ApiError> tratarRegraDeNegocio(RegraDeNegocioException ex, HttpServletRequest request) {
         ApiError corpo = erroComCampoOpcional(HttpStatus.BAD_REQUEST, ex.getMessage(), request, ex.campo());
+        return ResponseEntity.badRequest().body(corpo);
+    }
+
+    /** Pagina ou tamanho fora dos limites das consultas paginadas -> 400 com a mensagem fixa, sem campos. */
+    @ExceptionHandler(PaginacaoInvalidaException.class)
+    public ResponseEntity<ApiError> tratarPaginacaoInvalida(PaginacaoInvalidaException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+
         return ResponseEntity.badRequest().body(corpo);
     }
 

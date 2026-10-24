@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.Test;
 
 import com.geitus.app.catalog.RegraDeNegocioException;
+import com.geitus.app.shared.paginacao.PaginacaoInvalidaException;
 
 /**
  * Padroes e limites dos parametros da listagem num lugar so (spec 4.2 e 4.4):
@@ -55,8 +56,8 @@ class ParametrosDaListagemTest {
     @Test
     void paginaETamanhoForaDosLimites400() {
         assertThatThrownBy(() -> ParametrosDaListagem.daRequisicao(null, null, null, null, null, null, -1, null))
-                .isInstanceOf(RegraDeNegocioException.class);
+                .isInstanceOf(PaginacaoInvalidaException.class);
         assertThatThrownBy(() -> ParametrosDaListagem.daRequisicao(null, null, null, null, null, null, null, 101))
-                .isInstanceOf(RegraDeNegocioException.class);
+                .isInstanceOf(PaginacaoInvalidaException.class);
     }
 }

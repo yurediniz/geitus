@@ -119,7 +119,9 @@ class HistoricoDoCaixaIT extends IntegracaoDoCaixa {
     @Test
     void periodoInvertido400() throws Exception {
         historico(empresa.admin(), "?de=2026-10-25&ate=2026-10-24").andExpect(status().isBadRequest());
-        historico(empresa.admin(), "?tamanho=101").andExpect(status().isBadRequest());
+        historico(empresa.admin(), "?tamanho=101").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("O tamanho da página deve ser entre 1 e 100."))
+                .andExpect(jsonPath("$.campos").doesNotExist());
     }
 
     @Test

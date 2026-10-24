@@ -1,7 +1,5 @@
 package com.geitus.app.shared.paginacao;
 
-import com.geitus.app.catalog.RegraDeNegocioException;
-
 /**
  * Limites das consultas paginadas (historico de precos, movimentos de
  * estoque, listagens e historico do caixa): pagina a partir de 0, tamanho de 1 a
@@ -20,18 +18,18 @@ public final class Paginacao {
         // Apenas metodos estaticos.
     }
 
-    /** Lanca {@link RegraDeNegocioException} (400) se a pagina ou o tamanho estiverem fora dos limites. */
+    /** Lanca {@link PaginacaoInvalidaException} (400) se a pagina ou o tamanho estiverem fora dos limites. */
     public static void validar(int pagina, int tamanho) {
         if (pagina < 0) {
-            throw new RegraDeNegocioException(MENSAGEM_PAGINA_NEGATIVA);
+            throw new PaginacaoInvalidaException(MENSAGEM_PAGINA_NEGATIVA);
         }
         if (tamanho < 1 || tamanho > TAMANHO_MAXIMO) {
-            throw new RegraDeNegocioException(MENSAGEM_TAMANHO_INVALIDO);
+            throw new PaginacaoInvalidaException(MENSAGEM_TAMANHO_INVALIDO);
         }
         // O deslocamento (pagina * tamanho) vira o OFFSET int da consulta; acima
         // disso o Spring Data falharia com 500.
         if ((long) pagina * tamanho > Integer.MAX_VALUE) {
-            throw new RegraDeNegocioException(MENSAGEM_PAGINA_GRANDE_DEMAIS);
+            throw new PaginacaoInvalidaException(MENSAGEM_PAGINA_GRANDE_DEMAIS);
         }
     }
 }

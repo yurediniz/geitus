@@ -45,6 +45,7 @@ import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.inventory.EstoqueService.ResultadoAjuste;
 import com.geitus.app.inventory.dto.AjusteEstoqueRequest;
+import com.geitus.app.shared.paginacao.PaginacaoInvalidaException;
 
 /**
  * Regras do ajuste manual de estoque (docs/modules/produtos-estoque.md, 4.2 a
@@ -717,10 +718,10 @@ class EstoqueServiceTest {
     @Test
     void movimentosComPaginacaoInvalida_400() {
         assertThatThrownBy(() -> estoqueService.movimentosParaUsuario(ID_USUARIO, UUID.randomUUID(), 0, 101))
-                .isInstanceOf(RegraDeNegocioException.class)
+                .isInstanceOf(PaginacaoInvalidaException.class)
                 .hasMessage("O tamanho da página deve ser entre 1 e 100.");
         assertThatThrownBy(() -> estoqueService.movimentosParaUsuario(ID_USUARIO, UUID.randomUUID(), -1, 20))
-                .isInstanceOf(RegraDeNegocioException.class)
+                .isInstanceOf(PaginacaoInvalidaException.class)
                 .hasMessage("A página deve ser maior ou igual a zero.");
     }
 }

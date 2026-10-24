@@ -87,6 +87,7 @@ import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.shared.numeracao.Numerador;
 import com.geitus.app.shared.numeracao.TipoNumeracao;
 import com.geitus.app.shared.paginacao.PaginaResponse;
+import com.geitus.app.shared.paginacao.PaginacaoInvalidaException;
 
 /**
  * Testa as regras do {@link ProdutoService}: validacoes de cadastro/atualizacao
@@ -1789,13 +1790,13 @@ class ProdutoServiceTest {
     @Test
     void historicoComPaginacaoForaDosLimites_400() {
         assertThatThrownBy(() -> produtoService.historicoDePrecosParaUsuario(9L, UUID.randomUUID(), -1, 20))
-                .isInstanceOf(RegraDeNegocioException.class)
+                .isInstanceOf(PaginacaoInvalidaException.class)
                 .hasMessage("A página deve ser maior ou igual a zero.");
         assertThatThrownBy(() -> produtoService.historicoDePrecosParaUsuario(9L, UUID.randomUUID(), 0, 101))
-                .isInstanceOf(RegraDeNegocioException.class)
+                .isInstanceOf(PaginacaoInvalidaException.class)
                 .hasMessage("O tamanho da página deve ser entre 1 e 100.");
         assertThatThrownBy(() -> produtoService.historicoDePrecosParaUsuario(9L, UUID.randomUUID(), 0, 0))
-                .isInstanceOf(RegraDeNegocioException.class)
+                .isInstanceOf(PaginacaoInvalidaException.class)
                 .hasMessage("O tamanho da página deve ser entre 1 e 100.");
 
         verifyNoInteractions(historicoPrecoRepository);
@@ -1805,7 +1806,7 @@ class ProdutoServiceTest {
     void historicoComPaginaGrandeDemais_400() {
         // pagina * tamanho estoura o int do deslocamento (offset) da consulta: 400, nao 500.
         assertThatThrownBy(() -> produtoService.historicoDePrecosParaUsuario(9L, UUID.randomUUID(), 21474837, 100))
-                .isInstanceOf(RegraDeNegocioException.class)
+                .isInstanceOf(PaginacaoInvalidaException.class)
                 .hasMessage("A página informada é grande demais.");
 
         verifyNoInteractions(historicoPrecoRepository);
