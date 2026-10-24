@@ -32,6 +32,15 @@ pnpm-debug.log*
 !.env.example
 *.pem
 *.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# ===== Claude Code (local) =====
+# Configuração local pode guardar comandos com credenciais; worktrees são cópias locais.
+.claude/settings.local.json
+.claude/worktrees/
 
 # ===== IntelliJ IDEA =====
 .idea/
