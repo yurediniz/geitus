@@ -3,6 +3,7 @@ import { createBrowserRouter, type RouteObject } from 'react-router-dom'
 import { RootLayout } from '@/components/layout/RootLayout'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { CaixaPage } from '@/features/cash-register/CaixaPage'
+import { HistoricoDoCaixaPage } from '@/features/cash-register/HistoricoDoCaixaPage'
 import { CategoriasPage } from '@/features/catalog/CategoriasPage'
 import { EtiquetaBalancaPage } from '@/features/catalog/EtiquetaBalancaPage'
 import { MarcasPage } from '@/features/catalog/MarcasPage'
@@ -70,6 +71,8 @@ const privateRoutes: RouteObject[] = [
           { path: 'clientes', element: <ClientesPage /> },
           // Caixa: qualquer autenticado opera o proprio caixa; o ADMIN ve e fecha o de outras pessoas (backend).
           { path: 'caixa', element: <CaixaPage /> },
+          // Historico: OPERADOR ve so as sessoes que abriu (filtrado no backend).
+          { path: 'caixa/historico', element: <HistoricoDoCaixaPage /> },
           { path: 'empresa', element: <EmpresaPage /> },
           {
             // Area restrita a ADMIN (RBAC no frontend; o backend tambem exige ADMIN).

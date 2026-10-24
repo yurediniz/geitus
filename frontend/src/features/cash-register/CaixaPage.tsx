@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Wallet } from 'lucide-react'
+import { ArrowLeft, History, Wallet } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -157,6 +158,12 @@ export function CaixaPage() {
             Abertura com fundo de troco, sangria, suprimento e fechamento do dinheiro da gaveta.
           </p>
         </div>
+        <Button asChild variant="outline" className="h-11 md:h-9">
+          <Link to="/caixa/historico">
+            <History className="h-4 w-4" aria-hidden="true" />
+            Histórico
+          </Link>
+        </Button>
       </div>
 
       <FeedbackCatalogo sucesso={sucesso} erro={erro} />

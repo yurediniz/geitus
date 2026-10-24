@@ -135,6 +135,12 @@ describe('CaixaPage', () => {
       expect(listarPontosMock).toHaveBeenCalledWith(true)
     })
 
+    it('tem o link para o histórico', async () => {
+      renderPagina()
+
+      expect(await screen.findByRole('link', { name: 'Histórico' })).toHaveAttribute('href', '/caixa/historico')
+    })
+
     it('um único ponto ativo e livre: "Abrir o Caixa 1" direto', async () => {
       renderPagina()
 
