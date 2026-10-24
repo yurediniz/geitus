@@ -261,36 +261,31 @@ class ProdutoRepositoryIT {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
-    // ---------- Unidade, categoria e unidade de compra (V6) ----------
+    // ---------- Unidade e categoria (V6) ----------
 
     @Test
-    void devePersistirERelerUnidadeCategoriaECompra() {
+    void devePersistirERelerUnidadeECategoria() {
         Empresa empresa = novaEmpresa("Empresa Vinculos");
-        UnidadeMedida caixa = novaUnidade(empresa, "CX");
         Categoria racao = categoriaRepository.saveAndFlush(new Categoria(empresa, null, "Ração"));
-        UUID uuid = salvar(produtoDa(empresa).nome("Sachê").categoria(racao).compra(caixa, "12").precoVenda("3.50"))
-                .getUuid();
+        UUID uuid = salvar(produtoDa(empresa).nome("Sachê").categoria(racao).precoVenda("3.50")).getUuid();
 
         entityManager.clear();
         Produto relido = produtoRepository.findByUuidAndEmpresa_Id(uuid, empresa.getId()).orElseThrow();
 
         assertThat(relido.getUnidade().getSigla()).isEqualTo("UN");
         assertThat(relido.getCategoria().getNome()).isEqualTo("Ração");
-        assertThat(relido.getUnidadeCompra().getSigla()).isEqualTo("CX");
-        assertThat(relido.getFatorConversao()).isEqualByComparingTo("12");
     }
 
     /**
      * Etapa 2 da listagem (Fase E): os produtos dos ids com os vinculos e os
      * codigos ja carregados, sem duplicar o produto com dois codigos e sem
-     * perder produto sem categoria ou compra.
+     * perder produto sem categoria.
      */
     @Test
-    void buscarComRelacoesPorIdsTrazOsVinculosSemPerderProdutoSemCategoriaOuCompra() {
+    void buscarComRelacoesPorIdsTrazOsVinculosSemPerderProdutoSemCategoria() {
         Empresa empresa = novaEmpresa("Empresa Listagem Vinculos");
-        UnidadeMedida caixa = novaUnidade(empresa, "CX");
         Categoria bebidas = categoriaRepository.saveAndFlush(new Categoria(empresa, null, "Bebidas"));
-        Produto agua = salvar(produtoDa(empresa).nome("Agua").categoria(bebidas).compra(caixa, "6").precoVenda("2.00")
+        Produto agua = salvar(produtoDa(empresa).nome("Agua").categoria(bebidas).precoVenda("2.00")
                 .sku("SKU-AGUA").codigo("96385074").codigo("ABC-1"));
         Produto bala = novoProduto(empresa, "Bala", null, true);
         entityManager.clear();
@@ -305,14 +300,11 @@ class ProdutoRepositoryIT {
         // JOIN FETCH: os vinculos e os codigos ja vem carregados (sem proxy pendente).
         assertThat(org.hibernate.Hibernate.isInitialized(todos.get(0).getUnidade())).isTrue();
         assertThat(org.hibernate.Hibernate.isInitialized(todos.get(0).getCategoria())).isTrue();
-        assertThat(org.hibernate.Hibernate.isInitialized(todos.get(0).getUnidadeCompra())).isTrue();
         assertThat(org.hibernate.Hibernate.isInitialized(todos.get(0).getCodigosBarras())).isTrue();
         assertThat(todos.get(0).getCodigosBarras()).extracting(ProdutoCodigoBarras::getCodigo)
                 .containsExactly("96385074", "ABC-1");
         assertThat(todos.get(0).getCategoria().getNome()).isEqualTo("Bebidas");
-        assertThat(todos.get(0).getUnidadeCompra().getSigla()).isEqualTo("CX");
         assertThat(todos.get(1).getCategoria()).isNull();
-        assertThat(todos.get(1).getUnidadeCompra()).isNull();
         assertThat(todos.get(1).getCodigosBarras()).isEmpty();
     }
 

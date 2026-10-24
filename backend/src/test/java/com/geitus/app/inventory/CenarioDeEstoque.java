@@ -94,7 +94,7 @@ class CenarioDeEstoque {
 
     /** Request minimo com o controle de estoque e o estoque inicial informados ({@code null} = sem). */
     static ProdutoRequest produto(UUID unidadeId, String nome, boolean controlaEstoque, String estoqueInicial) {
-        return new ProdutoRequest(nome, null, null, null, null, unidadeId, null, null, null,
+        return new ProdutoRequest(nome, null, null, null, null, unidadeId, null,
                 new BigDecimal("10.00"), null, null, null, null, null, List.of(), null, null, null, null, null,
                 controlaEstoque,
                 estoqueInicial == null ? null : new BigDecimal(estoqueInicial));

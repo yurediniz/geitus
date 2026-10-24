@@ -29,6 +29,14 @@ import jakarta.persistence.Table;
  * <p>O codigo e o formato nao mudam depois de gravados: um codigo mantido na
  * edicao preserva o formato com que foi gravado (inclusive {@code OUTRO} vindo
  * da migracao). Apenas a ordem e atualizada.
+ *
+ * <p>Fase B3 (V12, docs/modules/produtos-embalagens.md, 4): o codigo pode ser
+ * de uma {@link ProdutoEmbalagem} do produto ({@code embalagem} preenchida) ou
+ * da unidade de venda ({@code embalagem} nula). O codigo da embalagem tambem
+ * guarda o produto: a FK composta {@code (empresa_id, produto_id, embalagem_id)}
+ * garante que a embalagem e do mesmo produto, e {@code uq_codigo_barras_empresa}
+ * vale entre unidade e embalagens. Um codigo nunca muda de dono: mover um
+ * codigo e apagar a linha antiga e criar outra.
  */
 @Entity
 @Table(name = "produto_codigos_barras")
@@ -45,6 +53,11 @@ public class ProdutoCodigoBarras {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "produto_id", nullable = false, updatable = false)
     private Produto produto;
+
+    /** Embalagem dona do codigo; {@code null} para os codigos da unidade de venda. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "embalagem_id", updatable = false)
+    private ProdutoEmbalagem embalagem;
 
     @Column(nullable = false, length = 50, updatable = false)
     private String codigo;
@@ -71,6 +84,12 @@ public class ProdutoCodigoBarras {
         this.codigo = codigo;
         this.formato = formato;
         posicionarEm(ordem);
+    }
+
+    /** Codigo de uma embalagem, ja normalizado e validado; produto e empresa vem da embalagem. */
+    ProdutoCodigoBarras(ProdutoEmbalagem embalagem, String codigo, FormatoCodigoBarras formato, int ordem) {
+        this(embalagem.getProduto(), codigo, formato, ordem);
+        this.embalagem = embalagem;
     }
 
     @PrePersist

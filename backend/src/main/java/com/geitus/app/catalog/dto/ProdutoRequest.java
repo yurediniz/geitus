@@ -25,8 +25,7 @@ import jakarta.validation.constraints.Size;
  * do produto e gerenciado apenas pelos endpoints dedicados de inativar e
  * reativar.
  *
- * <p>Unidade de venda, categoria e unidade de compra sao referenciadas pelo
- * UUID publico do cadastro correspondente (docs/modules/categorias-e-unidades.md,
+ * <p>Unidade de venda e categoria sao referenciadas pelo UUID publico do cadastro correspondente (docs/modules/categorias-e-unidades.md,
  * 5.2); o service confirma que pertencem a empresa do usuario (404 se nao).
  *
  * <p>Os tamanhos maximos e a precisao numerica espelham as colunas das
@@ -34,8 +33,7 @@ import jakarta.validation.constraints.Size;
  * {@code marca}/{@code fornecedor VARCHAR(100)}, {@code descricao VARCHAR(1000)},
  * {@code sku}/{@code produto_codigos_barras.codigo VARCHAR(50)},
  * {@code preco_venda}/{@code custo}/{@code preco_minimo NUMERIC(12,2)},
- * {@code estoque_minimo}/{@code estoque_maximo}/{@code ponto_reposicao NUMERIC(12,3)},
- * {@code fator_conversao NUMERIC(12,4)}). O {@code @Digits} garante um 400
+ * {@code estoque_minimo}/{@code estoque_maximo}/{@code ponto_reposicao NUMERIC(12,3)}). O {@code @Digits} garante um 400
  * amigavel em vez de um erro de banco quando o cliente envia casas a mais.
  *
  * <p>{@code codigosBarras} e a lista completa (0 a 20). No PATCH, uma lista
@@ -92,15 +90,6 @@ public record ProdutoRequest(
 
         @Schema(description = "UUID da categoria (opcional)")
         UUID categoriaId,
-
-        @Schema(description = "UUID da unidade de compra (opcional; exige fatorConversao)")
-        UUID unidadeCompraId,
-
-        @Schema(description = "Quantas unidades de venda cabem em 1 unidade de compra (exige unidadeCompraId)",
-                example = "12")
-        @DecimalMin(value = "0", inclusive = false, message = "Fator de conversão deve ser maior que zero.")
-        @Digits(integer = 8, fraction = 4, message = "Fator de conversão deve ter no máximo 4 casas decimais.")
-        BigDecimal fatorConversao,
 
         @Schema(example = "25.90")
         @NotNull(message = "Preço de venda é obrigatório.")

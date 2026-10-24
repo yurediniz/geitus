@@ -64,8 +64,8 @@ import com.geitus.app.shared.numeracao.TipoNumeracao;
  * usado para isolar consultas e alteracoes por tenant (DEC-016): um produto de
  * outra empresa nunca deve ser encontrado, atualizado, excluido ou vazado —
  * inclusive pelo nome, na mensagem de codigo de barras duplicado. O mesmo vale
- * para a unidade, a categoria e a unidade de compra informadas: sao buscadas
- * dentro da empresa e, se forem de outra, respondem 404.
+ * para a unidade e a categoria informadas: sao buscadas dentro da empresa e,
+ * se forem de outra, respondem 404.
  *
  * <p>A API publica do service e composta apenas pelos metodos {@code *ParaUsuario},
  * que recebem {@code idUsuario} (o id extraido do JWT) e resolvem a empresa
@@ -114,13 +114,7 @@ public class ProdutoService {
             "O ponto de reposição não pode ser menor que o estoque mínimo.";
     static final String MENSAGEM_MAXIMO_MENOR_QUE_PONTO =
             "O estoque máximo não pode ser menor que o ponto de reposição.";
-    static final String MENSAGEM_COMPRA_E_FATOR_JUNTOS = "Informe a unidade de compra e o fator de conversão juntos.";
-    static final String MENSAGEM_FATOR_DA_MESMA_UNIDADE =
-            "Quando a unidade de compra é a mesma de venda, o fator deve ser 1.";
-    static final String MENSAGEM_FATOR_NAO_POSITIVO = "O fator de conversão deve ser maior que zero.";
     static final String MENSAGEM_UNIDADE_INATIVA = "Esta unidade está inativa. Escolha uma unidade ativa.";
-    static final String MENSAGEM_UNIDADE_COMPRA_INATIVA =
-            "Esta unidade de compra está inativa. Escolha uma unidade ativa.";
     static final String MENSAGEM_CATEGORIA_INATIVA = "Esta categoria está inativa. Escolha uma categoria ativa.";
     static final String MENSAGEM_SKU_DUPLICADO = "Já existe um produto com este SKU nesta empresa.";
 
@@ -676,56 +670,30 @@ public class ProdutoService {
         return texto.toLowerCase(Locale.ROOT);
     }
 
-    // ---------- Unidade, categoria e conversao de compra ----------
+    // ---------- Unidade e categoria ----------
 
     /** Cadastros vinculados ao produto, ja resolvidos e validados dentro da empresa. */
-    private record Vinculos(UnidadeMedida unidade, Categoria categoria, UnidadeMedida unidadeCompra) {
+    private record Vinculos(UnidadeMedida unidade, Categoria categoria) {
     }
 
     /**
-     * Resolve unidade, categoria e unidade de compra pelo UUID dentro da
-     * empresa (404 se de outra empresa) e aplica as regras da spec 5.1.
-     * {@code produtoAtual} e {@code null} no cadastro; na edicao, permite
-     * manter uma unidade/categoria que foi inativada depois (Review Focus 4).
+     * Resolve unidade e categoria pelo UUID dentro da empresa (404 se de outra
+     * empresa) e aplica as regras da spec 5.1. {@code produtoAtual} e
+     * {@code null} no cadastro; na edicao, permite manter uma
+     * unidade/categoria que foi inativada depois (Review Focus 4).
      */
     private Vinculos resolverVinculos(Long empresaId, ProdutoRequest request, Produto produtoAtual) {
-        validarConversaoDeCompra(request);
+        if (request.unidadeId() == null) {
+            // Defesa alem do Bean Validation, para chamadas sem @Valid.
+            throw new RegraDeNegocioException(MENSAGEM_UNIDADE_OBRIGATORIA);
+        }
         UnidadeMedida unidade = unidadeService.buscarDaEmpresa(empresaId, request.unidadeId());
         exigirUnidadeAtivaOuAtual(unidade, produtoAtual == null ? null : produtoAtual.getUnidade(),
                 MENSAGEM_UNIDADE_INATIVA);
-        UnidadeMedida unidadeCompra = buscarUnidadeOpcional(empresaId, request.unidadeCompraId());
-        exigirUnidadeAtivaOuAtual(unidadeCompra, produtoAtual == null ? null : produtoAtual.getUnidadeCompra(),
-                MENSAGEM_UNIDADE_COMPRA_INATIVA);
         Categoria categoria = buscarCategoriaOpcional(empresaId, request.categoriaId());
         exigirCategoriaSelecionavelOuAtual(empresaId, categoria,
                 produtoAtual == null ? null : produtoAtual.getCategoria());
-        return new Vinculos(unidade, categoria, unidadeCompra);
-    }
-
-    /**
-     * Regras que so dependem do request (antes de qualquer consulta): unidade
-     * obrigatoria; unidade de compra e fator juntos; fator maior que zero
-     * (defesa alem do Bean Validation, para chamadas sem {@code @Valid});
-     * mesma unidade so com fator 1.
-     */
-    private static void validarConversaoDeCompra(ProdutoRequest request) {
-        if (request.unidadeId() == null) {
-            throw new RegraDeNegocioException(MENSAGEM_UNIDADE_OBRIGATORIA);
-        }
-        if ((request.unidadeCompraId() == null) != (request.fatorConversao() == null)) {
-            throw new RegraDeNegocioException(MENSAGEM_COMPRA_E_FATOR_JUNTOS);
-        }
-        if (request.fatorConversao() != null && request.fatorConversao().signum() <= 0) {
-            throw new RegraDeNegocioException(MENSAGEM_FATOR_NAO_POSITIVO);
-        }
-        if (request.unidadeId().equals(request.unidadeCompraId())
-                && request.fatorConversao().compareTo(BigDecimal.ONE) != 0) {
-            throw new RegraDeNegocioException(MENSAGEM_FATOR_DA_MESMA_UNIDADE);
-        }
-    }
-
-    private UnidadeMedida buscarUnidadeOpcional(Long empresaId, UUID unidadeId) {
-        return unidadeId == null ? null : unidadeService.buscarDaEmpresa(empresaId, unidadeId);
+        return new Vinculos(unidade, categoria);
     }
 
     private Categoria buscarCategoriaOpcional(Long empresaId, UUID categoriaId) {
@@ -733,8 +701,7 @@ public class ProdutoService {
     }
 
     /**
-     * Unidade inativa so e aceita se ja for a do produto (edicao sem trocar);
-     * {@code mensagemSeInativa} diferencia unidade de venda e de compra.
+     * Unidade inativa so e aceita se ja for a do produto (edicao sem trocar).
      */
     private static void exigirUnidadeAtivaOuAtual(UnidadeMedida escolhida, UnidadeMedida atual,
             String mensagemSeInativa) {
@@ -900,7 +867,7 @@ public class ProdutoService {
         return new DadosProduto(request.nome().trim(), normalizarOuNulo(request.nomeCurto()),
                 normalizarOuNulo(request.marca()), normalizarOuNulo(request.fornecedor()),
                 normalizarOuNulo(request.descricao()), vinculos.unidade(), vinculos.categoria(),
-                vinculos.unidadeCompra(), request.fatorConversao(), request.precoVenda(), request.custo(),
+                request.precoVenda(), request.custo(),
                 request.precoMinimo(), request.estoqueMinimo(), request.estoqueMaximo(), request.pontoReposicao(),
                 sku,
                 promocao.map(PromocaoRequest::preco).orElse(null),

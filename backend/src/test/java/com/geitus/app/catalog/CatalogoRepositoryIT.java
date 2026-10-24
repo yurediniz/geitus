@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -103,24 +104,34 @@ class CatalogoRepositoryIT {
         return categoriaRepository.saveAndFlush(new Categoria(empresa, pai, nome));
     }
 
-    private void novoProduto(Empresa empresa, UnidadeMedida unidade, UnidadeMedida unidadeCompra,
-            Categoria categoria) {
+    /**
+     * Produto com a unidade de venda, a categoria e uma embalagem de cada
+     * unidade em {@code unidadesDasEmbalagens} (quantidades 12, 24...).
+     */
+    private void novoProduto(Empresa empresa, UnidadeMedida unidade, Categoria categoria,
+            UnidadeMedida... unidadesDasEmbalagens) {
         // JdbcTemplate (mesma transacao do teste): binda nulos sem o problema de
         // inferencia de tipo dos parametros nulos em query nativa do Hibernate.
         // As colunas da busca (V10) sao NOT NULL e mantidas pela aplicacao; o
         // numero (V11) e o proximo livre da empresa.
-        jdbcTemplate.update("""
-                INSERT INTO produtos (empresa_id, numero, nome, preco_venda, unidade_id, unidade_compra_id,
-                                      fator_conversao, categoria_id, nome_normalizado, busca_normalizada)
+        Long produtoId = jdbcTemplate.queryForObject("""
+                INSERT INTO produtos (empresa_id, numero, nome, preco_venda, unidade_id, categoria_id,
+                                      nome_normalizado, busca_normalizada)
                 VALUES (?, (SELECT coalesce(max(numero), 0) + 1 FROM produtos WHERE empresa_id = ?), 'Produto',
-                        10.00, ?, ?, ?, ?, 'produto', 'produto')
-                """,
+                        10.00, ?, ?, 'produto', 'produto')
+                RETURNING id
+                """, Long.class,
                 empresa.getId(),
                 empresa.getId(),
                 unidade.getId(),
-                unidadeCompra == null ? null : unidadeCompra.getId(),
-                unidadeCompra == null ? null : new BigDecimal("12"),
                 categoria == null ? null : categoria.getId());
+        for (int ordem = 0; ordem < unidadesDasEmbalagens.length; ordem++) {
+            jdbcTemplate.update("""
+                    INSERT INTO produto_embalagens (uuid, empresa_id, produto_id, unidade_id, quantidade, ordem)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """, UUID.randomUUID(), empresa.getId(), produtoId, unidadesDasEmbalagens[ordem].getId(),
+                    new BigDecimal(12 * (ordem + 1)), ordem);
+        }
     }
 
     private static Map<Long, Long> comoMapa(List<Object[]> linhas) {
@@ -134,20 +145,21 @@ class CatalogoRepositoryIT {
     // ---------- Unidades: contagem de uso (Review Focus 5) ----------
 
     @Test
-    void contarProdutosQueUsamContaVendaECompra() {
+    void contarProdutosQueUsamContaVendaEEmbalagem() {
         Empresa empresa = novaEmpresa("Empresa Uso");
         UnidadeMedida un = novaUnidade(empresa, "UN");
         UnidadeMedida cx = novaUnidade(empresa, "CX");
         UnidadeMedida fd = novaUnidade(empresa, "FD");
         UnidadeMedida semUso = novaUnidade(empresa, "PCT");
-        novoProduto(empresa, un, null, null);
-        novoProduto(empresa, un, cx, null);
-        novoProduto(empresa, cx, null, null);
-        novoProduto(empresa, un, fd, null);
+        novoProduto(empresa, un, null);
+        novoProduto(empresa, un, null, cx);
+        novoProduto(empresa, cx, null);
+        // Duas embalagens com a mesma unidade: o produto conta uma vez.
+        novoProduto(empresa, un, null, fd, fd);
 
         assertThat(unidadeRepository.contarProdutosQueUsam(un.getId())).isEqualTo(3);
         assertThat(unidadeRepository.contarProdutosQueUsam(cx.getId())).isEqualTo(2);
-        // Usada SO como unidade de compra: ainda conta (bloqueia a exclusao).
+        // Usada SO em embalagem: ainda conta (bloqueia a exclusao).
         assertThat(unidadeRepository.contarProdutosQueUsam(fd.getId())).isEqualTo(1);
         assertThat(unidadeRepository.contarProdutosQueUsam(semUso.getId())).isZero();
     }
@@ -159,11 +171,11 @@ class CatalogoRepositoryIT {
         UnidadeMedida un = novaUnidade(empresa, "UN");
         UnidadeMedida cx = novaUnidade(empresa, "CX");
         UnidadeMedida unDaOutra = novaUnidade(outra, "UN");
-        novoProduto(empresa, un, null, null);
-        // Mesma unidade como venda e compra: o produto conta uma vez so.
-        novoProduto(empresa, cx, cx, null);
-        novoProduto(empresa, un, cx, null);
-        novoProduto(outra, unDaOutra, null, null);
+        novoProduto(empresa, un, null);
+        // Varias embalagens com a mesma unidade: o produto conta uma vez so.
+        novoProduto(empresa, un, null, cx, cx);
+        novoProduto(empresa, cx, null);
+        novoProduto(outra, unDaOutra, null);
 
         Map<Long, Long> uso = comoMapa(unidadeRepository.contarUsoPorUnidade(empresa.getId()));
 
@@ -184,11 +196,11 @@ class CatalogoRepositoryIT {
         Categoria umida = novaCategoria(empresa, racao, "Úmida");
         Categoria vazia = novaCategoria(empresa, null, "Vazia");
         Categoria daOutra = novaCategoria(outra, null, "Ração");
-        novoProduto(empresa, un, null, racao);
-        novoProduto(empresa, un, null, racao);
-        novoProduto(empresa, un, null, umida);
-        novoProduto(empresa, un, null, null);
-        novoProduto(outra, unDaOutra, null, daOutra);
+        novoProduto(empresa, un, racao);
+        novoProduto(empresa, un, racao);
+        novoProduto(empresa, un, umida);
+        novoProduto(empresa, un, null);
+        novoProduto(outra, unDaOutra, daOutra);
 
         Map<Long, Long> porCategoria = comoMapa(categoriaRepository.contarProdutosPorCategoria(empresa.getId()));
 

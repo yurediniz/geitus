@@ -148,7 +148,6 @@ class CatalogoServiceIT {
                 ProdutoRequestBuilder.comUnidade(siglaParaUuid(unidades, "KG"))
                         .nome("Sachê de frango")
                         .categoriaId(sache)
-                        .compra(siglaParaUuid(unidades, "CX"), "12")
                         .build());
 
         List<ProdutoResponse> listados = produtoService.listarParaUsuario(idUsuario,
@@ -160,9 +159,7 @@ class CatalogoServiceIT {
     private static void vinculosDoSacheResolvidos(ProdutoResponse produto) {
         assertThat(produto.nome()).isEqualTo("Sachê de frango");
         assertThat(produto.unidade().sigla()).isEqualTo("KG");
-        assertThat(produto.unidadeCompra().sigla()).isEqualTo("CX");
         assertThat(produto.categoria().caminho()).isEqualTo("Ração › Úmida › Sachê");
-        assertThat(produto.conversaoTexto()).isEqualTo("1 CX = 12 KG");
     }
 
     // ---------- Edicao com vinculos inativados depois do cadastro ----------
@@ -185,8 +182,7 @@ class CatalogoServiceIT {
         UUID racao = cadastrarCategoria(idUsuario, "Ração", null);
         UUID umida = cadastrarCategoria(idUsuario, "Úmida", racao);
         ProdutoResponse cadastrado = produtoService.cadastrarParaUsuario(idUsuario,
-                ProdutoRequestBuilder.comUnidade(kg).nome("Patê de carne").categoriaId(umida).compra(cx, "12")
-                        .build());
+                ProdutoRequestBuilder.comUnidade(kg).nome("Patê de carne").categoriaId(umida).build());
 
         unidadeService.inativarParaUsuario(idUsuario, kg);
         unidadeService.inativarParaUsuario(idUsuario, cx);
@@ -194,17 +190,14 @@ class CatalogoServiceIT {
         categoriaService.inativarParaUsuario(idUsuario, racao);
 
         ProdutoResponse editado = produtoService.atualizarDadosBasicosParaUsuario(idUsuario, cadastrado.id(),
-                ProdutoRequestBuilder.comUnidade(kg).nome("Patê de carne 400g").categoriaId(umida)
-                        .compra(cx, "12").build());
+                ProdutoRequestBuilder.comUnidade(kg).nome("Patê de carne 400g").categoriaId(umida).build());
 
         assertThat(editado.nome()).isEqualTo("Patê de carne 400g");
         assertThat(editado.unidade().sigla()).isEqualTo("KG");
-        assertThat(editado.unidadeCompra().sigla()).isEqualTo("CX");
         assertThat(editado.categoria().caminho()).isEqualTo("Ração › Úmida");
 
         assertThatThrownBy(() -> produtoService.atualizarDadosBasicosParaUsuario(idUsuario, cadastrado.id(),
-                ProdutoRequestBuilder.comUnidade(g).nome("Patê de carne 400g").categoriaId(umida)
-                        .compra(cx, "12").build()))
+                ProdutoRequestBuilder.comUnidade(g).nome("Patê de carne 400g").categoriaId(umida).build()))
                 .isInstanceOf(RegraDeNegocioException.class)
                 .hasMessage("Esta unidade está inativa. Escolha uma unidade ativa.");
         assertThat(produtoService.buscarPorIdParaUsuario(idUsuario, cadastrado.id()).unidade().sigla())
@@ -445,6 +438,57 @@ class CatalogoServiceIT {
                 cadastrado.id())).isZero();
         assertThatThrownBy(() -> produtoService.buscarPorIdParaUsuario(idUsuario, cadastrado.id()))
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
+    }
+
+    /** Fase B3: a embalagem e os codigos dela saem junto com o produto (cascade), sem erro de FK. */
+    @Test
+    void excluirProdutoComEmbalagemApagaAEmbalagemEOsCodigos() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        ProdutoResponse cadastrado = produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("Nexgard").codigosBarras("96385074").build());
+        Long idInterno = idInternoDoProduto(cadastrado.id());
+        Long caixa = inserirEmbalagem(empresa, idInterno, "CX");
+        jdbcTemplate.update("""
+                INSERT INTO produto_codigos_barras (empresa_id, produto_id, embalagem_id, codigo, formato, ordem)
+                VALUES (?, ?, ?, '7891000315507', 'EAN13', 0)
+                """, empresa.getId(), idInterno, caixa);
+
+        produtoService.excluirParaUsuario(idUsuario, cadastrado.id());
+
+        assertThat(codigosDoProduto(idInterno)).isZero();
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM produto_embalagens WHERE produto_id = ?",
+                Long.class, idInterno)).isZero();
+    }
+
+    /** Fase B3 (spec 4): a unidade usada so numa embalagem conta 1 produto e nao pode ser excluida. */
+    @Test
+    void unidadeUsadaSoEmEmbalagemNaoPodeSerExcluida() {
+        Empresa empresa = novaEmpresa();
+        Long idUsuario = novoAdmin(empresa);
+        UUID un = unidadePadrao(empresa, idUsuario, "UN");
+        ProdutoResponse cadastrado = produtoService.cadastrarParaUsuario(idUsuario,
+                ProdutoRequestBuilder.comUnidade(un).nome("Sachê").build());
+        inserirEmbalagem(empresa, idInternoDoProduto(cadastrado.id()), "CX");
+        UUID cx = unidadePadrao(empresa, idUsuario, "CX");
+
+        assertThat(unidadeService.listarParaUsuario(idUsuario, null).stream()
+                .filter(unidade -> unidade.id().equals(cx))
+                .findFirst().orElseThrow().emUso()).isEqualTo(1);
+        assertThatThrownBy(() -> unidadeService.excluirParaUsuario(idUsuario, cx))
+                .isInstanceOf(CatalogoConflitoException.class)
+                .hasMessage("Esta unidade está em uso por 1 produto(s). Inative-a para que não apareça em novos "
+                        + "cadastros.");
+    }
+
+    /** Embalagem c/ 12 da unidade padrao com a sigla, gravada direto no banco (a API vem na Task 3). */
+    private Long inserirEmbalagem(Empresa empresa, Long produtoId, String sigla) {
+        return jdbcTemplate.queryForObject("""
+                INSERT INTO produto_embalagens (uuid, empresa_id, produto_id, unidade_id, quantidade, ordem)
+                VALUES (?, ?, ?, (SELECT id FROM unidades_medida WHERE empresa_id = ? AND sigla = ?), 12, 0)
+                RETURNING id
+                """, Long.class, UUID.randomUUID(), empresa.getId(), produtoId, empresa.getId(), sigla);
     }
 
     @Test

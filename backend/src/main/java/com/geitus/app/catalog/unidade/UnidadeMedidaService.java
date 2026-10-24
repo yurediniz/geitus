@@ -115,7 +115,7 @@ public class UnidadeMedidaService {
 
     /**
      * Exclui fisicamente a unidade, desde que nenhum produto a use como
-     * unidade de venda ou de compra; senao 409 com a contagem.
+     * unidade de venda ou numa embalagem; senao 409 com a contagem.
      */
     @Transactional
     public void excluirParaUsuario(Long idUsuario, UUID id) {
@@ -150,7 +150,7 @@ public class UnidadeMedidaService {
         }
     }
 
-    /** Quantidade de produtos que usam a unidade (venda ou compra). */
+    /** Quantidade de produtos que usam a unidade (venda ou embalagem). */
     @Transactional(readOnly = true)
     public long contarUso(UnidadeMedida unidade) {
         return unidadeRepository.contarProdutosQueUsam(unidade.getId());

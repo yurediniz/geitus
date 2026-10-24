@@ -273,8 +273,6 @@ class ProdutoServiceTest {
         assertThat(produto.getUuid()).isNotNull();
         assertThat(produto.getUnidade()).isSameAs(un);
         assertThat(produto.getCategoria()).isNull();
-        assertThat(produto.getUnidadeCompra()).isNull();
-        assertThat(produto.getFatorConversao()).isNull();
         assertThat(produto.isAtivo()).isTrue();
         assertThat(codigosDe(produto)).containsExactly(EAN13_VALIDO);
         assertThat(formatosDe(produto)).containsExactly(FormatoCodigoBarras.EAN13);
@@ -1288,86 +1286,6 @@ class ProdutoServiceTest {
     }
 
     @Test
-    void unidadeCompraDeOutraEmpresaLanca404() {
-        unidadeDaEmpresa(un);
-        UUID compraDeOutraEmpresa = UUID.randomUUID();
-        when(unidadeService.buscarDaEmpresa(EMPRESA_ID, compraDeOutraEmpresa))
-                .thenThrow(new CatalogoNaoEncontradoException("Unidade de medida não encontrada."));
-
-        assertThatThrownBy(() -> cadastrar(requestComUN().compra(compraDeOutraEmpresa, "12").build()))
-                .isInstanceOf(CatalogoNaoEncontradoException.class);
-
-        verify(produtoRepository, never()).save(any());
-    }
-
-    @Test
-    void unidadeCompraSemFatorLanca400() {
-        assertThatThrownBy(() -> cadastrar(requestComUN().compra(UUID.randomUUID(), null).build()))
-                .isInstanceOf(RegraDeNegocioException.class)
-                .hasMessage("Informe a unidade de compra e o fator de conversão juntos.");
-
-        verify(produtoRepository, never()).save(any());
-    }
-
-    @Test
-    void fatorSemUnidadeCompraLanca400() {
-        assertThatThrownBy(() -> cadastrar(requestComUN().compra(null, "12").build()))
-                .isInstanceOf(RegraDeNegocioException.class)
-                .hasMessage("Informe a unidade de compra e o fator de conversão juntos.");
-
-        verify(produtoRepository, never()).save(any());
-    }
-
-    @Test
-    void fatorZeroOuNegativoLanca400MesmoSemBeanValidation() {
-        UUID caixa = UUID.randomUUID();
-
-        assertThatThrownBy(() -> cadastrar(requestComUN().compra(caixa, "0").build()))
-                .isInstanceOf(RegraDeNegocioException.class)
-                .hasMessage("O fator de conversão deve ser maior que zero.");
-        assertThatThrownBy(() -> cadastrar(requestComUN().compra(caixa, "-2.5").build()))
-                .isInstanceOf(RegraDeNegocioException.class)
-                .hasMessage("O fator de conversão deve ser maior que zero.");
-        // Mesma unidade com fator 0: o fator invalido e apontado primeiro.
-        assertThatThrownBy(() -> cadastrar(requestComUN().compra(un.getUuid(), "0").build()))
-                .isInstanceOf(RegraDeNegocioException.class)
-                .hasMessage("O fator de conversão deve ser maior que zero.");
-
-        verify(produtoRepository, never()).save(any());
-    }
-
-    @Test
-    void mesmaUnidadeComFatorDiferenteDeUmLanca400() {
-        assertThatThrownBy(() -> cadastrar(requestComUN().compra(un.getUuid(), "12").build()))
-                .isInstanceOf(RegraDeNegocioException.class)
-                .hasMessage("Quando a unidade de compra é a mesma de venda, o fator deve ser 1.");
-
-        verify(produtoRepository, never()).save(any());
-    }
-
-    @Test
-    void mesmaUnidadeComFatorUmEPermitido() {
-        cadastroPermitido();
-
-        Produto produto = cadastrar(requestComUN().compra(un.getUuid(), "1.0000").build());
-
-        assertThat(produto.getUnidadeCompra()).isSameAs(un);
-        assertThat(produto.getFatorConversao()).isEqualByComparingTo("1");
-    }
-
-    @Test
-    void unidadeCompraEFatorSaoGravados() {
-        UnidadeMedida cx = unidade(12L, empresa, "CX");
-        unidadeDaEmpresa(cx);
-        cadastroPermitido();
-
-        Produto produto = cadastrar(requestComUN().compra(cx.getUuid(), "12").build());
-
-        assertThat(produto.getUnidadeCompra()).isSameAs(cx);
-        assertThat(produto.getFatorConversao()).isEqualByComparingTo("12");
-    }
-
-    @Test
     void unidadeInativaSoSeJaForAAtual() {
         // Review Focus 4 (Fase A). Cadastrar com unidade inativa -> 400.
         UnidadeMedida inativa = unidade(13L, empresa, "PCT");
@@ -1391,24 +1309,6 @@ class ProdutoServiceTest {
         assertThatThrownBy(() -> atualizar(comUnidade(outraInativa.getUuid()).build()))
                 .isInstanceOf(RegraDeNegocioException.class)
                 .hasMessage("Esta unidade está inativa. Escolha uma unidade ativa.");
-    }
-
-    @Test
-    void unidadeCompraInativaSoSeJaForAAtual() {
-        UnidadeMedida caixaInativa = unidade(15L, empresa, "CX");
-        caixaInativa.inativar();
-        unidadeDaEmpresa(un);
-        unidadeDaEmpresa(caixaInativa);
-
-        assertThatThrownBy(() -> cadastrar(requestComUN().compra(caixaInativa.getUuid(), "12").build()))
-                .isInstanceOf(RegraDeNegocioException.class)
-                .hasMessage("Esta unidade de compra está inativa. Escolha uma unidade ativa.");
-
-        produtoExistente(existente().compra(caixaInativa, "12"));
-        salvamentoDevolveOProduto();
-        Produto atualizado = atualizar(requestComUN().compra(caixaInativa.getUuid(), "6").build());
-        assertThat(atualizado.getUnidadeCompra()).isSameAs(caixaInativa);
-        assertThat(atualizado.getFatorConversao()).isEqualByComparingTo("6");
     }
 
     @Test

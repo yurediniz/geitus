@@ -13,7 +13,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  *
  * <p>O {@code id} e o UUID publico; a PK numerica e o {@code empresaId} nunca
  * saem na API. {@code emUso} e a quantidade de produtos que usam a unidade
- * (venda ou compra).
+ * (venda ou embalagem).
  */
 @Schema(description = "Dados publicos de uma unidade de medida")
 public record UnidadeMedidaResponse(
@@ -23,7 +23,7 @@ public record UnidadeMedidaResponse(
         String descricao,
         boolean fracionada,
         boolean ativo,
-        @Schema(description = "Quantidade de produtos que usam a unidade (venda ou compra)")
+        @Schema(description = "Quantidade de produtos que usam a unidade (venda ou embalagem)")
         long emUso,
         LocalDateTime criadoEm,
         LocalDateTime atualizadoEm) {

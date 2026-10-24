@@ -24,6 +24,9 @@ import com.geitus.app.catalog.unidade.UnidadeMedida;
  * <p>Fase D: {@code controlaEstoque} liga ou desliga o controle de estoque do
  * produto (o saldo em si nunca e um dado do cadastro).
  *
+ * <p>Fase B3: a unidade de compra e o fator sairam; viraram a embalagem de
+ * compra ({@link ProdutoEmbalagem}), que nao faz parte destes dados.
+ *
  * <p>Fase B2: {@code codigo} (1 a 999999, ou {@code null}) e
  * {@code vendidoBalanca} (que exige o codigo). O numero de registro nao esta
  * aqui: e dado na criacao e nunca muda.
@@ -36,8 +39,6 @@ public record DadosProduto(
         String descricao,
         UnidadeMedida unidade,
         Categoria categoria,
-        UnidadeMedida unidadeCompra,
-        BigDecimal fatorConversao,
         BigDecimal precoVenda,
         BigDecimal custo,
         BigDecimal precoMinimo,

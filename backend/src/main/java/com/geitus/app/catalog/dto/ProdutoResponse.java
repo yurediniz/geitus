@@ -11,7 +11,6 @@ import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ResumoDeEstoque;
 import com.geitus.app.catalog.SituacaoEstoque;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
-import com.geitus.app.catalog.unidade.UnidadeMedida;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -26,7 +25,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * ha necessidade de expor esse dado na resposta. A entidade JPA nunca deve ser
  * exposta diretamente na API (ver CLAUDE.md).
  *
- * <p>Unidade de venda, categoria e unidade de compra saem como resumos com o
+ * <p>Unidade de venda e categoria saem como resumos com o
  * UUID publico ({@link UnidadeResumo}, {@link CategoriaResumo}); o caminho da
  * categoria vem da {@link CategoriaArvore} da empresa, montada uma vez por
  * requisicao pelo service (nao uma vez por produto).
@@ -34,9 +33,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * <p>{@code margem} e {@code markup} sao derivados (nao tem coluna): calculados
  * a partir de {@code precoVenda} e {@code custo}, alinhados ao principio
  * "calcular automaticamente" do CLAUDE.md. Ambos ficam {@code null} quando o
- * custo (ou o preco, para a margem) nao permite o calculo. {@code conversaoTexto}
- * tambem e derivado: {@code "1 CX = 12 UN"} (fator sem zeros a direita, virgula
- * decimal pt-BR), ou {@code null} sem unidade de compra.
+ * custo (ou o preco, para a margem) nao permite o calculo.
  *
  * <p>Fase C: {@code promocao} (com a situacao calculada para {@code hoje}) e
  * {@code atacado} saem {@code null} quando nao existem; {@code emPromocao} e
@@ -69,13 +66,6 @@ public record ProdutoResponse(
         String fornecedor,
         @Schema(description = "Unidade de venda")
         UnidadeResumo unidade,
-        @Schema(description = "Unidade de compra; null se nao houver")
-        UnidadeResumo unidadeCompra,
-        @Schema(description = "Unidades de venda em 1 unidade de compra; null se nao houver unidade de compra")
-        BigDecimal fatorConversao,
-        @Schema(description = "Conversao de compra legivel; null se nao houver unidade de compra",
-                example = "1 CX = 12 UN")
-        String conversaoTexto,
         String descricao,
         BigDecimal precoVenda,
         BigDecimal custo,
@@ -137,9 +127,6 @@ public record ProdutoResponse(
                 produto.getMarca(),
                 produto.getFornecedor(),
                 UnidadeResumo.deOuNulo(produto.getUnidade()),
-                UnidadeResumo.deOuNulo(produto.getUnidadeCompra()),
-                produto.getFatorConversao(),
-                conversaoTexto(produto.getUnidade(), produto.getUnidadeCompra(), produto.getFatorConversao()),
                 produto.getDescricao(),
                 preco,
                 custo,
@@ -164,21 +151,5 @@ public record ProdutoResponse(
                 MargemEMarkup.markup(preco, custo),
                 produto.getCriadoEm(),
                 produto.getAtualizadoEm());
-    }
-
-    /**
-     * Texto da conversao de compra, ex.: {@code "1 CX = 12 UN"} ou
-     * {@code "1 FD = 1,5 KG"}. {@code null} sem unidade de compra.
-     */
-    private static String conversaoTexto(UnidadeMedida unidade, UnidadeMedida unidadeCompra, BigDecimal fator) {
-        if (unidadeCompra == null || fator == null) {
-            return null;
-        }
-        return "1 " + unidadeCompra.getSigla() + " = " + formatarFator(fator) + " " + unidade.getSigla();
-    }
-
-    /** Fator sem zeros a direita e com virgula decimal (pt-BR): 12.0000 → "12", 1.5000 → "1,5". */
-    private static String formatarFator(BigDecimal fator) {
-        return fator.stripTrailingZeros().toPlainString().replace('.', ',');
     }
 }

@@ -34,7 +34,7 @@ final class ProdutosDeTeste {
 
     /** Produto minimo (nome, preco e unidade) com o id interno e o controle de estoque informados. */
     static Produto produto(Empresa empresa, UnidadeMedida unidade, Long id, boolean controlaEstoque) {
-        DadosProduto dados = new DadosProduto("Arroz", null, null, null, null, unidade, null, null, null,
+        DadosProduto dados = new DadosProduto("Arroz", null, null, null, null, unidade, null,
                 new BigDecimal("10.00"), null, null, null, null, null, null, null, null, null, null, null,
                 controlaEstoque, null, false);
         // O numero de registro (V11) acompanha o id: unico entre os produtos do teste.

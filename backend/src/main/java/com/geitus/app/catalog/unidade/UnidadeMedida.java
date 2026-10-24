@@ -20,7 +20,7 @@ import jakarta.persistence.Table;
 
 /**
  * Unidade de medida de uma empresa (ex.: UN, KG, CX), usada como unidade de
- * venda e, opcionalmente, de compra do produto
+ * venda e nas embalagens do produto
  * (docs/modules/categorias-e-unidades.md, secao 3).
  *
  * <p>Pertence a uma empresa (DEC-016); empresa e {@code uuid} sao imutaveis. O

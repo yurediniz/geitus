@@ -45,10 +45,6 @@ class ProdutoResponseTest {
                 .custo(custo == null ? null : custo.toPlainString()).build();
     }
 
-    private Produto produtoComCompra(UnidadeMedida venda, UnidadeMedida compra, String fator) {
-        return ProdutoTesteBuilder.produto(empresa, venda).compra(compra, fator).build();
-    }
-
     private static ProdutoResponse responder(Produto produto) {
         return ProdutoResponse.de(produto, SEM_CATEGORIAS, true, HOJE, ResumoDeEstoque.VAZIO);
     }
@@ -122,38 +118,6 @@ class ProdutoResponseTest {
         assertThat(response.unidade().descricao()).isEqualTo("Unidade");
         assertThat(response.unidade().fracionada()).isFalse();
         assertThat(response.categoria()).isNull();
-    }
-
-    @Test
-    void conversaoTexto() {
-        ProdutoResponse caixa = responder(produtoComCompra(un, cx, "12"));
-        ProdutoResponse fardo = responder(produtoComCompra(kg, fd, "1.5000"));
-        ProdutoResponse semCompra = responder(produto(new BigDecimal("10.00"), null));
-
-        assertThat(caixa.conversaoTexto()).isEqualTo("1 CX = 12 UN");
-        assertThat(caixa.unidadeCompra().sigla()).isEqualTo("CX");
-        assertThat(caixa.fatorConversao()).isEqualByComparingTo("12");
-        assertThat(fardo.conversaoTexto()).isEqualTo("1 FD = 1,5 KG");
-        assertThat(semCompra.conversaoTexto()).isNull();
-        assertThat(semCompra.unidadeCompra()).isNull();
-        assertThat(semCompra.fatorConversao()).isNull();
-    }
-
-    @Test
-    void conversaoTextoComFatorInteiroDeEscalaQuatroNaoUsaNotacaoCientifica() {
-        // 100.0000.stripTrailingZeros() vira 1E+2: o texto deve ser "100".
-        ProdutoResponse response = responder(produtoComCompra(un, cx, "100.0000"));
-
-        assertThat(response.conversaoTexto()).isEqualTo("1 CX = 100 UN");
-    }
-
-    @Test
-    void conversaoTextoComFatorDeMilOuMaisNaoUsaSeparadorDeMilhar() {
-        ProdutoResponse fracionado = responder(produtoComCompra(un, cx, "1500.5000"));
-        ProdutoResponse mil = responder(produtoComCompra(un, cx, "1000.0000"));
-
-        assertThat(fracionado.conversaoTexto()).isEqualTo("1 CX = 1500,5 UN");
-        assertThat(mil.conversaoTexto()).isEqualTo("1 CX = 1000 UN");
     }
 
     @Test

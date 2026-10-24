@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.hibernate.annotations.SQLRestriction;
+
 import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.company.Empresa;
@@ -39,8 +41,7 @@ import jakarta.persistence.Table;
  * setters individuais), garantindo que as alteracoes passem pelas regras do
  * {@code ProdutoService}.
  *
- * <p>Unidade de venda (obrigatoria), categoria e unidade de compra sao
- * cadastros da mesma empresa (docs/modules/categorias-e-unidades.md, secao 5);
+ * <p>Unidade de venda (obrigatoria) e categoria sao cadastros da mesma empresa (docs/modules/categorias-e-unidades.md, secao 5);
  * o service valida a empresa e a V6 garante no banco com FKs compostas
  * {@code (empresa_id, id)}.
  *
@@ -62,6 +63,12 @@ import jakarta.persistence.Table;
  * na criacao e imutavel ({@code updatable = false}; nao e a PK). O
  * {@code codigo} (1 a 999999, opcional) e o "vendido na balanca" sao dados do
  * cadastro.
+ *
+ * <p>Fase B3 (V12, docs/modules/produtos-embalagens.md): o produto tem de 0 a
+ * 10 {@link ProdutoEmbalagem} (cascade e orphanRemoval), que substituem a
+ * antiga unidade de compra + fator. A colecao {@code codigosBarras} so traz os
+ * codigos da unidade de venda ({@code embalagem_id IS NULL}); os das
+ * embalagens ficam em cada embalagem.
  *
  * <p>Nao deve ser exposta diretamente na API: o {@code ProdutoController} usa
  * DTOs ({@code ProdutoRequest}/{@code ProdutoResponse}).
@@ -101,13 +108,6 @@ public class Produto {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "categoria_id")
     private Categoria categoria;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "unidade_compra_id")
-    private UnidadeMedida unidadeCompra;
-
-    @Column(name = "fator_conversao", precision = 12, scale = 4)
-    private BigDecimal fatorConversao;
 
     @Column(length = 100)
     private String marca;
@@ -168,9 +168,16 @@ public class Produto {
     @Column(name = "controla_estoque", nullable = false)
     private boolean controlaEstoque = true;
 
+    /** So os codigos da unidade de venda: os das embalagens tambem tem {@code produto_id}, mas outro dono. */
     @OneToMany(mappedBy = "produto", cascade = CascadeType.ALL, orphanRemoval = true)
+    @SQLRestriction("embalagem_id IS NULL")
     @OrderBy("ordem")
     private List<ProdutoCodigoBarras> codigosBarras = new ArrayList<>();
+
+    /** Fase B3 (V12): embalagens na ordem da lista enviada. */
+    @OneToMany(mappedBy = "produto", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("ordem")
+    private List<ProdutoEmbalagem> embalagens = new ArrayList<>();
 
     /**
      * Fase E (V10): nome, nome curto, SKU e marca normalizados por
@@ -226,7 +233,7 @@ public class Produto {
     /**
      * Atualiza os dados do cadastro. Chamado pelo service apos as validacoes de
      * regra de negocio (nome, preco, unicidade de SKU, unidade/categoria da
-     * empresa, coerencia da conversao de compra, promocao e atacado) ja terem
+     * empresa, promocao e atacado) ja terem
      * sido feitas. Promocao ou atacado ausente grava nulo nos campos do bloco.
      */
     public void atualizarDadosBasicos(DadosProduto dados) {
@@ -237,8 +244,6 @@ public class Produto {
         this.descricao = dados.descricao();
         this.unidade = dados.unidade();
         this.categoria = dados.categoria();
-        this.unidadeCompra = dados.unidadeCompra();
-        this.fatorConversao = dados.fatorConversao();
         this.precoVenda = dados.precoVenda();
         this.custo = dados.custo();
         this.precoMinimo = dados.precoMinimo();
@@ -380,16 +385,6 @@ public class Produto {
         return categoria;
     }
 
-    /** Unidade de compra, ou {@code null}; quando presente, {@link #getFatorConversao()} tambem esta. */
-    public UnidadeMedida getUnidadeCompra() {
-        return unidadeCompra;
-    }
-
-    /** Unidades de venda contidas em 1 unidade de compra, ou {@code null}. */
-    public BigDecimal getFatorConversao() {
-        return fatorConversao;
-    }
-
     public String getMarca() {
         return marca;
     }
@@ -430,6 +425,18 @@ public class Produto {
     /** Codigos de barras na ordem (somente leitura; alterar via {@link #substituirCodigos}). */
     public List<ProdutoCodigoBarras> getCodigosBarras() {
         return Collections.unmodifiableList(codigosBarras);
+    }
+
+    /** Embalagens na ordem (somente leitura; alteradas pelo {@code EmbalagensDoProduto}). */
+    public List<ProdutoEmbalagem> getEmbalagens() {
+        return Collections.unmodifiableList(embalagens);
+    }
+
+    /** Embalagem deste produto com o UUID publico, se houver. */
+    public Optional<ProdutoEmbalagem> embalagem(UUID embalagemId) {
+        return embalagens.stream()
+                .filter(embalagem -> embalagem.getUuid().equals(embalagemId))
+                .findFirst();
     }
 
     public String getSku() {

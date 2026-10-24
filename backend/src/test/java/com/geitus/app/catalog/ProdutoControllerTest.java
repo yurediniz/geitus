@@ -617,23 +617,6 @@ class ProdutoControllerTest {
     }
 
     @Test
-    void cadastrarComFatorZeroOuComCasasDemaisDeveRetornar400() throws Exception {
-        String token = tokenParaUsuario(1L);
-        String compra = "\"unidadeCompraId\": \"" + UUID.randomUUID() + "\"";
-
-        for (String fator : List.of("0", "-1", "1.23456", "123456789")) {
-            mockMvc.perform(post("/api/produtos")
-                            .header("Authorization", "Bearer " + token)
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(corpo("Produto", "10.00", compra, "\"fatorConversao\": " + fator)))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.campos[?(@.campo=='fatorConversao')]").exists());
-        }
-
-        verifyNoInteractions(produtoService);
-    }
-
-    @Test
     void cadastrarComUnidadeDeOutraEmpresaDeveRetornar404() throws Exception {
         when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
                 .thenThrow(new CatalogoNaoEncontradoException("Unidade de medida não encontrada."));
@@ -649,35 +632,17 @@ class ProdutoControllerTest {
     }
 
     @Test
-    void cadastrarComRegraDeConversaoVioladaDeveRetornar400ComMensagem() throws Exception {
-        when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
-                .thenThrow(new RegraDeNegocioException("Informe a unidade de compra e o fator de conversão juntos."));
-
-        String token = tokenParaUsuario(1L);
-
-        mockMvc.perform(post("/api/produtos")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(corpo("Produto", "10.00", "\"fatorConversao\": 12")))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.mensagem").value("Informe a unidade de compra e o fator de conversão juntos."))
-                .andExpect(jsonPath("$.campos").doesNotExist());
-    }
-
-    @Test
-    void respostaTrazUnidadeCategoriaComCaminhoEConversaoSemIdsInternos() throws Exception {
+    void respostaTrazUnidadeCategoriaComCaminhoSemIdsInternos() throws Exception {
         Empresa empresa = new Empresa("Empresa 7");
         ReflectionTestUtils.setField(empresa, "id", 7L);
         UnidadeMedida un = new UnidadeMedida(empresa, "UN", "Unidade", false);
-        UnidadeMedida cx = new UnidadeMedida(empresa, "CX", "Caixa", false);
         ReflectionTestUtils.setField(un, "id", 31L);
-        ReflectionTestUtils.setField(cx, "id", 32L);
         Categoria racao = new Categoria(empresa, null, "Ração");
         ReflectionTestUtils.setField(racao, "id", 41L);
         Categoria umida = new Categoria(empresa, racao, "Úmida");
         ReflectionTestUtils.setField(umida, "id", 42L);
         Produto produto = ProdutoTesteBuilder.produto(empresa, un).id(5L).nome("Sachê").categoria(umida)
-                .compra(cx, "12.0000").precoVenda("3.50").build();
+                .precoVenda("3.50").build();
         when(produtoService.buscarPorIdParaUsuario(1L, produto.getUuid()))
                 .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of(racao, umida)), true, HOJE,
                         ResumoDeEstoque.VAZIO));
@@ -693,8 +658,8 @@ class ProdutoControllerTest {
                 .andExpect(jsonPath("$.categoria.id").value(umida.getUuid().toString()))
                 .andExpect(jsonPath("$.categoria.nome").value("Úmida"))
                 .andExpect(jsonPath("$.categoria.caminho").value("Ração › Úmida"))
-                .andExpect(jsonPath("$.unidadeCompra.sigla").value("CX"))
-                .andExpect(jsonPath("$.conversaoTexto").value("1 CX = 12 UN"))
+                .andExpect(jsonPath("$.unidadeCompra").doesNotExist())
+                .andExpect(jsonPath("$.conversaoTexto").doesNotExist())
                 .andExpect(jsonPath("$.empresaId").doesNotExist())
                 .andExpect(jsonPath("$.unidadeId").doesNotExist())
                 .andExpect(jsonPath("$.categoriaId").doesNotExist());

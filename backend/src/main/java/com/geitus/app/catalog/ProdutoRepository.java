@@ -32,16 +32,15 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
     // como um unico atributo da entidade e falha na inicializacao do
     // contexto ("Could not resolve attribute 'empresaId' of ... Produto").
 
-    // Nota: as consultas que montam a resposta trazem unidade, unidade de
-    // compra, categoria e os codigos de barras no mesmo SELECT (JOIN FETCH)
-    // para nao disparar uma consulta por produto. Categoria, compra e codigos
-    // sao opcionais (LEFT JOIN): produto sem eles continua no resultado.
+    // Nota: as consultas que montam a resposta trazem unidade, categoria e os
+    // codigos de barras da unidade no mesmo SELECT (JOIN FETCH) para nao
+    // disparar uma consulta por produto. Categoria e codigos sao opcionais
+    // (LEFT JOIN): produto sem eles continua no resultado.
 
     /** Produto da empresa pelo UUID publico, com os vinculos e os codigos ja carregados. */
     @Query("""
             SELECT p FROM Produto p
               JOIN FETCH p.unidade
-              LEFT JOIN FETCH p.unidadeCompra
               LEFT JOIN FETCH p.categoria
               LEFT JOIN FETCH p.codigosBarras
             WHERE p.uuid = :uuid
@@ -213,7 +212,6 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
     @Query("""
             SELECT p FROM Produto p
               JOIN FETCH p.unidade
-              LEFT JOIN FETCH p.unidadeCompra
               LEFT JOIN FETCH p.categoria
               LEFT JOIN FETCH p.codigosBarras
             WHERE p.empresa.id = :empresaId

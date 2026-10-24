@@ -33,8 +33,6 @@ final class ProdutoTesteBuilder {
     private String fornecedor;
     private String descricao;
     private Categoria categoria;
-    private UnidadeMedida unidadeCompra;
-    private BigDecimal fatorConversao;
     private BigDecimal precoVenda = new BigDecimal("10.00");
     private BigDecimal custo;
     private BigDecimal precoMinimo;
@@ -101,12 +99,6 @@ final class ProdutoTesteBuilder {
 
     ProdutoTesteBuilder categoria(Categoria valor) {
         this.categoria = valor;
-        return this;
-    }
-
-    ProdutoTesteBuilder compra(UnidadeMedida unidadeDeCompra, String fator) {
-        this.unidadeCompra = unidadeDeCompra;
-        this.fatorConversao = new BigDecimal(fator);
         return this;
     }
 
@@ -192,7 +184,7 @@ final class ProdutoTesteBuilder {
 
     Produto build() {
         Produto produto = new Produto(empresa, numero, new DadosProduto(nome, nomeCurto, marca, fornecedor, descricao,
-                unidade, categoria, unidadeCompra, fatorConversao, precoVenda, custo, precoMinimo, estoqueMinimo,
+                unidade, categoria, precoVenda, custo, precoMinimo, estoqueMinimo,
                 estoqueMaximo, pontoReposicao, sku, precoPromocional, promocaoInicio, promocaoFim, precoAtacado,
                 quantidadeMinimaAtacado, controlaEstoque, codigoDoProduto, vendidoBalanca));
         produto.substituirCodigos(codigos);
