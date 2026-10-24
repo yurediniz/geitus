@@ -14,6 +14,7 @@ import {
   textoTamanhoNaEtiqueta,
   type ProdutoFormValues,
 } from '@/features/products/produtoFormulario'
+import { idDaSecao } from '@/features/products/secoes/rolagem'
 import { CODIGO_PRODUTO_MAXIMO } from '@/lib/codigoProduto'
 import { sugerirSku } from '@/services/produtoService'
 import type { Produto } from '@/types/produto'
@@ -25,6 +26,8 @@ export interface SecaoCodigosProps {
   /** OPERADOR: sem "Gerar automaticamente" (a sugestao de SKU e so de ADMIN). */
   somenteLeitura: boolean
   aoAlterarCampo: () => void
+  /** Link da linha "ficam em Embalagens": rola ate a secao e foca o titulo. */
+  aoIrParaEmbalagens: () => void
 }
 
 const AJUDA_CODIGO = 'O código que você digita no PDV e programa na balança. Até 6 dígitos; zeros à esquerda são ignorados.'
@@ -45,7 +48,13 @@ function motivoNumeroNaoCabe(numero: number, digitosNaEtiqueta: number | null): 
  * o codigo do produto (o da balanca e da digitacao no PDV) com "Vendido na
  * balança" e, por ultimo, o SKU (com sugestao automatica).
  */
-export function SecaoCodigos({ produto, desabilitado, somenteLeitura, aoAlterarCampo }: SecaoCodigosProps) {
+export function SecaoCodigos({
+  produto,
+  desabilitado,
+  somenteLeitura,
+  aoAlterarCampo,
+  aoIrParaEmbalagens,
+}: SecaoCodigosProps) {
   const {
     control,
     register,
@@ -55,7 +64,7 @@ export function SecaoCodigos({ produto, desabilitado, somenteLeitura, aoAlterarC
     formState: { errors, isSubmitted },
   } = useFormContext<ProdutoFormValues>()
   const [anuncioSku, setAnuncioSku] = useState('')
-  const [codigo, vendidoBalanca] = useWatch({ control, name: ['codigo', 'vendidoBalanca'] })
+  const [codigo, vendidoBalanca, embalagens] = useWatch({ control, name: ['codigo', 'vendidoBalanca', 'embalagens'] })
   const digitosNaEtiqueta = useConfiguracaoEtiqueta().data?.digitosCodigo ?? null
   // Atalho so na edicao: no cadastro o numero ainda nao existe (spec B2 §2).
   const pedeNumero = vendidoBalanca && codigo.trim() === '' && produto !== null && !somenteLeitura
@@ -94,6 +103,22 @@ export function SecaoCodigos({ produto, desabilitado, somenteLeitura, aoAlterarC
           Códigos de barras
         </h3>
         <CodigosBarrasDoProduto produto={produto} desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
+        {embalagens.length > 0 && (
+          <p className="text-sm text-muted-foreground">
+            Os códigos de barras das embalagens ficam em{' '}
+            <a
+              href={`#${idDaSecao('embalagens')}`}
+              onClick={(event) => {
+                event.preventDefault()
+                aoIrParaEmbalagens()
+              }}
+              className="inline-flex min-h-11 items-center font-medium text-foreground underline underline-offset-4"
+            >
+              Embalagens
+            </a>
+            .
+          </p>
+        )}
       </section>
 
       <div className="grid gap-4 md:grid-cols-2">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { FormProvider, useForm, type FieldErrors } from 'react-hook-form'
+import { FormProvider, useForm, type FieldErrors, type FieldPath } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -18,10 +18,13 @@ import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { formatarQuantidade } from '@/features/products/formatacaoProduto'
 import { destinoDaLista, type EstadoParaLista } from '@/features/products/navegacaoProdutos'
 import {
+  CAMPOS_DA_EMBALAGEM,
   CAMPOS_POR_SECAO,
+  MAXIMO_CODIGOS_POR_EMBALAGEM,
   ROTULO_SECAO,
   SECOES_PRODUTO,
   avaliarNovoCodigo,
+  caminhosComErroNasEmbalagens,
   campoDaChaveDoServidor,
   erroCodigoNaEtiqueta,
   erroFracaoAtacado,
@@ -32,7 +35,7 @@ import {
   idUnidadePadrao,
   montarRequest,
   primeiroCampoComErro,
-  produtoSchema,
+  produtoSchemaCom,
   secaoDoCampo,
   valoresDoProduto,
   valoresIniciais,
@@ -44,6 +47,7 @@ import { SeloStatus } from '@/features/products/SeloStatus'
 import { AtalhosDasSecoes, SecaoDaPagina } from '@/features/products/secoes/AtalhosDasSecoes'
 import { ID_BARRA_FIXA, rolarAteASecao, rolarEFocarCampo } from '@/features/products/secoes/rolagem'
 import { SecaoCodigos } from '@/features/products/secoes/SecaoCodigos'
+import { SecaoEmbalagens } from '@/features/products/secoes/SecaoEmbalagens'
 import { SecaoEstoque } from '@/features/products/secoes/SecaoEstoque'
 import { SecaoGeral } from '@/features/products/secoes/SecaoGeral'
 import { SecaoHistorico } from '@/features/products/secoes/SecaoHistorico'
@@ -113,6 +117,12 @@ function mensagemErroNaSecao(secao: SecaoProduto): string {
   return `O produto não foi salvo. Confira o erro na seção ${ROTULO_SECAO[secao]}.`
 }
 
+/** Para onde levar o foco: o campo (o caminho, ex.: "embalagens.0.quantidade") e a secao dele. */
+interface DestinoDoErro {
+  secao: SecaoProduto
+  campo: string
+}
+
 /** Falha ao salvar mostrada no topo; mudar um dos `campos` a retira (o erro ja esta sendo corrigido). */
 interface ErroAoSalvar {
   mensagem: string
@@ -135,9 +145,14 @@ function Tecla({ children }: { children: ReactNode }) {
   return <kbd className="rounded border bg-muted px-1 font-sans">{children}</kbd>
 }
 
-/** Erro do backend levado a um campo do formulario. */
+/**
+ * Erro do backend levado a um campo do formulario: `campo` e o campo de
+ * primeiro nivel (contagem e resumo por secao) e `caminho`, onde o erro fica
+ * (igual ao campo, ou "embalagens.1.quantidade").
+ */
 interface ErroDeCampoDoServidor {
   campo: keyof ProdutoFormValues
+  caminho: string
   mensagem: string
 }
 
@@ -148,6 +163,36 @@ const CAMPOS_COM_ERRO_DO_SERVIDOR: ReadonlySet<string> = new Set(
 
 function ehCampoComErroDoServidor(campo: string): campo is keyof ProdutoFormValues {
   return CAMPOS_COM_ERRO_DO_SERVIDOR.has(campo)
+}
+
+/**
+ * Caminho do erro do backend no formulario: o de uma embalagem que existe na
+ * tela fica nela; o de um indice que nao existe vai para a lista.
+ */
+function caminhoNoFormulario(caminho: string, quantidadeDeEmbalagens: number): string {
+  const [campo, indice] = caminho.split('.')
+  if (campo !== 'embalagens' || indice === undefined) {
+    return caminho
+  }
+  return Number(indice) < quantidadeDeEmbalagens ? caminho : 'embalagens'
+}
+
+/** O primeiro caminho de embalagem na ordem da tela (a lista inteira, depois embalagem a embalagem e campo a campo). */
+function primeiroCaminhoDeEmbalagem(caminhos: readonly string[]): string {
+  const ordem = (caminho: string): [number, number] => {
+    const [, indice, campo] = caminho.split('.')
+    if (indice === undefined) {
+      return [-1, -1]
+    }
+    return [Number(indice), (CAMPOS_DA_EMBALAGEM as readonly string[]).indexOf(campo)]
+  }
+  return (
+    [...caminhos].sort((a, b) => {
+      const [indiceA, campoA] = ordem(a)
+      const [indiceB, campoB] = ordem(b)
+      return indiceA - indiceB || campoA - campoB
+    })[0] ?? 'embalagens'
+  )
 }
 
 /** Campos com regras checadas no envio: fracao pela unidade de venda e o tamanho do codigo na etiqueta. */
@@ -179,7 +224,10 @@ const MENSAGEM_SKU_DUPLICADO = 'Já existe um produto com este SKU nesta empresa
  * mensagem exata de SKU.
  * `restantes` sao mensagens de chaves que nao sao campos do formulario.
  */
-function errosDeCampoDoServidor(erro: unknown): { erros: ErroDeCampoDoServidor[]; restantes: string[] } {
+function errosDeCampoDoServidor(
+  erro: unknown,
+  quantidadeDeEmbalagens: number,
+): { erros: ErroDeCampoDoServidor[]; restantes: string[] } {
   const vazio = { erros: [], restantes: [] }
   if (!(erro instanceof HttpError) || (erro.status !== 400 && erro.status !== 409)) {
     return vazio
@@ -188,22 +236,24 @@ function errosDeCampoDoServidor(erro: unknown): { erros: ErroDeCampoDoServidor[]
     erro.status === 409 && campo === 'sku' ? `${mensagem} ${ORIENTACAO_SKU_DUPLICADO}` : mensagem
 
   if (erro.campos) {
-    const porCampo = new Map<keyof ProdutoFormValues, string[]>()
+    const porCaminho = new Map<string, { campo: keyof ProdutoFormValues; mensagens: string[] }>()
     const restantes: string[] = []
     for (const [chave, mensagem] of Object.entries(erro.campos)) {
-      const campo = campoDaChaveDoServidor(chave)
+      const caminho = caminhoNoFormulario(campoDaChaveDoServidor(chave), quantidadeDeEmbalagens)
+      const campo = caminho.split('.')[0]
       if (ehCampoComErroDoServidor(campo)) {
-        const mensagens = porCampo.get(campo) ?? []
-        if (!mensagens.includes(mensagem)) {
-          mensagens.push(mensagem)
+        const doCaminho = porCaminho.get(caminho) ?? { campo, mensagens: [] }
+        if (!doCaminho.mensagens.includes(mensagem)) {
+          doCaminho.mensagens.push(mensagem)
         }
-        porCampo.set(campo, mensagens)
+        porCaminho.set(caminho, doCaminho)
       } else {
         restantes.push(mensagem)
       }
     }
-    const erros = [...porCampo].map(([campo, mensagens]) => ({
+    const erros = [...porCaminho].map(([caminho, { campo, mensagens }]) => ({
       campo,
+      caminho,
       mensagem: comOrientacao(campo, mensagens.join(' ')),
     }))
     return { erros, restantes }
@@ -213,23 +263,23 @@ function errosDeCampoDoServidor(erro: unknown): { erros: ErroDeCampoDoServidor[]
     return vazio
   }
   if (erro.message.startsWith(INICIO_MENSAGEM_CODIGO_DE_BARRAS)) {
-    return { erros: [{ campo: 'codigosBarras', mensagem: erro.message }], restantes: [] }
+    return { erros: [{ campo: 'codigosBarras', caminho: 'codigosBarras', mensagem: erro.message }], restantes: [] }
   }
   if (erro.status === 409 && erro.message.startsWith(INICIO_MENSAGEM_CODIGO_DO_PRODUTO)) {
-    return { erros: [{ campo: 'codigo', mensagem: erro.message }], restantes: [] }
+    return { erros: [{ campo: 'codigo', caminho: 'codigo', mensagem: erro.message }], restantes: [] }
   }
   if (erro.status === 409 && erro.message === MENSAGEM_SKU_DUPLICADO) {
-    return { erros: [{ campo: 'sku', mensagem: comOrientacao('sku', erro.message) }], restantes: [] }
+    return { erros: [{ campo: 'sku', caminho: 'sku', mensagem: comOrientacao('sku', erro.message) }], restantes: [] }
   }
   return vazio
 }
 
 /** Resumo no topo quando os erros foram levados aos campos: diz em que secao(oes) olhar. */
-function mensagemErrosNosCampos(campos: readonly (keyof ProdutoFormValues)[]): string {
+function mensagemErrosNosCampos(campos: readonly (keyof ProdutoFormValues)[], quantidadeDeErros: number): string {
   const secoes = SECOES_PRODUTO.filter((secao) => campos.some((campo) => secaoDoCampo(campo) === secao))
   if (secoes.length <= 1) {
     const secao = secoes[0] ?? 'geral'
-    return campos.length > 1
+    return quantidadeDeErros > 1
       ? `O produto não foi salvo. Confira os erros na seção ${ROTULO_SECAO[secao]}.`
       : mensagemErroNaSecao(secao)
   }
@@ -256,11 +306,8 @@ function mensagemErroExcluir(erro: unknown): string {
   return 'Não foi possível excluir o produto. Tente novamente.'
 }
 
-/** Secoes da edicao. Provisorio (Task 5 da B3): a secao Embalagens entra na Task 6. */
-const SECOES_DA_EDICAO = SECOES_PRODUTO.filter((secao) => secao !== 'embalagens')
-
 /** Secoes do cadastro novo: o Historico so existe para um produto ja gravado. */
-const SECOES_DO_CADASTRO = SECOES_DA_EDICAO.filter((secao) => secao !== 'historico')
+const SECOES_DO_CADASTRO = SECOES_PRODUTO.filter((secao) => secao !== 'historico')
 
 /**
  * Pagina do produto (`/produtos/novo` e `/produtos/:id`): formulario em tela
@@ -404,11 +451,11 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   const navigate = useNavigate()
   const modoNovo = produto === null
 
-  const secoesVisiveis = modoNovo ? SECOES_DO_CADASTRO : SECOES_DA_EDICAO
+  const secoesVisiveis = modoNovo ? SECOES_DO_CADASTRO : SECOES_PRODUTO
   const [secaoAtiva, marcarSecao] = useSecaoAtiva(secoesVisiveis)
   const digitosCodigoNaEtiqueta = useConfiguracaoEtiqueta().data?.digitosCodigo ?? null
   // O cadastro novo comeca pelo Nome.
-  const [campoParaFocar, setCampoParaFocar] = useState<keyof ProdutoFormValues | null>(modoNovo ? 'nome' : null)
+  const [campoParaFocar, setCampoParaFocar] = useState<string | null>(modoNovo ? 'nome' : null)
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null)
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [erroSalvar, setErroSalvar] = useState<ErroAoSalvar | null>(null)
@@ -426,8 +473,23 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     queryFn: () => listarCategorias(),
   })
 
+  // Unidades com o `fracionada` (lista + unidade do produto e das embalagens): as regras de fracao
+  // (atacado, estoque inicial e embalagens) e as siglas das mensagens das embalagens.
+  const unidades = unidadesQuery.data
+  const unidadesConhecidas = useMemo<UnidadeResumo[]>(() => {
+    const lista: UnidadeResumo[] = [...(unidades ?? [])]
+    for (const resumo of [produto?.unidade, ...(produto?.embalagens ?? []).map((embalagem) => embalagem.unidade)]) {
+      if (resumo && !lista.some((unidade) => unidade.id === resumo.id)) {
+        lista.push(resumo)
+      }
+    }
+    return lista
+  }, [unidades, produto])
+  // O schema muda quando a lista de unidades carrega (o RHF le o resolver a cada render).
+  const resolver = useMemo(() => zodResolver(produtoSchemaCom(unidadesConhecidas)), [unidadesConhecidas])
+
   const form = useForm<ProdutoFormValues>({
-    resolver: zodResolver(produtoSchema),
+    resolver,
     defaultValues: produto ? valoresDoProduto(produto) : valoresIniciais(),
     // O foco do erro e da pagina: rola ate o campo antes de focar (ver aoInvalidar).
     shouldFocusError: false,
@@ -480,6 +542,15 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
           }
         }
       }
+      // Os erros das embalagens comparam embalagens entre si e com a unidade de venda e o preco
+      // minimo: com algum na tela, a lista inteira e revalidada quando um desses muda.
+      const afetaEmbalagens =
+        name === 'unidadeId' ||
+        name === 'precoMinimo' ||
+        (name !== undefined && /^embalagens\.\d+\.(unidadeId|quantidade|deCompra)$/.test(name))
+      if (afetaEmbalagens && getFieldState('embalagens').invalid) {
+        void trigger('embalagens')
+      }
     })
     return () => assinatura.unsubscribe()
   }, [isSubmitted, watch, trigger, getFieldState, clearErrors])
@@ -500,7 +571,6 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
 
   // Produto novo ja vem com UN (a unidade mais comum), se existir e estiver ativa.
   // Vira o valor padrao do campo: escolher a UN sozinha nao conta como alteracao.
-  const unidades = unidadesQuery.data
   const padraoAplicadoRef = useRef(false)
   useEffect(() => {
     if (!modoNovo || !unidades || padraoAplicadoRef.current) {
@@ -528,7 +598,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
       const campo = document.getElementById(idDoCampo(campoParaFocar))
       if (campo) {
         // O codigo de barras barrado fica selecionado: o proximo bip o substitui.
-        rolarEFocarCampo(campo, { selecionar: campoParaFocar === 'codigoPendente' })
+        rolarEFocarCampo(campo, { selecionar: /(^|\.)codigoPendente$/.test(campoParaFocar) })
       } else {
         rolarAteASecao(secaoDoCampo(campoParaFocar))
       }
@@ -544,7 +614,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   }
 
   /** Leva ao campo com erro: marca a secao dele no atalho e pede o foco. */
-  const irParaCampo = (destino: { secao: SecaoProduto; campo: keyof ProdutoFormValues }) => {
+  const irParaCampo = (destino: DestinoDoErro) => {
     marcarSecao(destino.secao)
     setCampoParaFocar(destino.campo)
   }
@@ -560,12 +630,6 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     return mapa
   }, [unidades, produto])
   const formatosGravados = useMemo(() => formatosDoProduto(produto), [produto])
-  // Unidades com o `fracionada` (lista + unidade do produto), para a regra de fracao do atacado.
-  const unidadesConhecidas = useMemo<UnidadeResumo[]>(() => {
-    const lista: UnidadeResumo[] = unidades ?? []
-    const atual = produto?.unidade
-    return atual && !lista.some((unidade) => unidade.id === atual.id) ? [...lista, atual] : lista
-  }, [unidades, produto])
 
   const aoAlterarCampo = () => {
     setMensagemSucesso(null)
@@ -605,24 +669,28 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     },
     onError: async (erro) => {
       setMensagemSucesso(null)
-      const { erros: errosDeCampo, restantes } = errosDeCampoDoServidor(erro)
+      const { erros: errosDeCampo, restantes } = errosDeCampoDoServidor(erro, getValues('embalagens').length)
       if (errosDeCampo.length > 0) {
         // Cada erro vai para o seu campo (com a contagem no atalho da secao); a
         // pagina rola ate o primeiro, na ordem das secoes.
-        for (const { campo, mensagem } of errosDeCampo) {
+        for (const { campo, caminho, mensagem } of errosDeCampo) {
           // Erro num campo de promocao/atacado: o bloco abre para o erro aparecer.
           const interruptor = interruptorDoCampo(campo)
           if (interruptor && !getValues(interruptor)) {
             setValue(interruptor, true)
           }
-          setError(campo, { type: 'server', message: mensagem })
+          setError(caminho as FieldPath<ProdutoFormValues>, { type: 'server', message: mensagem })
         }
-        const campos = errosDeCampo.map(({ campo }) => campo)
+        const campos = [...new Set(errosDeCampo.map(({ campo }) => campo))]
         const destino = primeiroCampoComErro((campo) => campos.includes(campo))
-        const resumo = mensagemErrosNosCampos(campos)
+        const resumo = mensagemErrosNosCampos(campos, errosDeCampo.length)
         setErroSalvar({ mensagem: [...restantes, resumo].join(' '), campos: restantes.length > 0 ? [] : campos })
         if (destino) {
-          irParaCampo(destino)
+          const caminhos = errosDeCampo.filter(({ campo }) => campo === destino.campo).map(({ caminho }) => caminho)
+          irParaCampo({
+            secao: destino.secao,
+            campo: destino.campo === 'embalagens' ? primeiroCaminhoDeEmbalagem(caminhos) : destino.campo,
+          })
         }
       } else {
         setErroSalvar({ mensagem: mensagemErroSalvar(erro), campos: [] })
@@ -689,33 +757,70 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   const aoInvalidar = (erros: FieldErrors<ProdutoFormValues>) => {
     const destino = primeiroCampoComErro((campo) => erros[campo] !== undefined)
     if (destino) {
-      irParaCampo(destino)
+      // Nas embalagens, o primeiro campo com erro da primeira embalagem com erro.
+      const campo =
+        destino.campo === 'embalagens'
+          ? (caminhosComErroNasEmbalagens(erros.embalagens)[0] ?? 'embalagens')
+          : destino.campo
+      irParaCampo({ secao: destino.secao, campo })
     }
   }
 
+  /** Codigos de barras de todas as listas do produto, menos a `excluida` (-1 = a da unidade). */
+  const codigosForaDaLista = (excluida: number): string[] => [
+    ...(excluida === -1 ? [] : getValues('codigosBarras')),
+    ...getValues('embalagens').flatMap((embalagem, indice) => (indice === excluida ? [] : embalagem.codigosBarras)),
+  ]
+
   /**
-   * Codigo digitado e nao adicionado: ao salvar, entra na lista com as mesmas
-   * regras do "Adicionar". Se for barrado, nada e salvo e o erro aparece no
-   * campo, na secao Codigos.
+   * Codigo digitado e nao adicionado (na unidade ou numa embalagem): ao salvar,
+   * entra na lista com as mesmas regras do "Adicionar". Se for barrado, nada e
+   * salvo e o erro aparece no campo, na secao dele.
    */
   const incorporarCodigoPendente = (): boolean => {
-    const pendente = getValues('codigoPendente')
-    const resultado = avaliarNovoCodigo(pendente, getValues('codigosBarras'), formatosGravados)
-    if (resultado.tipo === 'vazio') {
-      if (pendente !== '') {
-        setValue('codigoPendente', '')
-      }
-      return true
-    }
-    if (resultado.tipo === 'bloqueado') {
-      setError('codigoPendente', { type: 'manual', message: resultado.motivo })
+    const barrar = (
+      caminho: FieldPath<ProdutoFormValues>,
+      secao: SecaoProduto,
+      motivo: string,
+      campos: (keyof ProdutoFormValues)[],
+    ) => {
+      setError(caminho, { type: 'manual', message: motivo })
       setMensagemSucesso(null)
-      setErroSalvar({ mensagem: mensagemErroNaSecao('codigos'), campos: ['codigoPendente', 'codigosBarras'] })
-      irParaCampo({ secao: 'codigos', campo: 'codigoPendente' })
+      setErroSalvar({ mensagem: mensagemErroNaSecao(secao), campos })
+      irParaCampo({ secao, campo: caminho })
       return false
     }
-    setValue('codigosBarras', resultado.lista, { shouldDirty: true })
-    setValue('codigoPendente', '')
+    const pendente = getValues('codigoPendente')
+    const resultado = avaliarNovoCodigo(pendente, getValues('codigosBarras'), formatosGravados, undefined, codigosForaDaLista(-1))
+    if (resultado.tipo === 'bloqueado') {
+      return barrar('codigoPendente', 'codigos', resultado.motivo, ['codigoPendente', 'codigosBarras'])
+    }
+    if (resultado.tipo === 'aceito') {
+      setValue('codigosBarras', resultado.lista, { shouldDirty: true })
+    }
+    if (pendente !== '') {
+      setValue('codigoPendente', '')
+    }
+    const embalagens = getValues('embalagens')
+    for (let indice = 0; indice < embalagens.length; indice++) {
+      const doPendente = embalagens[indice].codigoPendente
+      const daEmbalagem = avaliarNovoCodigo(
+        doPendente,
+        embalagens[indice].codigosBarras,
+        formatosGravados,
+        MAXIMO_CODIGOS_POR_EMBALAGEM,
+        codigosForaDaLista(indice),
+      )
+      if (daEmbalagem.tipo === 'bloqueado') {
+        return barrar(`embalagens.${indice}.codigoPendente`, 'embalagens', daEmbalagem.motivo, ['embalagens'])
+      }
+      if (daEmbalagem.tipo === 'aceito') {
+        setValue(`embalagens.${indice}.codigosBarras`, daEmbalagem.lista, { shouldDirty: true })
+      }
+      if (doPendente !== '') {
+        setValue(`embalagens.${indice}.codigoPendente`, '')
+      }
+    }
     return true
   }
 
@@ -785,8 +890,14 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   const acaoEmAndamento = salvarMutation.isPending ? salvarMutation.variables?.acao : undefined
   const desabilitado = salvando || somenteLeitura
 
-  /** Campos com erro na secao; o texto pendente e a lista de codigos de barras contam como um so. */
+  /**
+   * Campos com erro na secao; o texto pendente e a lista de codigos de barras
+   * contam como um so. Nas embalagens, cada campo com erro de cada embalagem.
+   */
   const errosDaSecao = (secao: SecaoProduto) => {
+    if (secao === 'embalagens') {
+      return caminhosComErroNasEmbalagens(errors.embalagens).length
+    }
     const comErro = CAMPOS_POR_SECAO[secao].filter((campo) => errors[campo] !== undefined)
     const codigoDeBarrasEmDobro = comErro.includes('codigoPendente') && comErro.includes('codigosBarras')
     return comErro.length - (codigoDeBarrasEmDobro ? 1 : 0)
@@ -902,10 +1013,21 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
               desabilitado={desabilitado}
               somenteLeitura={somenteLeitura}
               aoAlterarCampo={aoAlterarCampo}
+              aoIrParaEmbalagens={() => irParaSecao('embalagens')}
             />
           </SecaoDaPagina>
           <SecaoDaPagina secao="precos">
             <SecaoPrecos siglaPorId={siglaPorId} desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
+          </SecaoDaPagina>
+          <SecaoDaPagina secao="embalagens">
+            <SecaoEmbalagens
+              produto={produto}
+              unidadesQuery={unidadesQuery}
+              siglaPorId={siglaPorId}
+              desabilitado={desabilitado}
+              somenteLeitura={somenteLeitura}
+              aoAlterarCampo={aoAlterarCampo}
+            />
           </SecaoDaPagina>
           <SecaoDaPagina secao="estoque">
             <SecaoEstoque

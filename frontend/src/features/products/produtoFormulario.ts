@@ -711,6 +711,8 @@ function embalagemDoRequest(embalagem: EmbalagemFormValues): EmbalagemRequest {
 export const TAMANHO_MAXIMO_CODIGO = 50
 
 export const MENSAGEM_CODIGO_REPETIDO = 'Este código já está na lista.'
+/** Codigo que ja esta na lista da unidade ou de outra embalagem do mesmo produto. */
+export const MENSAGEM_CODIGO_EM_OUTRA_LISTA = 'Este código já está em outra lista deste produto.'
 export const MENSAGEM_DIGITO_INVALIDO =
   'Este código não confere (o último dígito não bate). Leia de novo ou confira os números.'
 /** Codigo barrado pelo limite da lista ("Limite de 20 códigos de barras atingido."). */
@@ -743,15 +745,17 @@ export type ResultadoNovoCodigo =
 
 /**
  * Regras para adicionar um codigo (as mesmas do backend): normaliza o texto,
- * barra repetido, mais de 20, mais de 50 caracteres e codigo novo com digito
- * verificador invalido. Um codigo ja gravado (ex.: `OUTRO` migrado com digito
- * invalido) volta sem bloqueio.
+ * barra repetido (na lista ou em `outrasListas` do mesmo produto: a unidade e
+ * as embalagens), mais que o `limite` (20 na unidade, 5 na embalagem), mais de
+ * 50 caracteres e codigo novo com digito verificador invalido. Um codigo ja
+ * gravado (ex.: `OUTRO` migrado com digito invalido) volta sem bloqueio.
  */
 export function avaliarNovoCodigo(
   entrada: string,
   lista: readonly string[],
   formatosGravados: FormatosGravados,
   limite: number = MAXIMO_CODIGOS_BARRAS,
+  outrasListas: readonly string[] = [],
 ): ResultadoNovoCodigo {
   const codigo = normalizarCodigo(entrada)
   if (codigo === '') {
@@ -759,6 +763,9 @@ export function avaliarNovoCodigo(
   }
   if (lista.includes(codigo)) {
     return { tipo: 'bloqueado', motivo: MENSAGEM_CODIGO_REPETIDO }
+  }
+  if (outrasListas.includes(codigo)) {
+    return { tipo: 'bloqueado', motivo: MENSAGEM_CODIGO_EM_OUTRA_LISTA }
   }
   if (lista.length >= limite) {
     return { tipo: 'bloqueado', motivo: mensagemLimiteCodigos(limite) }

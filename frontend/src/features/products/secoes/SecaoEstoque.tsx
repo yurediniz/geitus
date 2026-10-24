@@ -10,6 +10,7 @@ import { SeloSituacaoEstoque } from '@/features/products/estoque/SeloSituacaoEst
 import { mensagemDeSucesso } from '@/features/products/estoque/ajusteEstoque'
 import { formatarQuantidade } from '@/features/products/formatacaoProduto'
 import type { ProdutoFormValues } from '@/features/products/produtoFormulario'
+import { conversaoDoSaldo, embalagemPrincipal } from '@/lib/embalagem'
 import type { Produto } from '@/types/produto'
 
 export interface SecaoEstoqueProps {
@@ -73,6 +74,17 @@ export function SecaoEstoque({
   const ajusteBloqueado = Boolean(dirtyFields.controlaEstoque || dirtyFields.unidadeId)
   // O saldo e da unidade gravada (produto com movimento nao troca de unidade).
   const saldoTexto = produto ? formatarQuantidade(produto.estoqueAtual, produto.unidade.sigla) : null
+  // Com embalagem gravada, o saldo tambem em embalagens: "55 UN (18 CX + 1 UN)" (spec B3 §5.2).
+  const principal = produto ? embalagemPrincipal(produto.embalagens) : undefined
+  const saldoConvertido =
+    produto && principal
+      ? conversaoDoSaldo(
+          produto.estoqueAtual,
+          { sigla: principal.unidade.sigla, quantidade: principal.quantidade },
+          produto.unidade.sigla,
+          produto.unidade.fracionada,
+        )
+      : null
   const avisarSaldoGuardado = produto !== null && produto.controlaEstoque && !controla && produto.estoqueAtual > 0
 
   return (
@@ -116,7 +128,7 @@ export function SecaoEstoque({
               Saldo atual
             </p>
             <div className="flex flex-wrap items-center gap-3">
-              <p className="text-2xl font-semibold tabular-nums">{saldoTexto}</p>
+              <p className="text-2xl font-semibold tabular-nums">{saldoConvertido ?? saldoTexto}</p>
               <SeloSituacaoEstoque situacao={produto.situacaoEstoque} />
             </div>
             {!somenteLeitura && (

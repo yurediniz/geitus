@@ -1,5 +1,5 @@
 import type { HTMLAttributes, ReactNode } from 'react'
-import { Controller, useFormContext, useWatch, type UseFormRegisterReturn } from 'react-hook-form'
+import { Controller, useFormContext, useWatch, type FieldPath, type UseFormRegisterReturn } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { AlertCircle, TriangleAlert } from 'lucide-react'
 
@@ -45,8 +45,11 @@ export function ErroDoCampo({ id, mensagem }: { id: string; mensagem?: string })
   )
 }
 
+/** Caminho de um campo do formulario, usado tambem como id do elemento ("nome", "embalagens.0.quantidade"). */
+export type IdDoCampo = FieldPath<ProdutoFormValues>
+
 interface CampoTextoProps {
-  id: keyof ProdutoFormValues
+  id: IdDoCampo
   label: string
   obrigatorio?: boolean
   erro?: string
@@ -132,7 +135,13 @@ function EstruturaCampo({ id, label, obrigatorio, erro, ajuda, children }: Estru
 }
 
 /** Campos de dinheiro do formulario (string decimal com ponto, exibidos com a mascara R$). */
-export type CampoDinheiro = 'precoVenda' | 'custo' | 'precoMinimo' | 'precoPromocional' | 'precoAtacado'
+export type CampoDinheiro =
+  | 'precoVenda'
+  | 'custo'
+  | 'precoMinimo'
+  | 'precoPromocional'
+  | 'precoAtacado'
+  | `embalagens.${number}.preco`
 
 interface CampoMoedaFormularioProps {
   id: CampoDinheiro
@@ -199,7 +208,7 @@ export function CampoMoedaFormulario({
 }
 
 interface CampoSelectProps {
-  id: keyof ProdutoFormValues
+  id: IdDoCampo
   label: string
   obrigatorio?: boolean
   erro?: string

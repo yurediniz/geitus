@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useController, useFormContext } from 'react-hook-form'
+import { useController, useFormContext, useWatch } from 'react-hook-form'
 
 import { useConfiguracaoEtiqueta } from '@/features/catalog/useConfiguracaoEtiqueta'
 import { CampoCodigosBarras } from '@/features/products/CampoCodigosBarras'
@@ -26,6 +26,9 @@ export function CodigosBarrasDoProduto({ produto, desabilitado, aoAlterarCampo }
 
   const formatosGravados = useMemo(() => formatosDoProduto(produto), [produto])
   const etiquetaQuery = useConfiguracaoEtiqueta()
+  // Um codigo pertence a uma lista so: os das embalagens nao entram na da unidade.
+  const embalagens = useWatch({ control, name: 'embalagens' })
+  const codigosDasEmbalagens = useMemo(() => embalagens.flatMap((embalagem) => embalagem.codigosBarras), [embalagens])
 
   return (
     <CampoCodigosBarras
@@ -44,6 +47,7 @@ export function CodigosBarrasDoProduto({ produto, desabilitado, aoAlterarCampo }
         mensagem ? setError('codigoPendente', { type: 'manual', message: mensagem }) : clearErrors('codigoPendente')
       }
       formatosGravados={formatosGravados}
+      outrasListas={codigosDasEmbalagens}
       configuracaoEtiqueta={etiquetaQuery.data ?? null}
       desabilitado={desabilitado}
       erro={estadoLista.error?.message}

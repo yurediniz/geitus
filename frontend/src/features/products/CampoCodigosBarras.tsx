@@ -27,7 +27,7 @@ const ROTULO_FORMATO: Readonly<Record<FormatoCodigoBarras, string>> = {
   OUTRO: 'Outro formato',
 }
 
-/** Id do campo "Adicionar código" (destino do foco ao salvar com o codigo pendente barrado). */
+/** Id padrao do campo "Adicionar código" (o da unidade; destino do foco ao salvar com o codigo pendente barrado). */
 const ID_ENTRADA = 'codigosBarras'
 
 export interface CampoCodigosBarrasProps {
@@ -51,13 +51,23 @@ export interface CampoCodigosBarrasProps {
   erro?: string
   /** Etiqueta de balanca da empresa, para avisar o codigo novo com o formato dela; null enquanto nao carrega. */
   configuracaoEtiqueta?: ConfiguracaoEtiqueta | null
+  /** Id do campo "Adicionar código" (o da embalagem: `embalagens.0.codigosBarras`). */
+  id?: string
+  /** Quantos codigos a lista aceita (20 na unidade, 5 na embalagem). */
+  limite?: number
+  /** Texto de apoio sob o campo. */
+  ajuda?: string
+  /** Nome acessivel da lista de codigos. */
+  rotuloLista?: string
+  /** Codigos das outras listas do mesmo produto (unidade e embalagens): nao podem entrar nesta. */
+  outrasListas?: readonly string[]
 }
 
 /** Elemento que recebe o foco depois de reordenar ou remover. */
 type FocoPendente = { tipo: 'entrada' } | { tipo: 'mover'; codigo: string; direcao: 'cima' | 'baixo' }
 
-function idBotaoMover(codigo: string, direcao: 'cima' | 'baixo'): string {
-  return `codigo-${direcao}-${codigo}`
+function idBotaoMover(prefixo: string, codigo: string, direcao: 'cima' | 'baixo'): string {
+  return `${prefixo}-${direcao}-${codigo}`
 }
 
 /**
@@ -76,10 +86,17 @@ export function CampoCodigosBarras({
   desabilitado = false,
   erro,
   configuracaoEtiqueta = null,
+  id = ID_ENTRADA,
+  limite = MAXIMO_CODIGOS_BARRAS,
+  ajuda = `Até ${limite} códigos. O primeiro é o exibido na lista de produtos.`,
+  rotuloLista = 'Códigos de barras do produto',
+  outrasListas = [],
 }: CampoCodigosBarrasProps) {
   const [anuncio, setAnuncio] = useState('')
   const [focoPendente, setFocoPendente] = useState<FocoPendente | null>(null)
   const entradaRef = useRef<HTMLInputElement>(null)
+  // Ids das setas unicos na pagina (a unidade e cada embalagem tem a sua lista).
+  const prefixoMover = id === ID_ENTRADA ? 'codigo' : `${id}-codigo`
 
   // Foco depois do render que reordenou/removeu: o botao da seta fica
   // desabilitado nas pontas, entao cai na outra seta do mesmo codigo.
@@ -89,18 +106,18 @@ export function CampoCodigosBarras({
     }
     let alvo: HTMLElement | null
     if (focoPendente.tipo === 'entrada') {
-      alvo = document.getElementById(ID_ENTRADA)
+      alvo = document.getElementById(id)
     } else {
       const outra = focoPendente.direcao === 'cima' ? 'baixo' : 'cima'
-      const mesma = document.getElementById(idBotaoMover(focoPendente.codigo, focoPendente.direcao))
+      const mesma = document.getElementById(idBotaoMover(prefixoMover, focoPendente.codigo, focoPendente.direcao))
       alvo =
         mesma instanceof HTMLButtonElement && !mesma.disabled
           ? mesma
-          : document.getElementById(idBotaoMover(focoPendente.codigo, outra))
+          : document.getElementById(idBotaoMover(prefixoMover, focoPendente.codigo, outra))
     }
     alvo?.focus()
     setFocoPendente(null)
-  }, [focoPendente])
+  }, [focoPendente, id, prefixoMover])
 
   /** Codigo novo (nao gravado) com formato desconhecido: merece o aviso amarelo. */
   const ehOutroNovo = (codigo: string) =>
@@ -111,7 +128,7 @@ export function CampoCodigosBarras({
     !formatosGravados.has(codigo) && pareceEtiqueta(codigo, configuracaoEtiqueta)
 
   const adicionar = () => {
-    const resultado = avaliarNovoCodigo(entrada, valor, formatosGravados)
+    const resultado = avaliarNovoCodigo(entrada, valor, formatosGravados, limite, outrasListas)
     if (resultado.tipo === 'vazio') {
       onEntradaChange('')
       return
@@ -162,15 +179,14 @@ export function CampoCodigosBarras({
   }
 
   const erroExibido = erroEntrada ?? erro
-  const idAjuda = `${ID_ENTRADA}-ajuda`
-  const idErro = `${ID_ENTRADA}-erro`
+  const idAjuda = `${id}-ajuda`
+  const idErro = `${id}-erro`
   const descricaoIds = [idAjuda, erroExibido ? idErro : null].filter(Boolean).join(' ')
-  const ajuda = `Até ${MAXIMO_CODIGOS_BARRAS} códigos. O primeiro é o exibido na lista de produtos.`
 
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
-        <label htmlFor={ID_ENTRADA} className="text-sm font-medium">
+        <label htmlFor={id} className="text-sm font-medium">
           Adicionar código
         </label>
         <div className="flex gap-2">
@@ -181,7 +197,7 @@ export function CampoCodigosBarras({
             />
             <Input
               ref={entradaRef}
-              id={ID_ENTRADA}
+              id={id}
               value={entrada}
               onChange={(event) => {
                 onEntradaChange(event.target.value)
@@ -223,7 +239,7 @@ export function CampoCodigosBarras({
           Nenhum código de barras cadastrado.
         </p>
       ) : (
-        <ol aria-label="Códigos de barras do produto" className="space-y-2">
+        <ol aria-label={rotuloLista} className="space-y-2">
           {valor.map((codigo, indice) => {
             const formato = formatosGravados.get(codigo) ?? detectarFormato(codigo)
             const outro = formato === 'OUTRO'
@@ -250,7 +266,7 @@ export function CampoCodigosBarras({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          id={idBotaoMover(codigo, 'cima')}
+                          id={idBotaoMover(prefixoMover, codigo, 'cima')}
                           className="size-11"
                           onClick={() => mover(indice, 'cima')}
                           disabled={desabilitado || indice === 0}
@@ -262,7 +278,7 @@ export function CampoCodigosBarras({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          id={idBotaoMover(codigo, 'baixo')}
+                          id={idBotaoMover(prefixoMover, codigo, 'baixo')}
                           className="size-11"
                           onClick={() => mover(indice, 'baixo')}
                           disabled={desabilitado || indice === valor.length - 1}
