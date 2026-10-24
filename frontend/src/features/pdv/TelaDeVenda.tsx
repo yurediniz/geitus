@@ -20,7 +20,7 @@ import { ehDoPagamento, separarMensagens } from '@/features/pdv/mensagensDoCalcu
 import { PainelDoTotal, type AcaoDoPainel } from '@/features/pdv/PainelDoTotal'
 import { PDV_QUERY_KEY } from '@/features/pdv/pdvQuery'
 import { useCalculo } from '@/features/pdv/useCalculo'
-import { useCarrinho } from '@/features/pdv/useCarrinho'
+import { MENSAGEM_TENTATIVA_PENDENTE, useCarrinho } from '@/features/pdv/useCarrinho'
 import { porEmEspera, tirarDaEspera, useVendasEmEspera } from '@/features/pdv/vendasEmEspera'
 import type { AvisosDaTela } from '@/hooks/useFeedbackDaTela'
 import { gerarUuid } from '@/lib/uuid'
@@ -54,6 +54,7 @@ export interface TelaDeVendaProps {
 const MENSAGEM_BLOQUEADO = 'Corrija os erros da venda antes de pagar.'
 const MENSAGEM_CALCULANDO = 'Aguarde o cálculo da venda.'
 const MENSAGEM_SEM_ITENS = 'Lance um item primeiro.'
+const MENSAGEM_AGUARDE_A_LEITURA = 'Aguarde a leitura…'
 
 /** "Venda nº 128 concluída · Troco R$ 5,00" (sem troco, so o numero). */
 function mensagemDaVendaConcluida(venda: Venda): string {
@@ -78,6 +79,8 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
   const [erroDaLeitura, setErroDaLeitura] = useState<string | null>(null)
   const [janela, setJanela] = useState<Janela | null>(null)
   const [errosDaVenda, setErrosDaVenda] = useState<ErrosDaVenda | null>(null)
+  const [leiturasPendentes, setLeiturasPendentes] = useState(0)
+  const [avisoDaLeitura, setAvisoDaLeitura] = useState<string | null>(null)
   const espera = useVendasEmEspera(usuario.empresa.id, usuario.id)
 
   const { linhas } = carrinho
@@ -113,11 +116,32 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
   }, [calculo.calculo, calculo.idsDoCalculo, calculo.errosDosDados, calculo.idsDosErros, errosDaVenda, carrinho.carrinho])
 
   const temErro = mensagens.gerais.length > 0 || Object.keys(mensagens.errosPorLinha).length > 0
-  const podePagar = linhas.length > 0 && calculo.atualizado && calculo.falhaDeRede === null && !temErro
+  /** Sem resposta numa tentativa anterior: o pagamento abre direto na trava (o reenvio e do mesmo corpo). */
+  const tentativaTravada = carrinho.tentativa?.trava != null
+  const podePagar =
+    linhas.length > 0 &&
+    leiturasPendentes === 0 &&
+    (tentativaTravada || (calculo.atualizado && calculo.falhaDeRede === null && !temErro))
 
   const recusar = useCallback((mensagem: string) => {
     setErroDaLeitura(mensagem)
     tocarBipeDeErro()
+  }, [])
+
+  /** Com a tentativa travada, nada muda o carrinho (o reenvio precisa do mesmo corpo). */
+  const livreParaMudar = (): boolean => {
+    if (tentativaTravada) {
+      recusar(MENSAGEM_TENTATIVA_PENDENTE)
+      return false
+    }
+    return true
+  }
+
+  const mudarPendentes = useCallback((quantas: number) => {
+    setLeiturasPendentes(quantas)
+    if (quantas === 0) {
+      setAvisoDaLeitura(null)
+    }
   }, [])
 
   const fecharJanela = useCallback(() => setJanela(null), [])
@@ -128,9 +152,14 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
         setJanela({ tipo: 'BUSCA', texto: '' })
         return
       case 'CLIENTE':
-        setJanela({ tipo: 'CLIENTE' })
+        if (livreParaMudar()) {
+          setJanela({ tipo: 'CLIENTE' })
+        }
         return
       case 'DESCONTO_ITEM':
+        if (!livreParaMudar()) {
+          return
+        }
         if (!selecionada) {
           recusar(MENSAGEM_SEM_ITENS)
           return
@@ -146,6 +175,9 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
         })
         return
       case 'DESCONTO_TOTAL':
+        if (!livreParaMudar()) {
+          return
+        }
         if (linhas.length === 0) {
           recusar(MENSAGEM_SEM_ITENS)
           return
@@ -182,7 +214,7 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
         return
       }
       case 'REMOVER':
-        if (!selecionada) {
+        if (!selecionada || !livreParaMudar()) {
           return
         }
         if (selecionada.desconto) {
@@ -202,10 +234,17 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
           return
         }
         carrinho.remover(selecionada.id)
+        focarCampoDeLeitura()
         return
       case 'PAGAMENTO':
         if (linhas.length === 0) {
           recusar(MENSAGEM_SEM_ITENS)
+        } else if (leiturasPendentes > 0) {
+          // Um bipe ainda nao entrou no carrinho: pagar agora deixaria o item de fora.
+          setAvisoDaLeitura(MENSAGEM_AGUARDE_A_LEITURA)
+        } else if (tentativaTravada) {
+          setErroDaLeitura(null)
+          setJanela({ tipo: 'PAGAMENTO' })
         } else if (temErro) {
           recusar(MENSAGEM_BLOQUEADO)
         } else if (!podePagar) {
@@ -220,10 +259,14 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
           recusar(MENSAGEM_SEM_ITENS)
           return
         }
+        if (!livreParaMudar()) {
+          return
+        }
         const resultado = porEmEspera(
           espera.vendas,
           carrinho.carrinho,
-          calculo.calculo?.total ?? null,
+          // So o total do calculo desta venda; sem ele, a lista mostra "—".
+          calculo.atualizado ? (calculo.calculo?.total ?? null) : null,
           new Date().toISOString(),
           gerarUuid(),
         )
@@ -235,6 +278,7 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
         carrinho.limpar()
         setErroDaLeitura(null)
         avisos.sucesso('Venda em espera.')
+        focarCampoDeLeitura()
         return
       }
       case 'VENDAS_EM_ESPERA':
@@ -298,7 +342,13 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
     { atalho: 'F6', rotulo: 'Pôr em espera', aoClicar: () => executar('POR_EM_ESPERA'), desabilitado: linhas.length === 0 },
     { atalho: 'F7', rotulo: `Em espera (${espera.vendas.length})`, aoClicar: () => executar('VENDAS_EM_ESPERA') },
     { atalho: 'F8', rotulo: 'Vendas do caixa', aoClicar: () => executar('VENDAS_DO_CAIXA') },
-    { atalho: 'F10', rotulo: 'Pagamento', aoClicar: () => executar('PAGAMENTO'), desabilitado: !podePagar, principal: true },
+    {
+      atalho: 'F10',
+      rotulo: 'Pagamento',
+      aoClicar: () => executar('PAGAMENTO'),
+      desabilitado: !podePagar,
+      principal: true,
+    },
   ]
 
   const retomar = (id: string, porAtualEmEspera: boolean) => {
@@ -306,12 +356,17 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
     if (!escolhida) {
       return
     }
+    if (tentativaTravada) {
+      setJanela(null)
+      recusar(MENSAGEM_TENTATIVA_PENDENTE)
+      return
+    }
     let restantes = tirarDaEspera(espera.vendas, id)
     if (porAtualEmEspera && linhas.length > 0) {
       const resultado = porEmEspera(
         restantes,
         carrinho.carrinho,
-        calculo.calculo?.total ?? null,
+        calculo.atualizado ? (calculo.calculo?.total ?? null) : null,
         new Date().toISOString(),
         gerarUuid(),
       )
@@ -355,6 +410,9 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
         <div className="border-t p-4">
           <CampoDeLeitura
             erro={erroDaLeitura}
+            aviso={avisoDaLeitura}
+            capturarTeclas={janela === null}
+            aoMudarPendentes={mudarPendentes}
             aoDigitar={() => setErroDaLeitura(null)}
             aoResolver={(item) => {
               const resultado = carrinho.adicionar(item)
@@ -372,6 +430,7 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
 
       <PainelDoTotal
         calculo={calculo.calculo}
+        vazio={linhas.length === 0}
         calculando={calculo.calculando}
         erros={mensagens.gerais}
         falhaDeRede={calculo.falhaDeRede}
@@ -405,23 +464,33 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
         clienteAtual={carrinho.cliente}
         aoFechar={fecharJanela}
         aoEscolher={(cliente) => {
-          carrinho.definirCliente(cliente)
+          const resultado = carrinho.definirCliente(cliente)
           setJanela(null)
+          if (!resultado.ok) {
+            recusar(resultado.erro)
+          }
         }}
       />
       <JanelaDesconto
         desconto={janela?.tipo === 'DESCONTO' ? janela.desconto : null}
         aoFechar={fecharJanela}
         aoAplicar={(alvo, desconto) => {
-          carrinho.aplicarDesconto(alvo, desconto)
+          const resultado = carrinho.aplicarDesconto(alvo, desconto)
           setJanela(null)
+          if (!resultado.ok) {
+            recusar(resultado.erro)
+          }
         }}
       />
       <JanelaConfirmar confirmacao={janela?.tipo === 'CONFIRMAR' ? janela.confirmacao : null} aoFechar={fecharJanela} />
       <JanelaPagamento
         aberta={janela?.tipo === 'PAGAMENTO'}
         carrinho={carrinho.carrinho}
+        tentativa={carrinho.tentativa}
+        aoMudarTentativa={carrinho.definirTentativa}
+        sessaoId={sessao.id}
         calculoInicial={calculo.calculo}
+        aoTotalMudar={calculo.recalcular}
         aoFechar={fecharJanela}
         aoConcluir={(venda) => {
           carrinho.limpar()

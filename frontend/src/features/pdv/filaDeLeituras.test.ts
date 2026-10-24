@@ -35,6 +35,22 @@ describe('FilaDeLeituras', () => {
     expect(aplicados).toEqual(['A', 'erro', 'C'])
   })
 
+  it('conta as leituras pendentes até serem aplicadas', async () => {
+    const contagens: number[] = []
+    const fila = new FilaDeLeituras((pendentes) => contagens.push(pendentes))
+    const primeira = adiado<string>()
+
+    fila.enfileirar(primeira.promessa, () => undefined, () => undefined)
+    fila.enfileirar(Promise.resolve('B'), () => undefined, () => undefined)
+    expect(fila.quantasPendentes()).toBe(2)
+
+    primeira.resolver('A')
+    await fila.ociosa()
+
+    expect(fila.quantasPendentes()).toBe(0)
+    expect(contagens).toEqual([1, 2, 1, 0])
+  })
+
   it('um erro ao aplicar não trava a fila', async () => {
     const fila = new FilaDeLeituras()
     const aplicados: string[] = []

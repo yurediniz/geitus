@@ -40,9 +40,10 @@ describe('pdvService', () => {
   it('resolve o código lido, codificado na URL', async () => {
     apiGetMock.mockResolvedValue({})
 
-    await resolverCodigo('542*0,750')
+    const controle = new AbortController()
+    await resolverCodigo('542*0,750', controle.signal)
 
-    expect(apiGetMock).toHaveBeenCalledWith('/pdv/itens?codigo=542*0%2C750', AUT)
+    expect(apiGetMock).toHaveBeenCalledWith('/pdv/itens?codigo=542*0%2C750', { autenticada: true, signal: controle.signal })
   })
 
   it('busca produtos ativos por nome, com o signal', async () => {

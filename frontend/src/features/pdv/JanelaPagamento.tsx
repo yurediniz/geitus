@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { Banknote, CreditCard, Loader2, QrCode, Trash2, WalletCards } from 'lucide-react'
+import { AlertTriangle, Banknote, CreditCard, Loader2, QrCode, Trash2, WalletCards } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -7,7 +7,7 @@ import { CampoMoeda } from '@/components/ui/campo-moeda'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatarReais, ROTULO_DA_FORMA } from '@/features/cash-register/formatacaoCaixa'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
-import { paraRequest, type Carrinho } from '@/features/pdv/carrinho'
+import { paraRequest, type Carrinho, type TentativaDeVenda } from '@/features/pdv/carrinho'
 import { classificarFalhaDaVenda, MENSAGEM_ABRA_O_CAIXA, MENSAGEM_TERMINE_O_FECHAMENTO } from '@/features/pdv/errosDaVenda'
 import { devolverFocoAoCampo } from '@/features/pdv/focoDoPdv'
 import { JanelaTotalMudou } from '@/features/pdv/JanelaTotalMudou'
@@ -23,6 +23,11 @@ import type { CalculoDaVenda, FinalizarVendaRequest, MensagemDoCalculo, Pagament
 export interface JanelaPagamentoProps {
   aberta: boolean
   carrinho: Carrinho
+  /** A tentativa pendente de finalizar (a chave guardada com o carrinho). */
+  tentativa: TentativaDeVenda | null
+  aoMudarTentativa: (tentativa: TentativaDeVenda | null) => void
+  /** A sessao em que a venda e feita (o caixa relido com outro id e outra sessao). */
+  sessaoId: string
   /** O calculo da tela (sem pagamentos), mostrado ate o da janela chegar. */
   calculoInicial: CalculoDaVenda | null
   aoFechar: () => void
@@ -34,6 +39,8 @@ export interface JanelaPagamentoProps {
    * e a relida do servidor; undefined quando a releitura falhou.
    */
   aoCaixaMudou: (mensagem: string, sessao: SessaoDeCaixa | null | undefined) => void
+  /** O total mudou e a venda voltou para a tela: ela recalcula. */
+  aoTotalMudar: () => void
 }
 
 const ICONE_DA_FORMA: Readonly<Record<FormaDePagamento, LucideIcon>> = {
@@ -44,6 +51,11 @@ const ICONE_DA_FORMA: Readonly<Record<FormaDePagamento, LucideIcon>> = {
 }
 const FALHA_DE_REDE = 'Não foi possível finalizar a venda. Confira a conexão e tente de novo.'
 const MENSAGEM_VALOR = 'Informe um valor maior que zero.'
+const MENSAGEM_TALVEZ_REGISTRADA =
+  'A última tentativa pode ter sido registrada. Tente de novo com os mesmos valores.'
+const MENSAGEM_PODE_TER_SIDO_REGISTRADA = 'Esta venda pode já ter sido registrada. Confira em Vendas do caixa (F8).'
+const MENSAGEM_ANTES_DE_DESCARTAR =
+  'Confira em Vendas do caixa (F8) se a venda não foi registrada antes de mudar o pagamento.'
 
 function emCentavos(valor: number): number {
   return Math.round(valor * 100)
@@ -52,8 +64,10 @@ function emCentavos(valor: number): number {
 /**
  * Pagamento (F10; spec do PDV §3.4 e §6.3): 1 Dinheiro, 2 Debito, 3 Credito e
  * 4 PIX escolhem a forma e preenchem o que falta; Enter adiciona. Com o pago
- * cobrindo o total, Enter finaliza. A chave de idempotencia nasce ao abrir a
- * janela e e reenviada igual em cada nova tentativa (rede, total mudou).
+ * cobrindo o total, Enter finaliza. A chave de idempotencia nasce na primeira
+ * tentativa e fica com o carrinho; so e trocada depois de sucesso ou de uma
+ * recusa definitiva. Sem resposta do servidor, o pagamento trava e so o mesmo
+ * corpo e reenviado, ate o operador conferir e descartar a tentativa.
  */
 export function JanelaPagamento({ aberta, aoFechar, ...props }: JanelaPagamentoProps) {
   const [enviando, setEnviando] = useState(false)
@@ -66,21 +80,28 @@ export function JanelaPagamento({ aberta, aoFechar, ...props }: JanelaPagamentoP
 
 function ConteudoDoPagamento({
   carrinho,
+  tentativa,
+  aoMudarTentativa,
+  sessaoId,
   calculoInicial,
   aoFechar,
   aoConcluir,
   aoFalharNosDados,
   aoCaixaMudou,
+  aoTotalMudar,
   aoMudarEnvio,
 }: Omit<JanelaPagamentoProps, 'aberta'> & { aoMudarEnvio: (enviando: boolean) => void }) {
-  const [chave] = useState(gerarUuid)
-  const [pagamentos, setPagamentos] = useState<PagamentoInformado[]>([])
+  const trava = tentativa?.trava ?? null
+  const [pagamentos, setPagamentos] = useState<PagamentoInformado[]>(() =>
+    tentativa?.trava && tentativa.corpo ? tentativa.corpo.pagamentos : [],
+  )
   const [forma, setForma] = useState<FormaDePagamento | null>(null)
   const [valor, setValor] = useState('')
   const [erroDoValor, setErroDoValor] = useState<string | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [enviando, setEnviando] = useState(false)
   const [focarFinalizar, setFocarFinalizar] = useState(false)
+  const [confirmandoDescarte, setConfirmandoDescarte] = useState(false)
   const [totalMudou, setTotalMudou] = useState<{ anterior: number; novo: CalculoDaVenda | null } | null>(null)
   const enviandoRef = useRef(false)
   const formasRef = useRef<HTMLDivElement>(null)
@@ -98,6 +119,7 @@ function ConteudoDoPagamento({
     [exibido, calculo.errosDosDados],
   )
   const podeFinalizar =
+    trava === null &&
     exibido !== null &&
     calculo.atualizado &&
     calculo.falhaDeRede === null &&
@@ -130,13 +152,108 @@ function ConteudoDoPagamento({
   }
 
   const escolher = (escolhida: FormaDePagamento) => {
+    if (trava !== null) {
+      return
+    }
     setForma(escolhida)
     setErroDoValor(null)
     setValor(faltaLocal > 0 ? (faltaLocal / 100).toFixed(2) : '')
   }
 
+  const desfazerForma = () => {
+    setForma(null)
+    setErroDoValor(null)
+    formasRef.current?.focus()
+  }
+
+  const tratarFalha = async (falha: unknown, dados: FinalizarVendaRequest) => {
+    const classificada = classificarFalhaDaVenda(falha)
+    switch (classificada.tipo) {
+      case 'REDE':
+        // A venda pode ter sido gravada: o corpo fica travado para o reenvio com a mesma chave.
+        aoMudarTentativa({ chave: dados.chave, corpo: dados, trava: 'REDE' })
+        return
+      case 'JA_REGISTRADA':
+        aoMudarTentativa({ chave: dados.chave, corpo: dados, trava: 'OUTROS_DADOS' })
+        return
+      case 'INVALIDO':
+        aoMudarTentativa(null)
+        setErro(classificada.mensagem)
+        return
+      case 'DADOS':
+        aoMudarTentativa(null)
+        aoFalharNosDados(classificada.mensagens, carrinho)
+        return
+      case 'TOTAL_MUDOU': {
+        // A mesma chave vai no "Confirmar e finalizar"; recusar troca a chave.
+        setTotalMudou({ anterior: dados.totalEsperado, novo: null })
+        calculo.recalcular()
+        try {
+          const novo = await calcular(paraRequest(carrinho, pagamentos), new AbortController().signal)
+          setTotalMudou((atual) => (atual ? { ...atual, novo } : atual))
+        } catch {
+          setTotalMudou(null)
+          setErro(FALHA_DE_REDE)
+        }
+        return
+      }
+      case 'CAIXA': {
+        // Decide pela situacao real do caixa, relida do servidor (e nao pelo texto do erro).
+        let relida: SessaoDeCaixa | null
+        try {
+          relida = await sessaoAtual()
+        } catch {
+          if (classificada.mensagem === MENSAGEM_ABRA_O_CAIXA || classificada.mensagem === MENSAGEM_TERMINE_O_FECHAMENTO) {
+            aoCaixaMudou(classificada.mensagem, undefined)
+          } else {
+            setErro(classificada.mensagem)
+          }
+          return
+        }
+        if (relida === null || relida.status !== 'ABERTA' || relida.id !== sessaoId) {
+          aoMudarTentativa(null)
+          aoCaixaMudou(classificada.mensagem, relida)
+        } else {
+          setErro(classificada.mensagem)
+        }
+      }
+    }
+  }
+
+  /** Envia o corpo; a chave fica guardada com o carrinho antes do envio (pode haver recarga no meio). */
+  const enviarCorpo = (dados: FinalizarVendaRequest) => {
+    if (enviandoRef.current) {
+      return
+    }
+    mudarEnvio(true)
+    setErro(null)
+    aoMudarTentativa({ chave: dados.chave, corpo: dados, trava })
+    finalizar(dados)
+      .then((venda) => {
+        mudarEnvio(false)
+        aoMudarTentativa(null)
+        aoConcluir(venda)
+      })
+      .catch(async (falha: unknown) => {
+        mudarEnvio(false)
+        setTotalMudou(null)
+        await tratarFalha(falha, dados)
+      })
+  }
+
+  const enviar = (totalEsperado: number) => {
+    const chave = tentativa?.chave ?? gerarUuid()
+    enviarCorpo({ ...paraRequest(carrinho, pagamentos), chave, totalEsperado })
+  }
+
+  const tentarDeNovo = () => {
+    if (tentativa?.corpo) {
+      enviarCorpo(tentativa.corpo)
+    }
+  }
+
   const adicionar = () => {
-    if (forma === null) {
+    if (forma === null || trava !== null) {
       return
     }
     const numero = Number(valor)
@@ -171,73 +288,6 @@ function ConteudoDoPagamento({
     formasRef.current?.focus()
   }
 
-  const tratarFalha = async (falha: unknown, dados: FinalizarVendaRequest) => {
-    const classificada = classificarFalhaDaVenda(falha)
-    switch (classificada.tipo) {
-      case 'REDE':
-        setErro(FALHA_DE_REDE)
-        return
-      case 'INVALIDO':
-        setErro(classificada.mensagem)
-        return
-      case 'DADOS':
-        aoFalharNosDados(classificada.mensagens, carrinho)
-        return
-      case 'TOTAL_MUDOU': {
-        setTotalMudou({ anterior: dados.totalEsperado, novo: null })
-        calculo.recalcular()
-        try {
-          const novo = await calcular(paraRequest(carrinho, pagamentos), new AbortController().signal)
-          setTotalMudou((atual) => (atual ? { ...atual, novo } : atual))
-        } catch {
-          setTotalMudou(null)
-          setErro(FALHA_DE_REDE)
-        }
-        return
-      }
-      case 'CAIXA': {
-        // Decide pela situacao real do caixa, relida do servidor (e nao pelo texto do erro).
-        let relida: SessaoDeCaixa | null
-        try {
-          relida = await sessaoAtual()
-        } catch {
-          if (classificada.mensagem === MENSAGEM_ABRA_O_CAIXA || classificada.mensagem === MENSAGEM_TERMINE_O_FECHAMENTO) {
-            aoCaixaMudou(classificada.mensagem, undefined)
-          } else {
-            setErro(classificada.mensagem)
-          }
-          return
-        }
-        if (relida === null || relida.status !== 'ABERTA') {
-          aoCaixaMudou(classificada.mensagem, relida)
-        } else {
-          setErro(classificada.mensagem)
-        }
-      }
-    }
-  }
-
-  const enviar = (totalEsperado: number) => {
-    if (enviandoRef.current) {
-      return
-    }
-    mudarEnvio(true)
-    setErro(null)
-    const dados: FinalizarVendaRequest = { ...paraRequest(carrinho, pagamentos), chave, totalEsperado }
-    finalizar(dados)
-      .then((venda) => {
-        mudarEnvio(false)
-        aoConcluir(venda)
-      })
-      .catch(async (falha: unknown) => {
-        mudarEnvio(false)
-        if (totalMudou !== null) {
-          setTotalMudou(null)
-        }
-        await tratarFalha(falha, dados)
-      })
-  }
-
   const aoTeclarNasFormas = (event: KeyboardEvent<HTMLDivElement>) => {
     const indice = Number(event.key) - 1
     if (event.target !== valorRef.current && Number.isInteger(indice) && indice >= 0 && indice < FORMAS_DE_PAGAMENTO.length) {
@@ -245,6 +295,8 @@ function ConteudoDoPagamento({
       escolher(FORMAS_DE_PAGAMENTO[indice])
     }
   }
+
+  const travado = trava !== null || enviando
 
   return (
     <DialogContent
@@ -254,7 +306,16 @@ function ConteudoDoPagamento({
         formasRef.current?.focus()
       }}
       onCloseAutoFocus={devolverFocoAoCampo}
-      onEscapeKeyDown={(event) => enviandoRef.current && event.preventDefault()}
+      onEscapeKeyDown={(event) => {
+        if (enviandoRef.current) {
+          event.preventDefault()
+        } else if (valorRef.current !== null && document.activeElement === valorRef.current) {
+          // Esc no valor desfaz so a forma escolhida; a janela continua. (O campo so existe com uma forma escolhida;
+          // o Radix guarda este callback, entao a decisao e pelo elemento, e nao pelo estado.)
+          event.preventDefault()
+          desfazerForma()
+        }
+      }}
       onInteractOutside={(event) => enviandoRef.current && event.preventDefault()}
       onKeyDown={(event) => {
         // Enter fora do campo e dos botoes finaliza quando o pago cobre o total.
@@ -296,6 +357,56 @@ function ConteudoDoPagamento({
         </div>
       </dl>
 
+      {trava !== null && (
+        <div role="alert" className="space-y-3 rounded-md bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground">
+          <p className="flex items-start gap-2 font-medium">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            {trava === 'REDE' ? MENSAGEM_TALVEZ_REGISTRADA : MENSAGEM_PODE_TER_SIDO_REGISTRADA}
+          </p>
+          {confirmandoDescarte ? (
+            <div className="space-y-2">
+              <p className="text-foreground">{MENSAGEM_ANTES_DE_DESCARTAR}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" className="min-h-11" onClick={() => setConfirmandoDescarte(false)}>
+                  Voltar
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="min-h-11"
+                  onClick={() => {
+                    setConfirmandoDescarte(false)
+                    // A edicao volta; a proxima tentativa nasce com outra chave.
+                    aoMudarTentativa(null)
+                    formasRef.current?.focus()
+                  }}
+                >
+                  Descartar tentativa
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {trava === 'REDE' && (
+                <Button type="button" className="min-h-11" onClick={tentarDeNovo} disabled={enviando}>
+                  {enviando && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                  Tentar de novo
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                onClick={() => setConfirmandoDescarte(true)}
+                disabled={enviando}
+              >
+                Descartar tentativa
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       <div
         ref={formasRef}
         role="group"
@@ -314,7 +425,7 @@ function ConteudoDoPagamento({
               aria-pressed={forma === opcao}
               aria-keyshortcuts={String(indice + 1)}
               onClick={() => escolher(opcao)}
-              disabled={enviando}
+              disabled={travado}
               className="h-14 flex-col gap-0.5"
             >
               <Icone className="h-4 w-4" aria-hidden="true" />
@@ -326,7 +437,7 @@ function ConteudoDoPagamento({
         })}
       </div>
 
-      {forma !== null && (
+      {forma !== null && trava === null && (
         <div className="space-y-1.5">
           <label htmlFor="pdv-pagamento-valor" className="text-sm font-medium">
             {`Valor em ${ROTULO_DA_FORMA[forma]}`}
@@ -344,11 +455,6 @@ function ConteudoDoPagamento({
                 if (event.key === 'Enter') {
                   event.preventDefault()
                   adicionar()
-                } else if (event.key === 'Escape') {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  setForma(null)
-                  formasRef.current?.focus()
                 }
               }}
               onFocus={(event) => event.currentTarget.select()}
@@ -378,7 +484,7 @@ function ConteudoDoPagamento({
                 className="size-11 md:size-9"
                 aria-label={`Remover ${ROTULO_DA_FORMA[pagamento.forma]}`}
                 onClick={() => remover(pagamento.forma)}
-                disabled={enviando}
+                disabled={travado}
               >
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
               </Button>
@@ -396,7 +502,7 @@ function ConteudoDoPagamento({
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-warning-soft-foreground">{calculo.falhaDeRede}</p>
           <Button type="button" variant="outline" size="sm" className="h-9" onClick={calculo.recalcular}>
-            Tentar de novo
+            Calcular de novo
           </Button>
         </div>
       )}
@@ -406,16 +512,18 @@ function ConteudoDoPagamento({
         <Button type="button" variant="outline" className="min-h-11" onClick={aoFechar} disabled={enviando}>
           Voltar à venda
         </Button>
-        <Button
-          ref={finalizarRef}
-          type="button"
-          className="min-h-11"
-          disabled={!podeFinalizar}
-          onClick={() => exibido && enviar(exibido.total)}
-        >
-          {enviando && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-          Finalizar venda
-        </Button>
+        {trava === null && (
+          <Button
+            ref={finalizarRef}
+            type="button"
+            className="min-h-11"
+            disabled={!podeFinalizar}
+            onClick={() => exibido && enviar(exibido.total)}
+          >
+            {enviando && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+            Finalizar venda
+          </Button>
+        )}
       </DialogFooter>
 
       <JanelaTotalMudou
@@ -425,6 +533,9 @@ function ConteudoDoPagamento({
         aoConfirmar={(novoTotal) => enviar(novoTotal)}
         aoVoltar={() => {
           setTotalMudou(null)
+          // Recusar o novo total troca a chave; a tela recalcula para mostrar o total certo.
+          aoMudarTentativa(null)
+          aoTotalMudar()
           aoFechar()
         }}
       />

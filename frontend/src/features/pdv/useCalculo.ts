@@ -78,6 +78,9 @@ export function useCalculo(carrinho: Carrinho, pagamentos: readonly PagamentoInf
 
   useEffect(() => {
     if (vazio) {
+      // Venda nova: o calculo da anterior nao pode aparecer nela.
+      setResposta(null)
+      setFalha(null)
       return
     }
     const pedido = JSON.parse(assinatura) as Pedido
@@ -107,9 +110,12 @@ export function useCalculo(carrinho: Carrinho, pagamentos: readonly PagamentoInf
 
   const falhaAtual = falha?.assinatura === assinatura ? falha : null
   const atualizado = resposta?.assinatura === assinatura
+  // Enquanto calcula, so vale o resultado anterior que tem alguma linha do carrinho de agora (a mesma venda).
+  const idsAtuais = new Set(carrinho.linhas.map((linha) => linha.id))
+  const exibida = !vazio && resposta && (atualizado || resposta.ids.some((id) => idsAtuais.has(id))) ? resposta : null
   return {
-    calculo: vazio ? null : (resposta?.calculo ?? null),
-    idsDoCalculo: vazio ? [] : (resposta?.ids ?? []),
+    calculo: exibida?.calculo ?? null,
+    idsDoCalculo: exibida?.ids ?? [],
     atualizado: vazio || atualizado,
     calculando: !vazio && !atualizado && falhaAtual === null,
     errosDosDados: falhaAtual?.mensagens ?? [],

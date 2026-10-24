@@ -76,7 +76,8 @@ function ConteudoDaBusca({ textoInicial, aoEscolher }: { textoInicial: string; a
             onKeyDown={(event) => {
               if (event.key === 'ArrowDown') {
                 event.preventDefault()
-                setAtivo(Math.min(indiceAtivo + 1, produtos.length - 1))
+                // Sem resultados ainda, fica no primeiro (nunca -1, que deixaria o Enter sem produto).
+                setAtivo(Math.max(0, Math.min(indiceAtivo + 1, produtos.length - 1)))
               } else if (event.key === 'ArrowUp') {
                 event.preventDefault()
                 setAtivo(Math.max(indiceAtivo - 1, 0))

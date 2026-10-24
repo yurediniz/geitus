@@ -8,6 +8,7 @@ import {
   chaveDoCarrinho,
   guardarCarrinho,
   lerCarrinhoGuardado,
+  lerGuardado,
   LIMITE_DE_LINHAS,
   paraRequest,
   quantidadeDeEstoque,
@@ -192,6 +193,25 @@ describe('carrinho', () => {
       const texto = guardarCarrinho(carrinho, 3, 7)
       expect(JSON.parse(texto)).toMatchObject({ versao: 1, empresaId: 3, usuarioId: 7 })
       expect(lerCarrinhoGuardado(texto, 3, 7)).toEqual(carrinho)
+      expect(lerGuardado(texto, 3, 7)).toEqual({ carrinho, tentativa: null })
+    })
+
+    it('a tentativa pendente da venda (chave e corpo) vai junto, na mesma estrutura', () => {
+      const corpo = { ...paraRequest(carrinho, [{ forma: 'PIX' as const, valor: 74.7 }]), chave: 'c-1', totalEsperado: 74.7 }
+      const tentativa = { chave: 'c-1', corpo, trava: 'REDE' as const }
+      const texto = guardarCarrinho(carrinho, 3, 7, tentativa)
+
+      expect(lerGuardado(texto, 3, 7)).toEqual({ carrinho, tentativa })
+      // Um carrinho vazio com tentativa também é guardado (a chave não pode se perder).
+      expect(lerGuardado(guardarCarrinho(CARRINHO_VAZIO, 3, 7, { chave: 'c-2', corpo: null, trava: null }), 3, 7)).toEqual({
+        carrinho: CARRINHO_VAZIO,
+        tentativa: { chave: 'c-2', corpo: null, trava: null },
+      })
+    })
+
+    it('tentativa malformada é ignorada, o carrinho fica', () => {
+      const texto = JSON.stringify({ versao: 1, empresaId: 3, usuarioId: 7, carrinho, tentativa: { chave: 5, trava: 'X' } })
+      expect(lerGuardado(texto, 3, 7)).toEqual({ carrinho, tentativa: null })
     })
 
     it.each([

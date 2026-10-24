@@ -36,9 +36,16 @@ describe('classificarFalhaDaVenda', () => {
   })
 
   it('outro 409 sem campo também relê o caixa, com a mensagem do servidor', () => {
-    expect(classificarFalhaDaVenda(new HttpError(409, 'Esta operação já foi registrada com outros dados.'))).toEqual({
+    expect(classificarFalhaDaVenda(new HttpError(409, 'Venda recusada.'))).toEqual({
       tipo: 'CAIXA',
-      mensagem: 'Esta operação já foi registrada com outros dados.',
+      mensagem: 'Venda recusada.',
+    })
+  })
+
+  it('409 "já registrada com outros dados" é um caso próprio, com a mensagem para conferir no F8', () => {
+    expect(classificarFalhaDaVenda(new HttpError(409, 'Esta operação já foi registrada com outros dados.'))).toEqual({
+      tipo: 'JA_REGISTRADA',
+      mensagem: 'Esta venda pode já ter sido registrada. Confira em Vendas do caixa (F8).',
     })
   })
 

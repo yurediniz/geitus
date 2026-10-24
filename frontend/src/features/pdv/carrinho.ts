@@ -9,6 +9,7 @@ import { quantidadeParaTexto } from '@/lib/quantidade'
 import type {
   CarrinhoRequest,
   DescontoInformado,
+  FinalizarVendaRequest,
   ItemResolvido,
   PagamentoInformado,
   ProdutoDoPdv,
@@ -290,24 +291,81 @@ export function ehCarrinho(valor: unknown): valor is Carrinho {
   )
 }
 
-/** O texto guardado: o carrinho com a versao do formato, a empresa e o usuario. */
-export function guardarCarrinho(carrinho: Carrinho, empresaId: number, usuarioId: number): string {
-  return JSON.stringify({ versao: VERSAO_DO_CARRINHO, empresaId, usuarioId, carrinho })
-}
+/**
+ * Por que a tentativa de finalizar ficou travada:
+ * - `REDE`: sem resposta; a venda pode ter sido gravada, entao so se reenvia o mesmo corpo;
+ * - `OUTROS_DADOS`: o servidor ja tem uma venda com esta chave e outros dados.
+ */
+export type TravaDaTentativa = 'REDE' | 'OUTROS_DADOS'
 
 /**
- * Le o carrinho guardado. Corrompido, de outra versao, de outra empresa ou de
- * outro usuario (Review Focus 3): ignorado, o carrinho comeca vazio, sem erro.
+ * A tentativa pendente de finalizar a venda (decisao do CTO sobre a spec do
+ * PDV §6.3): a chave de idempotencia nasce na primeira tentativa e fica com o
+ * carrinho, para ser reenviada igual depois de fechar a janela ou recarregar.
  */
-export function lerCarrinhoGuardado(texto: string | null, empresaId: number, usuarioId: number): Carrinho {
+export interface TentativaDeVenda {
+  chave: string
+  /** O corpo da ultima tentativa; com `trava`, e reenviado sem mudar. */
+  corpo: FinalizarVendaRequest | null
+  trava: TravaDaTentativa | null
+}
+
+export interface CarrinhoGuardado {
+  carrinho: Carrinho
+  tentativa: TentativaDeVenda | null
+}
+
+function ehCorpo(valor: unknown, chave: string): valor is FinalizarVendaRequest {
+  return (
+    ehObjeto(valor) &&
+    valor.chave === chave &&
+    typeof valor.totalEsperado === 'number' &&
+    Array.isArray(valor.itens) &&
+    Array.isArray(valor.pagamentos) &&
+    valor.pagamentos.every(
+      (pagamento) => ehObjeto(pagamento) && typeof pagamento.forma === 'string' && typeof pagamento.valor === 'number',
+    ) &&
+    ehTextoOuNulo(valor.clienteId) &&
+    ehDesconto(valor.desconto)
+  )
+}
+
+function ehTentativa(valor: unknown): valor is TentativaDeVenda {
+  return (
+    ehObjeto(valor) &&
+    typeof valor.chave === 'string' &&
+    valor.chave !== '' &&
+    (valor.trava === null || valor.trava === 'REDE' || valor.trava === 'OUTROS_DADOS') &&
+    (valor.corpo === null || ehCorpo(valor.corpo, valor.chave))
+  )
+}
+
+/** O texto guardado: o carrinho e a tentativa pendente, com a versao do formato, a empresa e o usuario. */
+export function guardarCarrinho(
+  carrinho: Carrinho,
+  empresaId: number,
+  usuarioId: number,
+  tentativa: TentativaDeVenda | null = null,
+): string {
+  return JSON.stringify({ versao: VERSAO_DO_CARRINHO, empresaId, usuarioId, carrinho, tentativa })
+}
+
+const NADA_GUARDADO: CarrinhoGuardado = { carrinho: CARRINHO_VAZIO, tentativa: null }
+
+/**
+ * Le o carrinho e a tentativa guardados. Corrompido, de outra versao, de outra
+ * empresa ou de outro usuario (Review Focus 3): ignorado, o carrinho comeca
+ * vazio, sem erro. Tentativa malformada e ignorada, o carrinho fica.
+ */
+export function lerGuardado(texto: string | null, empresaId: number, usuarioId: number): CarrinhoGuardado {
   if (texto === null) {
-    return CARRINHO_VAZIO
+    return NADA_GUARDADO
   }
   let guardado: unknown
   try {
     guardado = JSON.parse(texto)
   } catch {
-    return CARRINHO_VAZIO
+    return NADA_GUARDADO
   }
   if (
     !ehObjeto(guardado) ||
@@ -316,7 +374,12 @@ export function lerCarrinhoGuardado(texto: string | null, empresaId: number, usu
     guardado.usuarioId !== usuarioId ||
     !ehCarrinho(guardado.carrinho)
   ) {
-    return CARRINHO_VAZIO
+    return NADA_GUARDADO
   }
-  return guardado.carrinho
+  return { carrinho: guardado.carrinho, tentativa: ehTentativa(guardado.tentativa) ? guardado.tentativa : null }
+}
+
+/** So o carrinho guardado (ver `lerGuardado`). */
+export function lerCarrinhoGuardado(texto: string | null, empresaId: number, usuarioId: number): Carrinho {
+  return lerGuardado(texto, empresaId, usuarioId).carrinho
 }

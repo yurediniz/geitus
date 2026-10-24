@@ -3,6 +3,7 @@ import { AlertCircle, Loader2, UserRound, WifiOff } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { formatarReais } from '@/features/cash-register/formatacaoCaixa'
+import { focarCampoDeLeitura } from '@/features/pdv/focoDoPdv'
 import { cn } from '@/lib/utils'
 import type { CalculoDaVenda } from '@/types/pdv'
 
@@ -16,7 +17,10 @@ export interface AcaoDoPainel {
 }
 
 export interface PainelDoTotalProps {
+  /** Null sem o calculo da venda atual (com itens, o total mostra "—"). */
   calculo: CalculoDaVenda | null
+  /** Carrinho vazio: o total e zero. */
+  vazio: boolean
   calculando: boolean
   /** Erros que nao sao de uma linha (desconto do total, total zero, dados que sumiram). */
   erros: readonly string[]
@@ -36,6 +40,7 @@ export interface PainelDoTotalProps {
  */
 export function PainelDoTotal({
   calculo,
+  vazio,
   calculando,
   erros,
   falhaDeRede,
@@ -47,6 +52,14 @@ export function PainelDoTotal({
   const idTotal = useId()
   const idCliente = useId()
   const descontos = calculo ? calculo.descontoItens + calculo.descontoTotal : 0
+  /** Sem o calculo desta venda, nada de valor de outra: o traco. */
+  const valor = (de: (calculo: CalculoDaVenda) => number) =>
+    calculo ? formatarReais(de(calculo)) : vazio ? formatarReais(0) : '—'
+  const depoisDe = (acao: () => void) => () => {
+    acao()
+    // Sem janela aberta, o foco volta ao campo (com janela, ela o devolve ao fechar).
+    focarCampoDeLeitura()
+  }
 
   return (
     <aside className="flex flex-col gap-5 rounded-xl bg-card p-5 shadow-sm">
@@ -72,12 +85,12 @@ export function PainelDoTotal({
             calculando && 'opacity-70',
           )}
         >
-          {formatarReais(calculo?.total ?? 0)}
+          {valor((atual) => atual.total)}
         </p>
         <dl className="space-y-1 pt-1 text-sm">
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">Subtotal</dt>
-            <dd className="tabular-nums">{formatarReais(calculo?.subtotal ?? 0)}</dd>
+            <dd className="tabular-nums">{valor((atual) => atual.subtotal)}</dd>
           </div>
           {descontos > 0 && (
             <div className="flex justify-between gap-4">
@@ -102,7 +115,7 @@ export function PainelDoTotal({
               <WifiOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               {falhaDeRede}
             </p>
-            <Button type="button" variant="outline" size="sm" className="h-9" onClick={aoTentarDeNovo}>
+            <Button type="button" variant="outline" size="sm" className="h-9" onClick={depoisDe(aoTentarDeNovo)}>
               Tentar de novo
             </Button>
           </div>
@@ -125,7 +138,7 @@ export function PainelDoTotal({
             key={acao.atalho}
             type="button"
             variant={acao.principal ? 'default' : 'outline'}
-            onClick={acao.aoClicar}
+            onClick={depoisDe(acao.aoClicar)}
             disabled={acao.desabilitado}
             aria-keyshortcuts={acao.atalho}
             className={cn('h-11 justify-start gap-2 px-3', acao.principal && 'col-span-2 h-12 text-base')}

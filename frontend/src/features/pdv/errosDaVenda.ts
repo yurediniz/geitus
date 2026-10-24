@@ -8,6 +8,8 @@ import type { MensagemDoCalculo } from '@/types/pdv'
 export const MENSAGEM_ABRA_O_CAIXA = 'Abra o caixa para vender.'
 export const MENSAGEM_TERMINE_O_FECHAMENTO = 'Termine o fechamento do caixa antes de vender.'
 export const MENSAGEM_TOTAL_MUDOU = 'O total da venda mudou. Confira os valores.'
+export const MENSAGEM_OUTROS_DADOS = 'Esta operação já foi registrada com outros dados.'
+export const MENSAGEM_PODE_TER_SIDO_REGISTRADA = 'Esta venda pode já ter sido registrada. Confira em Vendas do caixa (F8).'
 const MENSAGEM_FALHA = 'Não foi possível finalizar a venda. A tela foi atualizada.'
 
 /**
@@ -16,7 +18,8 @@ const MENSAGEM_FALHA = 'Não foi possível finalizar a venda. A tela foi atualiz
  * - `DADOS`: marcar as linhas (`itens[i]`) ou o cliente, mantendo o carrinho (Review Focus 2);
  * - `CAIXA`: reler a sessao e decidir pelo status real (Review Focus 5);
  * - `INVALIDO`: a mensagem fica na janela (pagamentos);
- * - `REDE`: tudo fica, e a nova tentativa reenvia a mesma chave.
+ * - `REDE`: tudo fica, e a nova tentativa reenvia a mesma chave;
+ * - `JA_REGISTRADA`: a chave ja tem uma venda com outros dados; nada de chave nova automatica.
  */
 export type FalhaDaVenda =
   | { tipo: 'TOTAL_MUDOU' }
@@ -24,6 +27,7 @@ export type FalhaDaVenda =
   | { tipo: 'CAIXA'; mensagem: string }
   | { tipo: 'INVALIDO'; mensagem: string }
   | { tipo: 'REDE' }
+  | { tipo: 'JA_REGISTRADA'; mensagem: string }
 
 export function classificarFalhaDaVenda(erro: unknown): FalhaDaVenda {
   if (ehFalhaSemResposta(erro) || !(erro instanceof HttpError)) {
@@ -32,6 +36,9 @@ export function classificarFalhaDaVenda(erro: unknown): FalhaDaVenda {
   const mensagemDoServidor = ehMensagemGenerica(erro.message) ? null : erro.message
   if (erro.status === 409 && (erro.campos?.totalEsperado || mensagemDoServidor === MENSAGEM_TOTAL_MUDOU)) {
     return { tipo: 'TOTAL_MUDOU' }
+  }
+  if (erro.status === 409 && mensagemDoServidor === MENSAGEM_OUTROS_DADOS) {
+    return { tipo: 'JA_REGISTRADA', mensagem: MENSAGEM_PODE_TER_SIDO_REGISTRADA }
   }
   if (erro.status === 400) {
     const doCampo = Object.values(erro.campos ?? {})

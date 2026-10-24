@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Ban, Loader2, Receipt } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import { devolverFocoAoCampo } from '@/features/pdv/focoDoPdv'
 import { formatarQuantidade } from '@/features/pdv/formatacaoPdv'
 import { chaveDaVenda, chaveDasVendas, PDV_QUERY_KEY } from '@/features/pdv/pdvQuery'
 import { ErroDoCampo, MarcaObrigatorio } from '@/features/products/CamposFormulario'
+import { useBuscaComAtraso } from '@/hooks/useBuscaComAtraso'
 import { cn } from '@/lib/utils'
 import { HttpError } from '@/services/httpClient'
 import { buscarVenda, cancelarVenda, listarVendas } from '@/services/pdvService'
@@ -36,7 +37,8 @@ const VENDA_INDISPONIVEL = 'Esta venda não está mais disponível.'
  * Vendas do caixa (F8; spec do PDV §6.4): as da sessao atual, com no, hora,
  * cliente, formas, total e situacao. O detalhe mostra itens e pagamentos e
  * cancela com o motivo, so com o caixa da venda aberto (o servidor confere).
- * O ADMIN filtra por periodo.
+ * Busca pelo numero da venda e carrega mais paginas sob demanda; o ADMIN
+ * filtra por periodo (o filtro por ponto depende da API, que ainda nao tem).
  */
 export function JanelaVendasDoCaixa({ aberta, aoFechar, ...props }: JanelaVendasDoCaixaProps) {
   return (
@@ -50,15 +52,18 @@ function ConteudoDasVendas({ sessaoId, ehAdmin }: Omit<JanelaVendasDoCaixaProps,
   const [vendaId, setVendaId] = useState<string | null>(null)
   const [periodo, setPeriodo] = useState({ de: '', ate: '' })
   const [aviso, setAviso] = useState<string | null>(null)
+  const [numero, setNumero] = useState('')
+  const numeroComAtraso = useBuscaComAtraso(numero.replace(/\D/g, ''), 300)
   const idDe = useId()
   const idAte = useId()
+  const idNumero = useId()
   const porPeriodo = ehAdmin && (periodo.de !== '' || periodo.ate !== '')
   const filtros: FiltrosDeVendas = {
     sessaoId: porPeriodo ? '' : sessaoId,
     status: '',
     de: porPeriodo ? periodo.de : '',
     ate: porPeriodo ? periodo.ate : '',
-    numero: '',
+    numero: numeroComAtraso,
     pagina: 1,
   }
 
@@ -87,8 +92,22 @@ function ConteudoDasVendas({ sessaoId, ehAdmin }: Omit<JanelaVendasDoCaixaProps,
         />
       ) : (
         <>
-          {ehAdmin && (
-            <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <label htmlFor={idNumero} className="text-xs font-medium">
+                Nº da venda
+              </label>
+              <Input
+                id={idNumero}
+                value={numero}
+                inputMode="numeric"
+                autoComplete="off"
+                onChange={(event) => setNumero(event.target.value)}
+                className="h-11 w-32 md:h-9"
+              />
+            </div>
+            {ehAdmin && (
+              <>
               <div className="space-y-1">
                 <label htmlFor={idDe} className="text-xs font-medium">
                   De
@@ -118,8 +137,9 @@ function ConteudoDasVendas({ sessaoId, ehAdmin }: Omit<JanelaVendasDoCaixaProps,
                   Só este caixa
                 </Button>
               )}
-            </div>
-          )}
+              </>
+            )}
+          </div>
           <ListaDasVendas
             filtros={filtros}
             aoAbrir={(id) => {
@@ -134,9 +154,15 @@ function ConteudoDasVendas({ sessaoId, ehAdmin }: Omit<JanelaVendasDoCaixaProps,
 }
 
 function ListaDasVendas({ filtros, aoAbrir }: { filtros: FiltrosDeVendas; aoAbrir: (id: string) => void }) {
-  const consulta = useQuery({
+  const consulta = useInfiniteQuery({
     queryKey: chaveDasVendas(filtros),
-    queryFn: ({ signal }) => listarVendas(filtros, signal),
+    queryFn: ({ pageParam, signal }) => listarVendas({ ...filtros, pagina: pageParam }, signal),
+    initialPageParam: 1,
+    getNextPageParam: (ultima, paginas) => {
+      const carregadas = paginas.reduce((soma, pagina) => soma + pagina.itens.length, 0)
+      // Pagina incompleta tambem encerra (a lista pode ter mudado entre as paginas).
+      return carregadas < ultima.totalItens && ultima.itens.length >= ultima.tamanho ? paginas.length + 1 : undefined
+    },
   })
 
   if (consulta.isPending) {
@@ -145,22 +171,39 @@ function ListaDasVendas({ filtros, aoAbrir }: { filtros: FiltrosDeVendas; aoAbri
   if (consulta.isError) {
     return <ErroAoCarregar mensagem="Não foi possível carregar as vendas." aoTentarDeNovo={() => consulta.refetch()} />
   }
-  if (consulta.data.itens.length === 0) {
+  const vendas = consulta.data.pages.flatMap((pagina) => pagina.itens)
+  if (vendas.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-6 text-center">
         <Receipt className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
-        <p className="text-sm text-muted-foreground">Nenhuma venda neste caixa ainda.</p>
+        <p className="text-sm text-muted-foreground">
+          {filtros.numero ? `Nenhuma venda nº ${filtros.numero}.` : 'Nenhuma venda neste caixa ainda.'}
+        </p>
       </div>
     )
   }
   return (
-    <ul aria-label="Vendas" className="max-h-96 divide-y overflow-y-auto">
-      {consulta.data.itens.map((venda) => (
-        <li key={venda.id}>
-          <LinhaDaVenda venda={venda} aoAbrir={() => aoAbrir(venda.id)} />
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-2">
+      <ul aria-label="Vendas" className="max-h-96 divide-y overflow-y-auto">
+        {vendas.map((venda) => (
+          <li key={venda.id}>
+            <LinhaDaVenda venda={venda} aoAbrir={() => aoAbrir(venda.id)} />
+          </li>
+        ))}
+      </ul>
+      {consulta.hasNextPage && (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11 w-full md:h-9"
+          onClick={() => consulta.fetchNextPage()}
+          disabled={consulta.isFetchingNextPage}
+        >
+          {consulta.isFetchingNextPage && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+          Carregar mais
+        </Button>
+      )}
+    </div>
   )
 }
 

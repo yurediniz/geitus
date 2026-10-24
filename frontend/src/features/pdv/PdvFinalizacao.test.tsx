@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 
-import { chaveDoCarrinho, lerCarrinhoGuardado, type Carrinho } from '@/features/pdv/carrinho'
+import { chaveDoCarrinho, lerCarrinhoGuardado, lerGuardado, type Carrinho } from '@/features/pdv/carrinho'
 import { PdvPage } from '@/features/pdv/PdvPage'
 import { chaveDasVendasEmEspera, guardarVendasEmEspera, type VendaEmEspera } from '@/features/pdv/vendasEmEspera'
 import { useAuth } from '@/hooks/useAuth'
@@ -47,6 +47,7 @@ const cancelarVendaMock = vi.mocked(cancelarVenda)
 
 const EMPRESA = 3
 const USUARIO = 7
+const MENSAGEM_PODE_TER_SIDO_GRAVADA = 'A última tentativa pode ter sido registrada. Tente de novo com os mesmos valores.'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 function definirUsuario(perfil: 'ADMIN' | 'OPERADOR' = 'OPERADOR') {
@@ -271,7 +272,7 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
       expect(await screen.findByText('Venda nº 129 concluída')).toBeInTheDocument()
     })
 
-    it('a rede caiu: a janela mantém tudo e a nova tentativa reenvia a mesma chave', async () => {
+    it('a rede caiu: as formas travam, o aviso aparece e "Tentar de novo" reenvia o mesmo corpo e a mesma chave', async () => {
       finalizarMock
         .mockRejectedValueOnce(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
         .mockResolvedValueOnce(venda({ numero: 130, troco: 0 }))
@@ -281,22 +282,25 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
       await pagar(janela, '4')
       const finalizarVenda = within(janela).getByRole('button', { name: 'Finalizar venda' })
       await waitFor(() => expect(finalizarVenda).toBeEnabled())
+      // A chave já fica guardada com o carrinho na primeira tentativa.
       fireEvent.click(finalizarVenda)
+      expect(lerGuardado(localStorage.getItem(chaveDoCarrinho(EMPRESA, USUARIO)), EMPRESA, USUARIO).tentativa?.chave).toMatch(UUID)
 
-      expect(await within(janela).findByRole('alert')).toHaveTextContent(
-        'Não foi possível finalizar a venda. Confira a conexão e tente de novo.',
-      )
-      expect(within(janela).getByRole('list', { name: 'Formas usadas' })).toHaveTextContent('PIX')
-      // O carrinho continua (a lista fica fora da árvore acessível enquanto a janela está aberta).
+      expect(await within(janela).findByText(MENSAGEM_PODE_TER_SIDO_GRAVADA)).toBeInTheDocument()
+      for (const forma of within(janela).getAllByRole('button', { name: /Dinheiro|Débito|Crédito|PIX/ })) {
+        expect(forma).toBeDisabled()
+      }
+      expect(within(janela).getByRole('button', { name: 'Remover PIX' })).toBeDisabled()
       expect(guardado().linhas).toHaveLength(1)
-      fireEvent.click(within(janela).getByRole('button', { name: 'Finalizar venda' }))
+      fireEvent.click(within(janela).getByRole('button', { name: 'Tentar de novo' }))
 
       await waitFor(() => expect(finalizarMock).toHaveBeenCalledTimes(2))
-      expect(finalizarMock.mock.calls[1][0].chave).toBe(finalizarMock.mock.calls[0][0].chave)
+      expect(finalizarMock.mock.calls[1][0]).toEqual(finalizarMock.mock.calls[0][0])
       expect(await screen.findByText('Venda nº 130 concluída')).toBeInTheDocument()
+      expect(localStorage.getItem(chaveDoCarrinho(EMPRESA, USUARIO))).toBeNull()
     })
 
-    it('Esc fecha a janela e uma nova janela gera outra chave', async () => {
+    it('Esc depois da queda de rede mantém a chave e a trava: a nova janela reenvia a mesma chave', async () => {
       finalizarMock.mockRejectedValue(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
       renderPdv()
       await lancar('542')
@@ -304,18 +308,128 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
       await pagar(janela, '4')
       await waitFor(() => expect(within(janela).getByRole('button', { name: 'Finalizar venda' })).toBeEnabled())
       fireEvent.click(within(janela).getByRole('button', { name: 'Finalizar venda' }))
-      await within(janela).findByRole('alert')
+      await within(janela).findByText(MENSAGEM_PODE_TER_SIDO_GRAVADA)
       fireEvent.keyDown(janela, { key: 'Escape' })
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
       expect(await campo()).toHaveFocus()
 
       janela = await abrirPagamento()
+      expect(within(janela).getByText(MENSAGEM_PODE_TER_SIDO_GRAVADA)).toBeInTheDocument()
+      expect(within(janela).getByRole('list', { name: 'Formas usadas' })).toHaveTextContent('PIX')
+      fireEvent.click(within(janela).getByRole('button', { name: 'Tentar de novo' }))
+
+      await waitFor(() => expect(finalizarMock).toHaveBeenCalledTimes(2))
+      expect(finalizarMock.mock.calls[1][0].chave).toBe(finalizarMock.mock.calls[0][0].chave)
+    })
+
+    it('recarregar a página depois da queda de rede mantém a chave', async () => {
+      finalizarMock
+        .mockRejectedValueOnce(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
+        .mockResolvedValueOnce(venda({ numero: 131, troco: 0 }))
+      const { unmount } = renderPdv()
+      await lancar('542')
+      const janela = await abrirPagamento()
       await pagar(janela, '4')
+      await waitFor(() => expect(within(janela).getByRole('button', { name: 'Finalizar venda' })).toBeEnabled())
+      fireEvent.click(within(janela).getByRole('button', { name: 'Finalizar venda' }))
+      await within(janela).findByText(MENSAGEM_PODE_TER_SIDO_GRAVADA)
+      unmount()
+
+      renderPdv()
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+      // Com a tentativa travada, o F10 abre direto na trava, mesmo antes do cálculo.
+      await tecla('F10')
+      const reaberta = await screen.findByRole('dialog', { name: 'Pagamento' })
+      fireEvent.click(within(reaberta).getByRole('button', { name: 'Tentar de novo' }))
+
+      await waitFor(() => expect(finalizarMock).toHaveBeenCalledTimes(2))
+      expect(finalizarMock.mock.calls[1][0]).toEqual(finalizarMock.mock.calls[0][0])
+      expect(await screen.findByText('Venda nº 131 concluída')).toBeInTheDocument()
+    })
+
+    it('"Descartar tentativa" pede confirmação, libera a edição e a próxima tentativa usa outra chave', async () => {
+      finalizarMock.mockRejectedValue(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
+      renderPdv()
+      await lancar('542')
+      const janela = await abrirPagamento()
+      await pagar(janela, '4')
+      await waitFor(() => expect(within(janela).getByRole('button', { name: 'Finalizar venda' })).toBeEnabled())
+      fireEvent.click(within(janela).getByRole('button', { name: 'Finalizar venda' }))
+      await within(janela).findByText(MENSAGEM_PODE_TER_SIDO_GRAVADA)
+
+      fireEvent.click(within(janela).getByRole('button', { name: 'Descartar tentativa' }))
+      expect(
+        await within(janela).findByText(
+          'Confira em Vendas do caixa (F8) se a venda não foi registrada antes de mudar o pagamento.',
+        ),
+      ).toBeInTheDocument()
+      expect(finalizarMock).toHaveBeenCalledTimes(1)
+      fireEvent.click(within(janela).getByRole('button', { name: 'Descartar tentativa' }))
+
+      await waitFor(() => expect(within(janela).queryByText(MENSAGEM_PODE_TER_SIDO_GRAVADA)).not.toBeInTheDocument())
+      fireEvent.click(within(janela).getByRole('button', { name: 'Remover PIX' }))
+      await pagar(janela, '1')
       await waitFor(() => expect(within(janela).getByRole('button', { name: 'Finalizar venda' })).toBeEnabled())
       fireEvent.click(within(janela).getByRole('button', { name: 'Finalizar venda' }))
 
       await waitFor(() => expect(finalizarMock).toHaveBeenCalledTimes(2))
       expect(finalizarMock.mock.calls[1][0].chave).not.toBe(finalizarMock.mock.calls[0][0].chave)
+      expect(finalizarMock.mock.calls[1][0].pagamentos).toEqual([{ forma: 'DINHEIRO', valor: 24.9 }])
+    })
+
+    it('409 "já registrada com outros dados": a mensagem para conferir no F8, sem chave nova', async () => {
+      finalizarMock.mockRejectedValue(new HttpError(409, 'Esta operação já foi registrada com outros dados.'))
+      renderPdv()
+      await lancar('542')
+      const janela = await abrirPagamento()
+      await pagar(janela, '1')
+      await waitFor(() => expect(within(janela).getByRole('button', { name: 'Finalizar venda' })).toBeEnabled())
+      fireEvent.click(within(janela).getByRole('button', { name: 'Finalizar venda' }))
+
+      expect(
+        await within(janela).findByText('Esta venda pode já ter sido registrada. Confira em Vendas do caixa (F8).'),
+      ).toBeInTheDocument()
+      const chave = finalizarMock.mock.calls[0][0].chave
+      expect(lerGuardado(localStorage.getItem(chaveDoCarrinho(EMPRESA, USUARIO)), EMPRESA, USUARIO).tentativa).toMatchObject({
+        chave,
+        trava: 'OUTROS_DADOS',
+      })
+      expect(within(janela).queryByRole('button', { name: 'Tentar de novo' })).not.toBeInTheDocument()
+      expect(within(janela).getByRole('button', { name: 'Descartar tentativa' })).toBeEnabled()
+    })
+
+    it('Esc com o foco no valor desfaz só a forma escolhida; a janela continua', async () => {
+      renderPdv()
+      await lancar('542')
+      const janela = await abrirPagamento()
+      fireEvent.keyDown(within(janela).getByRole('group', { name: 'Formas de pagamento' }), { key: '2' })
+      const valor = await within(janela).findByLabelText('Valor em Débito')
+
+      fireEvent.keyDown(valor, { key: 'Escape' })
+
+      await waitFor(() => expect(within(janela).queryByLabelText('Valor em Débito')).not.toBeInTheDocument())
+      expect(screen.getByRole('dialog', { name: 'Pagamento' })).toBeInTheDocument()
+      expect(within(janela).getByRole('group', { name: 'Formas de pagamento' })).toHaveFocus()
+    })
+
+    it('"Voltar à venda" depois do total mudou recalcula a tela principal', async () => {
+      finalizarMock.mockRejectedValueOnce(new HttpError(409, 'O total da venda mudou. Confira os valores.'))
+      renderPdv()
+      await lancar('542')
+      const janela = await abrirPagamento()
+      await pagar(janela, '1', '50,00')
+      await waitFor(() => expect(within(janela).getByRole('button', { name: 'Finalizar venda' })).toBeEnabled())
+      calcularMock.mockImplementation(async (carrinho: CarrinhoRequest) => ({
+        ...calculoFalso(carrinho),
+        total: 26.9,
+        subtotal: 26.9,
+      }))
+      fireEvent.click(within(janela).getByRole('button', { name: 'Finalizar venda' }))
+      const mudou = await screen.findByRole('dialog', { name: 'O total da venda mudou' })
+      fireEvent.click(within(mudou).getByRole('button', { name: 'Voltar à venda' }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      await waitFor(() => expect(screen.getByRole('status', { name: 'Total' })).toHaveTextContent('R$ 26,90'))
     })
 
     it.each([
@@ -360,7 +474,7 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
     })
 
     it('outro 409 com o caixa ainda aberto: a mensagem fica na janela', async () => {
-      finalizarMock.mockRejectedValue(new HttpError(409, 'Esta operação já foi registrada com outros dados.'))
+      finalizarMock.mockRejectedValue(new HttpError(409, 'Venda recusada pelo servidor.'))
       renderPdv()
       await lancar('542')
       const janela = await abrirPagamento()
@@ -368,7 +482,7 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
       await waitFor(() => expect(within(janela).getByRole('button', { name: 'Finalizar venda' })).toBeEnabled())
       fireEvent.click(within(janela).getByRole('button', { name: 'Finalizar venda' }))
 
-      expect(await within(janela).findByRole('alert')).toHaveTextContent('Esta operação já foi registrada com outros dados.')
+      expect(await within(janela).findByRole('alert')).toHaveTextContent('Venda recusada pelo servidor.')
       expect(sessaoAtualMock).toHaveBeenCalledTimes(2)
     })
   })
@@ -525,6 +639,44 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
 
       expect(await within(janela).findByRole('alert')).toHaveTextContent(
         'Esta venda é de um caixa que já foi fechado ou está em conferência. Use devolução.',
+      )
+    })
+
+    it('"Carregar mais" traz a próxima página; a busca pelo número filtra a lista', async () => {
+      const pagina1 = Array.from({ length: 50 }, (_, indice) =>
+        vendaResumo({ id: `v-${200 - indice}`, numero: 200 - indice }),
+      )
+      listarVendasMock.mockImplementation(async (filtros) => {
+        if (filtros.numero === '128') {
+          return { itens: [vendaResumo()], pagina: 0, tamanho: 50, totalItens: 1 }
+        }
+        return filtros.pagina === 1
+          ? { itens: pagina1, pagina: 0, tamanho: 50, totalItens: 51 }
+          : { itens: [vendaResumo({ id: 'v-150', numero: 150 })], pagina: 1, tamanho: 50, totalItens: 51 }
+      })
+      renderPdv()
+      await campo()
+      await tecla('F8')
+      const janela = await screen.findByRole('dialog', { name: 'Vendas do caixa' })
+      const lista = await within(janela).findByRole('list', { name: 'Vendas' })
+      expect(within(lista).getAllByRole('listitem')).toHaveLength(50)
+
+      fireEvent.click(within(janela).getByRole('button', { name: 'Carregar mais' }))
+
+      await waitFor(() => expect(within(lista).getAllByRole('listitem')).toHaveLength(51))
+      expect(listarVendasMock).toHaveBeenCalledWith(expect.objectContaining({ pagina: 2 }), expect.anything())
+      expect(within(janela).queryByRole('button', { name: 'Carregar mais' })).not.toBeInTheDocument()
+
+      fireEvent.change(within(janela).getByLabelText('Nº da venda'), { target: { value: '128' } })
+
+      await waitFor(() =>
+        expect(listarVendasMock).toHaveBeenCalledWith(
+          expect.objectContaining({ numero: '128', sessaoId: 's-ana', pagina: 1 }),
+          expect.anything(),
+        ),
+      )
+      await waitFor(() =>
+        expect(within(within(janela).getByRole('list', { name: 'Vendas' })).getAllByRole('listitem')).toHaveLength(1),
       )
     })
 

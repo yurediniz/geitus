@@ -1,10 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 
 import { tocarBipeDeErro } from '@/features/pdv/bipeDeErro'
 import { chaveDoCarrinho, guardarCarrinho } from '@/features/pdv/carrinho'
+import { LIMITES_DA_LEITURA } from '@/features/pdv/filaDeLeituras'
 import { PdvPage } from '@/features/pdv/PdvPage'
 import { useAuth } from '@/hooks/useAuth'
 import { listarPontos, sessaoAtual } from '@/services/caixaService'
@@ -48,6 +49,7 @@ const calcularMock = vi.mocked(calcular)
 const bipeMock = vi.mocked(tocarBipeDeErro)
 
 const EMPRESA = 3
+const TEMPO_PADRAO = LIMITES_DA_LEITURA.tempoMaximoMs
 const USUARIO = 7
 
 function definirUsuario(perfil: 'ADMIN' | 'OPERADOR' = 'OPERADOR') {
@@ -162,7 +164,7 @@ describe('PdvPage', () => {
       await waitFor(() => expect(ultimoCarrinho().itens).toEqual([expect.objectContaining({ produtoId: 'p-racao', quantidade: 4 })]))
       expect(linhas()).toHaveLength(1)
       await waitFor(() => expect(total()).toHaveTextContent('R$ 99,60'))
-      expect(resolverMock).toHaveBeenNthCalledWith(1, '542*3')
+      expect(resolverMock).toHaveBeenNthCalledWith(1, '542*3', expect.any(AbortSignal))
     })
 
     it('cada etiqueta da balança vira uma linha nova', async () => {
@@ -502,5 +504,168 @@ describe('PdvPage', () => {
 
       expect(await campo()).toBeInTheDocument()
     })
+  })
+
+  describe('leituras pendentes (I1)', () => {
+    afterEach(() => {
+      LIMITES_DA_LEITURA.tempoMaximoMs = TEMPO_PADRAO
+    })
+
+    it('F10 logo depois de um bipe ainda pendente é recusado com "Aguarde a leitura…"', async () => {
+      renderPdv()
+      await ler('542')
+      await waitFor(() => expect(screen.getByRole('button', { name: /Pagamento/ })).toBeEnabled())
+      resolverMock.mockImplementation(() => new Promise(() => undefined))
+
+      await ler('900')
+      await tecla('F10')
+
+      expect(await screen.findByText('Aguarde a leitura…')).toBeInTheDocument()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Pagamento/ })).toBeDisabled()
+      expect(screen.getByRole('status', { name: 'Lendo o código' })).toBeInTheDocument()
+      expect(bipeMock).not.toHaveBeenCalled()
+    })
+
+    it('leitura travada: depois do tempo máximo, aborta e pede para ler de novo', async () => {
+      LIMITES_DA_LEITURA.tempoMaximoMs = 50
+      const sinais: AbortSignal[] = []
+      resolverMock.mockImplementation(
+        (_codigo, signal) =>
+          new Promise((_resolve, reject) => {
+            if (signal) {
+              sinais.push(signal)
+              signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+            }
+          }),
+      )
+      renderPdv()
+
+      await ler('542')
+
+      expect(await screen.findByText('Sem resposta do servidor. Leia o código de novo.')).toBeInTheDocument()
+      expect(sinais[0].aborted).toBe(true)
+      expect(screen.queryByRole('status', { name: 'Lendo o código' })).not.toBeInTheDocument()
+      expect(bipeMock).toHaveBeenCalled()
+    })
+
+    it('as leituras pendentes são abortadas ao sair da tela', async () => {
+      const sinais: AbortSignal[] = []
+      resolverMock.mockImplementation((_codigo, signal) => {
+        if (signal) {
+          sinais.push(signal)
+        }
+        return new Promise(() => undefined)
+      })
+      const { unmount } = renderPdv()
+      await ler('542')
+      await waitFor(() => expect(sinais).toHaveLength(1))
+
+      unmount()
+
+      expect(sinais[0].aborted).toBe(true)
+    })
+  })
+
+  describe('total sempre da venda atual (I2)', () => {
+    it('depois de pôr a venda 1 em espera, a venda 2 não mostra o total da venda 1', async () => {
+      renderPdv()
+      await ler('542')
+      await waitFor(() => expect(total()).toHaveTextContent('R$ 24,90'))
+      await tecla('F6')
+      await waitFor(() => expect(linhas()).toHaveLength(0))
+      expect(total()).toHaveTextContent('R$ 0,00')
+      calcularMock.mockImplementation(() => new Promise(() => undefined))
+
+      await ler('900')
+
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+      expect(total()).toHaveTextContent('—')
+      expect(total()).not.toHaveTextContent('24,90')
+    })
+
+    it('carrinho restaurado com o cálculo falhando mostra "—" no total', async () => {
+      localStorage.setItem(
+        chaveDoCarrinho(EMPRESA, USUARIO),
+        guardarCarrinho(
+          {
+            linhas: [{ id: 'l', produto: RACAO, embalagemId: null, quantidade: 1, codigoLido: '542', etiqueta: false, desconto: null }],
+            desconto: null,
+            cliente: null,
+          },
+          EMPRESA,
+          USUARIO,
+        ),
+      )
+      calcularMock.mockRejectedValue(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
+      renderPdv()
+
+      expect(await screen.findByText('Não foi possível calcular a venda. Confira a conexão.')).toBeInTheDocument()
+      expect(total()).toHaveTextContent('—')
+    })
+
+    it('F6 sem o cálculo atual guarda a venda em espera sem total ("—" na lista)', async () => {
+      calcularMock.mockImplementation(() => new Promise(() => undefined))
+      renderPdv()
+      await ler('542')
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+
+      await tecla('F6')
+      await tecla('F7')
+
+      const janela = await screen.findByRole('dialog', { name: 'Vendas em espera' })
+      expect(within(janela).getByRole('listitem')).toHaveTextContent('—')
+    })
+  })
+
+  it('foco permanente (I3): clicar numa área vazia e bipar não perde a leitura', async () => {
+    renderPdv()
+    const entrada = await campo()
+    entrada.blur()
+    expect(entrada).not.toHaveFocus()
+
+    // As teclas chegam fora do campo (o jsdom não insere o caractere num campo focado por keydown).
+    for (const digito of ['5', '4', '2']) {
+      fireEvent.keyDown(document.body, { key: digito })
+    }
+    expect(entrada).toHaveFocus()
+    expect(entrada).toHaveValue('542')
+    fireEvent.keyDown(entrada, { key: 'Enter' })
+
+    await waitFor(() => expect(resolverMock).toHaveBeenCalledWith('542', expect.anything()))
+    await waitFor(() => expect(linhas()).toHaveLength(1))
+  })
+
+  it('os botões do painel devolvem o foco ao campo', async () => {
+    renderPdv()
+    await ler('542')
+    await waitFor(() => expect(linhas()).toHaveLength(1))
+
+    fireEvent.click(screen.getByRole('button', { name: /Pôr em espera/ }))
+
+    await waitFor(() => expect(linhas()).toHaveLength(0))
+    expect(await campo()).toHaveFocus()
+  })
+
+  it('↓ na busca antes dos resultados não quebra o Enter (I7)', async () => {
+    let responder: (produtos: Awaited<ReturnType<typeof buscarProdutos>>) => void = () => undefined
+    buscarProdutosMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          responder = resolve
+        }),
+    )
+    renderPdv()
+    await ler('ração')
+    const janela = await screen.findByRole('dialog', { name: 'Buscar produto' })
+    const busca = within(janela).getByLabelText('Nome do produto')
+    await waitFor(() => expect(buscarProdutosMock).toHaveBeenCalled())
+
+    fireEvent.keyDown(busca, { key: 'ArrowDown' })
+    responder([{ ...RACAO, precoVigente: 24.9 }])
+    expect(await within(janela).findByRole('option', { name: /Ração X 1kg/ })).toHaveAttribute('aria-selected', 'true')
+    fireEvent.keyDown(busca, { key: 'Enter' })
+
+    await waitFor(() => expect(linhas()).toHaveLength(1))
   })
 })

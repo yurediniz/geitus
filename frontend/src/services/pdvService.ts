@@ -30,9 +30,9 @@ function caminhoDaVenda(id: string): string {
  * O item do texto lido (codigo, `codigo*quantidade` ou etiqueta da balanca).
  * 404 "Codigo nao encontrado.", 409 produto inativo, 400 quantidade invalida.
  */
-export function resolverCodigo(codigo: string): Promise<ItemResolvido> {
+export function resolverCodigo(codigo: string, signal?: AbortSignal): Promise<ItemResolvido> {
   const params = new URLSearchParams({ codigo })
-  return apiGet<ItemResolvido>(`/pdv/itens?${params.toString()}`, AUTENTICADA)
+  return apiGet<ItemResolvido>(`/pdv/itens?${params.toString()}`, { autenticada: true, signal })
 }
 
 /** Ate 20 produtos ativos pelo nome. */
