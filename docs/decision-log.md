@@ -951,3 +951,33 @@ Decisões do usuário em conversa: árvore livre, só o nome obrigatório e "For
 - **Compras:** importação de NF-e (cria ou atualiza o fornecedor pelo CNPJ), preço e código por fornecedor, e contas a pagar.
 - **Listagem de produtos:** filtro por marca e por fornecedor.
 - **Dados pessoais:** o OPERADOR vê documento (inclusive CPF de fornecedor pessoa física) e contatos, como em Clientes. Mascarar para o OPERADOR fica para quando houver perfis mais granulares (apontado pelo security-reviewer na B5).
+
+## DEC-040 — Imagem do produto no PostgreSQL com URLs assinadas (Fase F)
+
+**Data:** 2026-10-24
+**Status:** Aceita
+**Contexto:**
+A DEC-030 previu a Fase F (imagem do produto no PostgreSQL, comprimida no navegador), e a Fase E reservou para ela a miniatura na lista. O login guarda o JWT no navegador e o envia em cabeçalho, então uma tag `<img>` comum não consegue ler uma rota protegida.
+
+**Decisão:**
+- **Uma imagem por produto.** Entra por arquivo, câmera do celular ou arrastar e soltar, e é exibida inteira, sem recorte (decisões do usuário).
+- **Compressão no navegador:** o navegador gera a versão grande (até 1200 px e 400 KB) e a miniatura (até 200 px e 40 KB), em WebP, com JPEG quando o WebP não é suportado. O servidor só confere o tipo real, os tamanhos e as dimensões, sem recomprimir e sem biblioteca nova.
+- **Banco:** tabela `produto_imagens` separada de `produtos` (V15), com `versao` UUID trocada a cada envio.
+- **Entrega por URLs assinadas** (HMAC-SHA256, com o segredo próprio `GEITUS_IMAGEM_SEGREDO`), válidas até o fim do dia UTC seguinte. A rota de leitura não exige JWT e responde com `nosniff` e cache longo. A troca da versão muda a URL.
+- **Gravação:** a imagem segue o Salvar da tela do produto. Envio e remoção são só ADMIN.
+
+**Motivo:**
+- **URLs assinadas:** permitem `<img>` e cache do navegador sem expor uma rota protegida pelo JWT. As alternativas (buscar com token e criar blob, ou embutir base64 na listagem) eram mais lentas ou pesavam em toda listagem.
+- **Tabela separada:** evita carregar bytes nas consultas de produto.
+
+**Impacto:**
+- O contrato do produto ganha `imagem`.
+- Endpoints novos: `PUT/DELETE /api/produtos/{id}/imagem` e `GET /api/imagens/produtos/...`.
+- Segredo novo no `.env`.
+- Spec: `docs/modules/produtos-imagem.md`.
+- Revisores obrigatórios: `data-reviewer` (V15, bytea) e `security-reviewer` (rota sem JWT, assinatura, upload e tipos de arquivo).
+
+**Observações futuras:**
+- O PDV usa a mesma `miniaturaUrl`.
+- Armazenamento externo (S3) quando o volume justificar.
+- Encerra as 6 fases da DEC-030.
