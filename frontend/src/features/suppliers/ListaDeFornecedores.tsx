@@ -80,14 +80,20 @@ function Representante({ fornecedor }: { fornecedor: FornecedorItemLista }) {
   )
 }
 
+/** Colunas secundarias: so a partir de 1.280 px, para a tabela caber sem rolagem entre 1.024 e 1.280 px (como em Produtos). */
+const SO_EM_TELA_LARGA = 'hidden xl:table-cell'
+
 function BotaoStatus({
   fornecedor,
   alterando,
   aoAlterar,
+  compacto = false,
 }: {
   fornecedor: FornecedorItemLista
   alterando: boolean
   aoAlterar: () => void
+  /** Na tabela: abaixo de 1.280 px, so o icone (o nome acessivel e a dica dizem a acao). */
+  compacto?: boolean
 }) {
   const Icone = alterando ? Loader2 : fornecedor.ativo ? XCircle : RotateCcw
   return (
@@ -99,9 +105,10 @@ function BotaoStatus({
       disabled={alterando}
       onClick={aoAlterar}
       aria-label={`${fornecedor.ativo ? 'Inativar' : 'Reativar'} ${fornecedor.razaoSocial}`}
+      title={compacto ? (fornecedor.ativo ? 'Inativar' : 'Reativar') : undefined}
     >
       <Icone className={alterando ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} aria-hidden="true" />
-      {fornecedor.ativo ? 'Inativar' : 'Reativar'}
+      <span className={compacto ? 'hidden xl:inline' : undefined}>{fornecedor.ativo ? 'Inativar' : 'Reativar'}</span>
     </Button>
   )
 }
@@ -134,13 +141,13 @@ export function ListaDeFornecedores({
               <th scope="col" className="px-3 py-2 font-medium">
                 CNPJ/CPF
               </th>
-              <th scope="col" className="px-3 py-2 font-medium">
+              <th scope="col" className={cn('px-3 py-2 font-medium', SO_EM_TELA_LARGA)}>
                 Telefone
               </th>
               <th scope="col" className="px-3 py-2 font-medium">
                 Representante
               </th>
-              <th scope="col" className="px-3 py-2 text-right font-medium">
+              <th scope="col" className={cn('px-3 py-2 text-right font-medium', SO_EM_TELA_LARGA)}>
                 Produtos
               </th>
               <th scope="col" className="px-3 py-2 font-medium">
@@ -165,7 +172,7 @@ export function ListaDeFornecedores({
                   <td className="px-3 py-3 whitespace-nowrap tabular-nums">
                     {documento ?? <SemValor motivo="Sem documento" />}
                   </td>
-                  <td className="px-3 py-3 whitespace-nowrap tabular-nums">
+                  <td className={cn('px-3 py-3 whitespace-nowrap tabular-nums', SO_EM_TELA_LARGA)}>
                     {fornecedor.telefone ? (
                       <LinkDoTelefone digitos={fornecedor.telefone} />
                     ) : (
@@ -175,7 +182,9 @@ export function ListaDeFornecedores({
                   <td className="px-3 py-3">
                     <Representante fornecedor={fornecedor} />
                   </td>
-                  <td className="px-3 py-3 text-right tabular-nums">{fornecedor.quantidadeProdutos}</td>
+                  <td className={cn('px-3 py-3 text-right tabular-nums', SO_EM_TELA_LARGA)}>
+                    {fornecedor.quantidadeProdutos}
+                  </td>
                   <td className="px-3 py-3">
                     <SeloStatus ativo={fornecedor.ativo} />
                   </td>
@@ -185,6 +194,7 @@ export function ListaDeFornecedores({
                         fornecedor={fornecedor}
                         alterando={alterandoStatusId === fornecedor.id}
                         aoAlterar={() => aoAlterarStatus(fornecedor)}
+                        compacto
                       />
                     </td>
                   )}

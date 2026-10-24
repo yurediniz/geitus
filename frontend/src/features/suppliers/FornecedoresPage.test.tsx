@@ -130,7 +130,22 @@ describe('FornecedoresPage', () => {
       'Status',
       'Ações',
     ])
+    // Sem rolagem lateral entre 1.024 e 1.280 px (regra de Produtos): Telefone e Produtos so a partir de 1.280 px.
+    const cabecalhos = within(tabela).getAllByRole('columnheader')
+    const soEmTelaLarga = cabecalhos.filter((th) => th.classList.contains('xl:table-cell')).map((th) => th.textContent)
+    expect(soEmTelaLarga).toEqual(['Telefone', 'Produtos'])
+    for (const th of cabecalhos.filter((cabecalho) => soEmTelaLarga.includes(cabecalho.textContent))) {
+      expect(th).toHaveClass('hidden', 'xl:table-cell')
+    }
     const linha = within(tabela).getAllByRole('row')[1]
+    const celulas = within(linha).getAllByRole('cell')
+    expect(celulas[3]).toHaveClass('hidden', 'xl:table-cell')
+    expect(celulas[5]).toHaveClass('hidden', 'xl:table-cell')
+    expect(celulas.filter((celula) => celula.classList.contains('hidden'))).toHaveLength(2)
+    // O representante continua com o telefone dele; a acao fica so com o icone abaixo de 1.280 px.
+    expect(within(celulas[4]).getByRole('link', { name: '(11) 98765-4321' })).toBeInTheDocument()
+    const acao = within(celulas[7]).getByRole('button', { name: 'Inativar Distribuidora Sul Ltda' })
+    expect(within(acao).getByText('Inativar')).toHaveClass('hidden', 'xl:inline')
     expect(linha).toHaveTextContent('Distribuidora Sul Ltda')
     expect(linha).toHaveTextContent('Dist Sul')
     expect(linha).toHaveTextContent('11.222.333/0001-81')
