@@ -24,6 +24,8 @@ import com.geitus.app.shared.busca.TextoDeBusca;
  * O {@code SELECT} trava as linhas lidas ({@code FOR NO KEY UPDATE}, sem
  * bloquear as FKs que apontam para o produto): uma edicao simultanea de um
  * desses produtos espera, e nenhuma das duas grava a busca com dados velhos.
+ * As linhas sao travadas em ordem de id, a mesma ordem da venda e do
+ * cancelamento no PDV (DT-032): os dois nunca se travam em ciclo.
  * Exige a transacao do renomear ({@link Propagation#MANDATORY}): a marca e a
  * busca mudam juntas ou nada muda.
  *
@@ -37,6 +39,7 @@ class BuscaDosProdutosDaMarca {
               FROM produtos p
              WHERE p.empresa_id = :empresaId
                AND p.marca_id = :marcaId
+             ORDER BY p.id
                FOR NO KEY UPDATE""";
     private static final String ATUALIZAR_BUSCA = """
             UPDATE produtos
