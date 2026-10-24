@@ -3,6 +3,9 @@ package com.geitus.app.supplier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.List;
 import java.util.UUID;
@@ -12,10 +15,12 @@ import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -31,6 +36,7 @@ import com.geitus.app.company.EmpresaRepository;
 import com.geitus.app.company.Endereco;
 import com.geitus.app.company.RepresentanteLegal;
 import com.geitus.app.company.TipoPessoa;
+import com.geitus.app.iam.JwtService;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.supplier.dto.FornecedorItemResponse;
@@ -52,6 +58,7 @@ import jakarta.persistence.EntityManagerFactory;
  * gravadas direto no banco (as telas deles sao da Task 5). Requer Docker.
  */
 @SpringBootTest
+@AutoConfigureMockMvc
 @Testcontainers
 class FornecedorIT {
 
@@ -93,6 +100,12 @@ class FornecedorIT {
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Autowired
+    private JwtService jwtService;
 
     // ---------- Cadastro ----------
 
@@ -246,6 +259,54 @@ class FornecedorIT {
         }
 
         assertThat(comandosDaListagem(loja, 25)).isEqualTo(comandosDaListagem(loja, 3));
+    }
+
+    @Test
+    void buscaPorCpfComMascaraNumPf() {
+        Loja loja = novaLoja();
+        fornecedorService.cadastrarParaUsuario(loja.admin(), request("João da Silva")
+                .tipoPessoa(TipoPessoaFornecedor.PF).documento("111.444.777-35").build());
+        fornecedorService.cadastrarParaUsuario(loja.admin(), request("Outro").build());
+
+        assertThat(nomes(listar(loja, "111.444.777-35", null))).containsExactly("João da Silva");
+        assertThat(nomes(listar(loja, "11144477735", null))).containsExactly("João da Silva");
+    }
+
+    /** Contrato JSON do detalhe e da listagem (o que o frontend le). */
+    @Test
+    void contratoJsonDoDetalheEDaListagem() throws Exception {
+        Loja loja = novaLoja();
+        MarcaResponse boehringer = marcaService.cadastrarParaUsuario(loja.admin(), new MarcaRequest("Boehringer", null));
+        MarcaResponse nexgard = marcaService.cadastrarParaUsuario(loja.admin(),
+                new MarcaRequest("Nexgard", boehringer.id()));
+        FornecedorResponse fornecedor = fornecedorService.cadastrarParaUsuario(loja.admin(), request("Distribuidora")
+                .logradouro("Rua das Flores").numeroEndereco("100")
+                .representantes(new RepresentanteRequest(null, "Ana", "11987654321", "ana@d.com.br"))
+                .marcaIds(nexgard.id()).build());
+        ligarAProduto(loja, fornecedor.id(), "Arroz");
+        String token = "Bearer " + jwtService.gerarToken(usuarioRepository.findById(loja.admin()).orElseThrow());
+
+        mockMvc.perform(get("/api/fornecedores/" + fornecedor.id()).header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(fornecedor.id().toString()))
+                .andExpect(jsonPath("$.logradouro").value("Rua das Flores"))
+                .andExpect(jsonPath("$.numeroEndereco").value("100"))
+                .andExpect(jsonPath("$.marcas[0].id").value(nexgard.id().toString()))
+                .andExpect(jsonPath("$.marcas[0].caminho").value("Boehringer › Nexgard"))
+                .andExpect(jsonPath("$.representantes[0].nome").value("Ana"))
+                .andExpect(jsonPath("$.representantes[0].id").exists())
+                .andExpect(jsonPath("$.quantidadeProdutos").value(1))
+                .andExpect(jsonPath("$.empresaId").doesNotExist())
+                .andExpect(jsonPath("$.buscaNormalizada").doesNotExist());
+        mockMvc.perform(get("/api/fornecedores").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.itens[0].id").value(fornecedor.id().toString()))
+                .andExpect(jsonPath("$.itens[0].representantePrincipal.nome").value("Ana"))
+                .andExpect(jsonPath("$.itens[0].representantePrincipal.telefone").value("11987654321"))
+                .andExpect(jsonPath("$.itens[0].quantidadeProdutos").value(1))
+                .andExpect(jsonPath("$.pagina").value(0))
+                .andExpect(jsonPath("$.tamanho").value(25))
+                .andExpect(jsonPath("$.totalItens").value(1));
     }
 
     @Test

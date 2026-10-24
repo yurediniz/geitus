@@ -217,6 +217,24 @@ class FornecedorNaEntradaPorCompraIT {
                 .isEqualTo(central);
     }
 
+    /** A repeticao devolve o movimento gravado antes das regras: o fornecedor inativado depois nao a barra. */
+    @Test
+    void chaveRepetidaDepoisDeInativarOFornecedorDevolveOMovimentoOriginal() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        UUID arroz = cenario.novoProduto(empresa, "UN", "Arroz");
+        UUID central = fornecedor(empresa, "Distribuidora Central");
+        UUID chave = UUID.randomUUID();
+        ResultadoAjuste primeiro = ajustar(empresa, arroz, compra("5", "10.00", central, chave));
+        fornecedorService.inativarParaUsuario(empresa.admin(), central);
+
+        ResultadoAjuste repetido = ajustar(empresa, arroz, compra("5", "10.00", central, chave));
+
+        assertThat(repetido.criado()).isFalse();
+        assertThat(repetido.movimento().id()).isEqualTo(primeiro.movimento().id());
+        assertThat(repetido.movimento().fornecedor().id()).isEqualTo(central);
+        assertThat(movimentos(arroz)).isEqualTo(1);
+    }
+
     @Test
     void chaveRepetidaComOutroFornecedorOuSemEle409() {
         CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();

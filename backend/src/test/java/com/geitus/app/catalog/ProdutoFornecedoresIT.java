@@ -38,6 +38,7 @@ import com.geitus.app.company.TipoPessoa;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.supplier.DadosFornecedorInvalidosException;
+import com.geitus.app.supplier.FornecedorNaoEncontradoException;
 import com.geitus.app.supplier.FornecedorService;
 import com.geitus.app.supplier.dto.FornecedorRequest;
 
@@ -352,6 +353,22 @@ class ProdutoFornecedoresIT {
         long comVinteECinco = comandosDaListagem(loja, 25);
 
         assertThat(comVinteECinco).isEqualTo(comTres);
+    }
+
+    @Test
+    void produtosEDesligarComFornecedorDeOutraEmpresaE404() {
+        Loja loja = novaLoja();
+        Loja outra = novaLoja();
+        UUID daOutra = fornecedor(outra, "Da outra");
+        ProdutoResponse produtoDaOutra = cadastrar(outra, "Ração", List.of(daOutra), daOutra);
+
+        assertThatThrownBy(() -> fornecedorService.produtosParaUsuario(loja.admin(), daOutra, 0, 25))
+                .isInstanceOf(FornecedorNaoEncontradoException.class)
+                .hasMessage("Fornecedor não encontrado.");
+        assertThatThrownBy(() -> fornecedorService.desligarProdutoParaUsuario(loja.admin(), daOutra,
+                produtoDaOutra.id()))
+                .isInstanceOf(FornecedorNaoEncontradoException.class);
+        assertThat(ligacoes(produtoDaOutra.id())).isEqualTo(1);
     }
 
     @Test

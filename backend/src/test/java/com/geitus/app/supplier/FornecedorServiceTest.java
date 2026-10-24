@@ -179,6 +179,21 @@ class FornecedorServiceTest {
                 .satisfies(erro -> assertThat(((DadosFornecedorInvalidosException) erro).campo()).contains("marcaIds"));
     }
 
+    /** O limite de 200 vale para as marcas distintas: as repetidas saem antes. */
+    @Test
+    void duzentasEUmaMarcasComRepeticaoEAteDuzentasDistintasPassa() {
+        Marca golden = marca(1L, null, "Golden");
+        Marca premier = marca(2L, null, "Premier");
+        UUID[] informadas = IntStream.range(0, 201)
+                .mapToObj(indice -> indice % 2 == 0 ? golden.getUuid() : premier.getUuid())
+                .toArray(UUID[]::new);
+
+        FornecedorResponse resposta = service.cadastrarParaUsuario(ID_USUARIO, ValidacaoDoFornecedorTest.request()
+                .marcaIds(informadas).build());
+
+        assertThat(resposta.marcas()).extracting(marca -> marca.nome()).containsExactly("Golden", "Premier");
+    }
+
     @Test
     void marcaInativaSoSeJaEstiverLigada() {
         Marca golden = marca(1L, null, "Golden");
@@ -235,6 +250,22 @@ class FornecedorServiceTest {
                 ValidacaoDoFornecedorTest.request().documento("111.444.777-35").build());
 
         assertThat(resposta.tipoPessoa()).isEqualTo(TipoPessoaFornecedor.PF);
+    }
+
+    /** Review Focus 4 na edicao: PATCH sem tipo num PF mantem o PF, e a IE informada e 400. */
+    @Test
+    void patchSemTipoNumPfComInscricaoEstadualE400() {
+        Fornecedor fornecedor = existente();
+        fornecedor.atualizarDados(ValidacaoDoFornecedor.dados(ValidacaoDoFornecedorTest.request()
+                .tipoPessoa(TipoPessoaFornecedor.PF).build()));
+
+        assertThatThrownBy(() -> service.atualizarParaUsuario(ID_USUARIO, fornecedor.getUuid(),
+                ValidacaoDoFornecedorTest.request().inscricaoEstadual("ISENTO").build()))
+                .isInstanceOf(DadosFornecedorInvalidosException.class)
+                .hasMessage("Inscrição estadual só para pessoa jurídica.")
+                .satisfies(erro -> assertThat(((DadosFornecedorInvalidosException) erro).campo())
+                        .contains("inscricaoEstadual"));
+        assertThat(fornecedor.getInscricaoEstadual()).isNull();
     }
 
     @Test

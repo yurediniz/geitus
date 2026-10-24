@@ -175,6 +175,16 @@ class ValidacaoDoFornecedorTest {
     }
 
     @Test
+    void exatamenteDezRepresentantesPassa() {
+        List<RepresentanteRequest> dez = IntStream.rangeClosed(1, 10)
+                .mapToObj(numero -> new RepresentanteRequest(null, "Representante " + numero, null, null))
+                .toList();
+
+        assertThat(ValidacaoDoFornecedor.representantes(dez)).hasSize(10)
+                .extracting(DadosRepresentante::nome).endsWith("Representante 10");
+    }
+
+    @Test
     void noMaximoDezRepresentantesESemIdRepetido() {
         List<RepresentanteRequest> onze = IntStream.rangeClosed(1, 11)
                 .mapToObj(numero -> new RepresentanteRequest(null, "Representante " + numero, null, null))
@@ -213,6 +223,7 @@ class ValidacaoDoFornecedorTest {
         private String inscricaoEstadual;
         private String cep;
         private String logradouro;
+        private String numeroEndereco;
         private String bairro;
         private String uf;
         private String telefone;
@@ -256,6 +267,11 @@ class ValidacaoDoFornecedorTest {
             return this;
         }
 
+        RequestDeTeste numeroEndereco(String valor) {
+            this.numeroEndereco = valor;
+            return this;
+        }
+
         RequestDeTeste bairro(String valor) {
             this.bairro = valor;
             return this;
@@ -293,7 +309,7 @@ class ValidacaoDoFornecedorTest {
 
         FornecedorRequest build() {
             return new FornecedorRequest(tipoPessoa, documento, razaoSocial, nomeFantasia, inscricaoEstadual, cep,
-                    logradouro, null, null, bairro, null, uf, telefone, email, observacoes, representantes, marcaIds);
+                    logradouro, numeroEndereco, null, bairro, null, uf, telefone, email, observacoes, representantes, marcaIds);
         }
     }
 }

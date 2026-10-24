@@ -79,6 +79,24 @@ class MigracaoV14IT {
         assertThat(texto("SELECT (marca_id IS NULL)::text FROM produtos WHERE id = " + semMarca)).isEqualTo("true");
     }
 
+    /** A grafia e a do produto de menor id, mesmo minuscula e com espaco: "golden " antes de "Golden". */
+    @Test
+    void grafiaDaMarcaEDoFornecedorEADoProdutoDeMenorId() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        long primeiro = inserirProduto(empresa, "Ração Filhote", "golden ", "distribuidora xavier");
+        long segundo = inserirProduto(empresa, "Ração Adulto", "Golden", "Distribuidora Xavier");
+
+        aplicarV14();
+
+        assertThat(texto("SELECT string_agg(nome, ',') FROM marcas WHERE empresa_id = " + empresa))
+                .isEqualTo("golden");
+        assertThat(texto("SELECT string_agg(razao_social, ',') FROM fornecedores WHERE empresa_id = " + empresa))
+                .isEqualTo("distribuidora xavier");
+        assertThat(texto("SELECT (count(DISTINCT marca_id) = 1 AND count(DISTINCT fornecedor_ultima_compra_id) = 1"
+                + " AND count(*) = 2)::text FROM produtos WHERE id IN (" + primeiro + ", " + segundo + ")"))
+                .isEqualTo("true");
+    }
+
     @Test
     void mesmaMarcaEmEmpresasDiferentesViraUmaMarcaPorEmpresa() throws SQLException {
         long empresaA = inserirEmpresa("Empresa A");

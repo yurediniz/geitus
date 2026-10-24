@@ -290,12 +290,14 @@ public class FornecedorService {
         if (informadas == null || informadas.isEmpty()) {
             return Set.of();
         }
-        if (informadas.size() > MAXIMO_DE_MARCAS) {
+        // O limite vale para as marcas distintas: as repetidas saem antes de contar.
+        Set<UUID> semRepeticao = new LinkedHashSet<>(informadas);
+        if (semRepeticao.size() > MAXIMO_DE_MARCAS) {
             throw new DadosFornecedorInvalidosException(MENSAGEM_MARCAS_DEMAIS, CAMPO_MARCAS);
         }
         Arvore<Marca> arvore = marcaService.arvoreDaEmpresa(empresaId);
         Set<Long> ids = new LinkedHashSet<>();
-        for (UUID informada : new LinkedHashSet<>(informadas)) {
+        for (UUID informada : semRepeticao) {
             Marca marca = arvore.buscarPeloUuid(informada)
                     .orElseThrow(() -> new FornecedorNaoEncontradoException(MENSAGEM_MARCA_NAO_ENCONTRADA));
             if (!arvore.selecionavel(marca.getId()) && !atuais.contains(marca.getId())) {
