@@ -134,7 +134,7 @@ class ListagemDeProdutosIT {
         Loja loja = novaLoja();
         UUID racao = categoria(loja, "Ração", null);
         UUID umida = categoria(loja, "Úmida", racao);
-        cadastrar(loja, comUnidade(loja).nome("Açúcar Cristal União").categoriaId(umida).marca("União")
+        cadastrar(loja, comUnidade(loja).nome("Açúcar Cristal União").categoriaId(umida)
                 .codigosBarras("7891000315507").estoqueInicial("4"));
         cadastrar(loja, comUnidade(loja).nome("Arroz"));
 

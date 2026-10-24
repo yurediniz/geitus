@@ -101,6 +101,13 @@ public class MovimentoEstoque {
     @Column(name = "custo_unitario", precision = 14, scale = 4, updatable = false)
     private BigDecimal custoUnitario;
 
+    /**
+     * Fase B5 (V14): id interno do fornecedor da entrada por compra, ou
+     * {@code null}. A V14 so o aceita na entrada manual por compra.
+     */
+    @Column(name = "fornecedor_id", updatable = false)
+    private Long fornecedorId;
+
     @Column(name = "criado_em", nullable = false, updatable = false)
     private LocalDateTime criadoEm;
 
@@ -256,6 +263,11 @@ public class MovimentoEstoque {
     /** Custo por unidade de venda, com 4 casas, ou {@code null} sem custo. */
     public BigDecimal getCustoUnitario() {
         return custoUnitario;
+    }
+
+    /** Id interno do fornecedor da entrada por compra, ou {@code null}. */
+    public Long getFornecedorId() {
+        return fornecedorId;
     }
 
     public LocalDateTime getCriadoEm() {

@@ -72,9 +72,6 @@ public record ProdutoResponse(
         String nomeCurtoEfetivo,
         @Schema(description = "Categoria com o caminho na arvore; null se sem categoria")
         CategoriaResumo categoria,
-        String marca,
-        @Schema(description = "Fornecedor principal; null se nao houver")
-        String fornecedor,
         @Schema(description = "Unidade de venda")
         UnidadeResumo unidade,
         String descricao,
@@ -149,8 +146,6 @@ public record ProdutoResponse(
                 produto.getNomeCurto(),
                 produto.nomeCurtoEfetivo(),
                 CategoriaResumo.deOuNulo(produto.getCategoria(), arvore),
-                produto.getMarca(),
-                produto.getFornecedor(),
                 UnidadeResumo.deOuNulo(produto.getUnidade()),
                 produto.getDescricao(),
                 preco,

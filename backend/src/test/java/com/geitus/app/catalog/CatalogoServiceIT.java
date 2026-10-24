@@ -506,19 +506,15 @@ class CatalogoServiceIT {
     }
 
     @Test
-    void sugestoesESkuSugeridoComBancoReal() {
+    void skuSugeridoComBancoReal() {
         Empresa empresa = novaEmpresa();
         Long idUsuario = novoAdmin(empresa);
         UUID un = unidadePadrao(empresa, idUsuario, "UN");
         produtoService.cadastrarParaUsuario(idUsuario,
-                ProdutoRequestBuilder.comUnidade(un).nome("A").marca("Golden").sku("P000030").build());
-        produtoService.cadastrarParaUsuario(idUsuario,
-                ProdutoRequestBuilder.comUnidade(un).nome("B").marca("golden").fornecedor("Distribuidora X").build());
+                ProdutoRequestBuilder.comUnidade(un).nome("A").sku("P000030").build());
+        produtoService.cadastrarParaUsuario(idUsuario, ProdutoRequestBuilder.comUnidade(un).nome("B").build());
 
         assertThat(produtoService.sugerirSkuParaUsuario(idUsuario)).isEqualTo("P000031");
-        assertThat(produtoService.sugestoesParaUsuario(idUsuario, "marca", "GOL")).containsExactly("Golden");
-        assertThat(produtoService.sugestoesParaUsuario(idUsuario, "fornecedor", null))
-                .containsExactly("Distribuidora X");
     }
 
     // ---------- Fase C: promocao e atacado ----------

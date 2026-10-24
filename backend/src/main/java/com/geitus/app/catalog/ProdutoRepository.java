@@ -204,43 +204,6 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
             """, nativeQuery = true)
     List<String> skusNoPadrao(@Param("empresaId") Long empresaId);
 
-    // Nota: as sugestoes de marca e de fornecedor sao DUAS queries fixas, uma
-    // por coluna. O nome da coluna nunca e montado a partir da entrada do
-    // cliente (nem concatenado no SQL): o service escolhe o metodo a partir de
-    // uma allow-list. Agrupam sem diferenciar maiusculas (lower), devolvem a
-    // grafia mais usada de cada valor (mode(), empate pela ordem alfabetica) e
-    // ordenam por frequencia desc e depois alfabeticamente. O padrao chega
-    // pronto do service (minusculas, escapado, com '%' nas pontas; sem termo e
-    // '%%'), nunca null.
-
-    /** Marcas ja usadas na empresa que contem o termo, das mais usadas para as menos. */
-    @Query(value = """
-            SELECT mode() WITHIN GROUP (ORDER BY p.marca) AS valor
-            FROM produtos p
-            WHERE p.empresa_id = :empresaId
-              AND p.marca IS NOT NULL
-              AND lower(p.marca) LIKE :padrao ESCAPE '\\'
-            GROUP BY lower(p.marca)
-            ORDER BY count(*) DESC, lower(p.marca)
-            LIMIT :limite
-            """, nativeQuery = true)
-    List<String> sugestoesDeMarca(@Param("empresaId") Long empresaId, @Param("padrao") String padrao,
-            @Param("limite") int limite);
-
-    /** Fornecedores ja usados na empresa que contem o termo, dos mais usados para os menos. */
-    @Query(value = """
-            SELECT mode() WITHIN GROUP (ORDER BY p.fornecedor) AS valor
-            FROM produtos p
-            WHERE p.empresa_id = :empresaId
-              AND p.fornecedor IS NOT NULL
-              AND lower(p.fornecedor) LIKE :padrao ESCAPE '\\'
-            GROUP BY lower(p.fornecedor)
-            ORDER BY count(*) DESC, lower(p.fornecedor)
-            LIMIT :limite
-            """, nativeQuery = true)
-    List<String> sugestoesDeFornecedor(@Param("empresaId") Long empresaId, @Param("padrao") String padrao,
-            @Param("limite") int limite);
-
     /**
      * Etapa 2 da listagem (docs/modules/produtos-listagem.md, 5): os produtos
      * da empresa com estes ids internos (vindos da {@code ConsultaDeProdutos}),

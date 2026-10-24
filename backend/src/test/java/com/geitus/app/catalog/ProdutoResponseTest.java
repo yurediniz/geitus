@@ -86,12 +86,11 @@ class ProdutoResponseTest {
         // Protege contra regressao silenciosa no mapeamento entidade -> response
         // dos campos da V4 (hoje so os derivados margem/markup eram assertados).
         Produto produto = ProdutoTesteBuilder.produto(empresa, un).nome("Arroz 5kg").precoVenda("25.90")
-                .custo("18.00").estoqueMinimo("2").sku("SKU-V4").marca("Tio João").descricao("Arroz branco tipo 1")
+                .custo("18.00").estoqueMinimo("2").sku("SKU-V4").descricao("Arroz branco tipo 1")
                 .estoqueMaximo("50.000").pontoReposicao("10.000").precoMinimo("20.00").build();
 
         ProdutoResponse response = responder(produto);
 
-        assertThat(response.marca()).isEqualTo("Tio João");
         assertThat(response.descricao()).isEqualTo("Arroz branco tipo 1");
         assertThat(response.estoqueMaximo()).isEqualByComparingTo("50.000");
         assertThat(response.pontoReposicao()).isEqualByComparingTo("10.000");
@@ -152,16 +151,15 @@ class ProdutoResponseTest {
     }
 
     @Test
-    void nomeCurtoFornecedorEPodeExcluirSaoMapeados() {
+    void nomeCurtoEPodeExcluirSaoMapeados() {
         Produto produto = ProdutoTesteBuilder.produto(empresa, un).nome("Ração Golden Adulto Frango e Arroz 15kg")
-                .fornecedor("Distribuidora X").build();
+                .build();
 
         ProdutoResponse podeExcluir = responder(produto);
         ProdutoResponse bloqueado = ProdutoResponse.de(produto, SEM_CATEGORIAS, false, HOJE, ResumoDeEstoque.VAZIO);
 
         assertThat(podeExcluir.nomeCurto()).isNull();
         assertThat(podeExcluir.nomeCurtoEfetivo()).isEqualTo("Ração Golden Adulto Frango e A");
-        assertThat(podeExcluir.fornecedor()).isEqualTo("Distribuidora X");
         assertThat(podeExcluir.podeExcluir()).isTrue();
         assertThat(bloqueado.podeExcluir()).isFalse();
     }

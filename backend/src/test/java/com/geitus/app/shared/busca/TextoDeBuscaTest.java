@@ -2,6 +2,9 @@ package com.geitus.app.shared.busca;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Arrays;
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
 import com.geitus.app.catalog.CodigoBarras;
@@ -88,6 +91,14 @@ class TextoDeBuscaTest {
         assertThat(TextoDeBusca.textoDoProduto("Ração Golden", null, "P000001", "Premier"))
                 .isEqualTo("racao golden p000001 premier");
         assertThat(TextoDeBusca.textoDoProduto("Sachê", "SACHE GT", null, "  ")).isEqualTo("sache sache gt");
+    }
+
+    /** Fase B5: o texto do fornecedor (razao social, fantasia e representantes) usa a mesma juncao. */
+    @Test
+    void textoDosCamposJuntaOsInformadosNaOrdem() {
+        assertThat(TextoDeBusca.textoDosCampos(Arrays.asList("Distribuidora São João", null, "  ",
+                "Ana Lúcia"))).isEqualTo("distribuidora sao joao ana lucia");
+        assertThat(TextoDeBusca.textoDosCampos(List.of())).isEmpty();
     }
 
     @Test

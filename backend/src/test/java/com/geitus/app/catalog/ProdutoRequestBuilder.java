@@ -21,8 +21,6 @@ final class ProdutoRequestBuilder {
 
     private String nome = "Produto";
     private String nomeCurto;
-    private String marca;
-    private String fornecedor;
     private String descricao;
     private UUID unidadeId;
     private UUID categoriaId;
@@ -57,16 +55,6 @@ final class ProdutoRequestBuilder {
 
     ProdutoRequestBuilder nomeCurto(String valor) {
         this.nomeCurto = valor;
-        return this;
-    }
-
-    ProdutoRequestBuilder marca(String valor) {
-        this.marca = valor;
-        return this;
-    }
-
-    ProdutoRequestBuilder fornecedor(String valor) {
-        this.fornecedor = valor;
         return this;
     }
 
@@ -182,7 +170,7 @@ final class ProdutoRequestBuilder {
     }
 
     ProdutoRequest build() {
-        return new ProdutoRequest(nome, nomeCurto, marca, fornecedor, descricao, unidadeId, categoriaId,
+        return new ProdutoRequest(nome, nomeCurto, descricao, unidadeId, categoriaId,
                 precoVenda, custo, estoqueMinimo, estoqueMaximo, pontoReposicao,
                 precoMinimo, codigosBarras, embalagens, sku, codigo, vendidoBalanca, promocao, atacado, controlaEstoque,
                 estoqueInicial);

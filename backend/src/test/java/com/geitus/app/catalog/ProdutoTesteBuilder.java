@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.geitus.app.catalog.categoria.Categoria;
+import com.geitus.app.catalog.marca.Marca;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.company.Empresa;
 
@@ -32,8 +33,7 @@ final class ProdutoTesteBuilder {
     private final UnidadeMedida unidade;
     private String nome = "Produto";
     private String nomeCurto;
-    private String marca;
-    private String fornecedor;
+    private Marca marca;
     private String descricao;
     private Categoria categoria;
     private BigDecimal precoVenda = new BigDecimal("10.00");
@@ -90,13 +90,8 @@ final class ProdutoTesteBuilder {
         return this;
     }
 
-    ProdutoTesteBuilder marca(String valor) {
+    ProdutoTesteBuilder marca(Marca valor) {
         this.marca = valor;
-        return this;
-    }
-
-    ProdutoTesteBuilder fornecedor(String valor) {
-        this.fornecedor = valor;
         return this;
     }
 
@@ -200,7 +195,7 @@ final class ProdutoTesteBuilder {
 
     /** Os dados do cadastro montados ate aqui, para {@link Produto#atualizarDadosBasicos} nos testes. */
     DadosProduto dados() {
-        return new DadosProduto(nome, nomeCurto, marca, fornecedor, descricao, unidade, categoria, precoVenda, custo,
+        return new DadosProduto(nome, nomeCurto, marca, descricao, unidade, categoria, precoVenda, custo,
                 precoMinimo, estoqueMinimo, estoqueMaximo, pontoReposicao, sku, precoPromocional, promocaoInicio,
                 promocaoFim, precoAtacado, quantidadeMinimaAtacado, controlaEstoque, codigoDoProduto, vendidoBalanca);
     }

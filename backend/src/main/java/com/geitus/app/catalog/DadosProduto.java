@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 import com.geitus.app.catalog.categoria.Categoria;
+import com.geitus.app.catalog.marca.Marca;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 
 /**
@@ -30,12 +31,15 @@ import com.geitus.app.catalog.unidade.UnidadeMedida;
  * <p>Fase B2: {@code codigo} (1 a 999999, ou {@code null}) e
  * {@code vendidoBalanca} (que exige o codigo). O numero de registro nao esta
  * aqui: e dado na criacao e nunca muda.
+ *
+ * <p>Fase B5: a marca e o item da arvore de marcas da empresa (o texto livre
+ * saiu, com o fornecedor em texto); os fornecedores do produto sao uma lista
+ * propria, fora destes dados.
  */
 public record DadosProduto(
         String nome,
         String nomeCurto,
-        String marca,
-        String fornecedor,
+        Marca marca,
         String descricao,
         UnidadeMedida unidade,
         Categoria categoria,

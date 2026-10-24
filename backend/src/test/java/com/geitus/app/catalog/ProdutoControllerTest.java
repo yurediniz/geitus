@@ -807,7 +807,7 @@ class ProdutoControllerTest {
         ReflectionTestUtils.setField(empresa, "id", 7L);
         UnidadeMedida un = new UnidadeMedida(empresa, "UN", "Unidade", false);
         Produto produto = ProdutoTesteBuilder.produto(empresa, un).id(5L)
-                .nome("Ração Golden Adulto Frango e Arroz 15kg").fornecedor("Distribuidora X")
+                .nome("Ração Golden Adulto Frango e Arroz 15kg")
                 .codigo("7891000315507").codigo("ABC-1").build();
         ReflectionTestUtils.setField(produto.getCodigosBarras().get(0), "id", 77L);
         when(produtoService.buscarPorIdParaUsuario(1L, produto.getUuid()))
@@ -821,7 +821,7 @@ class ProdutoControllerTest {
                 .andExpect(jsonPath("$.id").value(produto.getUuid().toString()))
                 .andExpect(jsonPath("$.nomeCurto").doesNotExist())
                 .andExpect(jsonPath("$.nomeCurtoEfetivo").value("Ração Golden Adulto Frango e A"))
-                .andExpect(jsonPath("$.fornecedor").value("Distribuidora X"))
+                .andExpect(jsonPath("$.fornecedor").doesNotExist())
                 .andExpect(jsonPath("$.podeExcluir").value(true))
                 .andExpect(jsonPath("$.codigosBarras[0].codigo").value("7891000315507"))
                 .andExpect(jsonPath("$.codigosBarras[0].formato").value("EAN13"))
@@ -968,35 +968,22 @@ class ProdutoControllerTest {
         verifyNoInteractions(produtoService);
     }
 
+    /**
+     * Fase B5: as sugestoes de marca e fornecedor em texto sairam (viraram
+     * cadastros). A rota cai em {@code GET /{id}} com um identificador que nao
+     * e UUID: 400, sem chegar ao service.
+     */
     @Test
-    void sugestoesDeMarcaComOperadorRetorna200() throws Exception {
-        when(produtoService.sugestoesParaUsuario(2L, "marca", "gol")).thenReturn(List.of("Golden", "Gold Pet"));
-
-        String token = tokenParaUsuarioComPerfil(2L, "OPERADOR");
-
-        mockMvc.perform(get("/api/produtos/sugestoes").param("campo", "marca").param("termo", "gol")
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0]").value("Golden"))
-                .andExpect(jsonPath("$[1]").value("Gold Pet"));
-    }
-
-    @Test
-    void sugestoesComCampoInvalidoRetorna400() throws Exception {
-        when(produtoService.sugestoesParaUsuario(1L, "x", null))
-                .thenThrow(new RegraDeNegocioException("Campo de sugestão inválido."));
-
+    void sugestoesDeMarcaEDeFornecedorNaoExistemMais() throws Exception {
         String token = tokenParaUsuario(1L);
 
-        mockMvc.perform(get("/api/produtos/sugestoes").param("campo", "x").header("Authorization", "Bearer " + token))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.mensagem").value("Campo de sugestão inválido."));
-    }
-
-    @Test
-    void sugestoesSemTokenRetorna401() throws Exception {
-        mockMvc.perform(get("/api/produtos/sugestoes").param("campo", "marca"))
-                .andExpect(status().isUnauthorized());
+        for (String campo : List.of("marca", "fornecedor")) {
+            mockMvc.perform(get("/api/produtos/sugestoes").param("campo", campo)
+                            .header("Authorization", "Bearer " + token))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.mensagem").value("Identificador inválido."));
+        }
+        verifyNoInteractions(produtoService);
     }
 
     // ---------- Fase C: promocao e atacado (Bean Validation aninhada) ----------

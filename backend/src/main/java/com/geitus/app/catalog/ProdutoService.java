@@ -46,6 +46,7 @@ import com.geitus.app.catalog.listagem.ConsultaDeProdutos;
 import com.geitus.app.catalog.listagem.FiltroDeProdutos;
 import com.geitus.app.catalog.listagem.PaginaDeIds;
 import com.geitus.app.catalog.listagem.ParametrosDaListagem;
+import com.geitus.app.catalog.marca.Marca;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.company.Empresa;
@@ -53,7 +54,6 @@ import com.geitus.app.company.EmpresaRepository;
 import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
-import com.geitus.app.shared.busca.PadraoLike;
 import com.geitus.app.shared.busca.TextoDeBusca;
 import com.geitus.app.shared.numeracao.Numerador;
 import com.geitus.app.shared.numeracao.TipoNumeracao;
@@ -81,8 +81,9 @@ import com.geitus.app.shared.numeracao.TipoNumeracao;
  * de isolamento por tenant.
  *
  * <p>Fase B (docs/modules/produtos-identificacao-e-formulario.md, secao 4):
- * codigos de barras multiplos, nome curto, fornecedor, SKU sugerido, sugestoes
- * de marca/fornecedor e exclusao fisica condicionada ao estoque (ver {@link #excluir}).
+ * codigos de barras multiplos, nome curto, SKU sugerido e exclusao fisica
+ * condicionada ao estoque (ver {@link #excluir}). As sugestoes de marca e
+ * fornecedor em texto sairam na Fase B5 (viraram cadastros).
  *
  * <p>Fase C (docs/modules/produtos-precos.md, 4.3 e 4.4): promocao e atacado
  * validados contra o preco de venda, o preco minimo e a unidade de venda; a
@@ -141,7 +142,6 @@ public class ProdutoService {
     static final String MENSAGEM_LIMITE_DE_CODIGOS = "Informe no máximo 20 códigos de barras.";
     static final String MENSAGEM_EXCLUSAO_BLOQUEADA =
             "Este produto já teve movimentação de estoque e não pode ser excluído. Inative-o.";
-    static final String MENSAGEM_CAMPO_DE_SUGESTAO_INVALIDO = "Campo de sugestão inválido.";
 
     static final String MENSAGEM_PRECO_PROMOCIONAL_OBRIGATORIO = "Informe o preço promocional.";
     static final String MENSAGEM_INICIO_PROMOCAO_OBRIGATORIO = "Informe o início da promoção.";
@@ -169,8 +169,6 @@ public class ProdutoService {
     static final String CAMPO_ESTOQUE_MAXIMO = "estoqueMaximo";
 
     static final int MAXIMO_CODIGOS_POR_PRODUTO = 20;
-    static final int LIMITE_DE_SUGESTOES = 10;
-    static final int TAMANHO_MAXIMO_TERMO_DE_SUGESTAO = 50;
     /** Casas decimais da quantidade minima do atacado ({@code NUMERIC(12,3)}, V8). */
     static final int CASAS_QUANTIDADE_ATACADO = 3;
     /** Intervalo do codigo do produto (V11, {@code ck_produto_codigo_intervalo}). */
@@ -461,22 +459,6 @@ public class ProdutoService {
                 + String.format(Locale.ROOT, FORMATO_NUMERO_SKU_SUGERIDO, maiorNumero.add(BigInteger.ONE));
     }
 
-    /**
-     * Ate {@value #LIMITE_DE_SUGESTOES} valores distintos de marca ou fornecedor
-     * ja usados na empresa que contem o termo (spec 4.4). {@code campo} vem de
-     * uma allow-list (400 fora dela); o termo e aparado e limitado aos
-     * {@value #TAMANHO_MAXIMO_TERMO_DE_SUGESTAO} primeiros caracteres; sem
-     * termo, os mais usados.
-     */
-    List<String> sugestoes(Long empresaId, String campo, String termo) {
-        CampoDeSugestao campoDeSugestao = CampoDeSugestao.de(campo);
-        String padrao = PadraoLike.contem(emMinusculas(termoDeSugestao(termo)));
-        return switch (campoDeSugestao) {
-            case MARCA -> produtoRepository.sugestoesDeMarca(empresaId, padrao, LIMITE_DE_SUGESTOES);
-            case FORNECEDOR -> produtoRepository.sugestoesDeFornecedor(empresaId, padrao, LIMITE_DE_SUGESTOES);
-        };
-    }
-
     // ---------- API publica (empresa sempre resolvida do usuario do JWT) ----------
 
     @Transactional
@@ -607,11 +589,6 @@ public class ProdutoService {
     @Transactional(readOnly = true)
     public String sugerirSkuParaUsuario(Long idUsuario) {
         return sugerirSku(resolverEmpresaId(idUsuario));
-    }
-
-    @Transactional(readOnly = true)
-    public List<String> sugestoesParaUsuario(Long idUsuario, String campo, String termo) {
-        return sugestoes(resolverEmpresaId(idUsuario), campo, termo);
     }
 
     // ---------- Codigos de barras (spec 4.3) ----------
@@ -764,47 +741,10 @@ public class ProdutoService {
         return constraint.equalsIgnoreCase(nome);
     }
 
-    // ---------- Sugestoes (spec 4.4) ----------
-
-    /** Allow-list dos campos de sugestao: o nome vindo da API nunca chega ao SQL. */
-    private enum CampoDeSugestao {
-        MARCA("marca"),
-        FORNECEDOR("fornecedor");
-
-        private final String nomeNaApi;
-
-        CampoDeSugestao(String nomeNaApi) {
-            this.nomeNaApi = nomeNaApi;
-        }
-
-        static CampoDeSugestao de(String campo) {
-            for (CampoDeSugestao candidato : values()) {
-                if (candidato.nomeNaApi.equals(campo)) {
-                    return candidato;
-                }
-            }
-            throw new RegraDeNegocioException(MENSAGEM_CAMPO_DE_SUGESTAO_INVALIDO);
-        }
-    }
-
-    private static String termoDeSugestao(String termo) {
-        if (!StringUtils.hasText(termo)) {
-            return "";
-        }
-        String aparado = termo.trim();
-        return aparado.length() <= TAMANHO_MAXIMO_TERMO_DE_SUGESTAO
-                ? aparado
-                : aparado.substring(0, TAMANHO_MAXIMO_TERMO_DE_SUGESTAO);
-    }
-
-    private static String emMinusculas(String texto) {
-        return texto.toLowerCase(Locale.ROOT);
-    }
-
     // ---------- Unidade e categoria ----------
 
     /** Cadastros vinculados ao produto, ja resolvidos e validados dentro da empresa. */
-    private record Vinculos(UnidadeMedida unidade, Categoria categoria) {
+    private record Vinculos(UnidadeMedida unidade, Categoria categoria, Marca marca) {
     }
 
     /**
@@ -824,7 +764,8 @@ public class ProdutoService {
         Categoria categoria = buscarCategoriaOpcional(empresaId, request.categoriaId());
         exigirCategoriaSelecionavelOuAtual(empresaId, categoria,
                 produtoAtual == null ? null : produtoAtual.getCategoria());
-        return new Vinculos(unidade, categoria);
+        // Fase B5: o texto da marca saiu do contrato; ate o marcaId existir, a marca atual e mantida.
+        return new Vinculos(unidade, categoria, produtoAtual == null ? null : produtoAtual.getMarca());
     }
 
     private Categoria buscarCategoriaOpcional(Long empresaId, UUID categoriaId) {
@@ -996,8 +937,7 @@ public class ProdutoService {
         Optional<PromocaoRequest> promocao = Optional.ofNullable(request.promocao());
         Optional<AtacadoRequest> atacado = Optional.ofNullable(request.atacado());
         return new DadosProduto(request.nome().trim(), normalizarOuNulo(request.nomeCurto()),
-                normalizarOuNulo(request.marca()), normalizarOuNulo(request.fornecedor()),
-                normalizarOuNulo(request.descricao()), vinculos.unidade(), vinculos.categoria(),
+                vinculos.marca(), normalizarOuNulo(request.descricao()), vinculos.unidade(), vinculos.categoria(),
                 request.precoVenda(), request.custo(),
                 request.precoMinimo(), request.estoqueMinimo(), request.estoqueMaximo(), request.pontoReposicao(),
                 sku,
@@ -1062,7 +1002,7 @@ public class ProdutoService {
      * Normaliza string em branco/vazia para {@code null} e apara as demais.
      * Evita gravar {@code ""}: a constraint UNIQUE(empresa_id, sku) do Postgres
      * trata multiplas strings vazias como conflitantes entre si (diferente de
-     * NULL), e a V7 proibe nome curto/fornecedor vazios ou com espacos nas pontas.
+     * NULL), e a V7 proibe nome curto vazio ou com espacos nas pontas.
      */
     private static String normalizarOuNulo(String valor) {
         return StringUtils.hasText(valor) ? valor.trim() : null;

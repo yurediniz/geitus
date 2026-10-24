@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Normalizacao unica do texto de busca (docs/modules/produtos-listagem.md,
@@ -109,9 +108,17 @@ public final class TextoDeBusca {
         return Long.parseLong(semZeros);
     }
 
-    /** Texto pesquisavel do produto: nome, nome curto, SKU e marca informados, juntos e normalizados. */
+    /** Texto pesquisavel do produto: nome, nome curto, SKU e nome da marca informados, juntos e normalizados. */
     public static String textoDoProduto(String nome, String nomeCurto, String sku, String marca) {
-        return Stream.of(nome, nomeCurto, sku, marca)
+        return textoDosCampos(Arrays.asList(nome, nomeCurto, sku, marca));
+    }
+
+    /**
+     * Os campos informados (nulos e vazios ignorados), normalizados e juntos
+     * por um espaco, na ordem. Fase B5: e o texto pesquisavel do fornecedor.
+     */
+    public static String textoDosCampos(List<String> campos) {
+        return campos.stream()
                 .map(TextoDeBusca::normalizar)
                 .filter(campo -> !campo.isEmpty())
                 .collect(Collectors.joining(ESPACO));

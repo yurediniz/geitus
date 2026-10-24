@@ -14,6 +14,7 @@ import java.util.UUID;
 import org.hibernate.annotations.SQLRestriction;
 
 import com.geitus.app.catalog.categoria.Categoria;
+import com.geitus.app.catalog.marca.Marca;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.company.Empresa;
 import com.geitus.app.shared.busca.TextoDeBusca;
@@ -51,8 +52,7 @@ import jakarta.persistence.Table;
  *
  * <p>Fase B (V7, docs/modules/produtos-identificacao-e-formulario.md): o
  * produto tem de 0 a 20 {@link ProdutoCodigoBarras} — parte do cadastro, por
- * isso {@code cascade} e {@code orphanRemoval} —, nome curto e fornecedor
- * principal.
+ * isso {@code cascade} e {@code orphanRemoval} — e nome curto.
  *
  * <p>Fase D (V9, docs/modules/produtos-estoque.md): o produto tem a flag
  * {@code controlaEstoque}; o saldo fica no pacote {@code inventory}, derivado
@@ -76,6 +76,12 @@ import jakarta.persistence.Table;
  *
  * <p>Fase B4 (V13, docs/modules/produtos-custo-entrada.md): o produto guarda a
  * origem do custo atual ({@link OrigemDoCusto}) e quando ela foi registrada.
+ *
+ * <p>Fase B5 (V14, docs/modules/fornecedores-e-marcas.md): a marca e um item
+ * da arvore de marcas da empresa (o texto livre saiu); o produto tem a lista de
+ * fornecedores ({@link ProdutoFornecedor}, so com o id do fornecedor: o
+ * catalogo nao depende do pacote {@code supplier}) e, entre eles, o da ultima
+ * compra, que a FK de tres colunas da V14 obriga a estar na lista.
  *
  * <p>Nao deve ser exposta diretamente na API: o {@code ProdutoController} usa
  * DTOs ({@code ProdutoRequest}/{@code ProdutoResponse}).
@@ -116,11 +122,10 @@ public class Produto {
     @JoinColumn(name = "categoria_id")
     private Categoria categoria;
 
-    @Column(length = 100)
-    private String marca;
-
-    @Column(length = 100)
-    private String fornecedor;
+    /** Fase B5 (V14): fabricante ou marca, qualquer nivel da arvore, ou {@code null}. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "marca_id")
+    private Marca marca;
 
     @Column(length = 1000)
     private String descricao;
@@ -193,13 +198,25 @@ public class Produto {
     @OrderBy("ordem")
     private List<ProdutoCodigoBarras> codigosBarras = new ArrayList<>();
 
+    /**
+     * Fase B5 (V14): fornecedores que vendem o produto. Alterada so pelo
+     * {@code FornecedoresDoProduto}, que limpa o da ultima compra antes de
+     * apagar a ligacao dele (FK imediata da V14).
+     */
+    @OneToMany(mappedBy = "produto", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ProdutoFornecedor> fornecedores = new ArrayList<>();
+
+    /** Fase B5 (V14): id interno do fornecedor da ultima compra, sempre um da lista, ou {@code null}. */
+    @Column(name = "fornecedor_ultima_compra_id")
+    private Long fornecedorUltimaCompraId;
+
     /** Fase B3 (V12): embalagens na ordem da lista enviada. */
     @OneToMany(mappedBy = "produto", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("ordem")
     private List<ProdutoEmbalagem> embalagens = new ArrayList<>();
 
     /**
-     * Fase E (V10): nome, nome curto, SKU e marca normalizados por
+     * Fase E (V10): nome, nome curto, SKU e nome da marca normalizados por
      * {@link TextoDeBusca} — a busca sem acento da listagem. Derivada: so muda
      * por {@link #atualizarDadosBasicos}.
      */
@@ -264,7 +281,6 @@ public class Produto {
         this.nome = dados.nome();
         this.nomeCurto = dados.nomeCurto();
         this.marca = dados.marca();
-        this.fornecedor = dados.fornecedor();
         this.descricao = dados.descricao();
         this.unidade = dados.unidade();
         this.categoria = dados.categoria();
@@ -305,10 +321,14 @@ public class Produto {
         }
     }
 
-    /** Colunas da busca (V10) sempre coerentes com o nome, o nome curto, o SKU e a marca gravados. */
+    /**
+     * Colunas da busca (V10) sempre coerentes com o nome, o nome curto, o SKU e
+     * o nome da marca (nao o caminho, spec 3.3). Renomear a marca recalcula a
+     * busca dos produtos dela em lote, fora daqui ({@code MarcaService}).
+     */
     private void recalcularTextosDeBusca() {
         this.nomeNormalizado = TextoDeBusca.normalizar(nome);
-        this.buscaNormalizada = TextoDeBusca.textoDoProduto(nome, nomeCurto, sku, marca);
+        this.buscaNormalizada = TextoDeBusca.textoDoProduto(nome, nomeCurto, sku, marca == null ? null : marca.getNome());
     }
 
     /**
@@ -471,13 +491,19 @@ public class Produto {
         return categoria;
     }
 
-    public String getMarca() {
+    /** Marca (qualquer nivel da arvore), ou {@code null}. */
+    public Marca getMarca() {
         return marca;
     }
 
-    /** Fornecedor principal (texto livre), ou {@code null}. */
-    public String getFornecedor() {
-        return fornecedor;
+    /** Fornecedores ligados ao produto (somente leitura; alterados pelo {@code FornecedoresDoProduto}). */
+    public List<ProdutoFornecedor> getFornecedores() {
+        return Collections.unmodifiableList(fornecedores);
+    }
+
+    /** Id interno do fornecedor da ultima compra (um da lista), ou {@code null}. */
+    public Long getFornecedorUltimaCompraId() {
+        return fornecedorUltimaCompraId;
     }
 
     public String getDescricao() {

@@ -30,7 +30,7 @@ import jakarta.validation.constraints.Size;
  *
  * <p>Os tamanhos maximos e a precisao numerica espelham as colunas das
  * migrations V3/V4/V6/V7 ({@code nome VARCHAR(150)}, {@code nome_curto VARCHAR(30)},
- * {@code marca}/{@code fornecedor VARCHAR(100)}, {@code descricao VARCHAR(1000)},
+ * {@code descricao VARCHAR(1000)},
  * {@code sku}/{@code produto_codigos_barras.codigo VARCHAR(50)},
  * {@code preco_venda}/{@code custo}/{@code preco_minimo NUMERIC(12,2)},
  * {@code estoque_minimo}/{@code estoque_maximo}/{@code ponto_reposicao NUMERIC(12,3)}). O {@code @Digits} garante um 400
@@ -76,14 +76,6 @@ public record ProdutoRequest(
                 example = "Golden Frango 15kg")
         @Size(max = 30, message = "Nome curto deve ter no máximo 30 caracteres.")
         String nomeCurto,
-
-        @Schema(example = "Tio João")
-        @Size(max = 100, message = "Marca deve ter no máximo 100 caracteres.")
-        String marca,
-
-        @Schema(description = "Fornecedor principal (texto livre)", example = "Distribuidora Central")
-        @Size(max = 100, message = "Fornecedor deve ter no máximo 100 caracteres.")
-        String fornecedor,
 
         @Schema(example = "Arroz branco tipo 1, pacote de 5kg.")
         @Size(max = 1000, message = "Descrição deve ter no máximo 1000 caracteres.")

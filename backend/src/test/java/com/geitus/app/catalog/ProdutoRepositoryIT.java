@@ -25,6 +25,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.categoria.CategoriaRepository;
+import com.geitus.app.catalog.marca.Marca;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.catalog.unidade.UnidadeMedidaRepository;
 import com.geitus.app.company.Empresa;
@@ -32,7 +33,6 @@ import com.geitus.app.company.EmpresaRepository;
 import com.geitus.app.company.Endereco;
 import com.geitus.app.company.RepresentanteLegal;
 import com.geitus.app.company.TipoPessoa;
-import com.geitus.app.shared.busca.PadraoLike;
 
 /**
  * Teste de integracao do {@link ProdutoRepository} contra um PostgreSQL real
@@ -41,7 +41,7 @@ import com.geitus.app.shared.busca.PadraoLike;
  * query (function lower(bytea) does not exist). Cobre isolamento por empresa
  * (DEC-016), a carga dos produtos da pagina com os vinculos (etapa 2 da
  * listagem; a busca, os filtros e a ordem ficam no {@code ConsultaDeProdutosIT}),
- * as colunas da busca (V10), unicidade de SKU e de codigo de barras por empresa, sugestoes de marca/fornecedor, SKUs no
+ * as colunas da busca (V10), unicidade de SKU e de codigo de barras por empresa, a marca (V14), SKUs no
  * padrao da sugestao e o mapeamento dos vinculos (V6) e dos codigos (V7).
  *
  * <p>Usa o banco do container (nao o H2 de teste) via
@@ -55,8 +55,6 @@ import com.geitus.app.shared.busca.PadraoLike;
 @Testcontainers
 class ProdutoRepositoryIT {
 
-    private static final int LIMITE_DE_SUGESTOES = 10;
-    private static final String TODOS = "%%";
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
@@ -134,13 +132,14 @@ class ProdutoRepositoryIT {
         return salvar(ativo ? builder : builder.inativo());
     }
 
-    // ---------- Campos cadastrais V4 (marca, descricao, hints de estoque/preco) ----------
+    // ---------- Campos cadastrais V4 (descricao, hints de estoque/preco) e marca (V14) ----------
 
     @Test
     void devePersistirERelerOsCamposCadastraisDaV4() {
         Empresa empresa = novaEmpresa("Empresa V4");
         Long id = salvar(produtoDa(empresa).nome("Arroz 5kg").precoVenda("25.90").custo("18.00")
-                .estoqueMinimo("2").sku("SKU-V4").marca("Tio João").descricao("Arroz branco tipo 1, pacote de 5kg.")
+                .estoqueMinimo("2").sku("SKU-V4").marca(novaMarca(empresa, "Tio João"))
+                .descricao("Arroz branco tipo 1, pacote de 5kg.")
                 .estoqueMaximo("50.000").pontoReposicao("10.000").precoMinimo("20.00")).getId();
 
         // Limpa o contexto de persistencia (cache de 1o nivel) para forcar um
@@ -148,7 +147,7 @@ class ProdutoRepositoryIT {
         entityManager.clear();
         Produto relido = produtoRepository.findById(id).orElseThrow();
 
-        assertThat(relido.getMarca()).isEqualTo("Tio João");
+        assertThat(relido.getMarca().getNome()).isEqualTo("Tio João");
         assertThat(relido.getDescricao()).isEqualTo("Arroz branco tipo 1, pacote de 5kg.");
         assertThat(relido.getEstoqueMaximo()).isEqualByComparingTo("50.000");
         assertThat(relido.getPontoReposicao()).isEqualByComparingTo("10.000");
@@ -175,13 +174,13 @@ class ProdutoRepositoryIT {
         assertThat(produtoRepository.buscarPorUuidParaAtualizar(UUID.randomUUID(), empresaA.getId())).isEmpty();
     }
 
-    // ---------- Identificacao (V7): uuid, nome curto, fornecedor e codigos ----------
+    // ---------- Identificacao (V7): uuid, nome curto e codigos ----------
 
     @Test
-    void devePersistirERelerUuidNomeCurtoFornecedorECodigosNaOrdem() {
+    void devePersistirERelerUuidNomeCurtoECodigosNaOrdem() {
         Empresa empresa = novaEmpresa("Empresa V7");
         Produto salvo = salvar(produtoDa(empresa).nome("Ração Golden 15kg").nomeCurto("Golden 15kg")
-                .fornecedor("Distribuidora X").codigo("96385074").codigo("ABC-1").codigo("7891000315507"));
+                .codigo("96385074").codigo("ABC-1").codigo("7891000315507"));
         UUID uuid = salvo.getUuid();
 
         entityManager.clear();
@@ -189,7 +188,6 @@ class ProdutoRepositoryIT {
 
         assertThat(relido.getUuid()).isEqualTo(uuid);
         assertThat(relido.getNomeCurto()).isEqualTo("Golden 15kg");
-        assertThat(relido.getFornecedor()).isEqualTo("Distribuidora X");
         assertThat(org.hibernate.Hibernate.isInitialized(relido.getCodigosBarras())).isTrue();
         assertThat(relido.getCodigosBarras()).extracting(ProdutoCodigoBarras::getCodigo)
                 .containsExactly("96385074", "ABC-1", "7891000315507");
@@ -323,7 +321,8 @@ class ProdutoRepositoryIT {
     @Test
     void colunasDaBuscaSaoGravadasERelidas() {
         Empresa empresa = novaEmpresa("Empresa Busca Gravada");
-        Produto produto = salvar(produtoDa(empresa).nome("Ração Golden").nomeCurto("GLD").sku("P1").marca("Premier"));
+        Produto produto = salvar(produtoDa(empresa).nome("Ração Golden").nomeCurto("GLD").sku("P1")
+                .marca(novaMarca(empresa, "Premier")));
         entityManager.clear();
 
         Produto relido = produtoRepository.findById(produto.getId()).orElseThrow();
@@ -399,60 +398,6 @@ class ProdutoRepositoryIT {
                 .containsExactlyInAnyOrder("P000001", "P000007", "P1000000");
     }
 
-    // ---------- Sugestoes de marca e fornecedor (spec 4.4) ----------
-
-    @Test
-    void sugestoesDistintasPorFrequencia() {
-        Empresa empresa = novaEmpresa("Empresa Sugestoes");
-        for (String marca : List.of("Golden", "Golden", "Golden", "golden", "Premier", "Zebra", "Zebra")) {
-            salvar(produtoDa(empresa).nome("Produto " + marca).marca(marca));
-        }
-        novoProduto(empresa, "Sem marca", null, true);
-
-        // Golden: 4 usos (grafia mais usada); Zebra: 2; Premier: 1.
-        assertThat(produtoRepository.sugestoesDeMarca(empresa.getId(), TODOS, LIMITE_DE_SUGESTOES))
-                .containsExactly("Golden", "Zebra", "Premier");
-        assertThat(produtoRepository.sugestoesDeMarca(empresa.getId(), "%gol%", LIMITE_DE_SUGESTOES))
-                .containsExactly("Golden");
-    }
-
-    @Test
-    void sugestoesComMesmaFrequenciaSaoAlfabeticasERespeitamOLimite() {
-        Empresa empresa = novaEmpresa("Empresa Sugestoes Limite");
-        for (String fornecedor : List.of("Delta", "alfa", "Charlie", "Bravo")) {
-            salvar(produtoDa(empresa).nome("Produto " + fornecedor).fornecedor(fornecedor));
-        }
-
-        assertThat(produtoRepository.sugestoesDeFornecedor(empresa.getId(), TODOS, LIMITE_DE_SUGESTOES))
-                .containsExactly("alfa", "Bravo", "Charlie", "Delta");
-        assertThat(produtoRepository.sugestoesDeFornecedor(empresa.getId(), TODOS, 2))
-                .containsExactly("alfa", "Bravo");
-    }
-
-    @Test
-    void sugestoesIsolamPorEmpresaESeparamMarcaDeFornecedor() {
-        Empresa empresa = novaEmpresa("Empresa Sugestoes A");
-        Empresa outra = novaEmpresa("Empresa Sugestoes B");
-        salvar(produtoDa(empresa).nome("Ração").marca("Golden").fornecedor("Distribuidora Sul"));
-        salvar(produtoDa(outra).nome("Ração").marca("Premier").fornecedor("Distribuidora Norte"));
-
-        assertThat(produtoRepository.sugestoesDeMarca(empresa.getId(), TODOS, LIMITE_DE_SUGESTOES))
-                .containsExactly("Golden");
-        assertThat(produtoRepository.sugestoesDeFornecedor(empresa.getId(), TODOS, LIMITE_DE_SUGESTOES))
-                .containsExactly("Distribuidora Sul");
-        assertThat(produtoRepository.sugestoesDeMarca(outra.getId(), "%golden%", LIMITE_DE_SUGESTOES)).isEmpty();
-    }
-
-    @Test
-    void sugestoesTratamCuringasDoTermoComoLiterais() {
-        Empresa empresa = novaEmpresa("Empresa Sugestoes Curingas");
-        salvar(produtoDa(empresa).nome("A").marca("100% Natural"));
-        salvar(produtoDa(empresa).nome("B").marca("1000 Natural"));
-
-        assertThat(produtoRepository.sugestoesDeMarca(empresa.getId(), PadraoLike.contem("100%"),
-                LIMITE_DE_SUGESTOES)).containsExactly("100% Natural");
-    }
-
     // ---------- Fase B2: numero e codigo do produto ----------
 
     /** {@code updatable = false}: mudar o numero na entidade nao chega ao banco, mesmo com outro UPDATE. */
@@ -506,5 +451,10 @@ class ProdutoRepositoryIT {
 
         assertThatThrownBy(() -> salvar(produtoDa(empresaA).codigoDoProduto(542)))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    /** Marca na raiz da empresa (Fase B5), ja gravada. */
+    private Marca novaMarca(Empresa empresa, String nome) {
+        return entityManager.persistFlushFind(new Marca(empresa, null, nome));
     }
 }

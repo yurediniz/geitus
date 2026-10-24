@@ -35,6 +35,8 @@ import com.geitus.app.catalog.listagem.FiltroDeProdutos;
 import com.geitus.app.catalog.listagem.OrdemDeProdutos;
 import com.geitus.app.catalog.listagem.PaginaDeIds;
 import com.geitus.app.catalog.listagem.StatusFiltro;
+import com.geitus.app.catalog.marca.Marca;
+import com.geitus.app.catalog.marca.MarcaRepository;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.catalog.unidade.UnidadeMedidaRepository;
 import com.geitus.app.company.Empresa;
@@ -92,6 +94,9 @@ class ConsultaDeProdutosIT {
     private CategoriaRepository categoriaRepository;
 
     @Autowired
+    private MarcaRepository marcaRepository;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     private Empresa empresa;
@@ -126,11 +131,14 @@ class ConsultaDeProdutosIT {
 
     @Test
     void buscaPorMarcaNomeCurtoESku() {
-        salvar(produto("Ração Adulto").marca("Golden"));
+        Marca boehringer = marcaRepository.saveAndFlush(new Marca(empresa, null, "Boehringer"));
+        salvar(produto("Ração Adulto").marca(marcaRepository.saveAndFlush(new Marca(empresa, boehringer, "Golden"))));
         salvar(produto("Sachê Gatos").nomeCurto("SACHE WHK").sku("DEMO-PET-003"));
         salvar(produto("Outro"));
 
         assertThat(nomes(filtro().busca("golden"))).containsExactly("Ração Adulto");
+        // Fase B5: so o nome da marca escolhida entra na busca, nao o caminho.
+        assertThat(nomes(filtro().busca("boehringer"))).isEmpty();
         assertThat(nomes(filtro().busca("whk"))).containsExactly("Sachê Gatos");
         assertThat(nomes(filtro().busca("pet-003"))).containsExactly("Sachê Gatos");
     }

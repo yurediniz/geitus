@@ -100,8 +100,8 @@ public class SecurityConfig {
                         // segue liberada a qualquer autenticado pela regra final.
                         .requestMatchers(HttpMethod.PATCH, "/api/empresas/minha").hasRole("ADMIN")
                         // Produtos (RBAC basico, DEC-025): escrita, exclusao e sugestao de
-                        // SKU exigem perfil ADMIN; leitura (inclusive as sugestoes de
-                        // marca/fornecedor) liberada a qualquer autenticado. Os matchers
+                        // SKU exigem perfil ADMIN; leitura liberada a qualquer
+                        // autenticado. Os matchers
                         // de ADMIN precedem o GET geral para nao serem ofuscados — em
                         // especial GET /sku/sugestao, que o GET /** cobriria. PATCH /**
                         // cobre /{id}, /{id}/inativar e /{id}/reativar.

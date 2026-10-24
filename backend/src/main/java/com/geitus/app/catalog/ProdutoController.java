@@ -1,6 +1,5 @@
 package com.geitus.app.catalog;
 
-import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -44,8 +43,9 @@ import jakarta.validation.Valid;
  * <p>O {@code {id}} das rotas e o UUID publico do produto (DEC-019); UUID
  * malformado responde 400 pelo handler global. RBAC (DEC-025) no
  * {@code SecurityConfig}: escrita, exclusao e sugestao de SKU exigem ADMIN;
- * leitura (inclusive o historico de precos) e sugestoes de marca/fornecedor
- * ficam com qualquer autenticado.
+ * leitura (inclusive o historico de precos) fica com qualquer autenticado.
+ * Fase B5: as sugestoes de marca e fornecedor em texto sairam (viraram os
+ * cadastros {@code /api/marcas} e {@code /api/fornecedores}).
  */
 @RestController
 @RequestMapping("/api/produtos")
@@ -109,19 +109,6 @@ public class ProdutoController {
     @GetMapping("/sku/sugestao")
     public ResponseEntity<SkuSugestaoResponse> sugerirSku(@AuthenticationPrincipal Long idUsuario) {
         return ResponseEntity.ok(new SkuSugestaoResponse(produtoService.sugerirSkuParaUsuario(idUsuario)));
-    }
-
-    @Operation(summary = "Sugere marcas ou fornecedores ja usados na empresa",
-            description = "Ate 10 valores distintos, dos mais usados para os menos usados.",
-            security = @SecurityRequirement(name = "bearer-jwt"))
-    @GetMapping("/sugestoes")
-    public ResponseEntity<List<String>> sugestoes(
-            @AuthenticationPrincipal Long idUsuario,
-            @Parameter(description = "marca ou fornecedor")
-            @RequestParam(required = false) String campo,
-            @Parameter(description = "Trecho do valor (ate 50 caracteres); vazio traz os mais usados")
-            @RequestParam(required = false) String termo) {
-        return ResponseEntity.ok(produtoService.sugestoesParaUsuario(idUsuario, campo, termo));
     }
 
     @Operation(summary = "Busca um produto pelo UUID, limitado a empresa do usuario autenticado",
