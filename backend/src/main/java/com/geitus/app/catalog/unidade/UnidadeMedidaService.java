@@ -11,7 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.geitus.app.catalog.CatalogoConflitoException;
 import com.geitus.app.catalog.CatalogoNaoEncontradoException;
 import com.geitus.app.catalog.ContagensPorId;
-import com.geitus.app.catalog.ProdutoConflitoException;
 import com.geitus.app.catalog.RegraDeNegocioException;
 import com.geitus.app.catalog.UsoDoProdutoNoEstoque;
 import com.geitus.app.catalog.unidade.UnidadesPadrao.UnidadePadrao;
@@ -166,8 +165,8 @@ public class UnidadeMedidaService {
      * fracionada: as quantidades fracionadas ja gravadas ficariam invalidas
      * (docs/modules/produtos-estoque.md, 4.8; DEC-031). Tambem nao deixa
      * quando um produto com esta unidade de venda tem embalagem com quantidade
-     * fracionada (Fase B3): a embalagem ficaria invalida (409, o conflito e com
-     * cadastros existentes). Ligar a fracao e livre.
+     * fracionada (Fase B3): a embalagem ficaria invalida. As duas regras
+     * respondem 400 no campo {@code fracionada}. Ligar a fracao e livre.
      */
     private void exigirFracaoMantidaSeMovimentada(Long empresaId, UnidadeMedida unidade, boolean fracionada) {
         boolean deixaDeSerFracionada = unidade.isFracionada() && !fracionada;
@@ -178,7 +177,7 @@ public class UnidadeMedidaService {
             throw new RegraDeNegocioException(MENSAGEM_FRACAO_EM_USO, CAMPO_FRACIONADA);
         }
         if (unidadeRepository.existeEmbalagemFracionadaDaUnidadeDeVenda(empresaId, unidade.getId())) {
-            throw new ProdutoConflitoException(MENSAGEM_FRACAO_EM_EMBALAGENS, CAMPO_FRACIONADA);
+            throw new RegraDeNegocioException(MENSAGEM_FRACAO_EM_EMBALAGENS, CAMPO_FRACIONADA);
         }
     }
 

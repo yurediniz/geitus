@@ -443,7 +443,8 @@ class ProdutoEmbalagensIT {
 
         assertThatThrownBy(() -> unidadeService.atualizarParaUsuario(loja.admin(), kg,
                 new UnidadeMedidaRequest("KG", "Quilograma", false)))
-                .isInstanceOf(ProdutoConflitoException.class)
+                .isInstanceOfSatisfying(RegraDeNegocioException.class,
+                        erro -> assertThat(erro.campo()).contains("fracionada"))
                 .hasMessage("Há embalagens com quantidade fracionada nesta unidade. Ajuste-as antes de desligar o "
                         + "fracionamento.");
     }
