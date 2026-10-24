@@ -66,9 +66,11 @@ import com.geitus.app.catalog.marca.Marca;
 import com.geitus.app.catalog.marca.MarcaService;
 import com.geitus.app.catalog.dto.CodigoBarrasResponse;
 import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
+import com.geitus.app.catalog.dto.ImagensDosProdutos;
 import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
+import com.geitus.app.catalog.imagem.ImagensDoProduto;
 import com.geitus.app.catalog.listagem.ConsultaDeProdutos;
 import com.geitus.app.catalog.listagem.EstoqueFiltro;
 import com.geitus.app.catalog.listagem.FiltroDeProdutos;
@@ -154,6 +156,9 @@ class ProdutoServiceTest {
     @Mock
     private TamanhoDoCodigoNaEtiqueta tamanhoDoCodigoNaEtiqueta;
 
+    @Mock
+    private ImagensDoProduto imagensDoProduto;
+
     private ProdutoService produtoService;
 
     private Empresa empresa;
@@ -168,7 +173,10 @@ class ProdutoServiceTest {
                 new EmbalagensDoProduto(unidadeService, new ValidadorDeCodigosDeBarras(produtoRepository)),
                 new FornecedoresDoProduto(ligacaoRepository, produtoRepository, nomesDeFornecedores),
                 nomesDeFornecedores, usoNoEstoque, registroDeEstoqueInicial,
-                consultaDeProdutos, numerador, tamanhoDoCodigoNaEtiqueta, RELOGIO);
+                consultaDeProdutos, numerador, tamanhoDoCodigoNaEtiqueta, imagensDoProduto, RELOGIO);
+        // Fase F: sem imagem por padrao; os testes da imagem ficam no ImagemDoProdutoIT.
+        lenient().when(imagensDoProduto.doProduto(any(), any())).thenReturn(ImagensDosProdutos.nenhuma());
+        lenient().when(imagensDoProduto.daPagina(any(), any())).thenReturn(ImagensDosProdutos.nenhuma());
         empresa = empresaComId(EMPRESA_ID);
         un = unidade(10L, empresa, "UN");
     }

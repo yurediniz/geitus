@@ -5,8 +5,12 @@ import java.io.UncheckedIOException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +20,7 @@ import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
 import com.geitus.app.catalog.ProdutoRepository;
 import com.geitus.app.catalog.dto.ImagemResponse;
+import com.geitus.app.catalog.dto.ImagensDosProdutos;
 import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
@@ -86,6 +91,21 @@ public class ImagensDoProduto {
             case GRANDE -> imagemRepository.grande(produtoUuid, versao);
             case MINIATURA -> imagemRepository.miniatura(produtoUuid, versao);
         };
+    }
+
+    /** A imagem de um produto da empresa para a resposta dele (detalhe e gravacoes), sem os bytes. */
+    @Transactional(readOnly = true)
+    public ImagensDosProdutos doProduto(Long empresaId, Long produtoId) {
+        return imagemRepository.resumo(empresaId, produtoId)
+                .map(resumo -> new ImagensDosProdutos(Map.of(produtoId, resumo), assinatura))
+                .orElseGet(ImagensDosProdutos::nenhuma);
+    }
+
+    /** As imagens dos produtos da empresa com estes ids (a pagina da listagem), numa consulta, sem os bytes. */
+    @Transactional(readOnly = true)
+    public ImagensDosProdutos daPagina(Long empresaId, Collection<Long> produtoIds) {
+        return new ImagensDosProdutos(imagemRepository.resumos(empresaId, produtoIds).stream()
+                .collect(Collectors.toMap(ResumoDaImagem::produtoId, Function.identity())), assinatura);
     }
 
     private Produto travarProduto(Long empresaId, UUID produtoId) {

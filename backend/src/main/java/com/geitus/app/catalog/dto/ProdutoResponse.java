@@ -64,6 +64,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * <p>Fase B5 (docs/modules/fornecedores-e-marcas.md, 3.3 e 5): {@code marca}
  * com o caminho, {@code fornecedores} por nome e {@code fornecedorUltimaCompra}
  * (um deles, ou {@code null}); a origem do custo cita o fornecedor da compra.
+ *
+ * <p>Fase F (docs/modules/produtos-imagem.md, 4.3): {@code imagem} com as URLs
+ * relativas ja assinadas e as dimensoes da versao grande, ou {@code null}.
  */
 @Schema(description = "Dados publicos de um produto")
 public record ProdutoResponse(
@@ -77,6 +80,8 @@ public record ProdutoResponse(
         String nomeCurto,
         @Schema(description = "Nome para cupom e PDV: o nome curto ou os 30 primeiros caracteres do nome")
         String nomeCurtoEfetivo,
+        @Schema(description = "Fase F: imagem com as URLs assinadas (miniatura e grande); null se nao houver")
+        ImagemResponse imagem,
         @Schema(description = "Categoria com o caminho na arvore; null se sem categoria")
         CategoriaResumo categoria,
         @Schema(description = "Fase B5: marca com o caminho na arvore de marcas; null se sem marca")
@@ -159,6 +164,7 @@ public record ProdutoResponse(
                 produto.getNome(),
                 produto.getNomeCurto(),
                 produto.nomeCurtoEfetivo(),
+                referencias.imagens().doProduto(produto.getId()),
                 CategoriaResumo.deOuNulo(produto.getCategoria(), referencias.categorias()),
                 MarcaResumo.deOuNulo(produto.getMarca(), referencias.marcas()),
                 fornecedores(produto, referencias),

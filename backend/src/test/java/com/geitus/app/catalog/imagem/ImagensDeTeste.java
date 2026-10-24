@@ -6,18 +6,19 @@ import java.util.Arrays;
 
 /**
  * Monta, nos testes, os bytes minimos de cada formato (so o cabecalho que o
- * {@link CabecalhoDeImagem} le), sem arquivos binarios no repositorio.
+ * {@link CabecalhoDeImagem} le), sem arquivos binarios no repositorio. Publica
+ * para os testes de outros pacotes do catalogo (a listagem com imagens).
  */
-final class ImagensDeTeste {
+public final class ImagensDeTeste {
 
-    static final int SOF0 = 0xC0;
-    static final int SOF2 = 0xC2;
+    public static final int SOF0 = 0xC0;
+    public static final int SOF2 = 0xC2;
 
     private ImagensDeTeste() {
     }
 
     /** JPEG com APP0 (JFIF), o SOF informado com as dimensoes e o fim (EOI). */
-    static byte[] jpeg(int marcadorSof, int largura, int altura) {
+    public static byte[] jpeg(int marcadorSof, int largura, int altura) {
         ByteArrayOutputStream saida = new ByteArrayOutputStream();
         escrever(saida, 0xFF, 0xD8);
         escrever(saida, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01,
@@ -29,7 +30,7 @@ final class ImagensDeTeste {
     }
 
     /** JPEG so com APP0 e o fim: nenhum SOF. */
-    static byte[] jpegSemSof() {
+    public static byte[] jpegSemSof() {
         byte[] completo = jpeg(SOF0, 10, 10);
         byte[] semSof = Arrays.copyOf(completo, 20 + 2);
         semSof[20] = (byte) 0xFF;
@@ -38,7 +39,7 @@ final class ImagensDeTeste {
     }
 
     /** WebP com perdas (bloco {@code VP8 }). */
-    static byte[] webpVp8(int largura, int altura) {
+    public static byte[] webpVp8(int largura, int altura) {
         byte[] bytes = riff("VP8 ", 30);
         bytes[20] = 0x10;
         bytes[23] = (byte) 0x9D;
@@ -50,7 +51,7 @@ final class ImagensDeTeste {
     }
 
     /** WebP sem perdas (bloco {@code VP8L}): 14 bits de largura - 1 e 14 de altura - 1. */
-    static byte[] webpVp8l(int largura, int altura) {
+    public static byte[] webpVp8l(int largura, int altura) {
         byte[] bytes = riff("VP8L", 25);
         bytes[20] = 0x2F;
         littleEndian(bytes, 21, (largura - 1) | ((altura - 1) << 14), 4);
@@ -58,7 +59,7 @@ final class ImagensDeTeste {
     }
 
     /** WebP estendido (bloco {@code VP8X}): 24 bits de largura - 1 e de altura - 1. */
-    static byte[] webpVp8x(int largura, int altura) {
+    public static byte[] webpVp8x(int largura, int altura) {
         byte[] bytes = riff("VP8X", 30);
         littleEndian(bytes, 24, largura - 1, 3);
         littleEndian(bytes, 27, altura - 1, 3);
@@ -66,29 +67,29 @@ final class ImagensDeTeste {
     }
 
     /** {@code RIFF....WEBP} seguido de um bloco desconhecido. */
-    static byte[] webpComBloco(String bloco) {
+    public static byte[] webpComBloco(String bloco) {
         return riff(bloco, 30);
     }
 
-    static byte[] png() {
+    public static byte[] png() {
         return bytes(0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D, 'I', 'H', 'D', 'R');
     }
 
-    static byte[] gif() {
+    public static byte[] gif() {
         return "GIF89a\u0001\u0000\u0001\u0000".getBytes(StandardCharsets.ISO_8859_1);
     }
 
-    static byte[] svg() {
+    public static byte[] svg() {
         return "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>"
                 .getBytes(StandardCharsets.UTF_8);
     }
 
-    static byte[] texto() {
+    public static byte[] texto() {
         return "isto nao e uma imagem".getBytes(StandardCharsets.UTF_8);
     }
 
     /** Os bytes completados com zeros ate {@code tamanho} (o cabecalho continua o mesmo). */
-    static byte[] comTamanho(byte[] imagem, int tamanho) {
+    public static byte[] comTamanho(byte[] imagem, int tamanho) {
         return Arrays.copyOf(imagem, tamanho);
     }
 

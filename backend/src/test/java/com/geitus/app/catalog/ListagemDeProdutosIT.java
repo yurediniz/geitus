@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
@@ -40,6 +41,8 @@ import com.geitus.app.catalog.dto.CodigoBarrasResponse;
 import com.geitus.app.catalog.dto.EmbalagemRequest;
 import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
+import com.geitus.app.catalog.imagem.ImagensDeTeste;
+import com.geitus.app.catalog.imagem.ImagensDoProduto;
 import com.geitus.app.catalog.listagem.ConsultaDeProdutos;
 import com.geitus.app.catalog.listagem.ParametrosDaListagem;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
@@ -111,6 +114,9 @@ class ListagemDeProdutosIT {
 
     @Autowired
     private JwtService jwtService;
+
+    @Autowired
+    private ImagensDoProduto imagensDoProduto;
 
     /** Spy (chama o real) para contar as chamadas da etapa 1; resetado apos cada teste. */
     @MockitoSpyBean
@@ -230,6 +236,48 @@ class ListagemDeProdutosIT {
 
             assertThat(comandosComVinteECinco).as("busca %s", parametros.busca()).isEqualTo(comandosComTres);
         }
+    }
+
+    /**
+     * Fase F (docs/modules/produtos-imagem.md, 4.3 e 8): as imagens da pagina
+     * vem numa consulta so, sem os bytes. A pagina com 3 itens e a com 25
+     * executam o mesmo numero de comandos, com e sem imagens; sem imagem, o
+     * campo {@code imagem} vem nulo.
+     */
+    @Test
+    void numeroDeConsultasConstanteComImagens() {
+        Loja semImagens = novaLoja();
+        Loja comImagens = novaLoja();
+        for (int i = 1; i <= 30; i++) {
+            cadastrar(semImagens, comUnidade(semImagens).nome(String.format("Produto %02d", i)));
+            UUID produto = produtoService.cadastrarParaUsuario(comImagens.admin(),
+                    comUnidade(comImagens).nome(String.format("Produto %02d", i)).build()).id();
+            if (i % 2 == 0) {
+                enviarImagem(comImagens, produto);
+            }
+        }
+        ParametrosDaListagem tres = parametros(null, null, 0, 3);
+        ParametrosDaListagem vinteECinco = parametros(null, null, 0, 25);
+
+        long semImagensComTres = comandosAoListar(semImagens, tres);
+        long semImagensComVinteECinco = comandosAoListar(semImagens, vinteECinco);
+        long comImagensComTres = comandosAoListar(comImagens, tres);
+        long comImagensComVinteECinco = comandosAoListar(comImagens, vinteECinco);
+
+        assertThat(semImagensComVinteECinco).isEqualTo(semImagensComTres);
+        assertThat(comImagensComVinteECinco).isEqualTo(comImagensComTres);
+        assertThat(comImagensComTres).isEqualTo(semImagensComTres);
+        List<ProdutoResponse> itens = listar(comImagens, vinteECinco).itens();
+        assertThat(itens).filteredOn(produto -> produto.imagem() != null).hasSize(12);
+        assertThat(itens).filteredOn(produto -> produto.nome().equals("Produto 01")).singleElement()
+                .satisfies(produto -> assertThat(produto.imagem()).isNull());
+        assertThat(itens).filteredOn(produto -> produto.nome().equals("Produto 02")).singleElement()
+                .satisfies(produto -> {
+                    assertThat(produto.imagem().miniaturaUrl())
+                            .startsWith("/api/imagens/produtos/" + produto.id() + "/");
+                    assertThat(produto.imagem().largura()).isEqualTo(1200);
+                    assertThat(produto.imagem().altura()).isEqualTo(900);
+                });
     }
 
     /**
@@ -368,6 +416,12 @@ class ListagemDeProdutosIT {
 
     private static List<String> nomes(PaginaResponse<ProdutoResponse> pagina) {
         return pagina.itens().stream().map(ProdutoResponse::nome).toList();
+    }
+
+    private void enviarImagem(Loja loja, UUID produto) {
+        imagensDoProduto.enviar(loja.admin(), produto,
+                new MockMultipartFile("grande", ImagensDeTeste.webpVp8(1200, 900)),
+                new MockMultipartFile("miniatura", ImagensDeTeste.webpVp8(200, 150)));
     }
 
     private void cadastrar(Loja loja, ProdutoRequestBuilder produto) {

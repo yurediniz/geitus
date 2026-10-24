@@ -43,6 +43,7 @@ import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.dto.ReferenciasDoProduto;
+import com.geitus.app.catalog.imagem.ImagensDoProduto;
 import com.geitus.app.catalog.dto.PromocaoRequest;
 import com.geitus.app.catalog.listagem.ConsultaDeProdutos;
 import com.geitus.app.catalog.listagem.FiltroDeProdutos;
@@ -216,6 +217,7 @@ public class ProdutoService {
     private final ConsultaDeProdutos consultaDeProdutos;
     private final Numerador numerador;
     private final TamanhoDoCodigoNaEtiqueta tamanhoDoCodigoNaEtiqueta;
+    private final ImagensDoProduto imagensDoProduto;
     private final Clock relogio;
 
     public ProdutoService(ProdutoRepository produtoRepository, EmpresaRepository empresaRepository,
@@ -227,7 +229,8 @@ public class ProdutoService {
             NomesDeFornecedores nomesDeFornecedores, UsoDoProdutoNoEstoque usoNoEstoque,
             RegistroDeEstoqueInicial registroDeEstoqueInicial,
             ConsultaDeProdutos consultaDeProdutos, Numerador numerador,
-            TamanhoDoCodigoNaEtiqueta tamanhoDoCodigoNaEtiqueta, Clock relogio) {
+            TamanhoDoCodigoNaEtiqueta tamanhoDoCodigoNaEtiqueta, ImagensDoProduto imagensDoProduto,
+            Clock relogio) {
         this.produtoRepository = produtoRepository;
         this.empresaRepository = empresaRepository;
         this.usuarioRepository = usuarioRepository;
@@ -245,6 +248,7 @@ public class ProdutoService {
         this.consultaDeProdutos = consultaDeProdutos;
         this.numerador = numerador;
         this.tamanhoDoCodigoNaEtiqueta = tamanhoDoCodigoNaEtiqueta;
+        this.imagensDoProduto = imagensDoProduto;
         this.relogio = relogio;
     }
 
@@ -593,8 +597,9 @@ public class ProdutoService {
         Set<Long> fornecedorIds = porId.values().stream()
                 .flatMap(produto -> produto.idsDosFornecedores().stream())
                 .collect(Collectors.toSet());
+        // Fase F: as imagens da pagina (sem os bytes) numa consulta.
         ReferenciasDoProduto referencias = new ReferenciasDoProduto(categorias, marcaService.arvoreDaEmpresa(empresaId),
-                nomesDeFornecedores.porIds(empresaId, fornecedorIds));
+                nomesDeFornecedores.porIds(empresaId, fornecedorIds), imagensDoProduto.daPagina(empresaId, ids));
         Map<Long, ResumoDeEstoque> estoques = usoNoEstoque.resumos(empresaId, ids);
         return ids.stream()
                 .map(porId::get)
@@ -1017,8 +1022,8 @@ public class ProdutoService {
     /**
      * Resposta de um produto; cada arvore so e carregada se o produto tiver
      * categoria ou marca, os nomes dos fornecedores numa consulta (nenhuma sem
-     * fornecedor), e a ultima compra (Fase B4) so com a origem do custo
-     * {@code ENTRADA_COMPRA}.
+     * fornecedor), a imagem (Fase F) numa consulta sem os bytes, e a ultima
+     * compra (Fase B4) so com a origem do custo {@code ENTRADA_COMPRA}.
      */
     private ProdutoResponse responder(Produto produto) {
         Long empresaId = produto.getEmpresaId();
@@ -1029,7 +1034,8 @@ public class ProdutoService {
                 ? Arvore.de(List.of())
                 : marcaService.arvoreDaEmpresa(empresaId);
         ReferenciasDoProduto referencias = new ReferenciasDoProduto(categorias, marcas,
-                nomesDeFornecedores.porIds(empresaId, produto.idsDosFornecedores()));
+                nomesDeFornecedores.porIds(empresaId, produto.idsDosFornecedores()),
+                imagensDoProduto.doProduto(empresaId, produto.getId()));
         return responder(produto, referencias, SituacaoPromocao.hoje(relogio), resumoDeEstoque(produto),
                 ultimaCompra(produto));
     }

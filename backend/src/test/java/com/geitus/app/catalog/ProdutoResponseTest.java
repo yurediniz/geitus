@@ -6,8 +6,11 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -17,9 +20,15 @@ import com.geitus.app.catalog.arvore.Arvore;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
 import com.geitus.app.catalog.dto.AtacadoResponse;
 import com.geitus.app.catalog.dto.CodigoBarrasResponse;
+import com.geitus.app.catalog.dto.ImagemResponse;
+import com.geitus.app.catalog.dto.ImagensDosProdutos;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.dto.PromocaoResponse;
 import com.geitus.app.catalog.dto.ReferenciasDoProduto;
+import com.geitus.app.catalog.imagem.AssinaturaDeImagem;
+import com.geitus.app.catalog.imagem.ResumoDaImagem;
+import com.geitus.app.catalog.imagem.TamanhoDaImagem;
+import com.geitus.app.catalog.imagem.TipoDeImagem;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.company.Empresa;
 
@@ -55,6 +64,29 @@ class ProdutoResponseTest {
         Categoria categoria = new Categoria(empresa, pai, nome);
         ReflectionTestUtils.setField(categoria, "id", id);
         return categoria;
+    }
+
+    /** Fase F: sem imagem, {@code imagem} nula; com imagem, as URLs assinadas e as dimensoes da grande. */
+    @Test
+    void imagemSaiComAsUrlsAssinadasOuNula() {
+        Produto produto = ProdutoTesteBuilder.produto(empresa, un).id(7L).build();
+        UUID versao = UUID.randomUUID();
+        LocalDateTime enviadaEm = LocalDateTime.of(2026, 11, 8, 10, 30);
+        AssinaturaDeImagem assinatura = new AssinaturaDeImagem("segredo-de-teste-das-imagens-do-geitus-0123",
+                Clock.fixed(Instant.parse("2026-11-08T13:00:00Z"), ZoneId.of("America/Sao_Paulo")));
+        ImagensDosProdutos imagens = new ImagensDosProdutos(Map.of(7L, new ResumoDaImagem(7L, produto.getUuid(),
+                versao, TipoDeImagem.WEBP, 1200, 900, enviadaEm)), assinatura);
+
+        ImagemResponse imagem = ProdutoResponse.de(produto, new ReferenciasDoProduto(CategoriaArvore.de(List.of()),
+                Arvore.de(List.of()), Map.of(), imagens), true, HOJE, ResumoDeEstoque.VAZIO).imagem();
+
+        assertThat(responder(produto).imagem()).isNull();
+        assertThat(imagem.miniaturaUrl()).isEqualTo(assinatura.url(produto.getUuid(), versao,
+                TamanhoDaImagem.MINIATURA));
+        assertThat(imagem.grandeUrl()).isEqualTo(assinatura.url(produto.getUuid(), versao, TamanhoDaImagem.GRANDE));
+        assertThat(imagem.largura()).isEqualTo(1200);
+        assertThat(imagem.altura()).isEqualTo(900);
+        assertThat(imagem.atualizadaEm()).isEqualTo(enviadaEm);
     }
 
     @Test

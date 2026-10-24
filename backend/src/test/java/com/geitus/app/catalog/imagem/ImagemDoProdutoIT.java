@@ -3,10 +3,13 @@ package com.geitus.app.catalog.imagem;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.emptyString;
+import static org.hamcrest.Matchers.matchesPattern;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -156,7 +159,7 @@ class ImagemDoProdutoIT {
                 .andExpect(header().stringValues("X-Content-Type-Options", "nosniff"))
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, "inline"))
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL,
-                        org.hamcrest.Matchers.matchesPattern("private, max-age=\\d+, immutable")))
+                        matchesPattern("private, max-age=\\d+, immutable")))
                 .andExpect(header().string(HttpHeaders.ETAG, containsString("-grande\"")))
                 .andExpect(header().doesNotExist(HttpHeaders.PRAGMA));
         mockMvc.perform(get(imagem.get("miniaturaUrl").asText()))
@@ -409,6 +412,42 @@ class ImagemDoProdutoIT {
         assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM produto_imagens i WHERE NOT EXISTS"
                 + " (SELECT 1 FROM produtos p WHERE p.id = i.produto_id)", Long.class)).isZero();
         mockMvc.perform(get(imagem.get("grandeUrl").asText())).andExpect(status().isNotFound());
+    }
+
+    // ---------- No produto (spec 4.3) ----------
+
+    /** O detalhe, a listagem e as respostas de gravacao trazem a imagem (nula sem imagem), tambem ao OPERADOR. */
+    @Test
+    void produtoTrazAImagemNoDetalheNaListagemENaGravacao() throws Exception {
+        Loja loja = novaLoja();
+        UUID produto = novoProduto(loja);
+        mockMvc.perform(get("/api/produtos/{id}", produto).header(HttpHeaders.AUTHORIZATION, token(loja.admin())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imagem").value(nullValue()));
+
+        JsonNode enviada = enviarComSucesso(loja, produto, GRANDE, MINIATURA);
+
+        mockMvc.perform(get("/api/produtos/{id}", produto)
+                        .header(HttpHeaders.AUTHORIZATION, token(loja.operador())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imagem.miniaturaUrl").value(enviada.get("miniaturaUrl").asText()))
+                .andExpect(jsonPath("$.imagem.grandeUrl").value(enviada.get("grandeUrl").asText()))
+                .andExpect(jsonPath("$.imagem.largura").value(1200))
+                .andExpect(jsonPath("$.imagem.altura").value(900))
+                .andExpect(jsonPath("$.imagem.atualizadaEm").isNotEmpty());
+        mockMvc.perform(get("/api/produtos").header(HttpHeaders.AUTHORIZATION, token(loja.operador())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.itens[0].imagem.miniaturaUrl").value(enviada.get("miniaturaUrl").asText()));
+        mockMvc.perform(patch("/api/produtos/{id}/inativar", produto)
+                        .header(HttpHeaders.AUTHORIZATION, token(loja.admin())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imagem.grandeUrl").value(enviada.get("grandeUrl").asText()));
+
+        mockMvc.perform(delete("/api/produtos/{id}/imagem", produto)
+                        .header(HttpHeaders.AUTHORIZATION, token(loja.admin())))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/produtos/{id}", produto).header(HttpHeaders.AUTHORIZATION, token(loja.admin())))
+                .andExpect(jsonPath("$.imagem").value(nullValue()));
     }
 
     // ---------- Leitura publica: assinatura ----------
