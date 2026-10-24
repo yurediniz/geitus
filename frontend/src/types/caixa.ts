@@ -64,8 +64,11 @@ export interface FechamentoRequest {
 export interface MovimentoDeCaixa {
   id: string
   tipo: TipoDeMovimentoDeCaixa
-  /** Sempre positivo. */
-  valor: number
+  /**
+   * Sempre positivo. Null para o OPERADOR no modo cego, com a sessao aberta,
+   * nos lancamentos feitos por outra pessoa (o valor aparece no fechamento).
+   */
+  valor: number | null
   /** Nulo na abertura. */
   motivo: string | null
   usuarioNome: string

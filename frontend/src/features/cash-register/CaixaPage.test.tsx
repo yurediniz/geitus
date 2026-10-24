@@ -7,7 +7,7 @@ import { CaixaPage } from '@/features/cash-register/CaixaPage'
 import { useAuth } from '@/hooks/useAuth'
 import { abrir, buscarSessao, contar, fechar, lancar, listarPontos, sessaoAtual } from '@/services/caixaService'
 import { HttpError } from '@/services/httpClient'
-import { ABERTA_AS_0802, pontoDeTeste, sessaoDeTeste } from '@/test/fixturesCaixa'
+import { ABERTA_AS_0802, movimentoDeTeste, pontoDeTeste, sessaoDeTeste } from '@/test/fixturesCaixa'
 import type { SessaoDeCaixa } from '@/types/caixa'
 
 vi.mock('@/services/caixaService', () => ({
@@ -282,16 +282,57 @@ describe('CaixaPage', () => {
       expect(segundaChave).toBe(primeiraChave)
     })
 
-    it('ponto ocupado (409): a mensagem do servidor aparece na janela', async () => {
+    it('ponto ocupado (409): a janela fecha e a mensagem do servidor vai para o aviso do topo', async () => {
       abrirMock.mockRejectedValue(new HttpError(409, 'O Caixa 1 já está aberto por Ana Souza.'))
+      listarPontosMock
+        .mockResolvedValueOnce([pontoDeTeste()])
+        .mockResolvedValue([{ ...CAIXA_2_DA_ANA, id: 'p-1', nome: 'Caixa 1' }])
       renderPagina()
 
       fireEvent.click(await screen.findByRole('button', { name: 'Abrir o Caixa 1' }))
       enviarJanela()
 
-      expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent(
-        'O Caixa 1 já está aberto por Ana Souza.',
-      )
+      expect(await screen.findByRole('alert')).toHaveTextContent('O Caixa 1 já está aberto por Ana Souza.')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(await screen.findByRole('heading', { name: 'Todos os caixas estão em uso' })).toBeInTheDocument()
+      await waitFor(() => expect(aviso()).toHaveFocus())
+    })
+
+    it('ponto inativado em outra aba: o 409 aparece mesmo quando não sobra ponto ativo', async () => {
+      abrirMock.mockRejectedValue(new HttpError(409, 'Este ponto de caixa está inativo.'))
+      listarPontosMock.mockResolvedValueOnce([pontoDeTeste()]).mockResolvedValue([])
+      renderPagina()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Abrir o Caixa 1' }))
+      enviarJanela()
+
+      expect(await screen.findByText('Nenhum ponto de caixa ativo')).toBeInTheDocument()
+      expect(screen.getByRole('alert')).toHaveTextContent('Este ponto de caixa está inativo.')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('outra aba já abriu o caixa: mostra o caixa aberto e avisa', async () => {
+      const abertaNaOutraAba = sessaoDeTeste({ ponto: { id: 'p-2', nome: 'Caixa 2' } })
+      sessaoAtualMock.mockResolvedValueOnce(null).mockResolvedValue(abertaNaOutraAba)
+      abrirMock.mockRejectedValue(new HttpError(409, 'Você já tem um caixa aberto no Caixa 2.'))
+      renderPagina()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Abrir o Caixa 1' }))
+      enviarJanela()
+
+      expect(
+        await screen.findByRole('heading', { name: 'Caixa 2 · aberto por você às 08:02' }),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('alert')).toHaveTextContent('Você já tem um caixa aberto no Caixa 2.')
+    })
+
+    it('último fundo de troco zero preenche o campo com "0,00"', async () => {
+      listarPontosMock.mockResolvedValue([pontoDeTeste({ ultimoFundoTroco: 0 })])
+      renderPagina()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Abrir o Caixa 1' }))
+
+      expect(within(screen.getByRole('dialog')).getByLabelText(/fundo de troco/i)).toHaveValue('0,00')
     })
 
     it('nenhum ponto ativo: o ADMIN vê o caminho para Configurações', async () => {
@@ -352,6 +393,87 @@ describe('CaixaPage', () => {
         await screen.findByText('Fechamento cego: o valor esperado aparece depois da contagem.'),
       ).toBeInTheDocument()
       expect(screen.queryByRole('region', { name: 'Dinheiro na gaveta' })).not.toBeInTheDocument()
+    })
+
+    it('gaveta zerada: mostra "R$ 0,00", e não a frase do modo cego', async () => {
+      sessaoAtualMock.mockResolvedValue(sessaoDeTeste({ fechamentoCego: true, dinheiroNaGaveta: 0 }))
+      renderPagina()
+
+      expect(await screen.findByRole('region', { name: 'Dinheiro na gaveta' })).toHaveTextContent('R$ 0,00')
+      expect(screen.queryByText(/Fechamento cego: o valor esperado/)).not.toBeInTheDocument()
+    })
+
+    it('modo cego: o lançamento de outra pessoa (valor oculto) mostra "Valor no fechamento", sem somar', async () => {
+      sessaoAtualMock.mockResolvedValue(
+        sessaoDeTeste({
+          fechamentoCego: true,
+          dinheiroNaGaveta: null,
+          movimentos: [
+            movimentoDeTeste({
+              id: 'mov-do-admin',
+              tipo: 'SANGRIA',
+              valor: null,
+              motivo: 'Depósito no cofre',
+              usuarioNome: 'Carlos Lima',
+              criadoEm: '2026-10-24T11:00:00-03:00',
+            }),
+            movimentoDeTeste(),
+          ],
+        }),
+      )
+      renderPagina()
+
+      const movimentos = await screen.findByRole('list', { name: 'Movimentos do caixa' })
+      const [doAdmin, abertura] = within(movimentos).getAllByRole('listitem')
+      expect(within(doAdmin).getByText('Valor no fechamento')).toHaveClass('text-muted-foreground')
+      expect(doAdmin).not.toHaveTextContent(/R\$/)
+      expect(abertura).toHaveTextContent('R$ 150,00')
+    })
+
+    it('rede cai na sangria: a janela fica, a sessão não é relida e o retry reenvia a mesma chave', async () => {
+      sessaoAtualMock.mockResolvedValue(sessaoDeTeste())
+      lancarMock
+        .mockRejectedValueOnce(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
+        .mockResolvedValueOnce(sessaoDeTeste())
+      renderPagina()
+
+      const janela = await prepararSangria('20,00')
+      enviarJanela()
+
+      expect(await within(janela).findByRole('alert')).toHaveTextContent(
+        'Não foi possível registrar a sangria. Confira a conexão e tente de novo.',
+      )
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(buscarSessaoMock).not.toHaveBeenCalled()
+      expect(sessaoAtualMock).toHaveBeenCalledTimes(1)
+
+      enviarJanela()
+      expect(await screen.findByRole('status')).toHaveTextContent('Sangria de R$ 20,00 registrada')
+      expect(lancarMock).toHaveBeenCalledTimes(2)
+      expect(lancarMock.mock.calls[0][1].chave === lancarMock.mock.calls[1][1].chave).toBe(true)
+    })
+
+    it('suprimento acima do limite: o 400 do campo valor fica no campo Valor, com aria-invalid e foco', async () => {
+      sessaoAtualMock.mockResolvedValue(sessaoDeTeste())
+      lancarMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { valor: 'O valor passa do limite do caixa.' }),
+      )
+      renderPagina()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Suprimento' }))
+      const janela = screen.getByRole('dialog')
+      const valor = within(janela).getByLabelText(/valor/i)
+      fireEvent.change(valor, { target: { value: '9.999.999.999,00' } })
+      const motivo = within(janela).getByLabelText(/motivo/i)
+      fireEvent.change(motivo, { target: { value: 'Reforço de troco' } })
+      motivo.focus()
+      enviarJanela()
+
+      expect(await within(janela).findByText('O valor passa do limite do caixa.')).toBeInTheDocument()
+      expect(valor).toHaveAttribute('aria-invalid', 'true')
+      expect(valor).toHaveAccessibleDescription('O valor passa do limite do caixa.')
+      await waitFor(() => expect(valor).toHaveFocus())
+      expect(within(janela).queryByRole('alert')).not.toBeInTheDocument()
     })
 
     it('aberto em outro dia: título sem hora e o aviso para fechar e abrir um novo', async () => {

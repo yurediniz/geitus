@@ -146,6 +146,43 @@ describe('JanelaFecharCaixa', () => {
       await waitFor(() => expect(aoConcluir).toHaveBeenCalled())
     })
 
+    it('esperado zero: "0,00" confere e a contagem vai com valorContado 0', async () => {
+      const gavetaVazia = sessaoDeTeste({ fechamentoCego: false, dinheiroNaGaveta: 0 })
+      contarMock.mockResolvedValue({ ...fechada(gavetaVazia), valorEsperado: 0, valorContado: 0, diferenca: 0 })
+      const janela = renderJanela(gavetaVazia)
+
+      expect(within(janela).getByText('Esperado R$ 0,00')).toBeInTheDocument()
+      digitarContado('0,00')
+      expect(within(janela).getByText('Confere')).toBeInTheDocument()
+      enviar()
+
+      await waitFor(() => expect(contarMock).toHaveBeenCalledWith(gavetaVazia.id, { valorContado: 0, justificativa: null }))
+      await waitFor(() => expect(aoConcluir).toHaveBeenCalled())
+    })
+
+    it('esperado desatualizado: a tela dizia "Confere", o servidor devolve EM_CONFERENCIA e a janela pede a justificativa com a falta real', async () => {
+      // Outro lancamento entrou depois que a tela carregou: o esperado real e R$ 340,00.
+      contarMock.mockResolvedValue({
+        ...emConferencia(NAO_CEGO),
+        valorEsperado: 340,
+        valorContado: 320,
+        diferenca: -20,
+      })
+      const janela = renderJanela(NAO_CEGO)
+
+      digitarContado('320,00')
+      expect(within(janela).getByText('Confere')).toBeInTheDocument()
+      enviar()
+
+      const resultado = await within(janela).findByLabelText('Resultado da contagem')
+      expect(contarMock).toHaveBeenCalledWith(NAO_CEGO.id, { valorContado: 320, justificativa: null })
+      expect(resultado).toHaveTextContent('EsperadoR$ 340,00')
+      expect(resultado).toHaveTextContent('Falta de R$ 20,00')
+      await waitFor(() => expect(within(janela).getByLabelText(/justificativa/i)).toHaveFocus())
+      expect(aoConcluir).not.toHaveBeenCalled()
+      expect(fecharMock).not.toHaveBeenCalled()
+    })
+
     it('campo vazio não vai ao servidor', async () => {
       renderJanela(NAO_CEGO)
 

@@ -18,6 +18,8 @@ const ALTURA_DO_CONTROLE = 'h-11 md:h-9'
 interface PontosParaAbrirProps {
   ehAdmin: boolean
   aoAbrir: (sessao: SessaoDeCaixa) => void
+  /** A abertura falhou porque o ponto ou o caixa mudou em outra aba: a tela avisa no topo. */
+  aoFalharAoAbrir: (mensagem: string) => void
   /** ADMIN: abre o caixa de outra pessoa pelo id da sessao. */
   aoVerCaixa: (sessaoId: string) => void
 }
@@ -27,7 +29,7 @@ interface PontosParaAbrirProps {
  * "Abrir caixa" nos livres. Com um unico ponto ativo e livre, a escolha e
  * pulada ("Abrir o Caixa 1"). O ADMIN ve e abre os caixas de outras pessoas.
  */
-export function PontosParaAbrir({ ehAdmin, aoAbrir, aoVerCaixa }: PontosParaAbrirProps) {
+export function PontosParaAbrir({ ehAdmin, aoAbrir, aoFalharAoAbrir, aoVerCaixa }: PontosParaAbrirProps) {
   const [pontoParaAbrir, setPontoParaAbrir] = useState<PontoDeCaixa | null>(null)
   const idTitulo = useId()
   const idSemPontos = useId()
@@ -41,6 +43,10 @@ export function PontosParaAbrir({ ehAdmin, aoAbrir, aoVerCaixa }: PontosParaAbri
       aoConcluir={(sessao) => {
         setPontoParaAbrir(null)
         aoAbrir(sessao)
+      }}
+      aoMudarOPonto={(mensagem) => {
+        setPontoParaAbrir(null)
+        aoFalharAoAbrir(mensagem)
       }}
     />
   )

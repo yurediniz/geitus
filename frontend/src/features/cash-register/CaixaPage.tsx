@@ -64,6 +64,13 @@ export function CaixaPage() {
     atualizar()
   }
 
+  // Ponto inativado ou ocupado, ou caixa ja aberto em outra aba: a recarga pode trocar a tela.
+  const aoFalharAoAbrir = (mensagem: string) => {
+    avisos.erro(mensagem)
+    focarAviso()
+    atualizar()
+  }
+
   const aoLancado = (lancamento: MovimentoDeCaixaRequest) => {
     const valor = formatarReais(lancamento.valor)
     avisos.sucesso(lancamento.tipo === 'SANGRIA' ? `Sangria de ${valor} registrada` : `Suprimento de ${valor} registrado`)
@@ -181,7 +188,9 @@ export function CaixaPage() {
         />
       )
     }
-    return <PontosParaAbrir ehAdmin={ehAdmin} aoAbrir={aoAbrir} aoVerCaixa={verCaixa} />
+    return (
+      <PontosParaAbrir ehAdmin={ehAdmin} aoAbrir={aoAbrir} aoFalharAoAbrir={aoFalharAoAbrir} aoVerCaixa={verCaixa} />
+    )
   }
 
   return (

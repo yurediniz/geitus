@@ -54,14 +54,15 @@ export function ResumoDoFechamento({ sessao }: { sessao: SessaoDeCaixa }) {
       </p>
     )
   }
-  const { suprimentos, sangrias } = totaisDosMovimentos(sessao.movimentos)
+  const { suprimentos, sangrias, completos } = totaisDosMovimentos(sessao.movimentos)
 
   return (
     <div className="space-y-3 text-sm">
       <dl>
         <Linha rotulo="Fundo de troco">{formatarReais(sessao.fundoTroco)}</Linha>
-        <Linha rotulo="Suprimentos">{`+ ${formatarReais(suprimentos)}`}</Linha>
-        <Linha rotulo="Sangrias">{`− ${formatarReais(sangrias)}`}</Linha>
+        {/* Com algum valor oculto, os totais sairiam errados: nao aparecem. */}
+        {completos && <Linha rotulo="Suprimentos">{`+ ${formatarReais(suprimentos)}`}</Linha>}
+        {completos && <Linha rotulo="Sangrias">{`− ${formatarReais(sangrias)}`}</Linha>}
         <Linha rotulo="Esperado na gaveta" destaque>
           {formatarReais(esperado)}
         </Linha>

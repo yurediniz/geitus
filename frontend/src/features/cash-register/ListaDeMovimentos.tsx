@@ -41,10 +41,15 @@ export function ListaDeMovimentos({ movimentos }: { movimentos: readonly Movimen
               {movimento.motivo && <p className="break-words">{movimento.motivo}</p>}
               <p className="text-xs text-muted-foreground">{movimento.usuarioNome}</p>
             </div>
-            <span className="shrink-0 pt-0.5 font-semibold tabular-nums">
-              {sinalDoMovimento(movimento.tipo)}
-              {formatarReais(movimento.valor)}
-            </span>
+            {movimento.valor === null ? (
+              // Modo cego: o lancamento de outra pessoa nao mostra o valor antes da contagem.
+              <span className="shrink-0 pt-0.5 text-xs text-muted-foreground">Valor no fechamento</span>
+            ) : (
+              <span className="shrink-0 pt-0.5 font-semibold tabular-nums">
+                {sinalDoMovimento(movimento.tipo)}
+                {formatarReais(movimento.valor)}
+              </span>
+            )}
           </li>
         )
       })}

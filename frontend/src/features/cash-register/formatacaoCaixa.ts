@@ -119,18 +119,29 @@ export function formatarDiferenca(valor: number): { texto: string; tom: 'ok' | '
   return { texto: centavos > 0 ? `Sobra de ${absoluto}` : `Falta de ${absoluto}`, tom: 'alerta' }
 }
 
-/** Soma dos suprimentos e das sangrias da sessao. */
-export function totaisDosMovimentos(movimentos: readonly MovimentoDeCaixa[]): { suprimentos: number; sangrias: number } {
+/**
+ * Soma dos suprimentos e das sangrias da sessao. Valor oculto (null, modo
+ * cego) nunca entra na soma: `completos` diz se todos os valores estavam
+ * visiveis (sem isso, os totais nao devem ser mostrados).
+ */
+export function totaisDosMovimentos(movimentos: readonly MovimentoDeCaixa[]): {
+  suprimentos: number
+  sangrias: number
+  completos: boolean
+} {
   let suprimentos = 0
   let sangrias = 0
+  let completos = true
   for (const movimento of movimentos) {
-    if (movimento.tipo === 'SUPRIMENTO') {
+    if (movimento.valor === null) {
+      completos = false
+    } else if (movimento.tipo === 'SUPRIMENTO') {
       suprimentos += emCentavos(movimento.valor)
     } else if (movimento.tipo === 'SANGRIA') {
       sangrias += emCentavos(movimento.valor)
     }
   }
-  return { suprimentos: suprimentos / 100, sangrias: sangrias / 100 }
+  return { suprimentos: suprimentos / 100, sangrias: sangrias / 100, completos }
 }
 
 /** "Caixa 2 fechado" ou "Caixa 2 fechado com falta de R$ 2,00" / "com sobra de R$ 2,00". */

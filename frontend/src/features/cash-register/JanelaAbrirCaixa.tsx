@@ -21,12 +21,19 @@ export interface JanelaAbrirCaixaProps {
   aoFechar: () => void
   /** Caixa aberto (201, ou 200 com a chave repetida). */
   aoConcluir: (sessao: SessaoDeCaixa) => void
+  /**
+   * 409 ou 404: o ponto ou o caixa do usuario mudou em outro lugar (inativado, ocupado,
+   * caixa ja aberto em outra aba). A tela recarrega e pode trocar (ex.: lista sem ponto
+   * ativo, ou o caixa aberto): quem abriu fecha a janela e leva a mensagem para o aviso do topo.
+   */
+  aoMudarOPonto: (mensagem: string) => void
 }
 
 const ID_CAMPO = 'abrir-caixa-fundo'
 const ID_AJUDA = 'abrir-caixa-fundo-ajuda'
 const ID_ERRO = 'abrir-caixa-fundo-erro'
 const MENSAGEM_FALHA = 'Não foi possível abrir o caixa. Confira a conexão e tente de novo.'
+const MENSAGEM_PONTO_REMOVIDO = 'Este ponto de caixa não existe mais. A lista foi atualizada.'
 
 /**
  * Janela "Abrir caixa" (spec §6.2): o fundo de troco, sugerido pela abertura
@@ -34,7 +41,7 @@ const MENSAGEM_FALHA = 'Não foi possível abrir o caixa. Confira a conexão e t
  * cada abertura, e com ele a chave de idempotencia: a nova tentativa depois de
  * uma falha de rede reenvia a mesma chave e o backend nao abre duas vezes.
  */
-export function JanelaAbrirCaixa({ ponto, aoFechar, aoConcluir }: JanelaAbrirCaixaProps) {
+export function JanelaAbrirCaixa({ ponto, aoFechar, ...props }: JanelaAbrirCaixaProps) {
   return (
     <Dialog
       open={ponto !== null}
@@ -44,15 +51,20 @@ export function JanelaAbrirCaixa({ ponto, aoFechar, aoConcluir }: JanelaAbrirCai
         }
       }}
     >
-      {ponto && <ConteudoAbrirCaixa key={ponto.id} ponto={ponto} aoFechar={aoFechar} aoConcluir={aoConcluir} />}
+      {ponto && <ConteudoAbrirCaixa key={ponto.id} ponto={ponto} aoFechar={aoFechar} {...props} />}
     </Dialog>
   )
 }
 
-function ConteudoAbrirCaixa({ ponto, aoFechar, aoConcluir }: JanelaAbrirCaixaProps & { ponto: PontoDeCaixa }) {
+function ConteudoAbrirCaixa({
+  ponto,
+  aoFechar,
+  aoConcluir,
+  aoMudarOPonto,
+}: JanelaAbrirCaixaProps & { ponto: PontoDeCaixa }) {
   const queryClient = useQueryClient()
-  // Gerada ao abrir a janela; so muda depois de um 409 (a chave pode ja ter gravado outra operacao).
-  const [chave, setChave] = useState(gerarUuid)
+  // Gerada ao abrir a janela; a nova tentativa depois de uma falha de rede reenvia a mesma.
+  const [chave] = useState(gerarUuid)
   const [fundo, setFundo] = useState(() => (ponto.ultimoFundoTroco === null ? '' : ponto.ultimoFundoTroco.toFixed(2)))
   const [erroDoCampo, setErroDoCampo] = useState<string | null>(null)
   const [erroGeral, setErroGeral] = useState<string | null>(null)
@@ -69,12 +81,14 @@ function ConteudoAbrirCaixa({ ponto, aoFechar, aoConcluir }: JanelaAbrirCaixaPro
       if (!ehFalhaSemResposta(erro)) {
         void queryClient.invalidateQueries({ queryKey: CAIXA_QUERY_KEY })
       }
-      if (erro instanceof HttpError && erro.status === 409) {
-        setChave(gerarUuid())
-      }
       if (erro instanceof HttpError && erro.status === 404) {
-        setErroDoCampo(null)
-        setErroGeral('Este ponto de caixa não existe mais. A lista foi atualizada.')
+        aoMudarOPonto(MENSAGEM_PONTO_REMOVIDO)
+        return
+      }
+      if (erro instanceof HttpError && erro.status === 409) {
+        // A janela fecha (uma nova abertura gera outra chave) e a mensagem vai para o topo,
+        // porque a tela recarregada pode nao ter mais esta janela.
+        aoMudarOPonto(lerErroDoServidor(erro, [], MENSAGEM_FALHA).geral ?? MENSAGEM_FALHA)
         return
       }
       const { porCampo, geral } = lerErroDoServidor(erro, ['fundoTroco'], MENSAGEM_FALHA)

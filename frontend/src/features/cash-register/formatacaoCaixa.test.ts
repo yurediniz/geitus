@@ -20,7 +20,7 @@ function semNbsp(texto: string): string {
   return texto.replace(/ /g, ' ')
 }
 
-function movimento(tipo: MovimentoDeCaixa['tipo'], valor: number): MovimentoDeCaixa {
+function movimento(tipo: MovimentoDeCaixa['tipo'], valor: number | null): MovimentoDeCaixa {
   return { id: `${tipo}-${valor}`, tipo, valor, motivo: null, usuarioNome: 'Ana', criadoEm: '2026-10-24T08:02:00-03:00' }
 }
 
@@ -104,7 +104,16 @@ describe('formatacaoCaixa', () => {
         movimento('SUPRIMENTO', 0.2),
         movimento('SANGRIA', 200),
       ])
-      expect(totais).toEqual({ suprimentos: 50.3, sangrias: 200 })
+      expect(totais).toEqual({ suprimentos: 50.3, sangrias: 200, completos: true })
+    })
+
+    it('valor oculto (modo cego) nunca entra na soma e marca os totais como incompletos', () => {
+      const totais = totaisDosMovimentos([
+        movimento('ABERTURA', 150),
+        { ...movimento('SANGRIA', 0), valor: null },
+        movimento('SUPRIMENTO', 10),
+      ])
+      expect(totais).toEqual({ suprimentos: 10, sangrias: 0, completos: false })
     })
 
     it('mensagem do fechamento com o nome do ponto e a diferença', () => {
