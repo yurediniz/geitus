@@ -496,6 +496,24 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Impacto:** Organizacao do codigo, observabilidade e regras que dependem do PDV; nenhum risco imediato.
 - **Quando revisar:** Na proxima rodada de refatoracao do catalogo e na especificacao do PDV.
 
+## DT-036 — Pendencias da Fase B4 (custo na entrada por compra)
+
+- **ID:** DT-036
+- **Modulo:** Backend/Frontend (Estoque — ajuste; Catalogo — custo)
+- **Origem:** Revisoes da Fase B4 e conferencia no navegador
+- **Prioridade:** media (o aviso de variacao grande), baixa (o resto)
+- **Status:** aberto
+- **Descricao:**
+  - **Aviso de custo muito diferente do ultimo** (ex.: "O custo novo e 19x o ultimo. Confira se e o da CX ou o da UN."). Na conferencia, um custo digitado errado (R$ 18.000.180,00 por CX) foi gravado sem alerta; o custo do produto aceita o valor, e so a previa mostrava a diferenca.
+  - **Total da compra no modal** ("Total: R$ 360,00"), para conferir com a linha da nota.
+  - **Seletor "Em" (embalagem) no ajuste aberto pela lista de produtos:** hoje a compra pela lista so entra em unidades.
+  - **Concorrencia otimista no PATCH do produto** (`@Version` ou `If-Match`, 409): um formulario aberto antes de uma compra e salvo depois ainda pode reverter o custo como "Editado". O frontend sincroniza o campo intocado, mas nao ha defesa no backend.
+  - **Indice parcial da ultima compra** (`movimentos_estoque WHERE custo_informado IS NOT NULL`), quando o PDV gerar muitos movimentos de venda.
+  - **Conta multiplicativa na CHECK** do custo unitario, se surgirem valores extremos (custo por unidade >= R$ 10.000 em embalagem > 100.000).
+  - **Custo medio ponderado:** fora por decisao do usuario (DEC-038); reavaliar com Compras.
+- **Impacto:** Erros de digitacao do custo passam sem alerta; o resto e refinamento.
+- **Quando revisar:** O aviso de variacao na proxima rodada de estoque; o resto com Compras e o PDV.
+
 ## DT-026 — Teto de profundidade e de quantidade na arvore de categorias
 
 - **ID:** DT-026

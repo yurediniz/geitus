@@ -28,7 +28,7 @@ O PDV ainda não existe. A origem `VENDA` fica reservada, sem tela nem código q
 | Item | Onde fica |
 |---|---|
 | Baixa de estoque pela venda, venda sem estoque, reserva | PDV (etapa 11) |
-| Custo médio, entrada com custo, nota de compra | futuro (Compras) |
+| Custo médio e nota de compra | futuro (Compras). A entrada por compra com custo veio na Fase B4 ([produtos-custo-entrada.md](produtos-custo-entrada.md)) |
 | Vários locais ou depósitos, lote, série, validade | futuro (fora do MVP) |
 | Filtro "estoque baixo/sem estoque" e ordenação por estoque na listagem | E |
 | Estorno ou cancelamento de um movimento | futuro (a correção é um novo ajuste) |

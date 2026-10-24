@@ -1,6 +1,6 @@
 # Produtos: Custo na entrada por compra (Fase B4)
 
-> **Status:** spec final, desenho aprovado em conversa em 2026-10-24. Fase intermediária da DEC-030, depois da Fase B3 ([produtos-embalagens.md](produtos-embalagens.md)) e antes da Fase B5 ([fornecedores-e-marcas.md](fornecedores-e-marcas.md)). Decisões na **DEC-038**.
+> **Status:** **implementada** em 2026-10-24 (migration V13; ajustes no §10). Desenho aprovado em conversa no mesmo dia. Fase intermediária da DEC-030, depois da Fase B3 ([produtos-embalagens.md](produtos-embalagens.md)) e antes da Fase B5 ([fornecedores-e-marcas.md](fornecedores-e-marcas.md)). Decisões na **DEC-038**.
 
 ## 1. Motivação
 - **O problema:** hoje a entrada de estoque por compra grava só a quantidade. O custo do produto é digitado à parte e fica desatualizado.
