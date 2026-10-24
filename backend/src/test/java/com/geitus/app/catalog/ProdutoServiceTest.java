@@ -131,6 +131,12 @@ class ProdutoServiceTest {
     private MarcaService marcaService;
 
     @Mock
+    private ProdutoFornecedorRepository ligacaoRepository;
+
+    @Mock
+    private NomesDeFornecedores nomesDeFornecedores;
+
+    @Mock
     private HistoricoPrecoRepository historicoPrecoRepository;
 
     @Mock
@@ -160,7 +166,8 @@ class ProdutoServiceTest {
                 unidadeService, categoriaService, marcaService, historicoPrecoRepository,
                 new HistoricoDePrecos(historicoPrecoRepository), new ValidadorDeCodigosDeBarras(produtoRepository),
                 new EmbalagensDoProduto(unidadeService, new ValidadorDeCodigosDeBarras(produtoRepository)),
-                usoNoEstoque, registroDeEstoqueInicial,
+                new FornecedoresDoProduto(ligacaoRepository, produtoRepository, nomesDeFornecedores),
+                nomesDeFornecedores, usoNoEstoque, registroDeEstoqueInicial,
                 consultaDeProdutos, numerador, tamanhoDoCodigoNaEtiqueta, RELOGIO);
         empresa = empresaComId(EMPRESA_ID);
         un = unidade(10L, empresa, "UN");

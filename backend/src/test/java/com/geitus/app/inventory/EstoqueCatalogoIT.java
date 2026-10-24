@@ -114,7 +114,7 @@ class EstoqueCatalogoIT {
 
     private static AjusteEstoqueRequest entrada(String quantidade) {
         return new AjusteEstoqueRequest(TipoMovimento.ENTRADA, new BigDecimal(quantidade), MotivoMovimento.COMPRA,
-                null, UUID.randomUUID(), null, new BigDecimal("10.00"));
+                null, UUID.randomUUID(), null, new BigDecimal("10.00"), null);
     }
 
     private long contarSaldos(Long idInterno) {

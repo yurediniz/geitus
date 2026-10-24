@@ -100,7 +100,7 @@ class EstoqueServiceIT {
 
     private static AjusteEstoqueRequest entrada(String quantidade, UUID chave) {
         return new AjusteEstoqueRequest(TipoMovimento.ENTRADA, new BigDecimal(quantidade), MotivoMovimento.COMPRA,
-                null, chave, null, CUSTO_DA_COMPRA);
+                null, chave, null, CUSTO_DA_COMPRA, null);
     }
 
     // ---------- Concorrencia (Review Focus 1) ----------
@@ -190,7 +190,7 @@ class EstoqueServiceIT {
             try {
                 estoqueService.ajustarParaUsuario(idUsuario, produto, new AjusteEstoqueRequest(TipoMovimento.SAIDA,
                         new BigDecimal("3"), MotivoMovimento.PERDA_AVARIA, null, UUID.randomUUID(),
-                        null, null));
+                        null, null, null));
                 return "criado";
             } catch (RegraDeNegocioException regra) {
                 return regra.getMessage();
@@ -299,9 +299,9 @@ class EstoqueServiceIT {
         estoqueService.ajustarParaUsuario(empresa.admin(), produto, entrada("10"));
         estoqueService.ajustarParaUsuario(empresa.admin(), produto, new AjusteEstoqueRequest(TipoMovimento.SAIDA,
                 new BigDecimal("2.5"), MotivoMovimento.PERDA_AVARIA, "Saco rasgado", UUID.randomUUID(),
-                null, null));
+                null, null, null));
         estoqueService.ajustarParaUsuario(empresa.admin(), produto, new AjusteEstoqueRequest(TipoMovimento.AJUSTE,
-                new BigDecimal("7"), MotivoMovimento.CONTAGEM, null, UUID.randomUUID(), null, null));
+                new BigDecimal("7"), MotivoMovimento.CONTAGEM, null, UUID.randomUUID(), null, null, null));
 
         PaginaResponse<MovimentoEstoqueResponse> primeira = estoqueService.movimentosParaUsuario(empresa.admin(),
                 produto, 0, 2);
@@ -377,7 +377,7 @@ class EstoqueServiceIT {
         BigDecimal custo = tipo == TipoMovimento.ENTRADA && motivo == MotivoMovimento.COMPRA
                 ? CUSTO_DA_COMPRA
                 : null;
-        return new AjusteEstoqueRequest(tipo, new BigDecimal(caixas), motivo, null, chave, embalagemId, custo);
+        return new AjusteEstoqueRequest(tipo, new BigDecimal(caixas), motivo, null, chave, embalagemId, custo, null);
     }
 
     private static UUID caixa(ProdutoResponse produto) {

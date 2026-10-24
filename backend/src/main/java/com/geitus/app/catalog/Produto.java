@@ -6,10 +6,13 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.hibernate.annotations.SQLRestriction;
 
@@ -328,7 +331,8 @@ public class Produto {
      */
     private void recalcularTextosDeBusca() {
         this.nomeNormalizado = TextoDeBusca.normalizar(nome);
-        this.buscaNormalizada = TextoDeBusca.textoDoProduto(nome, nomeCurto, sku, marca == null ? null : marca.getNome());
+        String nomeDaMarca = marca == null ? null : marca.getNome();
+        this.buscaNormalizada = TextoDeBusca.textoDoProduto(nome, nomeCurto, sku, nomeDaMarca);
     }
 
     /**
@@ -412,6 +416,72 @@ public class Produto {
      */
     void registrarAlteracaoDasEmbalagens() {
         if (jaGravado()) {
+            this.atualizadoEm = LocalDateTime.now();
+        }
+    }
+
+    // ---------- Fornecedores (Fase B5) ----------
+
+    /** Ids internos dos fornecedores ligados, na ordem da lista. */
+    public Set<Long> idsDosFornecedores() {
+        return fornecedores.stream()
+                .map(ProdutoFornecedor::getFornecedorId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /**
+     * A lista completa de fornecedores (ids ja conferidos na empresa): os
+     * ausentes saem ({@code orphanRemoval}) e os novos entram; os mantidos
+     * continuam a mesma linha. O fornecedor da ultima compra que sair da lista
+     * tem de ter sido limpo antes ({@link #definirFornecedorDaUltimaCompra}
+     * com {@code null} e {@code flush}), pela FK imediata da V14.
+     */
+    void substituirFornecedores(Collection<Long> fornecedorIds) {
+        Set<Long> antes = idsDosFornecedores();
+        if (fornecedorUltimaCompraId != null && !fornecedorIds.contains(fornecedorUltimaCompraId)) {
+            throw new IllegalStateException("Limpe o fornecedor da ultima compra antes de tira-lo da lista.");
+        }
+        fornecedores.removeIf(ligacao -> !fornecedorIds.contains(ligacao.getFornecedorId()));
+        for (Long fornecedorId : fornecedorIds) {
+            if (!idsDosFornecedores().contains(fornecedorId)) {
+                fornecedores.add(new ProdutoFornecedor(this, fornecedorId));
+            }
+        }
+        carimbarSeOsFornecedoresMudaram(antes);
+    }
+
+    /** Liga o fornecedor se ainda nao estiver na lista; {@code true} se ligou agora. */
+    boolean ligarFornecedor(Long fornecedorId) {
+        if (idsDosFornecedores().contains(fornecedorId)) {
+            return false;
+        }
+        Set<Long> antes = idsDosFornecedores();
+        fornecedores.add(new ProdutoFornecedor(this, fornecedorId));
+        carimbarSeOsFornecedoresMudaram(antes);
+        return true;
+    }
+
+    /** Tira o fornecedor da lista; o da ultima compra precisa ter sido limpo antes (FK da V14). */
+    void desligarFornecedor(Long fornecedorId) {
+        if (Objects.equals(fornecedorUltimaCompraId, fornecedorId)) {
+            throw new IllegalStateException("Limpe o fornecedor da ultima compra antes de tira-lo da lista.");
+        }
+        Set<Long> antes = idsDosFornecedores();
+        fornecedores.removeIf(ligacao -> ligacao.getFornecedorId().equals(fornecedorId));
+        carimbarSeOsFornecedoresMudaram(antes);
+    }
+
+    /** O fornecedor da ultima compra: um da lista, ou {@code null} (nenhum). */
+    void definirFornecedorDaUltimaCompra(Long fornecedorId) {
+        if (fornecedorId != null && !idsDosFornecedores().contains(fornecedorId)) {
+            throw new IllegalArgumentException("O fornecedor da ultima compra precisa estar na lista.");
+        }
+        this.fornecedorUltimaCompraId = fornecedorId;
+    }
+
+    /** As ligacoes ficam em outra tabela: num produto ja gravado, carimba o {@code atualizadoEm} se mudaram. */
+    private void carimbarSeOsFornecedoresMudaram(Set<Long> antes) {
+        if (jaGravado() && !antes.equals(idsDosFornecedores())) {
             this.atualizadoEm = LocalDateTime.now();
         }
     }

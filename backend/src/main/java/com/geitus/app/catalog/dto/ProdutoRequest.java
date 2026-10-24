@@ -93,6 +93,15 @@ public record ProdutoRequest(
         @Schema(description = "Fase B5: UUID da marca (opcional, qualquer nivel da arvore de marcas)")
         UUID marcaId,
 
+        @Schema(description = "Fase B5: UUIDs dos fornecedores do produto (ate 20). Lista informada substitui a "
+                + "lista inteira ([] remove todos); no PATCH, ausente ou null mantem a lista e o da ultima compra")
+        @Size(max = 20, message = "Informe no máximo 20 fornecedores.")
+        List<@NotNull(message = "Informe o fornecedor.") UUID> fornecedorIds,
+
+        @Schema(description = "Fase B5: UUID do fornecedor da ultima compra, um da lista; null = nenhum. So vale "
+                + "com fornecedorIds informado")
+        UUID fornecedorUltimaCompraId,
+
         @Schema(example = "25.90")
         @NotNull(message = "Preço de venda é obrigatório.")
         @DecimalMin(value = "0.0", message = "Preço de venda não pode ser negativo.")

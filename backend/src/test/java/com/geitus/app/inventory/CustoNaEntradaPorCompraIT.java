@@ -114,7 +114,7 @@ class CustoNaEntradaPorCompraIT {
     private static AjusteEstoqueRequest ajuste(TipoMovimento tipo, String quantidade, MotivoMovimento motivo,
             String custo, UUID embalagemId, UUID chave) {
         return new AjusteEstoqueRequest(tipo, new BigDecimal(quantidade), motivo, null, chave, embalagemId,
-                custo == null ? null : new BigDecimal(custo));
+                custo == null ? null : new BigDecimal(custo), null);
     }
 
     private MovimentoEstoqueResponse ajustar(CenarioDeEstoque.EmpresaDeTeste empresa, UUID produto,

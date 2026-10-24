@@ -15,10 +15,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.geitus.app.catalog.LigacaoDoProduto;
 import com.geitus.app.catalog.dto.PaginaResponse;
+import com.geitus.app.catalog.dto.ProdutoDoFornecedorResponse;
 import com.geitus.app.supplier.dto.FornecedorItemResponse;
 import com.geitus.app.supplier.dto.FornecedorRequest;
 import com.geitus.app.supplier.dto.FornecedorResponse;
+import com.geitus.app.supplier.dto.ProdutoDoFornecedorRequest;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -58,7 +61,8 @@ public class FornecedorController {
     public ResponseEntity<PaginaResponse<FornecedorItemResponse>> listar(
             @AuthenticationPrincipal Long idUsuario,
             @Parameter(description = "Termo de busca") @RequestParam(required = false) String busca,
-            @Parameter(description = "ativos (padrao), inativos ou todos") @RequestParam(required = false) String status,
+            @Parameter(description = "ativos (padrao), inativos ou todos")
+            @RequestParam(required = false) String status,
             @RequestParam(defaultValue = PAGINA_PADRAO) int pagina,
             @RequestParam(defaultValue = TAMANHO_PADRAO) int tamanho) {
         return ResponseEntity.ok(fornecedorService.listarParaUsuario(idUsuario, busca, status, pagina, tamanho));
@@ -69,7 +73,8 @@ public class FornecedorController {
     public ResponseEntity<FornecedorResponse> cadastrar(
             @AuthenticationPrincipal Long idUsuario,
             @Valid @RequestBody FornecedorRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(fornecedorService.cadastrarParaUsuario(idUsuario, request));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(fornecedorService.cadastrarParaUsuario(idUsuario, request));
     }
 
     @Operation(summary = "Busca um fornecedor pelo UUID", security = @SecurityRequirement(name = "bearer-jwt"))
@@ -114,6 +119,41 @@ public class FornecedorController {
             @AuthenticationPrincipal Long idUsuario,
             @PathVariable UUID id) {
         fornecedorService.excluirParaUsuario(idUsuario, id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Produtos que o fornecedor vende, por nome",
+            security = @SecurityRequirement(name = "bearer-jwt"))
+    @GetMapping("/{id}/produtos")
+    public ResponseEntity<PaginaResponse<ProdutoDoFornecedorResponse>> produtos(
+            @AuthenticationPrincipal Long idUsuario,
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = PAGINA_PADRAO) int pagina,
+            @RequestParam(defaultValue = TAMANHO_PADRAO) int tamanho) {
+        return ResponseEntity.ok(fornecedorService.produtosParaUsuario(idUsuario, id, pagina, tamanho));
+    }
+
+    @Operation(summary = "Liga um produto ao fornecedor (apenas ADMIN)",
+            description = "Idempotente: 201 na ligacao nova, 200 se o produto ja era do fornecedor.",
+            security = @SecurityRequirement(name = "bearer-jwt"))
+    @PostMapping("/{id}/produtos")
+    public ResponseEntity<ProdutoDoFornecedorResponse> ligarProduto(
+            @AuthenticationPrincipal Long idUsuario,
+            @PathVariable UUID id,
+            @Valid @RequestBody ProdutoDoFornecedorRequest request) {
+        LigacaoDoProduto ligacao = fornecedorService.ligarProdutoParaUsuario(idUsuario, id, request.produtoId());
+        return ResponseEntity.status(ligacao.criada() ? HttpStatus.CREATED : HttpStatus.OK).body(ligacao.produto());
+    }
+
+    @Operation(summary = "Tira um produto do fornecedor (apenas ADMIN)",
+            description = "Se o fornecedor era o da ultima compra do produto, esse campo do produto e limpo.",
+            security = @SecurityRequirement(name = "bearer-jwt"))
+    @DeleteMapping("/{id}/produtos/{produtoId}")
+    public ResponseEntity<Void> desligarProduto(
+            @AuthenticationPrincipal Long idUsuario,
+            @PathVariable UUID id,
+            @PathVariable UUID produtoId) {
+        fornecedorService.desligarProdutoParaUsuario(idUsuario, id, produtoId);
         return ResponseEntity.noContent().build();
     }
 }

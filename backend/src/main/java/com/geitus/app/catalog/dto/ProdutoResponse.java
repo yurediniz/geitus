@@ -3,16 +3,20 @@ package com.geitus.app.catalog.dto;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 import com.geitus.app.catalog.EntradaDeCompra;
+import com.geitus.app.catalog.FornecedorResumido;
 import com.geitus.app.catalog.MargemEMarkup;
 import com.geitus.app.catalog.PrecoAplicado;
 import com.geitus.app.catalog.PrecoDeVenda;
 import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ResumoDeEstoque;
 import com.geitus.app.catalog.SituacaoEstoque;
+import com.geitus.app.shared.busca.TextoDeBusca;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -56,6 +60,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * <p>Fase B4 (docs/modules/produtos-custo-entrada.md, 4): {@code custoOrigem}
  * diz de onde veio o custo atual ({@code null} sem origem); a quantidade e a
  * embalagem da ultima compra so vem no detalhe e nas respostas de gravacao.
+ *
+ * <p>Fase B5 (docs/modules/fornecedores-e-marcas.md, 3.3 e 5): {@code marca}
+ * com o caminho, {@code fornecedores} por nome e {@code fornecedorUltimaCompra}
+ * (um deles, ou {@code null}); a origem do custo cita o fornecedor da compra.
  */
 @Schema(description = "Dados publicos de um produto")
 public record ProdutoResponse(
@@ -73,6 +81,10 @@ public record ProdutoResponse(
         CategoriaResumo categoria,
         @Schema(description = "Fase B5: marca com o caminho na arvore de marcas; null se sem marca")
         MarcaResumo marca,
+        @Schema(description = "Fase B5: fornecedores do produto, por nome")
+        List<FornecedorResumo> fornecedores,
+        @Schema(description = "Fase B5: o fornecedor da ultima compra (um da lista); null se nenhum")
+        FornecedorResumo fornecedorUltimaCompra,
         @Schema(description = "Unidade de venda")
         UnidadeResumo unidade,
         String descricao,
@@ -149,6 +161,8 @@ public record ProdutoResponse(
                 produto.nomeCurtoEfetivo(),
                 CategoriaResumo.deOuNulo(produto.getCategoria(), referencias.categorias()),
                 MarcaResumo.deOuNulo(produto.getMarca(), referencias.marcas()),
+                fornecedores(produto, referencias),
+                fornecedorDaUltimaCompra(produto, referencias),
                 UnidadeResumo.deOuNulo(produto.getUnidade()),
                 produto.getDescricao(),
                 preco,
@@ -176,6 +190,23 @@ public record ProdutoResponse(
                 MargemEMarkup.markup(preco, custo),
                 produto.getCriadoEm(),
                 produto.getAtualizadoEm());
+    }
+
+    /** Os fornecedores ligados, por nome (sem acento nem maiusculas) e depois pelo numero. */
+    private static List<FornecedorResumo> fornecedores(Produto produto, ReferenciasDoProduto referencias) {
+        return produto.idsDosFornecedores().stream()
+                .map(referencias.fornecedores()::get)
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing((FornecedorResumido fornecedor) -> TextoDeBusca.normalizar(
+                        fornecedor.nome())).thenComparing(FornecedorResumido::numero))
+                .map(FornecedorResumo::de)
+                .toList();
+    }
+
+    private static FornecedorResumo fornecedorDaUltimaCompra(Produto produto, ReferenciasDoProduto referencias) {
+        Long id = produto.getFornecedorUltimaCompraId();
+        FornecedorResumido fornecedor = id == null ? null : referencias.fornecedores().get(id);
+        return fornecedor == null ? null : FornecedorResumo.de(fornecedor);
     }
 
     /** Embalagens com o preco efetivo; o preco vigente da unidade e calculado uma vez por produto. */

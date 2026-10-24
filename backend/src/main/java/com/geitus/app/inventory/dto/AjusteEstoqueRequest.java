@@ -22,7 +22,8 @@ import jakarta.validation.constraints.Size;
  * torna o pedido idempotente. As regras que dependem do produto (fracao,
  * saldo, motivo do tipo, observacao em "Outro", embalagem) e as do custo da
  * compra (Fase B4: obrigatorio, maior que zero, so na entrada por compra)
- * ficam no service.
+ * e do fornecedor (Fase B5: opcional, so na entrada por compra, ativo e da
+ * empresa) ficam no service.
  */
 @Schema(description = "Ajuste manual de estoque do produto")
 public record AjusteEstoqueRequest(
@@ -64,5 +65,9 @@ public record AjusteEstoqueRequest(
                 + "divisao pela quantidade dela", example = "180.00")
         @Digits(integer = 10, fraction = 2,
                 message = "O custo deve ter no máximo 10 dígitos inteiros e 2 casas decimais.")
-        BigDecimal custo) {
+        BigDecimal custo,
+
+        @Schema(description = "Fase B5: UUID do fornecedor da compra, opcional e so em ENTRADA com motivo COMPRA. "
+                + "Ele entra na lista de fornecedores do produto, se faltar, e vira o da ultima compra")
+        UUID fornecedorId) {
 }

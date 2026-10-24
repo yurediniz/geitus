@@ -75,7 +75,7 @@ class CustoNaEntradaReversaoIT {
 
     private static AjusteEstoqueRequest compra(String quantidade, String custo) {
         return new AjusteEstoqueRequest(TipoMovimento.ENTRADA, new BigDecimal(quantidade), MotivoMovimento.COMPRA,
-                null, UUID.randomUUID(), null, new BigDecimal(custo));
+                null, UUID.randomUUID(), null, new BigDecimal(custo), null);
     }
 
     private long linhasDeCusto(UUID produto) {

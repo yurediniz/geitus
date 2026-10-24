@@ -26,7 +26,9 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
 
     /**
      * Movimentos do produto, do mais recente para o mais antigo (desempate pelo
-     * id), ja com o nome do usuario. Filtra pela empresa alem do produto
+     * id), ja com o nome do usuario e (Fase B5) o fornecedor da compra, pela
+     * juncao com a entidade do pacote {@code supplier} (so leitura; a FK
+     * composta da V14 garante a mesma empresa). Filtra pela empresa alem do produto
      * (DEC-016) e atende o indice {@code ix_movimento_estoque_produto}. O
      * {@code pageable} nao deve trazer ordenacao: a ordem e a da consulta.
      */
@@ -34,9 +36,10 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
             SELECT new com.geitus.app.inventory.dto.MovimentoEstoqueResponse(
                        m.uuid, m.tipo, m.motivo, m.origem, m.quantidade, m.saldoAnterior, m.saldoNovo,
                        m.observacao, u.nome, m.criadoEm, m.embalagemRotulo, m.embalagemQuantidade,
-                       m.quantidadeEmbalagens, m.custoInformado, m.custoUnitario)
+                       m.quantidadeEmbalagens, m.custoInformado, m.custoUnitario, f.uuid, f.razaoSocial)
               FROM MovimentoEstoque m
               JOIN Usuario u ON u.id = m.usuarioId AND u.empresa.id = m.empresaId
+              LEFT JOIN Fornecedor f ON f.id = m.fornecedorId AND f.empresa.id = m.empresaId
              WHERE m.empresaId = :empresaId
                AND m.produto.id = :produtoId
              ORDER BY m.criadoEm DESC, m.id DESC
@@ -57,8 +60,10 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
      * indice {@code ix_movimento_estoque_produto}.
      */
     @Query("""
-            SELECT new com.geitus.app.catalog.EntradaDeCompra(m.quantidade, m.quantidadeEmbalagens, m.embalagemRotulo)
+            SELECT new com.geitus.app.catalog.EntradaDeCompra(m.quantidade, m.quantidadeEmbalagens, m.embalagemRotulo,
+                       f.razaoSocial)
               FROM MovimentoEstoque m
+              LEFT JOIN Fornecedor f ON f.id = m.fornecedorId AND f.empresa.id = m.empresaId
              WHERE m.empresaId = :empresaId
                AND m.produto.id = :produtoId
                AND m.custoInformado IS NOT NULL

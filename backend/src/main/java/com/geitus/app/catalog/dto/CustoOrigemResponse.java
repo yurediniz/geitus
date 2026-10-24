@@ -30,7 +30,10 @@ public record CustoOrigemResponse(
         Integer quantidadeDeEmbalagens,
         @Schema(description = "Rotulo da embalagem da ultima compra; null em EDICAO, na listagem ou com a "
                 + "compra em unidades", example = "CX c/ 18 UN")
-        String embalagemRotulo) {
+        String embalagemRotulo,
+        @Schema(description = "Fase B5: fornecedor da ultima compra; null em EDICAO, na listagem ou com a compra "
+                + "sem fornecedor", example = "Distribuidora Central Ltda")
+        String fornecedorNome) {
 
     /**
      * A origem do produto ({@code null} sem origem), com o detalhe da
@@ -43,9 +46,9 @@ public record CustoOrigemResponse(
             return null;
         }
         if (tipo != OrigemDoCusto.ENTRADA_COMPRA || ultimaCompra == null) {
-            return new CustoOrigemResponse(tipo, produto.getCustoOrigemEm(), null, null, null);
+            return new CustoOrigemResponse(tipo, produto.getCustoOrigemEm(), null, null, null, null);
         }
         return new CustoOrigemResponse(tipo, produto.getCustoOrigemEm(), ultimaCompra.quantidade(),
-                ultimaCompra.quantidadeDeEmbalagens(), ultimaCompra.embalagemRotulo());
+                ultimaCompra.quantidadeDeEmbalagens(), ultimaCompra.embalagemRotulo(), ultimaCompra.fornecedorNome());
     }
 }

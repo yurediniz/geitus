@@ -12,11 +12,13 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.geitus.app.catalog.LigacaoDoProduto;
 import com.geitus.app.catalog.Paginacao;
 import com.geitus.app.catalog.ProdutosDoFornecedor;
 import com.geitus.app.catalog.arvore.Arvore;
 import com.geitus.app.catalog.dto.MarcaResumo;
 import com.geitus.app.catalog.dto.PaginaResponse;
+import com.geitus.app.catalog.dto.ProdutoDoFornecedorResponse;
 import com.geitus.app.catalog.listagem.PaginaDeIds;
 import com.geitus.app.catalog.listagem.StatusFiltro;
 import com.geitus.app.catalog.marca.Marca;
@@ -66,6 +68,7 @@ public class FornecedorService {
     static final String MENSAGEM_MARCA_NAO_ENCONTRADA = "Marca não encontrada.";
     static final String MENSAGEM_MARCA_INATIVA = "Esta marca está inativa. Escolha uma marca ativa.";
     static final String MENSAGEM_MARCAS_DEMAIS = "Informe no máximo 200 marcas.";
+    static final String MENSAGEM_FORNECEDOR_INATIVO = "Este fornecedor está inativo.";
     static final String CAMPO_MARCAS = "marcaIds";
 
     private final FornecedorRepository fornecedorRepository;
@@ -189,6 +192,42 @@ public class FornecedorService {
         }
         fornecedorRepository.delete(fornecedor);
         fornecedorRepository.flush();
+    }
+
+    // ---------- Produtos que vende (spec 4.4) ----------
+
+    @Transactional(readOnly = true)
+    public PaginaResponse<ProdutoDoFornecedorResponse> produtosParaUsuario(Long idUsuario, UUID id, int pagina,
+            int tamanho) {
+        Paginacao.validar(pagina, tamanho);
+        Long empresaId = resolverEmpresaId(idUsuario);
+        Fornecedor fornecedor = buscarDaEmpresa(empresaId, id);
+        return produtosDoFornecedor.pagina(empresaId, fornecedor.getId(), pagina, tamanho);
+    }
+
+    /**
+     * Liga um produto da empresa ao fornecedor (a mesma lista do produto),
+     * idempotente. Como no produto, um fornecedor inativo nao ganha produtos
+     * novos (400); o que ja estava ligado continua.
+     */
+    @Transactional
+    public LigacaoDoProduto ligarProdutoParaUsuario(Long idUsuario, UUID id, UUID produtoId) {
+        Long empresaId = resolverEmpresaId(idUsuario);
+        Fornecedor fornecedor = buscarDaEmpresa(empresaId, id);
+        LigacaoDoProduto ligacao = produtosDoFornecedor.ligar(empresaId, fornecedor.getId(), produtoId);
+        // A ligacao nova de um inativo e desfeita junto com a transacao (rollback pela excecao).
+        if (ligacao.criada() && !fornecedor.isAtivo()) {
+            throw new DadosFornecedorInvalidosException(MENSAGEM_FORNECEDOR_INATIVO, null);
+        }
+        return ligacao;
+    }
+
+    /** Tira o produto do fornecedor; se ele era o da ultima compra, o campo do produto e limpo (Review Focus 1). */
+    @Transactional
+    public void desligarProdutoParaUsuario(Long idUsuario, UUID id, UUID produtoId) {
+        Long empresaId = resolverEmpresaId(idUsuario);
+        Fornecedor fornecedor = buscarDaEmpresa(empresaId, id);
+        produtosDoFornecedor.desligar(empresaId, fornecedor.getId(), produtoId);
     }
 
     // ---------- Uso interno do pacote ----------

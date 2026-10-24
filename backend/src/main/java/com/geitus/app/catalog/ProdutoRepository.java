@@ -240,6 +240,15 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
     // abaixo inicializam essas colecoes nos produtos ja carregados na mesma
     // sessao, entao o numero de comandos da listagem continua constante.
 
+    /** Fase B5: inicializa {@code fornecedores} dos produtos ja carregados com estes ids. */
+    @Query("""
+            SELECT DISTINCT p FROM Produto p
+              LEFT JOIN FETCH p.fornecedores
+            WHERE p.empresa.id = :empresaId
+              AND p.id IN :ids
+            """)
+    List<Produto> carregarFornecedores(@Param("empresaId") Long empresaId, @Param("ids") Collection<Long> ids);
+
     /** Inicializa {@code embalagens} (com a unidade de cada uma) dos produtos ja carregados com estes ids. */
     @Query("""
             SELECT DISTINCT p FROM Produto p

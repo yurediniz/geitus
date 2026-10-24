@@ -32,6 +32,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import com.geitus.app.catalog.CatalogoNaoEncontradoException;
 import com.geitus.app.catalog.CompraComCusto;
 import com.geitus.app.catalog.CustoDeEntrada;
+import com.geitus.app.catalog.FornecedoresDoProduto;
+import com.geitus.app.catalog.NomesDeFornecedores;
 import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ProdutoConflitoException;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
@@ -72,6 +74,12 @@ class EstoqueServiceTest {
     @Mock
     private CustoDeEntrada custoDeEntrada;
 
+    @Mock
+    private NomesDeFornecedores nomesDeFornecedores;
+
+    @Mock
+    private FornecedoresDoProduto fornecedoresDoProduto;
+
     private EstoqueService estoqueService;
 
     private PlatformTransactionManager transacoes;
@@ -84,7 +92,7 @@ class EstoqueServiceTest {
     void setUp() {
         transacoes = mock(PlatformTransactionManager.class);
         estoqueService = new EstoqueService(produtoRepository, usuarioRepository, saldoRepository,
-                movimentoRepository, custoDeEntrada, transacoes);
+                movimentoRepository, custoDeEntrada, nomesDeFornecedores, fornecedoresDoProduto, transacoes);
         empresa = ProdutosDeTeste.empresa(EMPRESA_ID);
         un = ProdutosDeTeste.unidade(empresa, "UN", false);
         kg = ProdutosDeTeste.unidade(empresa, "KG", true);
@@ -117,7 +125,7 @@ class EstoqueServiceTest {
     private static AjusteEstoqueRequest ajuste(TipoMovimento tipo, String quantidade, MotivoMovimento motivo,
             String observacao, UUID chave) {
         return new AjusteEstoqueRequest(tipo, new BigDecimal(quantidade), motivo, observacao, chave, null,
-                custoSeForCompra(tipo, motivo));
+                custoSeForCompra(tipo, motivo), null);
     }
 
     /** Fase B4: a entrada por compra exige o custo; os demais ajustes nao o levam. */
@@ -402,7 +410,7 @@ class EstoqueServiceTest {
     private static AjusteEstoqueRequest comCusto(TipoMovimento tipo, String quantidade, MotivoMovimento motivo,
             String custo) {
         return new AjusteEstoqueRequest(tipo, new BigDecimal(quantidade), motivo, null, UUID.randomUUID(), null,
-                custo == null ? null : new BigDecimal(custo));
+                custo == null ? null : new BigDecimal(custo), null);
     }
 
     /** Spec 4: a data da origem do custo e a do movimento (preenchida no persist, antes de aplicar o custo). */
@@ -492,10 +500,10 @@ class EstoqueServiceTest {
                 .thenReturn(Optional.of(gravado));
 
         ResultadoAjuste mesmo = ajustar(produto, new AjusteEstoqueRequest(TipoMovimento.ENTRADA,
-                new BigDecimal("5"), MotivoMovimento.COMPRA, null, chave, null, new BigDecimal("10")));
+                new BigDecimal("5"), MotivoMovimento.COMPRA, null, chave, null, new BigDecimal("10"), null));
         assertThat(mesmo.criado()).isFalse();
         assertThatThrownBy(() -> ajustar(produto, new AjusteEstoqueRequest(TipoMovimento.ENTRADA,
-                new BigDecimal("5"), MotivoMovimento.COMPRA, null, chave, null, new BigDecimal("10.01"))))
+                new BigDecimal("5"), MotivoMovimento.COMPRA, null, chave, null, new BigDecimal("10.01"), null)))
                 .isInstanceOf(ProdutoConflitoException.class);
         verify(custoDeEntrada, never()).registrar(any(), any(), any());
     }
@@ -505,7 +513,7 @@ class EstoqueServiceTest {
     private static AjusteEstoqueRequest emEmbalagens(TipoMovimento tipo, String quantidade, MotivoMovimento motivo,
             UUID embalagemId) {
         return new AjusteEstoqueRequest(tipo, new BigDecimal(quantidade), motivo, null, UUID.randomUUID(),
-                embalagemId, custoSeForCompra(tipo, motivo));
+                embalagemId, custoSeForCompra(tipo, motivo), null);
     }
 
     /** A contagem e sempre na unidade de venda: o tipo e conferido antes de procurar a embalagem. */
@@ -545,7 +553,7 @@ class EstoqueServiceTest {
 
         // Movimento anterior a Fase B4 (sem custo), repetido sem custo: o mesmo pedido.
         ResultadoAjuste resultado = ajustar(produto, new AjusteEstoqueRequest(TipoMovimento.ENTRADA,
-                new BigDecimal("2"), MotivoMovimento.COMPRA, null, chave, UUID.randomUUID(), null));
+                new BigDecimal("2"), MotivoMovimento.COMPRA, null, chave, UUID.randomUUID(), null, null));
 
         assertThat(resultado.criado()).isFalse();
         assertThat(resultado.movimento().embalagem().rotulo()).isEqualTo("CX c/ 18 UN");
@@ -566,10 +574,10 @@ class EstoqueServiceTest {
                 .thenReturn(Optional.of(gravado));
 
         assertThatThrownBy(() -> ajustar(produto, new AjusteEstoqueRequest(TipoMovimento.ENTRADA,
-                new BigDecimal("3"), MotivoMovimento.COMPRA, null, chave, UUID.randomUUID(), null)))
+                new BigDecimal("3"), MotivoMovimento.COMPRA, null, chave, UUID.randomUUID(), null, null)))
                 .isInstanceOf(ProdutoConflitoException.class);
         assertThatThrownBy(() -> ajustar(produto, new AjusteEstoqueRequest(TipoMovimento.ENTRADA,
-                new BigDecimal("36"), MotivoMovimento.COMPRA, null, chave, null, null)))
+                new BigDecimal("36"), MotivoMovimento.COMPRA, null, chave, null, null, null)))
                 .isInstanceOf(ProdutoConflitoException.class);
     }
 

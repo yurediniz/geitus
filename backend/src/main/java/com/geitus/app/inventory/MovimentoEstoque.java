@@ -148,7 +148,21 @@ public class MovimentoEstoque {
     MovimentoEstoque(Produto produto, TipoMovimento tipo, MotivoMovimento motivo, OrigemMovimento origem,
             BigDecimal quantidade, BigDecimal saldoAnterior, BigDecimal saldoNovo, String observacao,
             Long usuarioId, UUID chaveIdempotencia, RetratoDaEmbalagem embalagem, CustoDaCompra custo) {
+        this(produto, tipo, motivo, origem, quantidade, saldoAnterior, saldoNovo, observacao, usuarioId,
+                chaveIdempotencia, embalagem, custo, null);
+    }
+
+    /**
+     * Fase B5: como o construtor com custo, com o fornecedor da entrada por
+     * compra (id interno ja conferido na empresa; {@code null} = sem). A V14 so
+     * o aceita na entrada manual por compra.
+     */
+    MovimentoEstoque(Produto produto, TipoMovimento tipo, MotivoMovimento motivo, OrigemMovimento origem,
+            BigDecimal quantidade, BigDecimal saldoAnterior, BigDecimal saldoNovo, String observacao,
+            Long usuarioId, UUID chaveIdempotencia, RetratoDaEmbalagem embalagem, CustoDaCompra custo,
+            Long fornecedorId) {
         this.produto = produto;
+        this.fornecedorId = fornecedorId;
         this.empresaId = produto.getEmpresaId();
         this.tipo = tipo;
         this.motivo = motivo;

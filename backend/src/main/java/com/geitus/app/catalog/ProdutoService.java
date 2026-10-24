@@ -108,6 +108,12 @@ import com.geitus.app.shared.numeracao.TipoNumeracao;
  * servidor, com busca sem acento, filtros e ordenacao feitos no banco pela
  * {@link ConsultaDeProdutos}.
  *
+ * <p>Fase B5 (docs/modules/fornecedores-e-marcas.md, 3.3 e 5): a marca e um
+ * item da arvore de marcas (como a categoria) e a lista de fornecedores, com o
+ * da ultima compra, segue as regras do {@link FornecedoresDoProduto}; os nomes
+ * dos fornecedores chegam pela {@link NomesDeFornecedores}, sem depender do
+ * pacote {@code supplier}.
+ *
  * <p>Fase B4 (docs/modules/produtos-custo-entrada.md, 3 e 4): o custo que muda
  * no cadastro ou na edicao marca a origem {@code EDICAO} no produto e no
  * historico; o mesmo custo nao mexe na origem. A resposta do detalhe traz a
@@ -203,6 +209,8 @@ public class ProdutoService {
     private final HistoricoDePrecos historicoDePrecos;
     private final ValidadorDeCodigosDeBarras validadorDeCodigos;
     private final EmbalagensDoProduto embalagensDoProduto;
+    private final FornecedoresDoProduto fornecedoresDoProduto;
+    private final NomesDeFornecedores nomesDeFornecedores;
     private final UsoDoProdutoNoEstoque usoNoEstoque;
     private final RegistroDeEstoqueInicial registroDeEstoqueInicial;
     private final ConsultaDeProdutos consultaDeProdutos;
@@ -215,7 +223,8 @@ public class ProdutoService {
             CategoriaService categoriaService, MarcaService marcaService,
             HistoricoPrecoRepository historicoPrecoRepository,
             HistoricoDePrecos historicoDePrecos, ValidadorDeCodigosDeBarras validadorDeCodigos,
-            EmbalagensDoProduto embalagensDoProduto, UsoDoProdutoNoEstoque usoNoEstoque,
+            EmbalagensDoProduto embalagensDoProduto, FornecedoresDoProduto fornecedoresDoProduto,
+            NomesDeFornecedores nomesDeFornecedores, UsoDoProdutoNoEstoque usoNoEstoque,
             RegistroDeEstoqueInicial registroDeEstoqueInicial,
             ConsultaDeProdutos consultaDeProdutos, Numerador numerador,
             TamanhoDoCodigoNaEtiqueta tamanhoDoCodigoNaEtiqueta, Clock relogio) {
@@ -229,6 +238,8 @@ public class ProdutoService {
         this.historicoDePrecos = historicoDePrecos;
         this.validadorDeCodigos = validadorDeCodigos;
         this.embalagensDoProduto = embalagensDoProduto;
+        this.fornecedoresDoProduto = fornecedoresDoProduto;
+        this.nomesDeFornecedores = nomesDeFornecedores;
         this.usoNoEstoque = usoNoEstoque;
         this.registroDeEstoqueInicial = registroDeEstoqueInicial;
         this.consultaDeProdutos = consultaDeProdutos;
@@ -258,6 +269,8 @@ public class ProdutoService {
         validarEstoqueInicial(request, vinculos.unidade());
         PlanoDeEmbalagens embalagens = embalagensDoProduto.planejar(empresaId, null, vinculos.unidade(),
                 request.precoMinimo(), request.embalagens(), textos(codigos));
+        PlanoDeFornecedores fornecedores = fornecedoresDoProduto.planejar(empresaId, null, request.fornecedorIds(),
+                request.fornecedorUltimaCompraId());
 
         Empresa empresa = empresaRepository.findById(empresaId)
                 .orElseThrow(() -> new RegraDeNegocioException("Empresa informada não encontrada."));
@@ -269,6 +282,9 @@ public class ProdutoService {
         if (request.estoqueInicial() != null) {
             registroDeEstoqueInicial.registrar(gravado, request.estoqueInicial(), idUsuario);
         }
+        // Fase B5: a ligacao precisa do produto gravado, e o da ultima compra precisa da ligacao.
+        fornecedoresDoProduto.aplicar(gravado, fornecedores);
+        produtoRepository.flush();
         return gravado;
     }
 
@@ -303,6 +319,8 @@ public class ProdutoService {
                 .orElseGet(() -> ListaDeCodigosDeBarras.textos(produto.getCodigosBarras()));
         PlanoDeEmbalagens embalagens = embalagensDoProduto.planejar(empresaId, produto, vinculos.unidade(),
                 request.precoMinimo(), request.embalagens(), codigosFinaisDaUnidade);
+        PlanoDeFornecedores fornecedores = fornecedoresDoProduto.planejar(empresaId, produto,
+                request.fornecedorIds(), request.fornecedorUltimaCompraId());
 
         BigDecimal custoAnterior = produto.getCusto();
         BigDecimal precoAnterior = produto.getPrecoVenda();
@@ -310,6 +328,7 @@ public class ProdutoService {
         Produto gravado = gravar(produto, () -> aplicarCodigosEEmbalagens(produto, codigos.orElse(null),
                 embalagens));
         registrarHistorico(gravado, idUsuario, custoAnterior, precoAnterior, embalagens);
+        fornecedoresDoProduto.aplicar(gravado, fornecedores);
         return gravado;
     }
 
@@ -412,6 +431,12 @@ public class ProdutoService {
 
     private void apagar(Produto produto) {
         try {
+            // Fase B5: o JPA apaga as ligacoes com fornecedores antes do produto; a da ultima compra
+            // so sai depois de o campo ser limpo e gravado (FK imediata da V14).
+            if (produto.getFornecedorUltimaCompraId() != null) {
+                produto.definirFornecedorDaUltimaCompra(null);
+                produtoRepository.flush();
+            }
             produtoRepository.delete(produto);
             produtoRepository.flush();
         } catch (DataIntegrityViolationException movimentadoNoMeioTempo) {
@@ -516,8 +541,7 @@ public class ProdutoService {
         LocalDate hoje = SituacaoPromocao.hoje(relogio);
         PaginaDeIds pagina = consultaDeProdutos.buscar(filtroDaListagem(empresaId, parametros, arvore, hoje),
                 parametros.ordem(), parametros.pagina(), parametros.tamanho());
-        ReferenciasDoProduto referencias = new ReferenciasDoProduto(arvore, marcaService.arvoreDaEmpresa(empresaId));
-        return new PaginaResponse<>(itensDaPagina(empresaId, pagina.ids(), referencias, hoje), parametros.pagina(),
+        return new PaginaResponse<>(itensDaPagina(empresaId, pagina.ids(), arvore, hoje), parametros.pagina(),
                 parametros.tamanho(), pagina.total());
     }
 
@@ -553,7 +577,7 @@ public class ProdutoService {
      * Etapa 2: produtos dos ids com as relacoes, na ordem dos ids. Um id que
      * sumiu entre as etapas (produto excluido no meio) fica fora da pagina.
      */
-    private List<ProdutoResponse> itensDaPagina(Long empresaId, List<Long> ids, ReferenciasDoProduto referencias,
+    private List<ProdutoResponse> itensDaPagina(Long empresaId, List<Long> ids, CategoriaArvore categorias,
             LocalDate hoje) {
         if (ids.isEmpty()) {
             return List.of();
@@ -564,6 +588,13 @@ public class ProdutoService {
         // carregados (duas consultas, qualquer que seja o tamanho da pagina).
         produtoRepository.carregarEmbalagens(empresaId, ids);
         produtoRepository.carregarCodigosDasEmbalagens(empresaId, ids);
+        // Fase B5: as ligacoes com fornecedores (uma consulta) e os nomes deles (outra).
+        produtoRepository.carregarFornecedores(empresaId, ids);
+        Set<Long> fornecedorIds = porId.values().stream()
+                .flatMap(produto -> produto.idsDosFornecedores().stream())
+                .collect(Collectors.toSet());
+        ReferenciasDoProduto referencias = new ReferenciasDoProduto(categorias, marcaService.arvoreDaEmpresa(empresaId),
+                nomesDeFornecedores.porIds(empresaId, fornecedorIds));
         Map<Long, ResumoDeEstoque> estoques = usoNoEstoque.resumos(empresaId, ids);
         return ids.stream()
                 .map(porId::get)
@@ -985,7 +1016,8 @@ public class ProdutoService {
 
     /**
      * Resposta de um produto; cada arvore so e carregada se o produto tiver
-     * categoria ou marca, e a ultima compra (Fase B4) so com a origem do custo
+     * categoria ou marca, os nomes dos fornecedores numa consulta (nenhuma sem
+     * fornecedor), e a ultima compra (Fase B4) so com a origem do custo
      * {@code ENTRADA_COMPRA}.
      */
     private ProdutoResponse responder(Produto produto) {
@@ -996,8 +1028,10 @@ public class ProdutoService {
         Arvore<Marca> marcas = produto.getMarca() == null
                 ? Arvore.de(List.of())
                 : marcaService.arvoreDaEmpresa(empresaId);
-        return responder(produto, new ReferenciasDoProduto(categorias, marcas), SituacaoPromocao.hoje(relogio),
-                resumoDeEstoque(produto), ultimaCompra(produto));
+        ReferenciasDoProduto referencias = new ReferenciasDoProduto(categorias, marcas,
+                nomesDeFornecedores.porIds(empresaId, produto.idsDosFornecedores()));
+        return responder(produto, referencias, SituacaoPromocao.hoje(relogio), resumoDeEstoque(produto),
+                ultimaCompra(produto));
     }
 
     private EntradaDeCompra ultimaCompra(Produto produto) {

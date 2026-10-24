@@ -2,6 +2,7 @@ package com.geitus.app.inventory;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -17,6 +18,9 @@ import org.springframework.util.StringUtils;
 import com.geitus.app.catalog.CatalogoNaoEncontradoException;
 import com.geitus.app.catalog.CompraComCusto;
 import com.geitus.app.catalog.CustoDeEntrada;
+import com.geitus.app.catalog.FornecedorResumido;
+import com.geitus.app.catalog.FornecedoresDoProduto;
+import com.geitus.app.catalog.NomesDeFornecedores;
 import com.geitus.app.catalog.Paginacao;
 import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ProdutoConflitoException;
@@ -31,6 +35,7 @@ import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.inventory.dto.AjusteEstoqueRequest;
 import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
+import com.geitus.app.inventory.dto.MovimentoEstoqueResponse.FornecedorDoMovimento;
 
 /**
  * Regras do estoque do produto (docs/modules/produtos-estoque.md, 4.1 a 4.5;
@@ -54,6 +59,11 @@ import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
  * <p>Fase B4 (docs/modules/produtos-custo-entrada.md, 2; DEC-038): a entrada
  * por compra exige o custo, gravado no movimento; o {@link CustoDeEntrada} do
  * catalogo o aplica no produto, na mesma transacao.
+ *
+ * <p>Fase B5 (docs/modules/fornecedores-e-marcas.md, 6; DEC-039): a entrada
+ * por compra aceita o fornecedor (opcional, ativo, da empresa), gravado no
+ * movimento; o {@link FornecedoresDoProduto} do catalogo o liga ao produto, se
+ * faltar, e o marca como o da ultima compra, na mesma transacao.
  */
 @Service
 public class EstoqueService {
@@ -63,6 +73,7 @@ public class EstoqueService {
     static final String CAMPO_OBSERVACAO = "observacao";
     static final String CAMPO_EMBALAGEM = "embalagemId";
     static final String CAMPO_CUSTO = "custo";
+    static final String CAMPO_FORNECEDOR = "fornecedorId";
 
     static final String MENSAGEM_SEM_CONTROLE = "Este produto não controla estoque.";
     static final String MENSAGEM_MOTIVO_DO_SISTEMA = "Este motivo é registrado só pelo sistema.";
@@ -78,6 +89,9 @@ public class EstoqueService {
     static final String MENSAGEM_CUSTO_FORA_DA_COMPRA = "O custo só é informado na entrada por compra.";
     static final String MENSAGEM_INFORME_O_CUSTO = "Informe o custo da compra.";
     static final String MENSAGEM_CUSTO_NAO_POSITIVO = "O custo deve ser maior que zero.";
+    static final String MENSAGEM_FORNECEDOR_FORA_DA_COMPRA = "O fornecedor só é informado na entrada por compra.";
+    static final String MENSAGEM_FORNECEDOR_NAO_ENCONTRADO = "Fornecedor não encontrado.";
+    static final String MENSAGEM_FORNECEDOR_INATIVO = "Este fornecedor está inativo.";
 
     /** Maior valor de {@code NUMERIC(12,3)}: acima disso o banco recusaria com erro generico. */
     static final BigDecimal SALDO_MAXIMO = QuantidadeDeEstoque.MAXIMO;
@@ -89,16 +103,21 @@ public class EstoqueService {
     private final EstoqueSaldoRepository saldoRepository;
     private final MovimentoEstoqueRepository movimentoRepository;
     private final CustoDeEntrada custoDeEntrada;
+    private final NomesDeFornecedores nomesDeFornecedores;
+    private final FornecedoresDoProduto fornecedoresDoProduto;
     private final TransactionTemplate transacao;
 
     public EstoqueService(ProdutoRepository produtoRepository, UsuarioRepository usuarioRepository,
             EstoqueSaldoRepository saldoRepository, MovimentoEstoqueRepository movimentoRepository,
-            CustoDeEntrada custoDeEntrada, PlatformTransactionManager gerenciadorDeTransacoes) {
+            CustoDeEntrada custoDeEntrada, NomesDeFornecedores nomesDeFornecedores,
+            FornecedoresDoProduto fornecedoresDoProduto, PlatformTransactionManager gerenciadorDeTransacoes) {
         this.produtoRepository = produtoRepository;
         this.usuarioRepository = usuarioRepository;
         this.saldoRepository = saldoRepository;
         this.movimentoRepository = movimentoRepository;
         this.custoDeEntrada = custoDeEntrada;
+        this.nomesDeFornecedores = nomesDeFornecedores;
+        this.fornecedoresDoProduto = fornecedoresDoProduto;
         this.transacao = new TransactionTemplate(gerenciadorDeTransacoes);
     }
 
@@ -162,7 +181,7 @@ public class EstoqueService {
     MovimentoEstoque registrarMovimento(Produto produto, TipoMovimento tipo, MotivoMovimento motivo,
             OrigemMovimento origem, BigDecimal quantidadeInformada, String observacao, Long usuarioId, UUID chave) {
         return registrarMovimento(produto, tipo, motivo, origem,
-                new ValoresDoMovimento(new QuantidadeDoAjuste(quantidadeInformada, null), null), observacao,
+                new ValoresDoMovimento(new QuantidadeDoAjuste(quantidadeInformada, null), null, null), observacao,
                 usuarioId, chave);
     }
 
@@ -170,8 +189,19 @@ public class EstoqueService {
     record QuantidadeDoAjuste(BigDecimal emUnidades, RetratoDaEmbalagem embalagem) {
     }
 
-    /** Quantidade validada e, so na entrada por compra (Fase B4), o custo; {@code null} nos demais. */
-    record ValoresDoMovimento(QuantidadeDoAjuste quantidade, CustoDaCompra custo) {
+    /**
+     * Quantidade validada e, so na entrada por compra, o custo (Fase B4) e o
+     * fornecedor (Fase B5, opcional); {@code null} nos demais.
+     */
+    record ValoresDoMovimento(QuantidadeDoAjuste quantidade, CustoDaCompra custo, FornecedorResumido fornecedor) {
+
+        ValoresDoMovimento comFornecedor(FornecedorResumido fornecedorDaCompra) {
+            return new ValoresDoMovimento(quantidade, custo, fornecedorDaCompra);
+        }
+
+        Long fornecedorId() {
+            return fornecedor == null ? null : fornecedor.id();
+        }
     }
 
     private MovimentoEstoque registrarMovimento(Produto produto, TipoMovimento tipo, MotivoMovimento motivo,
@@ -188,16 +218,18 @@ public class EstoqueService {
         }
         saldo.aplicar(variacao);
         return movimentoRepository.save(new MovimentoEstoque(produto, tipo, motivo, origem, variacao, anterior, novo,
-                observacao, usuarioId, chave, quantidade.embalagem(), valores.custo()));
+                observacao, usuarioId, chave, quantidade.embalagem(), valores.custo(), valores.fornecedorId()));
     }
 
     // ---------- Ajuste manual ----------
 
     /**
      * Ordem da spec: chave -> produto (trava, 404) -> chave de novo -> regras ->
-     * movimento -> custo do produto (Fase B4). A chave repetida devolve o
-     * movimento gravado antes de procurar a embalagem, que pode ter saido do
-     * produto depois (Review Focus 5 da B3), e sem tocar no custo.
+     * fornecedor (Fase B5) -> movimento -> custo do produto (Fase B4) ->
+     * fornecedor do produto (Fase B5). A chave repetida devolve o movimento
+     * gravado antes de procurar a embalagem, que pode ter saido do produto
+     * depois (Review Focus 5 da B3), e sem tocar no custo nem nos fornecedores
+     * do produto (Review Focus 5 da B5: uma ligacao so).
      */
     private ResultadoAjuste ajustar(Long idUsuario, UUID produtoId, AjusteEstoqueRequest request) {
         Usuario usuario = resolverUsuario(idUsuario);
@@ -214,7 +246,8 @@ public class EstoqueService {
         if (repetido.isPresent()) {
             return repetido.get();
         }
-        ValoresDoMovimento valores = validarAjusteManual(produto, request);
+        ValoresDoMovimento valores = validarAjusteManual(produto, request)
+                .comFornecedor(fornecedorDaCompra(empresaId, request));
         MovimentoEstoque movimento = registrarMovimento(produto, request.tipo(), request.motivo(),
                 OrigemMovimento.AJUSTE_MANUAL, valores, normalizarOuNulo(request.observacao()),
                 usuario.getId(), request.chave());
@@ -223,7 +256,42 @@ public class EstoqueService {
             custoDeEntrada.registrar(produto, new CompraComCusto(movimento.getId(), valores.custo().porUnidade(),
                     movimento.getCriadoEm()), usuario.getId());
         }
-        return new ResultadoAjuste(MovimentoEstoqueResponse.de(movimento, usuario.getNome()), true);
+        if (valores.fornecedor() != null) {
+            fornecedoresDoProduto.registrarCompra(produto, valores.fornecedorId());
+        }
+        return new ResultadoAjuste(MovimentoEstoqueResponse.de(movimento, usuario.getNome(),
+                fornecedorDoMovimento(valores.fornecedor())), true);
+    }
+
+    /**
+     * Fornecedor da compra (spec 6), depois das regras da B4, nesta ordem: so
+     * na entrada por compra (400), da empresa (404, DEC-016) e ativo (400).
+     * {@code null} sem fornecedor.
+     */
+    private FornecedorResumido fornecedorDaCompra(Long empresaId, AjusteEstoqueRequest request) {
+        if (request.fornecedorId() == null) {
+            return null;
+        }
+        if (!entradaPorCompra(request)) {
+            throw new RegraDeNegocioException(MENSAGEM_FORNECEDOR_FORA_DA_COMPRA, CAMPO_FORNECEDOR);
+        }
+        FornecedorResumido fornecedor = nomesDeFornecedores.porUuids(empresaId, List.of(request.fornecedorId()))
+                .get(request.fornecedorId());
+        if (fornecedor == null) {
+            throw new CatalogoNaoEncontradoException(MENSAGEM_FORNECEDOR_NAO_ENCONTRADO);
+        }
+        if (!fornecedor.ativo()) {
+            throw new RegraDeNegocioException(MENSAGEM_FORNECEDOR_INATIVO, CAMPO_FORNECEDOR);
+        }
+        return fornecedor;
+    }
+
+    private static boolean entradaPorCompra(AjusteEstoqueRequest request) {
+        return request.tipo() == TipoMovimento.ENTRADA && request.motivo() == MotivoMovimento.COMPRA;
+    }
+
+    private static FornecedorDoMovimento fornecedorDoMovimento(FornecedorResumido fornecedor) {
+        return fornecedor == null ? null : new FornecedorDoMovimento(fornecedor.uuid(), fornecedor.nome());
     }
 
     /**
@@ -242,7 +310,7 @@ public class EstoqueService {
         QuantidadeDoAjuste quantidade = request.embalagemId() != null
                 ? emEmbalagens(produto, request)
                 : emUnidades(produto, request);
-        return new ValoresDoMovimento(quantidade, custoDaCompra(request, quantidade.embalagem()));
+        return new ValoresDoMovimento(quantidade, custoDaCompra(request, quantidade.embalagem()), null);
     }
 
     private static QuantidadeDoAjuste emUnidades(Produto produto, AjusteEstoqueRequest request) {
@@ -284,9 +352,7 @@ public class EstoqueService {
      * entrada por compra.
      */
     private static CustoDaCompra custoDaCompra(AjusteEstoqueRequest request, RetratoDaEmbalagem embalagem) {
-        boolean entradaPorCompra = request.tipo() == TipoMovimento.ENTRADA
-                && request.motivo() == MotivoMovimento.COMPRA;
-        if (!entradaPorCompra) {
+        if (!entradaPorCompra(request)) {
             if (request.custo() != null) {
                 throw new RegraDeNegocioException(MENSAGEM_CUSTO_FORA_DA_COMPRA, CAMPO_CUSTO);
             }
@@ -317,12 +383,27 @@ public class EstoqueService {
     private Optional<ResultadoAjuste> repeticao(Long empresaId, UUID produtoId, AjusteEstoqueRequest request) {
         return movimentoRepository.findByEmpresaIdAndChaveIdempotencia(empresaId, request.chave())
                 .map(gravado -> {
-                    if (!mesmoPedido(gravado, produtoId, request)) {
+                    FornecedorResumido fornecedor = fornecedorGravado(empresaId, gravado);
+                    if (!mesmoPedido(gravado, produtoId, request) || !mesmoFornecedor(fornecedor, request)) {
                         throw new ProdutoConflitoException(MENSAGEM_CHAVE_COM_OUTROS_DADOS);
                     }
-                    return new ResultadoAjuste(
-                            MovimentoEstoqueResponse.de(gravado, nomeDoUsuario(gravado.getUsuarioId())), false);
+                    return new ResultadoAjuste(MovimentoEstoqueResponse.de(gravado,
+                            nomeDoUsuario(gravado.getUsuarioId()), fornecedorDoMovimento(fornecedor)), false);
                 });
+    }
+
+    private FornecedorResumido fornecedorGravado(Long empresaId, MovimentoEstoque gravado) {
+        if (gravado.getFornecedorId() == null) {
+            return null;
+        }
+        Long fornecedorId = gravado.getFornecedorId();
+        return nomesDeFornecedores.porIds(empresaId, List.of(fornecedorId)).get(fornecedorId);
+    }
+
+    /** Fase B5 (Review Focus 5): a mesma chave com outro fornecedor (ou com e sem) e outro pedido. */
+    private static boolean mesmoFornecedor(FornecedorResumido gravado, AjusteEstoqueRequest request) {
+        UUID doPedido = request.fornecedorId();
+        return gravado == null ? doPedido == null : gravado.uuid().equals(doPedido);
     }
 
     /**

@@ -8,6 +8,15 @@ import java.math.BigDecimal;
  * quantidade em unidades de venda e, se a compra foi em embalagens, o numero
  * de embalagens e o rotulo do retrato ("2" e "CX c/ 18 UN"); os dois nulos na
  * compra em unidades. Vem do estoque pela {@link UsoDoProdutoNoEstoque}.
+ *
+ * <p>Fase B5: {@code fornecedorNome} e a razao social do fornecedor da
+ * compra, ou {@code null} (compra sem fornecedor ou entrada lida sem ele).
  */
-public record EntradaDeCompra(BigDecimal quantidade, Integer quantidadeDeEmbalagens, String embalagemRotulo) {
+public record EntradaDeCompra(BigDecimal quantidade, Integer quantidadeDeEmbalagens, String embalagemRotulo,
+        String fornecedorNome) {
+
+    /** Sem o fornecedor: a entrada vista pelo historico de precos, que nao o mostra. */
+    public EntradaDeCompra(BigDecimal quantidade, Integer quantidadeDeEmbalagens, String embalagemRotulo) {
+        this(quantidade, quantidadeDeEmbalagens, embalagemRotulo, null);
+    }
 }

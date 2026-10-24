@@ -118,7 +118,7 @@ class CenarioDeEstoque {
     /** Fase B4: como o request com embalagens, com o custo do cadastro ({@code null} = sem custo). */
     static ProdutoRequest produtoComCusto(UUID unidadeId, String nome, String custo, boolean controlaEstoque,
             String estoqueInicial, List<EmbalagemRequest> embalagens) {
-        return new ProdutoRequest(nome, null, null, unidadeId, null, null,
+        return new ProdutoRequest(nome, null, null, unidadeId, null, null, null, null,
                 new BigDecimal("10.00"), custo == null ? null : new BigDecimal(custo), null, null, null, null,
                 List.of(), embalagens, null, null, null, null, null, controlaEstoque,
                 estoqueInicial == null ? null : new BigDecimal(estoqueInicial));

@@ -34,7 +34,8 @@ public class ConsultaDeFornecedores {
             WHERE f.empresa_id = :empresaId""";
     private static final String CONTAGEM = "SELECT count(*)";
     private static final String IDS = "SELECT f.id";
-    private static final String ORDEM_E_PAGINA = " ORDER BY f.nome_normalizado, f.id LIMIT :tamanho OFFSET :deslocamento";
+    private static final String ORDEM_E_PAGINA =
+            " ORDER BY f.nome_normalizado, f.id LIMIT :tamanho OFFSET :deslocamento";
 
     private static final String ATIVOS = " AND f.ativo";
     private static final String INATIVOS = " AND NOT f.ativo";

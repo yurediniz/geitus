@@ -25,6 +25,8 @@ final class ProdutoRequestBuilder {
     private UUID unidadeId;
     private UUID categoriaId;
     private UUID marcaId;
+    private List<UUID> fornecedorIds;
+    private UUID fornecedorUltimaCompraId;
     private BigDecimal precoVenda = new BigDecimal("10.00");
     private BigDecimal custo;
     private BigDecimal estoqueMinimo;
@@ -76,6 +78,17 @@ final class ProdutoRequestBuilder {
 
     ProdutoRequestBuilder marcaId(UUID valor) {
         this.marcaId = valor;
+        return this;
+    }
+
+    /** Fase B5: a lista de fornecedores ({@code null} = ausente; no PATCH, mantem a lista). */
+    ProdutoRequestBuilder fornecedorIds(List<UUID> valores) {
+        this.fornecedorIds = valores;
+        return this;
+    }
+
+    ProdutoRequestBuilder fornecedorUltimaCompraId(UUID valor) {
+        this.fornecedorUltimaCompraId = valor;
         return this;
     }
 
@@ -176,7 +189,7 @@ final class ProdutoRequestBuilder {
     }
 
     ProdutoRequest build() {
-        return new ProdutoRequest(nome, nomeCurto, descricao, unidadeId, categoriaId, marcaId,
+        return new ProdutoRequest(nome, nomeCurto, descricao, unidadeId, categoriaId, marcaId, fornecedorIds, fornecedorUltimaCompraId,
                 precoVenda, custo, estoqueMinimo, estoqueMaximo, pontoReposicao,
                 precoMinimo, codigosBarras, embalagens, sku, codigo, vendidoBalanca, promocao, atacado, controlaEstoque,
                 estoqueInicial);

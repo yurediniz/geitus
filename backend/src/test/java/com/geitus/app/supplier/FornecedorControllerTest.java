@@ -28,7 +28,9 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import com.geitus.app.catalog.LigacaoDoProduto;
 import com.geitus.app.catalog.dto.PaginaResponse;
+import com.geitus.app.catalog.dto.ProdutoDoFornecedorResponse;
 import com.geitus.app.config.RestAccessDeniedHandler;
 import com.geitus.app.config.RestAuthenticationEntryPoint;
 import com.geitus.app.config.SecurityConfig;
@@ -139,6 +141,49 @@ class FornecedorControllerTest {
                 .andExpect(status().isOk());
         mockMvc.perform(comoAdmin(patch("/api/fornecedores/" + id + "/inativar"))).andExpect(status().isOk());
         mockMvc.perform(comoAdmin(delete("/api/fornecedores/" + id))).andExpect(status().isNoContent());
+    }
+
+    // ---------- Produtos que vende ----------
+
+    /** O corpo e o item da lista nos dois casos: 201 quando liga agora, 200 quando ja estava ligado. */
+    @Test
+    void ligarProdutoRespondeOItemComCorpoEm201E200() throws Exception {
+        UUID id = UUID.randomUUID();
+        UUID produto = UUID.randomUUID();
+        ProdutoDoFornecedorResponse item = new ProdutoDoFornecedorResponse(produto, 15L, "Ração Golden", 542,
+                "P000015", true, false);
+        when(fornecedorService.ligarProdutoParaUsuario(ID_ADMIN, id, produto))
+                .thenReturn(new LigacaoDoProduto(item, true))
+                .thenReturn(new LigacaoDoProduto(item, false));
+        String corpo = "{ \"produtoId\": \"" + produto + "\" }";
+
+        mockMvc.perform(comoAdmin(comCorpo(post("/api/fornecedores/" + id + "/produtos"), corpo)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(produto.toString()))
+                .andExpect(jsonPath("$.numero").value(15))
+                .andExpect(jsonPath("$.nome").value("Ração Golden"))
+                .andExpect(jsonPath("$.codigo").value(542))
+                .andExpect(jsonPath("$.fornecedorDaUltimaCompra").value(false));
+        mockMvc.perform(comoAdmin(comCorpo(post("/api/fornecedores/" + id + "/produtos"), corpo)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(produto.toString()))
+                .andExpect(jsonPath("$.nome").value("Ração Golden"));
+    }
+
+    @Test
+    void ligarSemProdutoRetorna400EOperadorListaOsProdutos() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(fornecedorService.produtosParaUsuario(ID_OPERADOR, id, 0, 25))
+                .thenReturn(new PaginaResponse<>(List.of(), 0, 25, 0));
+
+        mockMvc.perform(comoAdmin(comCorpo(post("/api/fornecedores/" + id + "/produtos"), "{}")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("produtoId"));
+        mockMvc.perform(comoOperador(get("/api/fornecedores/" + id + "/produtos")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItens").value(0));
+        mockMvc.perform(comoAdmin(delete("/api/fornecedores/" + id + "/produtos/" + UUID.randomUUID())))
+                .andExpect(status().isNoContent());
     }
 
     // ---------- Validacao e erros ----------

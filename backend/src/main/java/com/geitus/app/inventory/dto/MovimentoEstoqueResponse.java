@@ -23,6 +23,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
  *
  * <p>Fase B4 (docs/modules/produtos-custo-entrada.md, 6): a entrada por compra
  * traz {@code custoInformado} e {@code custoUnitario}.
+ *
+ * <p>Fase B5 (docs/modules/fornecedores-e-marcas.md, 6): a entrada por compra
+ * com fornecedor traz {@code fornecedor: {id, nome}}.
  */
 @Schema(description = "Movimento de estoque do produto")
 public record MovimentoEstoqueResponse(
@@ -50,7 +53,22 @@ public record MovimentoEstoqueResponse(
         BigDecimal custoInformado,
         @Schema(description = "Fase B4: custo por unidade de venda, com 4 casas; null junto com custoInformado",
                 example = "10.0000")
-        BigDecimal custoUnitario) {
+        BigDecimal custoUnitario,
+        @Schema(description = "Fase B5: fornecedor da entrada por compra; null sem fornecedor")
+        FornecedorDoMovimento fornecedor) {
+
+    /** O fornecedor da compra no movimento (o historico mostra "Fornecedor: {nome}"). */
+    @Schema(description = "Fornecedor da entrada por compra")
+    public record FornecedorDoMovimento(
+            @Schema(description = "Identificador publico do fornecedor (UUID)")
+            UUID id,
+            @Schema(example = "Distribuidora Central Ltda")
+            String nome) {
+
+        static FornecedorDoMovimento deOuNulo(UUID id, String nome) {
+            return id == null ? null : new FornecedorDoMovimento(id, nome);
+        }
+    }
 
     /** Retrato da embalagem no movimento ("+36 UN (2 CX c/ 18 UN)"). */
     @Schema(description = "Embalagem em que o ajuste foi informado")
@@ -77,19 +95,22 @@ public record MovimentoEstoqueResponse(
     public MovimentoEstoqueResponse(UUID id, TipoMovimento tipo, MotivoMovimento motivo, OrigemMovimento origem,
             BigDecimal quantidade, BigDecimal saldoAnterior, BigDecimal saldoNovo, String observacao,
             String usuarioNome, LocalDateTime criadoEm, String embalagemRotulo, BigDecimal embalagemQuantidade,
-            Integer quantidadeEmbalagens, BigDecimal custoInformado, BigDecimal custoUnitario) {
+            Integer quantidadeEmbalagens, BigDecimal custoInformado, BigDecimal custoUnitario,
+            UUID fornecedorId, String fornecedorNome) {
         this(id, tipo, motivo, origem, quantidade, saldoAnterior, saldoNovo, observacao, usuarioNome, criadoEm,
                 embalagemRotulo == null
                         ? null
                         : new EmbalagemDoMovimento(embalagemRotulo, embalagemQuantidade, quantidadeEmbalagens),
-                custoInformado, custoUnitario);
+                custoInformado, custoUnitario, FornecedorDoMovimento.deOuNulo(fornecedorId, fornecedorNome));
     }
 
-    public static MovimentoEstoqueResponse de(MovimentoEstoque movimento, String usuarioNome) {
+    /** O movimento gravado, com o nome do usuario e o fornecedor ({@code null} = sem). */
+    public static MovimentoEstoqueResponse de(MovimentoEstoque movimento, String usuarioNome,
+            FornecedorDoMovimento fornecedor) {
         return new MovimentoEstoqueResponse(movimento.getUuid(), movimento.getTipo(), movimento.getMotivo(),
                 movimento.getOrigem(), movimento.getQuantidade(), movimento.getSaldoAnterior(),
                 movimento.getSaldoNovo(), movimento.getObservacao(), usuarioNome, movimento.getCriadoEm(),
                 EmbalagemDoMovimento.deOuNulo(movimento.getRetratoDaEmbalagem().orElse(null)),
-                movimento.getCustoInformado(), movimento.getCustoUnitario());
+                movimento.getCustoInformado(), movimento.getCustoUnitario(), fornecedor);
     }
 }
