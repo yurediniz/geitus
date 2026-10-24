@@ -18,12 +18,12 @@ Conforme o escopo definido no [CLAUDE.md](../../CLAUDE.md):
 - [Clientes](clientes.md) ✔
 - [Fornecedores](fornecedores-e-marcas.md) ✔ — cadastro com representantes, marcas e produtos que vende (Fase B5, DEC-039; amplia o escopo do MVP de Produtos)
 - PDV
-- [Caixa](caixa.md) — em especificação (DEC-041; inclui a tela Configurações com a seção Caixa)
+- [Caixa](caixa.md) ✔ — pontos de caixa, sessões, sangria, suprimento e fechamento cego configurável (DEC-041)
 - Estoque básico
 - Financeiro básico
 - Dashboard básico
 - Relatórios básicos
-- Configurações básicas
+- Configurações básicas — iniciada com a seção Caixa (DEC-041)
 
 > Cada item ganha um arquivo próprio (ex.: `produtos.md`, `pdv.md`, `caixa.md`) assim que é iniciado — os já especificados estão linkados acima.
 

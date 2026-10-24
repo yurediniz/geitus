@@ -396,3 +396,41 @@ Todas autenticadas e isoladas pela empresa do JWT. Recurso de outra empresa → 
 - **Venda:** a venda vai procurar a sessão `ABERTA` do usuário (`GET /api/caixa/sessoes/atual`) e gravar nela os recebimentos (tipo `RECEBIMENTO`, com forma de pagamento). Recebimento em dinheiro entra no esperado da gaveta.
 - **Conferência por forma:** a conferência de cartão e PIX vira uma contagem por forma de pagamento, definida na spec do PDV.
 - **Chave de idempotência:** a do movimento já é única por empresa. A venda deve gerar uma chave por recebimento (ver DT-032).
+
+## 10. Ajustes na implementação
+
+Decisões tomadas durante a implementação e as revisões (2026-10-24), que completam ou corrigem o texto acima.
+
+**Regras**
+- **Justificativa junto com a contagem no modo cego:** dá 400 **sempre**, mesmo com diferença zero. Se o 400 dependesse da diferença, o operador descobriria o esperado por tentativa, porque a contagem recusada não é gravada.
+- **Justificativa no modo não cego com diferença zero:** é ignorada. A sessão fecha com a justificativa nula.
+- **Ordem das conferências na abertura:** primeiro a chave repetida, depois "Você já tem um caixa aberto…" e por último "O Caixa 1 já está aberto…", que é a mensagem mais útil para quem tem caixa em outro ponto.
+- **Lançamentos de outra pessoa no modo cego:** a §3.6 aceita mostrar só os lançamentos do próprio operador. Para o OPERADOR, com a sessão `ABERTA` e o modo cego ligado, os movimentos lançados por outro usuário (por exemplo, uma sangria do ADMIN) saem com `valor: null`. A tela mostra "Valor no fechamento" no lugar do valor.
+- **Escritas de ponto e configuração:** além do perfil do token (`SecurityConfig`), conferem o perfil do banco. Um ADMIN rebaixado com token antigo recebe 403.
+- **`sessaoAbertaDoUsuario`** (para o PDV) devolve só sessão `ABERTA`, nunca `EM_CONFERENCIA`.
+
+**Mensagens que a spec não definia**
+- "Já existe um ponto de caixa com este nome." (409, campo `nome`)
+- "A empresa já tem o limite de 50 pontos de caixa." (409)
+- "Informe o nome do ponto de caixa." e "O nome do ponto de caixa deve ter até 40 caracteres." (400)
+- "Conte o dinheiro da gaveta antes de fechar o caixa." (409, fechamento de sessão `ABERTA`)
+- "Escolha sangria ou suprimento.", "Informe o motivo." e "O motivo deve ter até 200 caracteres." (400)
+- "A data inicial não pode ser depois da final." (400, campo `de`)
+- "Ponto de caixa não encontrado." e "Caixa não encontrado." (404)
+
+**Banco (V16)**
+- **Movimento só em sessão aberta:** gatilho `BEFORE INSERT` em `movimentos_caixa`, que lê o status da sessão com `FOR SHARE` e recusa quando ele não é `ABERTA`. Regra para o PDV: travar a sessão **antes** de inserir o movimento.
+- **Gatilho da sessão:** também exige que a sessão nasça `ABERTA` e proíbe `ABERTA → FECHADA` com diferença no modo cego. Ele protege ainda `id` e `uuid`.
+- **Índice extra** `ix_sessao_caixa_ponto (empresa_id, ponto_caixa_id, aberta_em DESC, id DESC)`, para o último fundo de troco, o filtro do histórico por ponto e a FK do ponto.
+- **Sessão atual:** as consultas filtram por `status IN ('ABERTA','EM_CONFERENCIA')`, igual ao predicado dos índices parciais, para usá-los.
+- **Horários** truncados em microssegundos, como no resto do projeto.
+
+**Frontend**
+- **Retomada em conferência:** a tela mostra "Contagem registrada · falta a justificativa" e o botão "Justificar e fechar". A janela não abre sozinha.
+- **Conflitos:** em qualquer 409 de lançamento, contagem ou fechamento, a tela relê a sessão e decide pelo `status` real, não pelo texto da mensagem.
+- **Logout:** limpa o cache de dados do navegador, para um OPERADOR no mesmo terminal não ver por instantes o que o ADMIN viu.
+- **Textos de UX** revisados pelo `product-ux-reviewer`:
+  - "Todos os caixas estão em uso";
+  - o aviso do caixa de outra pessoa;
+  - "a contagem não pode ser alterada depois";
+  - "Caixa 2 fechado com falta de R$ 2,00".

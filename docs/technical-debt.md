@@ -581,6 +581,71 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Impacto:** Refinamentos e operacao; nenhum risco imediato de integridade.
 - **Quando revisar:** Antes do primeiro deploy (segredo de exemplo do JWT) e quando o volume de imagens crescer.
 
+## DT-039 — Modo cego do caixa antes do PDV
+
+- **ID:** DT-039
+- **Modulo:** Backend/Frontend (Caixa — cashier)
+- **Origem:** Revisoes de seguranca e backend do modulo Caixa (DEC-041)
+- **Prioridade:** media (obrigatoria antes do PDV)
+- **Status:** aberto
+- **Descricao:** o modo cego esconde o total da gaveta e o valor dos lancamentos de outra pessoa, mas o OPERADOR ve o valor dos proprios lancamentos e consegue somar o esperado. Com o PDV, entram os recebimentos (tipo `RECEBIMENTO`) e duas rotas que respondem sem gravar:
+  - a sangria acima da gaveta (409) permite descobrir o esperado por busca binaria;
+  - o suprimento acima do limite (400) tambem responde sem gravar.
+- **Impacto:** sem decisao, o modo cego deixa de ter efeito quando houver vendas em dinheiro.
+- **Quando revisar:** na spec do PDV (etapa 11).
+- **Observacoes:**
+  - decidir se o OPERADOR em sessao `ABERTA` no modo cego ve os recebimentos com valor;
+  - limitar ou auditar as tentativas de sangria recusadas;
+  - o `sessaoAbertaDoUsuario` deve receber `UsuarioAutenticado` (nao ids crus) e o PDV deve travar a sessao antes de inserir o movimento (gatilho `BEFORE INSERT ... FOR SHARE` da V16).
+
+## DT-040 — Pendencias do modulo Caixa
+
+- **ID:** DT-040
+- **Modulo:** Backend/Frontend (Caixa — cashier)
+- **Origem:** Revisoes do modulo Caixa (dados, seguranca, backend, frontend, UX e QA)
+- **Prioridade:** baixa
+- **Status:** aberto
+- **Descricao:** itens nao bloqueantes, deixados para depois:
+  - **Banco:**
+    - gatilho conferindo `valor_esperado` = soma dos movimentos e `ABERTURA` = `fundo_troco`;
+    - gatilho `BEFORE TRUNCATE` nas tabelas do caixa;
+    - CHECKs `valor_esperado >= 0`, `contada_em >= aberta_em`, `fechada_em >= contada_em` e justificativa aparada;
+    - limite de 50 pontos sem trava (dois cadastros simultaneos podem passar de 50);
+    - indice `(empresa_id, sessao_caixa_id, id) INCLUDE (tipo, valor)` e `(empresa_id, aberta_por, aberta_em DESC)` quando o volume crescer.
+  - **Backend:**
+    - a lista de pontos entrega ao OPERADOR o `sessaoId` das sessoes de outras pessoas (sem acesso, mas exposicao desnecessaria);
+    - a trava da sessao vem antes da regra do dono;
+    - leituras de nome de usuario sem filtro de empresa (alinhar a DT-024);
+    - `ViolacaoDeConstraint` depende do `getConstraintName()` do Hibernate; alinhar com o `EstoqueService`, que procura o nome na mensagem;
+    - contagem repetida com justificativa numa sessao em conferencia no modo nao cego nao fecha;
+    - calculo do esperado e `CASAS_DO_DINHEIRO` duplicados;
+    - historico com o ponto lido de forma lazy (usar `JOIN FETCH` na selecao);
+    - `@Size` antes de aparar a justificativa;
+    - `HistoricoDoCaixaIT` muda o fuso da JVM inteira (fragil com testes em paralelo).
+  - **Frontend:**
+    - falha da atualizacao em segundo plano do historico mantem os dados antigos sem aviso;
+    - uma mutacao para todas as linhas dos pontos;
+    - reuso (`ErroAoCarregar`, `textarea`, pecas genericas guardadas em `catalog`/`products`, esquema das janelas);
+    - o "hoje" do aviso "Aberto desde" so e recalculado quando a tela redesenha.
+  - **UX:**
+    - data junto da hora nos movimentos de caixa aberto ha mais de um dia;
+    - "Ir para o caixa" no detalhe do historico;
+    - proximo nome livre em "Adicionar ponto";
+    - confirmar antes de inativar o ultimo ponto ativo;
+    - periodos prontos e filtro "Aberto por" no historico;
+    - motivos frequentes na sangria;
+    - atalhos de teclado junto com o PDV.
+  - **Testes:**
+    - concorrencia entre contagem e sangria, e entre dois fechamentos;
+    - chave de abertura reaproveitada por outro usuario ou numa sangria;
+    - limites de dinheiro na abertura e no movimento;
+    - filtro `EM_CONFERENCIA` no historico;
+    - aviso "Aberto desde" na fronteira da meia-noite no nivel da tela;
+    - Configuracoes: renomear com 409, duplo clique no interruptor, limite de 50 na tela.
+  - **Validacao manual:** `CampoMoeda` em Android e iOS (DT-031).
+- **Impacto:** robustez, desempenho e clareza; nenhum risco imediato.
+- **Quando revisar:** na spec do PDV ou na proxima manutencao do caixa.
+
 ## DT-026 — Teto de profundidade e de quantidade na arvore de categorias
 
 - **ID:** DT-026
