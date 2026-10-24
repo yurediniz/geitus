@@ -550,11 +550,11 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **ID:** DT-038
 - **Modulo:** Backend/Frontend (Catalogo — imagem)
 - **Origem:** Revisoes da Fase F (dados, seguranca, backend e frontend)
-- **Prioridade:** baixa (media para o segredo de exemplo do JWT)
+- **Prioridade:** baixa
 - **Status:** aberto
 - **Descricao:**
   - **Seguranca:**
-    - o `JwtSecretValidator` aceita o `JWT_SECRET` de exemplo do `.env.example`; aplicar a mesma regra do segredo das imagens;
+    - ~~o `JwtSecretValidator` aceita o `JWT_SECRET` de exemplo do `.env.example`; aplicar a mesma regra do segredo das imagens;~~ **resolvido:** o `JwtSecretValidator` recusa o valor do `.env.example` e o da documentacao, sem mostrar o valor (teste garante que a constante e igual ao `.env.example`); a senha do banco tambem deixou de ter valor padrao no `application.yml`;
     - quota de armazenamento de imagens por empresa;
     - limite de requisicoes na rota publica com URL valida;
     - logs de acesso do proxy com as URLs assinadas nao devem ser publicos.

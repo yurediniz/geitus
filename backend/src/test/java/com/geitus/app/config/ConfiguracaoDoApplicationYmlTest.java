@@ -26,6 +26,12 @@ class ConfiguracaoDoApplicationYmlTest {
         assertThat(propriedades.getProperty("geitus.imagens.segredo")).isEqualTo("${GEITUS_IMAGEM_SEGREDO:}");
     }
 
+    /** A senha do banco nao tem valor padrao: sem POSTGRES_PASSWORD a aplicacao nao sobe. */
+    @Test
+    void senhaDoBancoSemValorPadrao() {
+        assertThat(propriedades().getProperty("spring.datasource.password")).isEqualTo("${POSTGRES_PASSWORD}");
+    }
+
     private static Properties propriedades() {
         FileSystemResource arquivo = new FileSystemResource(APPLICATION_YML_PRINCIPAL);
         assertThat(arquivo.exists()).as("rodar a partir de backend/").isTrue();

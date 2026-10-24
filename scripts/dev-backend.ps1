@@ -98,6 +98,9 @@ try {
         throw ("O backend exige Java 21 (versao ativa: {0}). Defina JAVA_HOME apontando para um JDK 21 no .env ou na sessao." -f $encontrada)
     }
 
+    if (-not $env:POSTGRES_PASSWORD) {
+        Write-Warning 'POSTGRES_PASSWORD nao definido: a aplicacao nao sobe sem a senha do banco (nao ha valor padrao).'
+    }
     if (-not $env:JWT_SECRET) {
         Write-Warning 'JWT_SECRET nao definido: a aplicacao nao sobe sem um segredo de no minimo 32 bytes.'
     }

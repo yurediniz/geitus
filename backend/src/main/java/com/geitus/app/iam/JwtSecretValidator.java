@@ -1,6 +1,7 @@
 package com.geitus.app.iam;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Set;
 
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,15 +11,21 @@ import org.springframework.stereotype.Component;
  * Validacao fail-fast do segredo JWT na subida da aplicacao.
  *
  * <p>Para o algoritmo HS256 o segredo precisa ter no minimo 256 bits (32 bytes).
- * Se {@code JWT_SECRET} estiver ausente ou for curto demais, a aplicacao NAO deve
- * subir: falha imediatamente com mensagem clara, evitando rodar com seguranca
- * fraca ou inexistente.
+ * Se {@code JWT_SECRET} estiver ausente, for curto demais ou for um dos valores de
+ * exemplo publicos (do {@code .env.example} ou da documentacao), a aplicacao NAO
+ * deve subir: falha imediatamente com mensagem clara, evitando rodar com seguranca
+ * fraca ou inexistente. As mensagens nunca mostram o valor.
  */
 @Component
 public class JwtSecretValidator implements InitializingBean {
 
     /** HS256 exige uma chave de pelo menos 256 bits = 32 bytes. */
     private static final int MINIMO_BYTES = 32;
+    /** O valor de exemplo do {@code .env.example}: publico no repositorio, nunca serve como segredo. */
+    static final String SEGREDO_DO_ENV_EXAMPLE = "defina-um-segredo-forte-com-no-minimo-32-bytes";
+    /** O valor de exemplo publicado em {@code docs/modules/autenticacao.md} (e antes no {@code backend/README.md}): copiavel. */
+    static final String SEGREDO_DA_DOCUMENTACAO = "um-segredo-forte-com-no-minimo-32-bytes-aqui";
+    private static final Set<String> SEGREDOS_DE_EXEMPLO = Set.of(SEGREDO_DO_ENV_EXAMPLE, SEGREDO_DA_DOCUMENTACAO);
 
     private final String secret;
 
@@ -39,6 +46,12 @@ public class JwtSecretValidator implements InitializingBean {
             throw new IllegalStateException(
                     "JWT_SECRET muito curto (" + bytes + " bytes). O algoritmo HS256 exige "
                             + "no minimo " + MINIMO_BYTES + " bytes (256 bits). Defina um segredo maior.");
+        }
+
+        if (SEGREDOS_DE_EXEMPLO.contains(secret)) {
+            throw new IllegalStateException(
+                    "JWT_SECRET com um valor de exemplo publico (do .env.example ou da documentacao). "
+                            + "Gere um segredo aleatorio proprio.");
         }
     }
 }

@@ -87,16 +87,16 @@ As migrations do banco ficam em `src/main/resources/db/migration`.
 
 ## Configuração (variáveis de ambiente)
 
-Nenhum dado sensível fica no código. A aplicação lê as variáveis abaixo (todas têm um valor padrão para desenvolvimento local):
+Nenhum dado sensível fica no código. A aplicação lê as variáveis abaixo; as marcadas como **obrigatórias** não têm valor padrão e, sem elas, a aplicação não sobe:
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
 | `DATABASE_URL` | `jdbc:postgresql://localhost:5432/geitus_db` | URL de conexão do PostgreSQL |
 | `POSTGRES_USER` | `geitus` | Usuário do banco |
-| `POSTGRES_PASSWORD` | `geitus` | Senha do banco |
+| `POSTGRES_PASSWORD` | *(sem padrão)* | Senha do banco. **Obrigatória**: sem ela a aplicação não sobe |
 | `SERVER_PORT` | `8080` | Porta da API |
 | `GEITUS_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origens liberadas no CORS (separadas por vírgula) |
-| `JWT_SECRET` | *(vazio)* | Segredo do JWT (HS256). **Obrigatório**: mínimo 32 bytes / 256 bits, senão a aplicação não sobe |
+| `JWT_SECRET` | *(vazio)* | Segredo do JWT (HS256). **Obrigatório**: mínimo 32 bytes / 256 bits e diferente dos valores de exemplo do `.env.example` e da documentação, senão a aplicação não sobe |
 | `JWT_EXPIRATION` | `86400000` | Expiração do token JWT em milissegundos |
 | `GEITUS_IMAGEM_SEGREDO` | *(vazio)* | Segredo do HMAC-SHA256 das URLs assinadas das imagens dos produtos. **Obrigatório**: mínimo 32 bytes, diferente do `JWT_SECRET` e diferente do valor de exemplo do `.env.example`, senão a aplicação não sobe |
 
@@ -189,7 +189,9 @@ A autenticação usa JWT (HS256) com senha em hash BCrypt. Requer PostgreSQL rod
 Em desenvolvimento, use o bootstrap do admin: defina `GEITUS_BOOTSTRAP_DEV_ADMIN=true` e as variáveis `GEITUS_DEV_ADMIN_*` no `.env` e suba com `.\scripts\dev-backend.ps1`. Equivalente manual (Git Bash):
 
 ```bash
-export JWT_SECRET="um-segredo-forte-com-no-minimo-32-bytes-aqui"
+export POSTGRES_PASSWORD="<senha-do-.env>"
+export JWT_SECRET="$(openssl rand -base64 48)"
+export GEITUS_IMAGEM_SEGREDO="$(openssl rand -base64 48)"
 export GEITUS_BOOTSTRAP_DEV_ADMIN=true
 export GEITUS_DEV_ADMIN_EMAIL="admin@geitus.dev"
 export GEITUS_DEV_ADMIN_PASSWORD="troque-esta-senha"
