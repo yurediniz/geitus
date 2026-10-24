@@ -20,6 +20,8 @@ export type ImagemPendente =
   | { tipo: 'nova'; arquivo: File; rotacao: RotacaoDaImagem; preparada: ImagemPreparada }
   | { tipo: 'remover' }
 
+export type ImagemNova = Extract<ImagemPendente, { tipo: 'nova' }>
+
 export const SEM_MUDANCA_NA_IMAGEM: ImagemPendente = { tipo: 'nenhuma' }
 
 /** Mensagem quando o produto foi salvo e a imagem nao (spec §5.1). */
@@ -35,46 +37,37 @@ export function proximaRotacao(rotacao: RotacaoDaImagem): RotacaoDaImagem {
 }
 
 /**
- * Estado levado pela rota quando o cadastro novo salvou o produto mas nao a
- * imagem: a pagina de edicao abre com a imagem pendente e o aviso.
+ * Marca levada pela rota quando o cadastro novo salvou o produto mas nao a
+ * imagem: a pagina de edicao abre com a imagem pendente e o aviso. A imagem
+ * (arquivo e versoes) fica so na memoria, nunca no `history.state`.
  */
 export interface EstadoDaImagemNaoEnviada {
-  imagemPendente: Extract<ImagemPendente, { tipo: 'nova' }>
   imagemNaoEnviada: true
 }
 
-function ehRotacao(valor: unknown): valor is RotacaoDaImagem {
-  return valor === 0 || valor === 90 || valor === 180 || valor === 270
+/** Imagens que nao subiram no cadastro novo, por id do produto, ate a edicao as ler. */
+const imagensNaoEnviadas = new Map<string, ImagemNova>()
+
+export function guardarImagemNaoEnviada(produtoId: string, imagem: ImagemNova): void {
+  imagensNaoEnviadas.set(produtoId, imagem)
 }
 
-function ehPreparada(valor: unknown): valor is ImagemPreparada {
-  if (typeof valor !== 'object' || valor === null) {
-    return false
-  }
-  const { grande, miniatura, tipo, largura, altura } = valor as Record<string, unknown>
-  return (
-    grande instanceof Blob &&
-    miniatura instanceof Blob &&
-    (tipo === 'image/webp' || tipo === 'image/jpeg') &&
-    typeof largura === 'number' &&
-    typeof altura === 'number'
-  )
+export function esquecerImagemNaoEnviada(produtoId: string): void {
+  imagensNaoEnviadas.delete(produtoId)
 }
 
-/** A imagem pendente vinda do `location.state` (nao confiavel: e validada); null sem ela. */
-export function imagemNaoEnviadaDaNavegacao(state: unknown): EstadoDaImagemNaoEnviada | null {
-  if (typeof state !== 'object' || state === null) {
-    return null
-  }
-  const { imagemPendente, imagemNaoEnviada } = state as Record<string, unknown>
-  if (imagemNaoEnviada !== true || typeof imagemPendente !== 'object' || imagemPendente === null) {
-    return null
-  }
-  const { tipo, arquivo, rotacao, preparada } = imagemPendente as Record<string, unknown>
-  if (tipo !== 'nova' || !(arquivo instanceof File) || !ehRotacao(rotacao) || !ehPreparada(preparada)) {
-    return null
-  }
-  return { imagemPendente: { tipo, arquivo, rotacao, preparada }, imagemNaoEnviada: true }
+/** Se o `location.state` (nao confiavel) traz a marca de imagem nao enviada. */
+export function temMarcaDeImagemNaoEnviada(state: unknown): boolean {
+  return typeof state === 'object' && state !== null && (state as Record<string, unknown>).imagemNaoEnviada === true
+}
+
+/**
+ * A imagem que nao subiu, quando a rota traz a marca e ela ainda esta na
+ * memoria. Depois de recarregar a pagina (F5) a memoria esta vazia: sem
+ * pendencia. Nao apaga: quem consome chama `esquecerImagemNaoEnviada`.
+ */
+export function imagemNaoEnviadaDaNavegacao(state: unknown, produtoId: string): ImagemNova | null {
+  return temMarcaDeImagemNaoEnviada(state) ? (imagensNaoEnviadas.get(produtoId) ?? null) : null
 }
 
 /** O que o quadro da imagem precisa para mostrar e mudar a imagem. */
@@ -88,6 +81,8 @@ export interface ControleDaImagem {
   erro: string | null
   /** Ha mudanca na imagem a salvar. */
   alterada: boolean
+  /** O que acabou de acontecer, para o anuncio do quadro (null no inicio e depois de descartar). */
+  ultimoResultado: 'pronta' | 'removida' | null
   escolherArquivo: (arquivo: File) => void
   girar: () => void
   remover: () => void
@@ -108,6 +103,7 @@ export function useImagemDoProduto(
   const [pendente, setPendente] = useState<ImagemPendente>(inicial)
   const [processando, setProcessando] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  const [ultimoResultado, setUltimoResultado] = useState<'pronta' | 'removida' | null>(null)
   const pedidoAtual = useRef(0)
 
   const preparar = useCallback(async (obterArquivo: () => Promise<File>, rotacao: RotacaoDaImagem) => {
@@ -119,6 +115,7 @@ export function useImagemDoProduto(
       const preparada = await prepararImagem(arquivo, rotacao)
       if (pedido === pedidoAtual.current) {
         setPendente({ tipo: 'nova', arquivo, rotacao, preparada })
+        setUltimoResultado('pronta')
       }
     } catch (falha) {
       if (pedido === pedidoAtual.current) {
@@ -164,6 +161,7 @@ export function useImagemDoProduto(
     setProcessando(false)
     setErro(null)
     setPendente(gravada ? { tipo: 'remover' } : SEM_MUDANCA_NA_IMAGEM)
+    setUltimoResultado('removida')
   }
 
   const descartar = useCallback(() => {
@@ -171,6 +169,7 @@ export function useImagemDoProduto(
     setProcessando(false)
     setErro(null)
     setPendente(SEM_MUDANCA_NA_IMAGEM)
+    setUltimoResultado(null)
   }, [])
 
   return {
@@ -179,6 +178,7 @@ export function useImagemDoProduto(
     processando,
     erro,
     alterada: pendente.tipo !== 'nenhuma',
+    ultimoResultado,
     escolherArquivo,
     girar,
     remover,

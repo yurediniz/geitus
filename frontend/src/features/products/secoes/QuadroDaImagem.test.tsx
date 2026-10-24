@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
 import { useImagemDoProduto, type ImagemPendente } from '@/features/products/imagemPendente'
 import { QuadroDaImagem } from '@/features/products/secoes/QuadroDaImagem'
@@ -48,9 +48,18 @@ interface CenarioProps {
   somenteLeitura?: boolean
   enviando?: boolean
   desabilitado?: boolean
+  naoEnviada?: boolean
 }
 
-function Cenario({ gravada = null, somenteLeitura = false, enviando = false, desabilitado = false }: CenarioProps) {
+const aoAlterar = vi.fn()
+
+function Cenario({
+  gravada = null,
+  somenteLeitura = false,
+  enviando = false,
+  desabilitado = false,
+  naoEnviada = false,
+}: CenarioProps) {
   const imagem = useImagemDoProduto(gravada)
   ultimoPendente = imagem.pendente
   return (
@@ -60,8 +69,19 @@ function Cenario({ gravada = null, somenteLeitura = false, enviando = false, des
       somenteLeitura={somenteLeitura}
       desabilitado={desabilitado}
       enviando={enviando}
+      naoEnviada={naoEnviada}
+      aoAlterar={aoAlterar}
     />
   )
+}
+
+/** A regiao `aria-live` do quadro (sempre montada, so para leitor de tela). */
+function anuncio(): HTMLElement {
+  const regiao = document.querySelector<HTMLElement>('[aria-live="polite"]')
+  if (!regiao) {
+    throw new Error('regiao aria-live nao encontrada')
+  }
+  return regiao
 }
 
 function inputDeArquivo(): HTMLInputElement {
@@ -131,13 +151,13 @@ describe('QuadroDaImagem', () => {
 
     fireEvent.change(inputDeArquivo(), { target: { files: [arquivo] } })
 
-    expect(await screen.findByText('Processando imagem…')).toBeInTheDocument()
+    expect(await within(quadro()).findByText('Processando imagem…')).toBeInTheDocument()
     expect(prepararImagemMock).toHaveBeenCalledWith(arquivo, 0)
     resolver(preparada())
 
     const previa = await screen.findByRole('img', { name: 'Arroz 5kg' })
     expect(previa).toHaveAttribute('src', 'blob:previa-1')
-    expect(screen.queryByText('Processando imagem…')).not.toBeInTheDocument()
+    expect(within(quadro()).queryByText('Processando imagem…')).not.toBeInTheDocument()
     expect(ultimoPendente).toMatchObject({ tipo: 'nova', arquivo, rotacao: 0 })
     expect(screen.getByRole('button', { name: 'Trocar imagem' })).toBeInTheDocument()
   })
@@ -264,21 +284,25 @@ describe('QuadroDaImagem', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('A imagem deve ter no máximo 15 MB.')
   })
 
-  it('enviando a imagem, o quadro mostra "Processando imagem…" e as acoes ficam desabilitadas', () => {
+  it('enviando a imagem, o quadro mostra "Enviando imagem…" e as acoes ficam desabilitadas', () => {
     render(<Cenario gravada={GRAVADA} enviando desabilitado />)
 
-    expect(screen.getByText('Processando imagem…')).toBeInTheDocument()
+    expect(within(quadro()).getByText('Enviando imagem…')).toBeInTheDocument()
+    expect(anuncio()).toHaveTextContent('Enviando imagem…')
     expect(screen.getByRole('button', { name: 'Trocar imagem' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Girar imagem' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Remover imagem' })).toBeDisabled()
   })
 
-  it('a imagem gravada que falha ao carregar volta ao icone', () => {
+  it('a imagem gravada que falha ao carregar volta ao icone, dizendo que nao foi possivel mostrar', () => {
     render(<Cenario gravada={GRAVADA} />)
 
     fireEvent.error(screen.getByRole('img', { name: 'Arroz 5kg' }))
 
-    expect(screen.getByText('Sem imagem')).toBeInTheDocument()
+    expect(screen.getByText('Não foi possível mostrar a imagem.')).toBeInTheDocument()
+    expect(screen.queryByText('Sem imagem')).not.toBeInTheDocument()
+    // As acoes continuam: da para trocar ou remover a imagem gravada.
+    expect(screen.getByRole('button', { name: 'Trocar imagem' })).toBeInTheDocument()
   })
 
   it('OPERADOR ve a imagem, sem botoes nem arrastar e soltar', () => {
@@ -290,5 +314,179 @@ describe('QuadroDaImagem', () => {
 
     fireEvent.drop(quadro(), { dataTransfer: { files: [foto()], types: ['Files'] } })
     expect(prepararImagemMock).not.toHaveBeenCalled()
+  })
+
+  describe('dica e avisos de pendencia', () => {
+    it('a dica do formato e, so com ponteiro fino, a do arrastar', () => {
+      render(<Cenario />)
+
+      expect(screen.getByText(/^Foto em JPG, PNG ou WebP, até 15 MB\./)).toBeInTheDocument()
+      const arrastar = screen.getByText('Ou arraste a foto até o quadro.')
+      expect(arrastar).toHaveClass('hidden', 'pointer-fine:inline')
+    })
+
+    it('imagem nova: avisa que ela sera gravada ao salvar', async () => {
+      render(<Cenario />)
+      fireEvent.change(inputDeArquivo(), { target: { files: [foto()] } })
+
+      expect(await screen.findByText('Imagem nova. Ela será gravada quando você salvar.')).toHaveClass(
+        'text-xs',
+        'text-muted-foreground',
+      )
+    })
+
+    it('remocao pendente: avisa que a imagem sera removida ao salvar', () => {
+      render(<Cenario gravada={GRAVADA} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remover imagem' }))
+
+      expect(screen.getByText('A imagem será removida quando você salvar.')).toBeInTheDocument()
+    })
+
+    it('depois da falha no envio: pede para salvar de novo', async () => {
+      render(<Cenario naoEnviada />)
+      fireEvent.change(inputDeArquivo(), { target: { files: [foto()] } })
+
+      expect(
+        await screen.findByText('Esta imagem ainda não foi enviada. Toque em Salvar para tentar de novo.'),
+      ).toBeInTheDocument()
+      expect(screen.queryByText('Imagem nova. Ela será gravada quando você salvar.')).not.toBeInTheDocument()
+    })
+
+    it('sem mudanca, nenhum aviso de pendencia', () => {
+      render(<Cenario gravada={GRAVADA} />)
+
+      expect(screen.queryByText(/quando você salvar/)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('acessibilidade', () => {
+    it('a regiao aria-live fica sempre montada e anuncia o processamento e a imagem pronta', async () => {
+      let resolver: (valor: ImagemPreparada) => void = () => {}
+      prepararImagemMock.mockReturnValue(new Promise((resolve) => (resolver = resolve)))
+      render(<Cenario />)
+      expect(anuncio()).toHaveClass('sr-only')
+      expect(anuncio()).toHaveTextContent('')
+
+      fireEvent.change(inputDeArquivo(), { target: { files: [foto()] } })
+      await waitFor(() => expect(anuncio()).toHaveTextContent('Processando imagem…'))
+      await act(async () => resolver(preparada()))
+
+      await waitFor(() => expect(anuncio()).toHaveTextContent('Imagem pronta.'))
+    })
+
+    it('anuncia a remocao', () => {
+      render(<Cenario gravada={GRAVADA} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remover imagem' }))
+
+      expect(anuncio()).toHaveTextContent('Imagem removida.')
+    })
+
+    it('depois de adicionar, o foco vai para "Trocar imagem"', async () => {
+      render(<Cenario />)
+      screen.getByRole('button', { name: 'Adicionar imagem' }).focus()
+
+      fireEvent.change(inputDeArquivo(), { target: { files: [foto()] } })
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Trocar imagem' })).toHaveFocus())
+    })
+
+    it('depois de soltar uma foto no quadro, o foco tambem vai para "Trocar imagem"', async () => {
+      render(<Cenario />)
+
+      fireEvent.drop(quadro(), { dataTransfer: { files: [foto()], types: ['Files'] } })
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Trocar imagem' })).toHaveFocus())
+    })
+
+    it('depois de remover, o foco vai para "Adicionar imagem"', () => {
+      render(<Cenario gravada={GRAVADA} />)
+      const remover = screen.getByRole('button', { name: 'Remover imagem' })
+      remover.focus()
+
+      fireEvent.click(remover)
+
+      expect(screen.getByRole('button', { name: 'Adicionar imagem' })).toHaveFocus()
+    })
+
+    it('girando, o botao fica aria-disabled (sem perder o foco) e ignora cliques', async () => {
+      prepararImagemMock.mockReturnValue(new Promise(() => {}))
+      baixarImagemMock.mockResolvedValue(new Blob(['g'], { type: 'image/webp' }))
+      render(<Cenario gravada={GRAVADA} />)
+      const girar = screen.getByRole('button', { name: 'Girar imagem' })
+      girar.focus()
+
+      fireEvent.click(girar)
+
+      await waitFor(() => expect(girar).toHaveAttribute('aria-disabled', 'true'))
+      expect(girar).not.toBeDisabled()
+      expect(girar).toHaveFocus()
+      fireEvent.click(girar)
+      expect(baixarImagemMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('o erro descreve Trocar e Girar (e Adicionar, sem imagem)', async () => {
+      prepararImagemMock.mockRejectedValue(new ErroDeImagem('Não foi possível ler esta imagem. Use JPG, PNG ou WebP.'))
+      render(<Cenario gravada={GRAVADA} />)
+
+      fireEvent.change(inputDeArquivo(), { target: { files: [foto()] } })
+
+      await screen.findByRole('alert')
+      for (const nome of ['Trocar imagem', 'Girar imagem']) {
+        expect(screen.getByRole('button', { name: nome })).toHaveAccessibleDescription(
+          'Não foi possível ler esta imagem. Use JPG, PNG ou WebP.',
+        )
+      }
+    })
+
+    it('as acoes avisam a pagina (para limpar o sucesso e, no remover, a falha anterior)', async () => {
+      render(<Cenario gravada={GRAVADA} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remover imagem' }))
+      expect(aoAlterar).toHaveBeenLastCalledWith('remover')
+      fireEvent.change(inputDeArquivo(), { target: { files: [foto()] } })
+      expect(aoAlterar).toHaveBeenLastCalledWith('escolher')
+      await screen.findByRole('img', { name: 'Arroz 5kg' })
+      fireEvent.click(screen.getByRole('button', { name: 'Girar imagem' }))
+      expect(aoAlterar).toHaveBeenLastCalledWith('girar')
+    })
+  })
+
+  describe('arrastar e soltar', () => {
+    it('com o quadro ocupado, o arquivo solto e ignorado sem o navegador abrir a foto', async () => {
+      prepararImagemMock.mockReturnValue(new Promise(() => {}))
+      render(<Cenario />)
+      fireEvent.change(inputDeArquivo(), { target: { files: [foto()] } })
+      await waitFor(() => expect(prepararImagemMock).toHaveBeenCalledTimes(1))
+
+      const dataTransfer = { files: [foto('outra.jpg')], types: ['Files'], dropEffect: 'copy' }
+      fireEvent.dragOver(quadro(), { dataTransfer })
+      expect(dataTransfer.dropEffect).toBe('none')
+      expect(quadro()).not.toHaveAttribute('data-arrastando')
+      const naoCancelado = fireEvent.drop(quadro(), { dataTransfer })
+
+      // false = preventDefault: o navegador nao navega para a foto.
+      expect(naoCancelado).toBe(false)
+      expect(prepararImagemMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('OPERADOR: soltar um arquivo tambem nao abre a foto no navegador', () => {
+      render(<Cenario gravada={GRAVADA} somenteLeitura />)
+
+      const naoCancelado = fireEvent.drop(quadro(), { dataTransfer: { files: [foto()], types: ['Files'] } })
+
+      expect(naoCancelado).toBe(false)
+      expect(prepararImagemMock).not.toHaveBeenCalled()
+    })
+
+    it('arrastar texto (sem arquivos) nao e tratado', () => {
+      render(<Cenario />)
+
+      const naoCancelado = fireEvent.dragOver(quadro(), { dataTransfer: { files: [], types: ['text/plain'] } })
+
+      expect(naoCancelado).toBe(true)
+      expect(quadro()).not.toHaveAttribute('data-arrastando')
+    })
   })
 })

@@ -17,7 +17,7 @@ import {
 } from '@/features/products/produtoFormulario'
 import { SeletorCategoria, SeletorMarca } from '@/features/products/SeletorCategoria'
 import { CamposFornecedoresDoProduto } from '@/features/products/secoes/CamposFornecedoresDoProduto'
-import { QuadroDaImagem } from '@/features/products/secoes/QuadroDaImagem'
+import { QuadroDaImagem, type AcaoNaImagem } from '@/features/products/secoes/QuadroDaImagem'
 import type { ControleDaImagem } from '@/features/products/imagemPendente'
 import type { Categoria, Marca, UnidadeMedida } from '@/types/catalogo'
 import type { Produto } from '@/types/produto'
@@ -37,6 +37,10 @@ export interface SecaoGeralProps {
   imagem: ControleDaImagem
   /** A imagem esta subindo, depois do Salvar. */
   enviandoImagem: boolean
+  /** O produto foi salvo e a imagem pendente nao subiu. */
+  imagemNaoEnviada: boolean
+  /** Uma acao no quadro da imagem. */
+  aoAlterarImagem: (acao: AcaoNaImagem) => void
 }
 
 /**
@@ -85,6 +89,8 @@ export function SecaoGeral({
   aoAlterarCampo,
   imagem,
   enviandoImagem,
+  imagemNaoEnviada,
+  aoAlterarImagem,
 }: SecaoGeralProps) {
   const {
     control,
@@ -116,7 +122,8 @@ export function SecaoGeral({
         somenteLeitura={somenteLeitura}
         desabilitado={desabilitado}
         enviando={enviandoImagem}
-        aoAlterar={aoAlterarCampo}
+        naoEnviada={imagemNaoEnviada}
+        aoAlterar={aoAlterarImagem}
       />
       <div className="grid gap-4 md:grid-cols-2">
         <CampoTexto

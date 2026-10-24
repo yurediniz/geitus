@@ -21,9 +21,13 @@ import { formatarQuantidade } from '@/features/products/formatacaoProduto'
 import { useFornecedoresGravados } from '@/features/products/fornecedoresGravados'
 import {
   MENSAGEM_IMAGEM_NAO_ENVIADA,
+  esquecerImagemNaoEnviada,
+  guardarImagemNaoEnviada,
   imagemNaoEnviadaDaNavegacao,
+  temMarcaDeImagemNaoEnviada,
   useImagemDoProduto,
   type EstadoDaImagemNaoEnviada,
+  type ImagemNova,
   type ImagemPendente,
 } from '@/features/products/imagemPendente'
 import {
@@ -67,6 +71,7 @@ import { SecaoCodigos } from '@/features/products/secoes/SecaoCodigos'
 import { SecaoEmbalagens } from '@/features/products/secoes/SecaoEmbalagens'
 import { SecaoEstoque } from '@/features/products/secoes/SecaoEstoque'
 import { SecaoGeral } from '@/features/products/secoes/SecaoGeral'
+import type { AcaoNaImagem } from '@/features/products/secoes/QuadroDaImagem'
 import { SecaoHistorico } from '@/features/products/secoes/SecaoHistorico'
 import { SecaoPrecos } from '@/features/products/secoes/SecaoPrecos'
 import { useSecaoAtiva } from '@/features/products/secoes/useSecaoVisivel'
@@ -382,8 +387,6 @@ export function ProdutoPage() {
   const { usuario } = useAuth()
   const somenteLeitura = usuario?.perfil !== 'ADMIN'
   const voltarPara = destinoDaLista(location.state)
-  // Cadastro novo salvo sem a imagem: a edicao abre com ela pendente (spec Fase F §5.1).
-  const imagemNaoEnviada = imagemNaoEnviadaDaNavegacao(location.state)
 
   if (id === undefined) {
     if (somenteLeitura) {
@@ -401,7 +404,6 @@ export function ProdutoPage() {
       id={id}
       voltarPara={voltarPara}
       somenteLeitura={somenteLeitura}
-      imagemNaoEnviada={imagemNaoEnviada}
     />
   )
 }
@@ -458,7 +460,6 @@ interface CarregamentoProdutoProps {
   id: string
   voltarPara: string
   somenteLeitura: boolean
-  imagemNaoEnviada: EstadoDaImagemNaoEnviada | null
 }
 
 /**
@@ -468,7 +469,25 @@ interface CarregamentoProdutoProps {
  * - O formulario so monta com dados buscados nesta abertura: os valores
  *   iniciais sao lidos uma vez, e o cache pode ter uma versao antiga.
  */
-function CarregamentoProduto({ id, voltarPara, somenteLeitura, imagemNaoEnviada }: CarregamentoProdutoProps) {
+function CarregamentoProduto({ id, voltarPara, somenteLeitura }: CarregamentoProdutoProps) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  // Cadastro novo salvo sem a imagem (spec Fase F §5.1): a rota so traz a marca, e a imagem esta
+  // na memoria. Lida uma vez ao montar (antes de o produto carregar); depois de recarregar a
+  // pagina, a memoria esta vazia e nao ha pendencia.
+  const [imagemNaoEnviada] = useState<ImagemNova | null>(() =>
+    somenteLeitura ? null : imagemNaoEnviadaDaNavegacao(location.state, id),
+  )
+  const marcaNaRota = temMarcaDeImagemNaoEnviada(location.state)
+  useEffect(() => {
+    if (!marcaNaRota) {
+      return
+    }
+    // Consumida: tira a imagem da memoria e a marca do historico (Voltar ou F5 nao a trazem de volta).
+    esquecerImagemNaoEnviada(id)
+    navigate(location.pathname, { replace: true, state: { voltarPara } })
+  }, [marcaNaRota, id, navigate, location.pathname, voltarPara])
+
   const produtoQuery = useQuery<Produto>({
     queryKey: chaveDoProduto(id),
     queryFn: () => buscarProduto(id),
@@ -514,7 +533,7 @@ function CarregamentoProduto({ id, voltarPara, somenteLeitura, imagemNaoEnviada 
       produto={produtoQuery.data}
       voltarPara={voltarPara}
       somenteLeitura={somenteLeitura}
-      imagemNaoEnviada={somenteLeitura ? null : imagemNaoEnviada}
+      imagemNaoEnviada={imagemNaoEnviada}
     />
   )
 }
@@ -525,7 +544,7 @@ interface FormularioProdutoProps {
   voltarPara: string
   somenteLeitura: boolean
   /** Imagem que nao subiu no cadastro novo, para tentar de novo na edicao. */
-  imagemNaoEnviada?: EstadoDaImagemNaoEnviada | null
+  imagemNaoEnviada?: ImagemNova | null
 }
 
 function FormularioProduto({ produto, voltarPara, somenteLeitura, imagemNaoEnviada = null }: FormularioProdutoProps) {
@@ -552,7 +571,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura, imagemNaoEnvia
   } | null>(null)
 
   // Imagem do produto (Fase F): a mudanca pendente segue o Salvar da tela.
-  const imagem = useImagemDoProduto(produto?.imagem ?? null, imagemNaoEnviada?.imagemPendente)
+  const imagem = useImagemDoProduto(produto?.imagem ?? null, imagemNaoEnviada ?? undefined)
   /** O produto foi salvo e a imagem nao: o aviso conta no atalho Geral ate o proximo Salvar. */
   const [falhaNaImagem, setFalhaNaImagem] = useState(imagemNaoEnviada !== null)
   /** Depois da falha, sem mudar os campos, o proximo Salvar so envia a imagem. */
@@ -766,6 +785,15 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura, imagemNaoEnvia
     setErroGeral(null)
   }
 
+  /** Remover a imagem que nao subiu tira a pendencia: a falha anterior deixa de valer. */
+  const aoAlterarImagem = (acao: AcaoNaImagem) => {
+    aoAlterarCampo()
+    if (acao === 'remover') {
+      setFalhaNaImagem(false)
+      setErroSalvar((atual) => (atual?.mensagem === MENSAGEM_IMAGEM_NAO_ENVIADA ? null : atual))
+    }
+  }
+
   /**
    * Guarda sincrona contra envio duplo: `salvando` vem do ultimo render, e a
    * mutacao so comeca depois da validacao assincrona do `handleSubmit` — dois
@@ -807,15 +835,15 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura, imagemNaoEnvia
       setErroSalvar(null)
       if (!imagemGravada) {
         if (mudancaDaImagem.tipo === 'nova' && !produto) {
-          // Cadastro novo: vai para a edicao do produto criado, com a imagem pendente para tentar de novo.
-          setSaida({
-            para: rotaDoProduto(salvo.id),
-            estado: { voltarPara, imagemPendente: mudancaDaImagem, imagemNaoEnviada: true },
-          })
+          // Cadastro novo: vai para a edicao do produto criado, com a imagem pendente para tentar de
+          // novo. A imagem fica na memoria; a rota so leva a marca.
+          guardarImagemNaoEnviada(salvo.id, mudancaDaImagem)
+          setSaida({ para: rotaDoProduto(salvo.id), estado: { voltarPara, imagemNaoEnviada: true } })
           return
         }
-        // Edicao: o que foi gravado vira o ponto de partida; a imagem continua pendente no quadro.
-        reset(valores)
+        // Edicao: o produto gravado vira o ponto de partida (com os ids das embalagens novas, para
+        // o proximo Salvar nao as criar de novo); a imagem continua pendente no quadro.
+        reset(valoresDoProduto(salvo))
         setFalhaNaImagem(true)
         setSoFaltaAImagem(true)
         setErroSalvar({ mensagem: MENSAGEM_IMAGEM_NAO_ENVIADA, campos: [] })
@@ -1192,6 +1220,8 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura, imagemNaoEnvia
               aoAlterarCampo={aoAlterarCampo}
               imagem={imagem}
               enviandoImagem={enviandoImagem}
+              imagemNaoEnviada={falhaNaImagem}
+              aoAlterarImagem={aoAlterarImagem}
             />
           </SecaoDaPagina>
           <SecaoDaPagina secao="codigos">

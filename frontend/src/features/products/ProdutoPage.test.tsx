@@ -5655,13 +5655,13 @@ describe('ProdutoPage', () => {
 
       fireEvent.change(screen.getByLabelText('Escolher a imagem do produto'), { target: { files: [foto()] } })
 
-      expect(await screen.findByText('Processando imagem…')).toBeInTheDocument()
+      expect(await within(screen.getByTestId('quadro-da-imagem')).findByText('Processando imagem…')).toBeInTheDocument()
       expect(botaoSalvar()).toBeDisabled()
       fireEvent.keyDown(campoNome(), { key: 'Enter', ctrlKey: true })
       expect(atualizarProdutoMock).not.toHaveBeenCalled()
     })
 
-    it('enquanto a imagem sobe, o quadro mostra "Processando imagem…"', async () => {
+    it('enquanto a imagem sobe, o quadro mostra "Enviando imagem…"', async () => {
       atualizarProdutoMock.mockResolvedValue(produtoAtivo)
       enviarImagemMock.mockReturnValue(new Promise(() => {}))
       renderEdicao()
@@ -5670,7 +5670,93 @@ describe('ProdutoPage', () => {
 
       fireEvent.click(botaoSalvar())
 
-      expect(await within(secao(/^geral$/i)).findByText('Processando imagem…')).toBeInTheDocument()
+      expect(await within(screen.getByTestId('quadro-da-imagem')).findByText('Enviando imagem…')).toBeInTheDocument()
+    })
+
+    it('edição com embalagem nova e falha no PUT: o próximo Salvar leva o id da embalagem já gravada', async () => {
+      const gravado = {
+        ...produtoAtivo,
+        embalagens: [embalagemDaApi({ id: 'emb-nova', unidade: resumo(CX), quantidade: 3, preco: null })],
+      }
+      atualizarProdutoMock.mockResolvedValue(gravado)
+      enviarImagemMock.mockRejectedValueOnce(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
+      renderEdicao()
+      await esperarFormulario()
+      const embalagens = secao(/^embalagens$/i)
+      fireEvent.click(within(embalagens).getByRole('button', { name: 'Adicionar embalagem' }))
+      const nova = within(embalagens).getByRole('group', { name: 'Nova embalagem' })
+      const unidadeDaEmbalagem = within(nova).getByLabelText(/^unidade/i)
+      await waitFor(() => expect(unidadeDaEmbalagem).toBeEnabled())
+      fireEvent.change(unidadeDaEmbalagem, { target: { value: 'cx' } })
+      fireEvent.change(within(nova).getByLabelText(/^contém/i), { target: { value: '3' } })
+      await adicionarImagem()
+      fireEvent.click(botaoSalvar())
+      expect(await screen.findByText('Produto salvo, mas a imagem não foi enviada. Tente de novo.')).toBeInTheDocument()
+      expect(atualizarProdutoMock.mock.calls[0][1].embalagens).toEqual([expect.not.objectContaining({ id: expect.anything() })])
+
+      fireEvent.change(campoNome(), { target: { value: 'Arroz Tipo 1' } })
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(atualizarProdutoMock).toHaveBeenCalledTimes(2))
+      expect(atualizarProdutoMock.mock.calls[1][1]).toMatchObject({
+        nome: 'Arroz Tipo 1',
+        embalagens: [expect.objectContaining({ id: 'emb-nova', unidadeId: 'cx', quantidade: 3 })],
+      })
+    })
+
+    it('a imagem pendente não vai para o history.state; Cancelar e Voltar não trazem a pendência de volta', async () => {
+      const criado = { ...produtoAtivo, nome: 'Café 500g' }
+      cadastrarProdutoMock.mockResolvedValue(criado)
+      buscarProdutoMock.mockResolvedValue(criado)
+      enviarImagemMock.mockRejectedValueOnce(new HttpError(413, 'Requisicao falhou (HTTP 413).'))
+      const router = renderNovo({ voltarPara: '/produtos?busca=caf' })
+      await esperarFormulario()
+      await preencherMinimo()
+      await adicionarImagem()
+      fireEvent.click(botaoSalvar())
+      expect(await screen.findByText('Produto salvo, mas a imagem não foi enviada. Tente de novo.')).toBeInTheDocument()
+      await waitFor(() => expect(imagemDoQuadro()).toHaveAttribute('src', expect.stringMatching(/^blob:/)))
+      // A marca e consumida: no historico fica so o destino da lista, sem arquivo nem blobs.
+      await waitFor(() => expect(router.state.location.state).toEqual({ voltarPara: '/produtos?busca=caf' }))
+
+      fireEvent.click(screen.getByRole('link', { name: 'Cancelar' }))
+      fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Descartar' }))
+      expect(await screen.findByRole('heading', { name: 'Lista de produtos?busca=caf' })).toBeInTheDocument()
+      await act(async () => {
+        await router.navigate(-1)
+      })
+
+      await esperarFormulario()
+      expect(router.state.location.pathname).toBe(`/produtos/${ID_ARROZ}`)
+      expect(within(secao(/^geral$/i)).getByText('Sem imagem')).toBeInTheDocument()
+      expect(screen.queryByText('Produto salvo, mas a imagem não foi enviada. Tente de novo.')).not.toBeInTheDocument()
+      expect(atalho(/geral/i)).toHaveAccessibleName('Geral')
+    })
+
+    it('com a marca na rota mas sem a imagem na memória (recarregou a página), não há pendência', async () => {
+      const router = renderEdicao(produtoAtivo, { voltarPara: '/produtos?busca=arroz', imagemNaoEnviada: true })
+      await esperarFormulario()
+
+      expect(within(secao(/^geral$/i)).getByText('Sem imagem')).toBeInTheDocument()
+      expect(screen.queryByText('Produto salvo, mas a imagem não foi enviada. Tente de novo.')).not.toBeInTheDocument()
+      await waitFor(() => expect(router.state.location.state).toEqual({ voltarPara: '/produtos?busca=arroz' }))
+    })
+
+    it('depois da falha, o quadro avisa que a imagem não foi enviada; remover a pendência limpa a falha', async () => {
+      atualizarProdutoMock.mockResolvedValue(produtoAtivo)
+      enviarImagemMock.mockRejectedValueOnce(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
+      renderEdicao()
+      await esperarFormulario()
+      await adicionarImagem()
+      fireEvent.click(botaoSalvar())
+      expect(
+        await screen.findByText('Esta imagem ainda não foi enviada. Toque em Salvar para tentar de novo.'),
+      ).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remover imagem' }))
+
+      expect(screen.queryByText('Produto salvo, mas a imagem não foi enviada. Tente de novo.')).not.toBeInTheDocument()
+      expect(atalho(/geral/i)).toHaveAccessibleName('Geral')
     })
 
     it('OPERADOR vê a imagem, sem os botões', async () => {
