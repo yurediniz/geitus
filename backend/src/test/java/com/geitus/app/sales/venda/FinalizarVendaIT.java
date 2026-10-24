@@ -185,6 +185,33 @@ class FinalizarVendaIT extends IntegracaoDoPdv {
                 Long.class, pdv.idDoProduto(sacola))).isZero();
     }
 
+    /** BACK-I2: produto vendido sem controle de estoque (sem movimento) tambem nao e excluivel. */
+    @Test
+    void produtoVendidoSemControleNaoEExcluivel() throws Exception {
+        abrirCaixa(empresa.operadora(), empresa.ponto(), "100.00");
+        UUID sacola = pdv.produto(empresa, NovoProduto.de("Sacola", "UN", "0.50").semControleDeEstoque()).id();
+        UUID outra = pdv.produto(empresa, NovoProduto.de("Sacola grande", "UN", "1.00").semControleDeEstoque()).id();
+        vender(empresa.operadora(), item(sacola, "2"), pagamento("DINHEIRO", "1"), "1.00");
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/produtos/" + sacola).header("Authorization", cenario.token(empresa.admin())))
+                .andExpect(jsonPath("$.podeExcluir").value(false));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/produtos")
+                        .param("busca", "sacola").header("Authorization", cenario.token(empresa.admin())))
+                .andExpect(jsonPath("$.itens[?(@.nome == 'Sacola')].podeExcluir",
+                        org.hamcrest.Matchers.contains(false)))
+                .andExpect(jsonPath("$.itens[?(@.nome == 'Sacola grande')].podeExcluir",
+                        org.hamcrest.Matchers.contains(true)));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/produtos/" + sacola).header("Authorization", cenario.token(empresa.admin())))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value(
+                        "Este produto já foi vendido e não pode ser excluído. Inative-o."));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/produtos/" + outra).header("Authorization", cenario.token(empresa.admin())))
+                .andExpect(status().is2xxSuccessful());
+    }
+
     @Test
     void nexgardBaixa4ERecebe299_80() throws Exception {
         UUID sessao = abrirCaixa(empresa.operadora(), empresa.ponto(), "100.00");

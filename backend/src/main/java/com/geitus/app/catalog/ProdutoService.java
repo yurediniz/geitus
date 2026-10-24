@@ -154,6 +154,8 @@ public class ProdutoService {
     static final String MENSAGEM_LIMITE_DE_CODIGOS = "Informe no máximo 20 códigos de barras.";
     static final String MENSAGEM_EXCLUSAO_BLOQUEADA =
             "Este produto já teve movimentação de estoque e não pode ser excluído. Inative-o.";
+    static final String MENSAGEM_PRODUTO_VENDIDO =
+            "Este produto já foi vendido e não pode ser excluído. Inative-o.";
 
     static final String MENSAGEM_PRECO_PROMOCIONAL_OBRIGATORIO = "Informe o preço promocional.";
     static final String MENSAGEM_INICIO_PROMOCAO_OBRIGATORIO = "Informe o início da promoção.";
@@ -214,6 +216,7 @@ public class ProdutoService {
     private final FornecedoresDoProduto fornecedoresDoProduto;
     private final NomesDeFornecedores nomesDeFornecedores;
     private final UsoDoProdutoNoEstoque usoNoEstoque;
+    private final UsoDoProdutoEmVendas usoEmVendas;
     private final RegistroDeEstoqueInicial registroDeEstoqueInicial;
     private final ConsultaDeProdutos consultaDeProdutos;
     private final Numerador numerador;
@@ -228,7 +231,7 @@ public class ProdutoService {
             HistoricoDePrecos historicoDePrecos, ValidadorDeCodigosDeBarras validadorDeCodigos,
             EmbalagensDoProduto embalagensDoProduto, FornecedoresDoProduto fornecedoresDoProduto,
             NomesDeFornecedores nomesDeFornecedores, UsoDoProdutoNoEstoque usoNoEstoque,
-            RegistroDeEstoqueInicial registroDeEstoqueInicial,
+            UsoDoProdutoEmVendas usoEmVendas, RegistroDeEstoqueInicial registroDeEstoqueInicial,
             ConsultaDeProdutos consultaDeProdutos, Numerador numerador,
             TamanhoDoCodigoNaEtiqueta tamanhoDoCodigoNaEtiqueta, ImagensDoProduto imagensDoProduto,
             Clock relogio) {
@@ -245,6 +248,7 @@ public class ProdutoService {
         this.fornecedoresDoProduto = fornecedoresDoProduto;
         this.nomesDeFornecedores = nomesDeFornecedores;
         this.usoNoEstoque = usoNoEstoque;
+        this.usoEmVendas = usoEmVendas;
         this.registroDeEstoqueInicial = registroDeEstoqueInicial;
         this.consultaDeProdutos = consultaDeProdutos;
         this.numerador = numerador;
@@ -423,6 +427,9 @@ public class ProdutoService {
     void excluir(Long idUsuario, Long empresaId, UUID produtoId) {
         Produto produto = produtoRepository.buscarPorUuidParaAtualizar(produtoId, empresaId)
                 .orElseThrow(ProdutoNaoEncontradoException::new);
+        if (vendido(produto)) {
+            throw new ProdutoConflitoException(MENSAGEM_PRODUTO_VENDIDO);
+        }
         ResumoDeEstoque estoque = resumoDeEstoque(produto);
         if (!estoque.permiteExcluir()) {
             throw new ProdutoConflitoException(MENSAGEM_EXCLUSAO_BLOQUEADA);
@@ -459,9 +466,19 @@ public class ProdutoService {
     }
 
     /**
-     * Resumo de estoque do produto (saldo e movimentos), que decide tanto o
-     * {@code DELETE} quanto o {@code podeExcluir} da resposta. Quando vendas
-     * existirem, a verificacao delas entra junto desta.
+     * PDV (DT-028): produto com item de venda nao e excluido. Junto com o
+     * resumo de estoque, decide o {@code DELETE} e o {@code podeExcluir}.
+     */
+    private boolean vendido(Produto produto) {
+        return produto.getId() != null
+                && usoEmVendas.produtosComVendas(produto.getEmpresaId(), Collections.singletonList(produto.getId()))
+                        .contains(produto.getId());
+    }
+
+    /**
+     * Resumo de estoque do produto (saldo e movimentos), que decide, com as
+     * vendas ({@link #vendido}), tanto o {@code DELETE} quanto o
+     * {@code podeExcluir} da resposta.
      */
     private ResumoDeEstoque resumoDeEstoque(Produto produto) {
         return usoNoEstoque.resumos(produto.getEmpresaId(), Collections.singletonList(produto.getId()))
@@ -602,11 +619,13 @@ public class ProdutoService {
         ReferenciasDoProduto referencias = new ReferenciasDoProduto(categorias, marcaService.arvoreDaEmpresa(empresaId),
                 nomesDeFornecedores.porIds(empresaId, fornecedorIds), imagensDoProduto.daPagina(empresaId, ids));
         Map<Long, ResumoDeEstoque> estoques = usoNoEstoque.resumos(empresaId, ids);
+        Set<Long> vendidos = usoEmVendas.produtosComVendas(empresaId, ids);
         return ids.stream()
                 .map(porId::get)
                 .filter(Objects::nonNull)
                 .map(produto -> responder(produto, referencias, hoje,
-                        estoques.getOrDefault(produto.getId(), ResumoDeEstoque.VAZIO), null))
+                        estoques.getOrDefault(produto.getId(), ResumoDeEstoque.VAZIO),
+                        vendidos.contains(produto.getId()), null))
                 .toList();
     }
 
@@ -1038,7 +1057,7 @@ public class ProdutoService {
                 nomesDeFornecedores.porIds(empresaId, produto.idsDosFornecedores()),
                 imagensDoProduto.doProduto(empresaId, produto.getId()));
         return responder(produto, referencias, SituacaoPromocao.hoje(relogio), resumoDeEstoque(produto),
-                ultimaCompra(produto));
+                vendido(produto), ultimaCompra(produto));
     }
 
     private EntradaDeCompra ultimaCompra(Produto produto) {
@@ -1048,9 +1067,11 @@ public class ProdutoService {
         return usoNoEstoque.ultimaEntradaDeCompra(produto.getEmpresaId(), produto.getId()).orElse(null);
     }
 
+    /** {@code podeExcluir}: sem venda e sem movimento de estoque alem do estoque inicial. */
     private static ProdutoResponse responder(Produto produto, ReferenciasDoProduto referencias, LocalDate hoje,
-            ResumoDeEstoque estoque, EntradaDeCompra ultimaCompra) {
-        return ProdutoResponse.de(produto, referencias, estoque.permiteExcluir(), hoje, estoque, ultimaCompra);
+            ResumoDeEstoque estoque, boolean vendido, EntradaDeCompra ultimaCompra) {
+        return ProdutoResponse.de(produto, referencias, estoque.permiteExcluir() && !vendido, hoje, estoque,
+                ultimaCompra);
     }
 
     /**

@@ -146,6 +146,9 @@ class ProdutoServiceTest {
     private UsoDoProdutoNoEstoque usoNoEstoque;
 
     @Mock
+    private UsoDoProdutoEmVendas usoEmVendas;
+
+    @Mock
     private RegistroDeEstoqueInicial registroDeEstoqueInicial;
 
     @Mock
@@ -173,7 +176,7 @@ class ProdutoServiceTest {
                 new HistoricoDePrecos(historicoPrecoRepository), new ValidadorDeCodigosDeBarras(produtoRepository),
                 new EmbalagensDoProduto(unidadeService, new ValidadorDeCodigosDeBarras(produtoRepository)),
                 new FornecedoresDoProduto(ligacaoRepository, produtoRepository, nomesDeFornecedores),
-                nomesDeFornecedores, usoNoEstoque, registroDeEstoqueInicial,
+                nomesDeFornecedores, usoNoEstoque, usoEmVendas, registroDeEstoqueInicial,
                 consultaDeProdutos, numerador, tamanhoDoCodigoNaEtiqueta, imagensDoProduto, RELOGIO);
         // Fase F: sem imagem por padrao; os testes da imagem ficam no ImagemDoProdutoIT.
         lenient().when(imagensDoProduto.doProduto(any(), any())).thenReturn(ImagensDosProdutos.nenhuma());

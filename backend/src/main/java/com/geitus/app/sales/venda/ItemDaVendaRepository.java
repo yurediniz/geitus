@@ -14,6 +14,15 @@ interface ItemDaVendaRepository extends Repository<ItemDaVenda, Long> {
 
     List<ItemDaVenda> findByEmpresaIdAndVendaIdOrderByOrdemAsc(Long empresaId, Long vendaId);
 
+    /** Os produtos destes que tem algum item de venda (a FK RESTRICT do item tambem barra a exclusao). */
+    @Query("""
+            SELECT DISTINCT i.produtoId
+              FROM ItemDaVenda i
+             WHERE i.empresaId = :empresaId AND i.produtoId IN :produtoIds
+            """)
+    List<Long> produtosVendidos(@Param("empresaId") Long empresaId,
+            @Param("produtoIds") java.util.Collection<Long> produtoIds);
+
     /** O produto (UUID publico) de cada item, na ordem: reconhece a repeticao do mesmo pedido pela chave. */
     record ProdutoDoItem(short ordem, UUID produtoId) {
     }
