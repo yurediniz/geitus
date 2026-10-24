@@ -201,8 +201,7 @@ class EstoqueDaVendaIT extends IntegracaoDoPdv {
     // ---------- Apoio ----------
 
     private long itemVendido(UUID produto, String quantidade) {
-        long venda = pdv.vendaPorJdbc(empresa, sessao, empresa.operadora(), "10.00");
-        return pdv.itemPorJdbc(empresa, venda, 1, produto, quantidade);
+        return pdv.itemVendidoPorJdbc(empresa, sessao, empresa.operadora(), produto, quantidade);
     }
 
     private void baixar(BaixaDeItem... baixas) {

@@ -19,6 +19,9 @@ public interface MovimentoDeCaixaRepository extends Repository<MovimentoDeCaixa,
 
     Optional<MovimentoDeCaixa> findByEmpresaIdAndChaveIdempotencia(Long empresaId, UUID chave);
 
+    /** Os movimentos do tipo informado ligados a venda (os recebimentos que o cancelamento estorna). */
+    List<MovimentoDeCaixa> findByEmpresaIdAndVendaIdAndTipo(Long empresaId, Long vendaId, TipoDeMovimentoDeCaixa tipo);
+
     /** Movimentos da sessao, do mais recente para o mais antigo. */
     List<MovimentoDeCaixa> findByEmpresaIdAndSessaoCaixaIdOrderByCriadoEmDescIdDesc(Long empresaId, Long sessaoId);
 

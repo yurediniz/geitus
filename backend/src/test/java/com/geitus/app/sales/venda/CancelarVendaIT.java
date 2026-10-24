@@ -53,6 +53,23 @@ class CancelarVendaIT extends IntegracaoDoPdv {
                 .andExpect(jsonPath("$.porForma[1].esperado").value(0.0));
     }
 
+    /** DADOS-I5: o estorno de estoque pode deixar o saldo ainda negativo (-10 + 5 = -5). */
+    @Test
+    void cancelamentoComSaldoAindaNegativo() throws Exception {
+        UUID semEstoque = pdv.produto(empresa, NovoProduto.de("Ração sem estoque", "UN", "10.00")).id();
+        vender(empresa.operadora(), item(semEstoque, "5"), pagamento("DINHEIRO", "50"), "50.00");
+        String segunda = vender(empresa.operadora(), item(semEstoque, "5"), pagamento("DINHEIRO", "50"), "50.00");
+        assertThat(pdv.saldo(semEstoque)).isEqualByComparingTo("-10");
+
+        cancelar(empresa.operadora(), segunda, "Desistiu").andExpect(status().isOk());
+
+        assertThat(pdv.saldo(semEstoque)).isEqualByComparingTo("-5");
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM movimentos_estoque m JOIN produtos p ON p.id = m.produto_id
+                 WHERE p.uuid = ? AND m.motivo = 'CANCELAMENTO_VENDA' AND m.saldo_anterior = -10 AND m.saldo_novo = -5
+                """, Long.class, semEstoque)).isEqualTo(1);
+    }
+
     @Test
     void caixaFechado409() throws Exception {
         String venda = vender(empresa.operadora(), item(racao, "1"), pagamento("PIX", "10"), "10.00");

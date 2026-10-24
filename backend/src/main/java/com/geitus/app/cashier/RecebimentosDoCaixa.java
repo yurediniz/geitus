@@ -44,12 +44,13 @@ public interface RecebimentosDoCaixa {
     SessaoDaVenda travarSessaoDaVenda(Long empresaId, Long sessaoId);
 
     /**
-     * Um movimento {@code ESTORNO} por forma com valor &gt; 0, ligado a venda.
+     * Um movimento {@code ESTORNO} para cada {@code RECEBIMENTO} gravado da
+     * venda, na mesma forma e com o mesmo valor (nada e recalculado; o gatilho
+     * da V17 confere o mesmo).
      *
      * @param escondeValor OPERADOR no modo cego: a mensagem sai sem o valor
      * @throws CaixaConflitoException 409 quando o dinheiro a devolver passa do
      *         dinheiro esperado na gaveta
      */
-    void registrarEstornos(Long empresaId, Long sessaoId, Long vendaId, Long usuarioId,
-            Map<FormaDePagamento, BigDecimal> valores, boolean escondeValor);
+    void registrarEstornos(Long empresaId, Long sessaoId, Long vendaId, Long usuarioId, boolean escondeValor);
 }

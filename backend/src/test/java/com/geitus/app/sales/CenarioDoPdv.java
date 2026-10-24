@@ -217,28 +217,35 @@ public class CenarioDoPdv {
         return saldos.isEmpty() ? BigDecimal.ZERO : saldos.get(0);
     }
 
-    /** Venda CONCLUIDA gravada direto no banco, na sessao aberta, com o total informado; devolve o id. */
-    public long vendaPorJdbc(EmpresaDoPdv empresa, UUID sessao, Long vendedor, String total) {
+    /**
+     * Venda CONCLUIDA gravada direto no banco, na sessao aberta pelo vendedor,
+     * com um item de unidade do produto (preco 1,00) e o pagamento em dinheiro,
+     * num comando so: a venda fica coerente no commit (tg_venda_coerente, V17).
+     * Devolve o id do item.
+     */
+    public long itemVendidoPorJdbc(EmpresaDoPdv empresa, UUID sessao, Long vendedor, UUID produto,
+            String quantidade) {
         return jdbcTemplate.queryForObject("""
-                INSERT INTO vendas (uuid, empresa_id, numero, sessao_caixa_id, usuario_id, status, subtotal,
-                                    desconto_itens, desconto_total, total, troco, chave_idempotencia, concluida_em)
-                VALUES (gen_random_uuid(), ?, ?, ?, ?, 'CONCLUIDA', ?::numeric, 0, 0, ?::numeric, 0,
-                        gen_random_uuid(), now())
-                RETURNING id
+                WITH v AS (
+                    INSERT INTO vendas (uuid, empresa_id, numero, sessao_caixa_id, usuario_id, status, subtotal,
+                                        desconto_itens, desconto_total, total, troco, chave_idempotencia, concluida_em)
+                    VALUES (gen_random_uuid(), ?, ?, ?, ?, 'CONCLUIDA', ?::numeric, 0, 0, ?::numeric, 0,
+                            gen_random_uuid(), now())
+                    RETURNING id, empresa_id, total),
+                i AS (
+                    INSERT INTO itens_venda (empresa_id, venda_id, ordem, produto_id, produto_nome, unidade_sigla,
+                                             etiqueta, quantidade, quantidade_estoque, preco_unitario, origem_preco,
+                                             valor_bruto, desconto_item, desconto_rateado, valor_liquido)
+                    SELECT v.empresa_id, v.id, 1, (SELECT id FROM produtos WHERE uuid = ?), 'Produto', 'UN', false,
+                           ?::numeric, ?::numeric, 1.00, 'NORMAL', v.total, 0, 0, v.total
+                      FROM v
+                    RETURNING id),
+                p AS (
+                    INSERT INTO pagamentos_venda (empresa_id, venda_id, forma, valor)
+                    SELECT v.empresa_id, v.id, 'DINHEIRO', v.total FROM v)
+                SELECT id FROM i
                 """, Long.class, empresa.id(), SEQUENCIA.incrementAndGet() + 100000, idDaSessao(sessao), vendedor,
-                total, total);
-    }
-
-    /** Item de unidade gravado direto no banco (preco 1,00 por unidade); devolve o id. */
-    public long itemPorJdbc(EmpresaDoPdv empresa, long venda, int ordem, UUID produto, String quantidade) {
-        return jdbcTemplate.queryForObject("""
-                INSERT INTO itens_venda (empresa_id, venda_id, ordem, produto_id, produto_nome, unidade_sigla,
-                                         etiqueta, quantidade, quantidade_estoque, preco_unitario, origem_preco,
-                                         valor_bruto, desconto_item, desconto_rateado, valor_liquido)
-                VALUES (?, ?, ?, (SELECT id FROM produtos WHERE uuid = ?), 'Produto', 'UN', false, ?::numeric,
-                        ?::numeric, 1.00, 'NORMAL', ?::numeric, 0, 0, ?::numeric)
-                RETURNING id
-                """, Long.class, empresa.id(), venda, ordem, produto, quantidade, quantidade, quantidade, quantidade);
+                quantidade, quantidade, produto, quantidade, quantidade);
     }
 
     private static BigDecimal valorOuNulo(String valor) {

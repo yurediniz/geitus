@@ -2,9 +2,6 @@ package com.geitus.app.sales.venda;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.EnumMap;
-import java.util.List;
-import java.util.Map;
 
 import com.geitus.app.cashier.FormaDePagamento;
 
@@ -54,24 +51,6 @@ public class PagamentoDaVenda {
         this.vendaId = venda.getId();
         this.forma = forma;
         this.valor = valor.setScale(CASAS_DO_REAL, RoundingMode.UNNECESSARY);
-    }
-
-    /**
-     * O que cada forma deixou no caixa (docs/modules/pdv.md, 3.4 e 3.8): o
-     * valor da forma e, no dinheiro, o valor menos o troco; so as formas com
-     * recebido &gt; 0. E o recebimento da venda e o estorno do cancelamento.
-     */
-    static Map<FormaDePagamento, BigDecimal> recebidos(List<PagamentoDaVenda> pagamentos, BigDecimal troco) {
-        Map<FormaDePagamento, BigDecimal> recebidos = new EnumMap<>(FormaDePagamento.class);
-        for (PagamentoDaVenda pagamento : pagamentos) {
-            BigDecimal valor = pagamento.forma == FormaDePagamento.DINHEIRO
-                    ? pagamento.valor.subtract(troco)
-                    : pagamento.valor;
-            if (valor.signum() > 0) {
-                recebidos.put(pagamento.forma, valor);
-            }
-        }
-        return recebidos;
     }
 
     public Long getVendaId() {

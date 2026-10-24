@@ -185,6 +185,39 @@ class FinalizarVendaIT extends IntegracaoDoPdv {
                 Long.class, pdv.idDoProduto(sacola))).isZero();
     }
 
+    /**
+     * DADOS-I2: a venda com etiqueta, desconto de item, desconto do total com
+     * resto de centavos e troco passa na conferencia do banco no commit
+     * (tg_venda_coerente): as somas da calculadora sao exatas.
+     */
+    @Test
+    void somasDaCalculadoraPassamNaConferenciaDoBanco() throws Exception {
+        abrirCaixa(empresa.operadora(), empresa.ponto(), "100.00");
+        UUID queijo = pdv.produto(empresa, NovoProduto.de("Queijo", "KG", "25.00").naBalanca(542)).id();
+        UUID pao = pdv.produto(empresa, NovoProduto.de("Pão", "UN", "3.33")).id();
+        String itens = "{\"produtoId\":\"" + queijo + "\",\"codigoLido\":\"2000542010000\",\"etiqueta\":true},"
+                + "{\"produtoId\":\"" + pao + "\",\"quantidade\":1,\"desconto\":{\"tipo\":\"PERCENTUAL\",\"valor\":7}},"
+                + item(pao, "2");
+        String pedido = "{\"itens\":[" + itens + "],\"desconto\":{\"tipo\":\"VALOR\",\"valor\":1.00},\"pagamentos\":["
+                + pagamento("DINHEIRO", "50") + "],\"chave\":\"" + UUID.randomUUID() + "\",\"totalEsperado\":18.76}";
+
+        finalizar(empresa.operadora(), pedido)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.subtotal").value(19.99))
+                .andExpect(jsonPath("$.descontoItens").value(0.23))
+                .andExpect(jsonPath("$.descontoTotal").value(1.0))
+                .andExpect(jsonPath("$.total").value(18.76))
+                .andExpect(jsonPath("$.troco").value(31.24));
+
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT count(*) FROM vendas v
+                 WHERE v.empresa_id = ?
+                   AND v.subtotal = (SELECT sum(valor_bruto) FROM itens_venda WHERE venda_id = v.id)
+                   AND v.desconto_total = (SELECT sum(desconto_rateado) FROM itens_venda WHERE venda_id = v.id)
+                   AND v.total = (SELECT sum(valor_liquido) FROM itens_venda WHERE venda_id = v.id)
+                """, Long.class, empresa.id())).isEqualTo(1);
+    }
+
     /** BACK-I2: produto vendido sem controle de estoque (sem movimento) tambem nao e excluivel. */
     @Test
     void produtoVendidoSemControleNaoEExcluivel() throws Exception {
@@ -230,6 +263,13 @@ class FinalizarVendaIT extends IntegracaoDoPdv {
 
         assertThat(pdv.saldo(nexgard.id())).isEqualByComparingTo("6");
         assertThat(recebimentos(sessao)).containsExactly(Map.entry("DINHEIRO", new BigDecimal("299.80")));
+        // DADOS-S7: o mesmo produto em duas linhas (embalagem e unidade) mantem a cadeia do saldo.
+        assertThat(jdbcTemplate.query("""
+                SELECT m.saldo_anterior, m.saldo_novo FROM movimentos_estoque m JOIN produtos p ON p.id = m.produto_id
+                 WHERE p.uuid = ? AND m.motivo = 'VENDA' ORDER BY m.id
+                """, (linha, numero) -> linha.getBigDecimal(1).stripTrailingZeros().toPlainString() + ">"
+                + linha.getBigDecimal(2).stripTrailingZeros().toPlainString(), nexgard.id()))
+                .containsExactly("10>7", "7>6");
     }
 
     @Test

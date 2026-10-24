@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -98,8 +99,13 @@ class CaixaDasVendas implements RecebimentosDoCaixa, SessoesParaVendas {
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void registrarEstornos(Long empresaId, Long sessaoId, Long vendaId, Long usuarioId,
-            Map<FormaDePagamento, BigDecimal> valores, boolean escondeValor) {
-        BigDecimal dinheiro = valores.getOrDefault(FormaDePagamento.DINHEIRO, BigDecimal.ZERO);
+            boolean escondeValor) {
+        List<MovimentoDeCaixa> recebimentos = movimentoRepository.findByEmpresaIdAndVendaIdAndTipo(empresaId,
+                vendaId, TipoDeMovimentoDeCaixa.RECEBIMENTO);
+        BigDecimal dinheiro = recebimentos.stream()
+                .filter(recebimento -> recebimento.getForma() == FormaDePagamento.DINHEIRO)
+                .map(MovimentoDeCaixa::getValor)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (dinheiro.signum() > 0) {
             BigDecimal naGaveta = EsperadoPorForma.dinheiro(movimentoRepository, empresaId, sessaoId);
             if (dinheiro.compareTo(naGaveta) > 0) {
@@ -109,13 +115,11 @@ class CaixaDasVendas implements RecebimentosDoCaixa, SessoesParaVendas {
             }
         }
         OffsetDateTime agora = agora();
-        valores.forEach((forma, valor) -> {
-            if (valor.signum() > 0) {
-                movimentoRepository.saveAndFlush(MovimentoDeCaixa.daVenda(empresaId, sessaoId,
-                        new MovimentoDeCaixa.DaVenda(TipoDeMovimentoDeCaixa.ESTORNO, forma, valor, vendaId),
-                        usuarioId, agora));
-            }
-        });
+        for (MovimentoDeCaixa recebimento : recebimentos) {
+            movimentoRepository.saveAndFlush(MovimentoDeCaixa.daVenda(empresaId, sessaoId,
+                    new MovimentoDeCaixa.DaVenda(TipoDeMovimentoDeCaixa.ESTORNO, recebimento.getForma(),
+                            recebimento.getValor(), vendaId), usuarioId, agora));
+        }
     }
 
     // ---------- SessoesParaVendas ----------

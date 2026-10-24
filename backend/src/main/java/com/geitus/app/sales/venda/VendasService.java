@@ -349,11 +349,9 @@ public class VendasService {
         }
         List<ItemDaVenda> itens = itemRepository.findByEmpresaIdAndVendaIdOrderByOrdemAsc(empresaId, venda.getId());
         estoqueDaVenda.travarSaldos(empresaId, itens.stream().map(ItemDaVenda::getProdutoId).distinct().toList());
-        List<PagamentoDaVenda> pagamentos = pagamentoRepository.findByEmpresaIdAndVendaIdIn(empresaId,
-                List.of(venda.getId()));
         boolean escondeValor = !usuario.ehAdmin() && configuracaoDoCaixa.fechamentoCego(empresaId);
         recebimentos.registrarEstornos(empresaId, referencia.sessaoId(), venda.getId(), usuario.usuarioId(),
-                PagamentoDaVenda.recebidos(pagamentos, venda.getTroco()), escondeValor);
+                escondeValor);
         estoqueDaVenda.estornar(empresaId, usuario.usuarioId(), itens.stream()
                 .map(item -> new BaixaDeItem(item.getProdutoId(), item.getId(), item.getQuantidadeEstoque()))
                 .toList());

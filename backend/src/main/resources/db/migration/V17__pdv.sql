@@ -30,6 +30,11 @@ ALTER TABLE numeracoes
 ALTER TABLE clientes
     ADD CONSTRAINT uq_cliente_empresa_id UNIQUE (empresa_id, id);
 
+-- Alvo da FK da venda para a sessao do vendedor: a venda entra so no caixa
+-- de quem o abriu.
+ALTER TABLE sessoes_caixa
+    ADD CONSTRAINT uq_sessao_caixa_empresa_id_aberta_por UNIQUE (empresa_id, id, aberta_por);
+
 -- =====================================================================
 -- Passo 2: vendas.
 -- =====================================================================
@@ -61,8 +66,10 @@ CREATE TABLE vendas (
     CONSTRAINT uq_venda_empresa_sessao_id UNIQUE (empresa_id, sessao_caixa_id, id),
     CONSTRAINT uq_venda_numero UNIQUE (empresa_id, numero),
     CONSTRAINT uq_venda_chave UNIQUE (empresa_id, chave_idempotencia),
-    CONSTRAINT fk_venda_sessao FOREIGN KEY (empresa_id, sessao_caixa_id)
-        REFERENCES sessoes_caixa (empresa_id, id) ON DELETE RESTRICT,
+    -- A sessao e da empresa e foi aberta pelo vendedor (a venda entra no caixa
+    -- de quem vende; a regra do dono do cancelamento depende disso).
+    CONSTRAINT fk_venda_sessao_do_vendedor FOREIGN KEY (empresa_id, sessao_caixa_id, usuario_id)
+        REFERENCES sessoes_caixa (empresa_id, id, aberta_por) ON DELETE RESTRICT,
     -- Usuarios nao sao excluidos fisicamente: RESTRICT (padrao). MATCH SIMPLE:
     -- cliente e cancelamento so conferidos quando preenchidos.
     CONSTRAINT fk_venda_usuario FOREIGN KEY (empresa_id, usuario_id)
@@ -87,8 +94,9 @@ CREATE TABLE vendas (
             AND motivo_cancelamento <> ''))
 );
 
--- Vendas do caixa (F8), da mais recente; tambem serve a FK RESTRICT da sessao.
-CREATE INDEX ix_venda_sessao ON vendas (empresa_id, sessao_caixa_id, id DESC);
+-- Vendas do caixa (F8), na ordem da lista (da mais recente, desempate por
+-- id); tambem serve a FK RESTRICT da sessao.
+CREATE INDEX ix_venda_sessao ON vendas (empresa_id, sessao_caixa_id, concluida_em DESC, id DESC);
 -- Consulta por periodo, da mais recente (desempate por id).
 CREATE INDEX ix_venda_concluida_em ON vendas (empresa_id, concluida_em DESC, id DESC);
 -- FK RESTRICT do cliente.
@@ -406,10 +414,13 @@ BEGIN
         RETURN NEW;
     END IF;
 
+    -- FOR NO KEY UPDATE (e nao FOR SHARE): com a sessao travada para escrita,
+    -- nenhum movimento novo entra entre esta conferencia e a mudanca de
+    -- situacao da sessao.
     SELECT status INTO situacao
     FROM sessoes_caixa
     WHERE empresa_id = NEW.empresa_id AND id = NEW.sessao_caixa_id
-    FOR SHARE;
+    FOR NO KEY UPDATE;
 
     IF FOUND AND situacao <> 'ABERTA' THEN
         RAISE EXCEPTION 'Contagem por forma só entra em sessão aberta.'
@@ -464,6 +475,31 @@ BEGIN
             USING ERRCODE = 'integrity_constraint_violation';
     END IF;
 
+    -- Ao sair de ABERTA, a fotografia confere com os movimentos: o esperado
+    -- do dinheiro (sangria e estorno subtraem) e o de cada forma contada
+    -- (estorno subtrai).
+    IF OLD.status = 'ABERTA' THEN
+        IF NEW.valor_esperado IS DISTINCT FROM (
+                SELECT COALESCE(SUM(CASE WHEN m.tipo IN ('SANGRIA', 'ESTORNO') THEN -m.valor ELSE m.valor END), 0)
+                FROM movimentos_caixa m
+                WHERE m.empresa_id = NEW.empresa_id AND m.sessao_caixa_id = NEW.id AND m.forma = 'DINHEIRO') THEN
+            RAISE EXCEPTION 'O esperado em dinheiro não confere com os movimentos do caixa.'
+                USING ERRCODE = 'integrity_constraint_violation';
+        END IF;
+        IF EXISTS (
+                SELECT 1
+                FROM contagens_caixa c
+                WHERE c.empresa_id = NEW.empresa_id AND c.sessao_caixa_id = NEW.id
+                  AND c.valor_esperado <> (
+                      SELECT COALESCE(SUM(CASE WHEN m.tipo = 'ESTORNO' THEN -m.valor ELSE m.valor END), 0)
+                      FROM movimentos_caixa m
+                      WHERE m.empresa_id = c.empresa_id AND m.sessao_caixa_id = c.sessao_caixa_id
+                        AND m.forma = c.forma)) THEN
+            RAISE EXCEPTION 'O esperado de uma forma não confere com os movimentos do caixa.'
+                USING ERRCODE = 'integrity_constraint_violation';
+        END IF;
+    END IF;
+
     tem_diferenca := COALESCE(NEW.diferenca <> 0, false) OR EXISTS (
         SELECT 1 FROM contagens_caixa c
         WHERE c.empresa_id = NEW.empresa_id AND c.sessao_caixa_id = NEW.id AND c.diferenca <> 0);
@@ -491,3 +527,116 @@ $$;
 CREATE TRIGGER tg_sessao_caixa_diferenca_por_forma
     BEFORE UPDATE ON sessoes_caixa
     FOR EACH ROW EXECUTE FUNCTION fn_sessao_caixa_diferenca_por_forma();
+
+-- Venda coerente no commit (constraint trigger deferida): a venda, os itens e
+-- os pagamentos sao gravados em comandos separados, entao as somas so podem
+-- ser conferidas no fim da transacao. Ao menos um item; soma dos brutos =
+-- subtotal; dos descontos dos itens = desconto_itens; dos rateados =
+-- desconto_total; dos liquidos = total; pagamentos - troco = total; e o troco
+-- nunca passa do dinheiro entregue.
+CREATE FUNCTION fn_venda_coerente() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+DECLARE
+    alvo BIGINT;
+    venda vendas%ROWTYPE;
+    itens INTEGER;
+    bruto NUMERIC;
+    desconto_dos_itens NUMERIC;
+    rateado NUMERIC;
+    liquido NUMERIC;
+    pago NUMERIC;
+    dinheiro NUMERIC;
+BEGIN
+    IF TG_TABLE_NAME = 'vendas' THEN
+        alvo := NEW.id;
+    ELSE
+        alvo := NEW.venda_id;
+    END IF;
+
+    SELECT * INTO venda FROM vendas WHERE id = alvo;
+    IF NOT FOUND THEN
+        RETURN NULL;
+    END IF;
+
+    SELECT count(*), COALESCE(SUM(valor_bruto), 0), COALESCE(SUM(desconto_item), 0),
+           COALESCE(SUM(desconto_rateado), 0), COALESCE(SUM(valor_liquido), 0)
+      INTO itens, bruto, desconto_dos_itens, rateado, liquido
+    FROM itens_venda
+    WHERE venda_id = alvo;
+
+    SELECT COALESCE(SUM(valor), 0), COALESCE(SUM(valor) FILTER (WHERE forma = 'DINHEIRO'), 0)
+      INTO pago, dinheiro
+    FROM pagamentos_venda
+    WHERE venda_id = alvo;
+
+    IF itens = 0
+            OR bruto <> venda.subtotal
+            OR desconto_dos_itens <> venda.desconto_itens
+            OR rateado <> venda.desconto_total
+            OR liquido <> venda.total
+            OR pago - venda.troco <> venda.total
+            OR venda.troco > dinheiro THEN
+        RAISE EXCEPTION 'Venda % incoerente: itens, descontos, pagamentos ou troco não somam os totais.', venda.numero
+            USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+
+    RETURN NULL;
+END;
+$$;
+
+CREATE CONSTRAINT TRIGGER tg_venda_coerente
+    AFTER INSERT ON vendas
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION fn_venda_coerente();
+
+CREATE CONSTRAINT TRIGGER tg_item_venda_coerente
+    AFTER INSERT ON itens_venda
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION fn_venda_coerente();
+
+CREATE CONSTRAINT TRIGGER tg_pagamento_venda_coerente
+    AFTER INSERT ON pagamentos_venda
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION fn_venda_coerente();
+
+-- Estorno de caixa preso ao recebimento: so devolve o que a venda recebeu,
+-- na mesma forma e com o mesmo valor.
+CREATE FUNCTION fn_movimento_caixa_estorno_do_recebimento() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.tipo = 'ESTORNO' AND NOT EXISTS (
+            SELECT 1
+            FROM movimentos_caixa r
+            WHERE r.empresa_id = NEW.empresa_id AND r.venda_id = NEW.venda_id AND r.tipo = 'RECEBIMENTO'
+              AND r.forma = NEW.forma AND r.valor = NEW.valor) THEN
+        RAISE EXCEPTION 'Estorno sem o recebimento da venda na mesma forma e com o mesmo valor.'
+            USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER tg_movimento_caixa_estorno_do_recebimento
+    BEFORE INSERT ON movimentos_caixa
+    FOR EACH ROW EXECUTE FUNCTION fn_movimento_caixa_estorno_do_recebimento();
+
+-- Estorno de estoque preso a baixa: devolve exatamente o que a baixa do mesmo
+-- item tirou (quantidade oposta). O tipo errado fica para o CHECK do motivo.
+CREATE FUNCTION fn_movimento_estoque_estorno_da_baixa() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.motivo = 'CANCELAMENTO_VENDA' AND NEW.tipo = 'ENTRADA' AND NOT EXISTS (
+            SELECT 1
+            FROM movimentos_estoque b
+            WHERE b.empresa_id = NEW.empresa_id AND b.item_venda_id = NEW.item_venda_id AND b.motivo = 'VENDA'
+              AND b.quantidade = -NEW.quantidade) THEN
+        RAISE EXCEPTION 'Estorno de estoque sem a baixa do item com a mesma quantidade.'
+            USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER tg_movimento_estoque_estorno_da_baixa
+    BEFORE INSERT ON movimentos_estoque
+    FOR EACH ROW EXECUTE FUNCTION fn_movimento_estoque_estorno_da_baixa();

@@ -99,7 +99,11 @@ public class CenarioDeCaixa {
         jdbcTemplate.update("UPDATE pontos_caixa SET ativo = false WHERE uuid = ?", ponto);
     }
 
-    /** Sessao ABERTA gravada direto no banco (sem movimento); devolve o UUID publico. */
+    /**
+     * Sessao ABERTA gravada direto no banco, com o movimento de abertura (o
+     * esperado em dinheiro e o fundo, como a V17 confere ao contar); devolve o
+     * UUID publico.
+     */
     public UUID sessaoAbertaPorJdbc(EmpresaDeCaixa empresa, UUID ponto, Long usuario, String fundo,
             OffsetDateTime abertaEm) {
         UUID uuid = UUID.randomUUID();
@@ -107,6 +111,12 @@ public class CenarioDeCaixa {
                 INSERT INTO sessoes_caixa (uuid, empresa_id, ponto_caixa_id, status, aberta_por, aberta_em, fundo_troco)
                 VALUES (?, ?, (SELECT id FROM pontos_caixa WHERE uuid = ?), 'ABERTA', ?, ?, ?)
                 """, uuid, empresa.id(), ponto, usuario, abertaEm, new BigDecimal(fundo));
+        jdbcTemplate.update("""
+                INSERT INTO movimentos_caixa (uuid, empresa_id, sessao_caixa_id, tipo, forma, valor, usuario_id,
+                                              chave_idempotencia, criado_em)
+                VALUES (gen_random_uuid(), ?, (SELECT id FROM sessoes_caixa WHERE uuid = ?), 'ABERTURA', 'DINHEIRO', ?,
+                        ?, gen_random_uuid(), ?)
+                """, empresa.id(), uuid, new BigDecimal(fundo), usuario, abertaEm);
         return uuid;
     }
 

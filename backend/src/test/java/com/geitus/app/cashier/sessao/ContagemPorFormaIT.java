@@ -50,11 +50,21 @@ class ContagemPorFormaIT extends IntegracaoDoCaixa {
 
     private EmpresaDeCaixa empresa;
     private UUID caixa1;
+    private long produto;
 
     @BeforeEach
     void criarEmpresa() throws Exception {
         empresa = cenario.novaEmpresa();
         caixa1 = cenario.novoPonto(empresa, "Caixa 1");
+        jdbcTemplate.update("INSERT INTO unidades_medida (empresa_id, sigla, descricao, fracionada) VALUES (?, 'UN',"
+                + " 'Unidade', false)", empresa.id());
+        produto = jdbcTemplate.queryForObject("""
+                INSERT INTO produtos (empresa_id, numero, nome, preco_venda, unidade_id, busca_normalizada,
+                                      nome_normalizado)
+                VALUES (?, 1, 'Produto', 1.00, (SELECT id FROM unidades_medida WHERE empresa_id = ?), 'produto',
+                        'produto')
+                RETURNING id
+                """, Long.class, empresa.id(), empresa.id());
     }
 
     // ---------- Esperado e formas da contagem ----------
@@ -62,20 +72,21 @@ class ContagemPorFormaIT extends IntegracaoDoCaixa {
     @Test
     void esperadoPorForma() throws Exception {
         UUID sessao = abrirCaixa(empresa.operadora(), caixa1, "100.00");
-        long venda = receber(sessao, Map.of(FormaDePagamento.DINHEIRO, "30.00", FormaDePagamento.PIX, "20.00"));
-        estornar(sessao, venda, Map.of(FormaDePagamento.DINHEIRO, "10.00"), false);
+        receber(sessao, Map.of(FormaDePagamento.DINHEIRO, "30.00", FormaDePagamento.PIX, "20.00"));
+        long cancelada = receber(sessao, Map.of(FormaDePagamento.DINHEIRO, "10.00"));
+        estornar(sessao, cancelada, false);
 
         detalhe(empresa.admin(), sessao)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.dinheiroNaGaveta").value(120.0))
+                .andExpect(jsonPath("$.dinheiroNaGaveta").value(130.0))
                 .andExpect(jsonPath("$.formasDaContagem", contains("DINHEIRO", "PIX")))
                 .andExpect(jsonPath("$.porForma[0].forma").value("DINHEIRO"))
-                .andExpect(jsonPath("$.porForma[0].esperado").value(120.0))
+                .andExpect(jsonPath("$.porForma[0].esperado").value(130.0))
                 .andExpect(jsonPath("$.porForma[0].contado").value(nullValue()))
                 .andExpect(jsonPath("$.porForma[1].forma").value("PIX"))
                 .andExpect(jsonPath("$.porForma[1].esperado").value(20.0))
                 .andExpect(jsonPath("$.movimentos[?(@.tipo == 'ESTORNO')].forma", contains("DINHEIRO")))
-                .andExpect(jsonPath("$.movimentos[?(@.tipo == 'RECEBIMENTO')]", hasSize(2)));
+                .andExpect(jsonPath("$.movimentos[?(@.tipo == 'RECEBIMENTO')]", hasSize(3)));
         historico(empresa.admin(), "")
                 .andExpect(jsonPath("$.itens[0].porForma[1].esperado").value(20.0))
                 .andExpect(jsonPath("$.itens[0].formasDaContagem", contains("DINHEIRO", "PIX")));
@@ -219,7 +230,7 @@ class ContagemPorFormaIT extends IntegracaoDoCaixa {
     void recebimentoEEstornoComValorNuloParaOperadorNoCego() throws Exception {
         UUID sessao = abrirCaixa(empresa.operadora(), caixa1, "100.00");
         long venda = receber(sessao, Map.of(FormaDePagamento.DINHEIRO, "30.00"));
-        estornar(sessao, venda, Map.of(FormaDePagamento.DINHEIRO, "30.00"), true);
+        estornar(sessao, venda, true);
 
         detalhe(empresa.operadora(), sessao)
                 .andExpect(jsonPath("$.movimentos[?(@.tipo == 'RECEBIMENTO')].valor", contains(nullValue())))
@@ -260,10 +271,10 @@ class ContagemPorFormaIT extends IntegracaoDoCaixa {
         long venda = receber(sessao, Map.of(FormaDePagamento.DINHEIRO, "30.00"));
         lancar(empresa.admin(), sessao, "SANGRIA", "35.00").andExpect(status().isCreated());
 
-        assertThatThrownBy(() -> estornar(sessao, venda, Map.of(FormaDePagamento.DINHEIRO, "30.00"), false))
+        assertThatThrownBy(() -> estornar(sessao, venda, false))
                 .isInstanceOf(CaixaConflitoException.class)
                 .hasMessage("Não há dinheiro suficiente na gaveta para devolver (R$ 5,00).");
-        assertThatThrownBy(() -> estornar(sessao, venda, Map.of(FormaDePagamento.DINHEIRO, "30.00"), true))
+        assertThatThrownBy(() -> estornar(sessao, venda, true))
                 .isInstanceOf(CaixaConflitoException.class)
                 .hasMessage("Não há dinheiro suficiente na gaveta para devolver.");
         detalhe(empresa.admin(), sessao).andExpect(jsonPath("$.dinheiroNaGaveta").value(5.0));
@@ -273,17 +284,37 @@ class ContagemPorFormaIT extends IntegracaoDoCaixa {
     // Apoio
     // ------------------------------------------------------------------
 
-    /** Venda gravada por JDBC na sessao e os recebimentos dela pelo {@link RecebimentosDoCaixa}; devolve o id. */
+    /**
+     * Venda coerente gravada por JDBC na sessao (um item e os pagamentos por
+     * forma, num comando so: tg_venda_coerente da V17) e os recebimentos dela
+     * pelo {@link RecebimentosDoCaixa}; devolve o id.
+     */
     private long receber(UUID sessao, Map<FormaDePagamento, String> valores) {
         long sessaoId = idDaSessao(sessao);
         BigDecimal total = valores.values().stream().map(BigDecimal::new).reduce(BigDecimal.ZERO, BigDecimal::add);
+        String pagamentos = emReais(valores).entrySet().stream()
+                .map(pagamento -> "('" + pagamento.getKey().name() + "', " + pagamento.getValue().toPlainString() + ")")
+                .collect(java.util.stream.Collectors.joining(", "));
         long venda = jdbcTemplate.queryForObject("""
-                INSERT INTO vendas (uuid, empresa_id, numero, sessao_caixa_id, usuario_id, status, subtotal,
-                                    desconto_itens, desconto_total, total, troco, chave_idempotencia, concluida_em)
-                VALUES (gen_random_uuid(), ?, ?, ?, ?, 'CONCLUIDA', ?, 0, 0, ?, 0, gen_random_uuid(), now())
-                RETURNING id
-                """, Long.class, empresa.id(), NUMERO_DA_VENDA.incrementAndGet(), sessaoId, empresa.operadora(),
-                total, total);
+                WITH v AS (
+                    INSERT INTO vendas (uuid, empresa_id, numero, sessao_caixa_id, usuario_id, status, subtotal,
+                                        desconto_itens, desconto_total, total, troco, chave_idempotencia,
+                                        concluida_em)
+                    VALUES (gen_random_uuid(), ?, ?, ?, ?, 'CONCLUIDA', ?, 0, 0, ?, 0, gen_random_uuid(), now())
+                    RETURNING id, empresa_id, total),
+                i AS (
+                    INSERT INTO itens_venda (empresa_id, venda_id, ordem, produto_id, produto_nome, unidade_sigla,
+                                             etiqueta, quantidade, quantidade_estoque, preco_unitario, origem_preco,
+                                             valor_bruto, desconto_item, desconto_rateado, valor_liquido)
+                    SELECT v.empresa_id, v.id, 1, ?, 'Produto', 'UN', false, 1, 1, v.total, 'NORMAL', v.total, 0, 0,
+                           v.total
+                      FROM v),
+                p AS (
+                    INSERT INTO pagamentos_venda (empresa_id, venda_id, forma, valor)
+                    SELECT v.empresa_id, v.id, f.forma, f.valor FROM v, (VALUES %s) AS f(forma, valor))
+                SELECT id FROM v
+                """.formatted(pagamentos), Long.class, empresa.id(), NUMERO_DA_VENDA.incrementAndGet(), sessaoId,
+                empresa.operadora(), total, total, produto);
         naTransacao(() -> {
             recebimentos.registrarRecebimentos(empresa.id(), sessaoId, venda, empresa.operadora(), emReais(valores));
             return null;
@@ -291,12 +322,12 @@ class ContagemPorFormaIT extends IntegracaoDoCaixa {
         return venda;
     }
 
-    private void estornar(UUID sessao, long venda, Map<FormaDePagamento, String> valores, boolean escondeValor) {
+    /** O cancelamento da venda no caixa: estorna os recebimentos gravados dela. */
+    private void estornar(UUID sessao, long venda, boolean escondeValor) {
         long sessaoId = idDaSessao(sessao);
         naTransacao(() -> {
             recebimentos.travarSessaoDaVenda(empresa.id(), sessaoId);
-            recebimentos.registrarEstornos(empresa.id(), sessaoId, venda, empresa.operadora(), emReais(valores),
-                    escondeValor);
+            recebimentos.registrarEstornos(empresa.id(), sessaoId, venda, empresa.operadora(), escondeValor);
             return null;
         });
     }
