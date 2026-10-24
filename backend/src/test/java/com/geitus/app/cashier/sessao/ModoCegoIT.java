@@ -69,6 +69,39 @@ class ModoCegoIT extends IntegracaoDoCaixa {
                 .andExpect(content().string(not(containsString(ESPERADO_NA_MENSAGEM))));
     }
 
+    /**
+     * Spec 3.6: no modo cego a operadora so ve os valores que ela mesma
+     * lancou. A sangria de R$ 157,00 do ADMIN aparece na lista (tipo, motivo,
+     * quem e quando) sem o valor, ate a contagem.
+     */
+    @Test
+    void lancamentoDeOutraPessoaSemValorParaOperadorAteAContagem() throws Exception {
+        lancar(empresa.admin(), sessao, "SANGRIA", "157.00", "Depósito no cofre", UUID.randomUUID())
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.movimentos[0].valor").value(157.0));
+
+        atual(empresa.operadora())
+                .andExpect(jsonPath("$.movimentos[0].tipo").value("SANGRIA"))
+                .andExpect(jsonPath("$.movimentos[0].motivo").value("Depósito no cofre"))
+                .andExpect(jsonPath("$.movimentos[0].usuarioNome").value("Admin Geral"))
+                .andExpect(jsonPath("$.movimentos[0].criadoEm").isNotEmpty())
+                .andExpect(jsonPath("$.movimentos[0].valor").value(nullValue()))
+                .andExpect(jsonPath("$.movimentos[1].valor").value(57.0))
+                .andExpect(jsonPath("$.movimentos[2].valor").value(100.0))
+                .andExpect(content().string(not(containsString(ESPERADO_NO_JSON))));
+        detalhe(empresa.operadora(), sessao)
+                .andExpect(content().string(not(containsString(ESPERADO_NO_JSON))));
+        lancar(empresa.operadora(), sessao, "SUPRIMENTO", "1.00")
+                .andExpect(content().string(not(containsString(ESPERADO_NO_JSON))));
+        historico(empresa.operadora(), "")
+                .andExpect(content().string(not(containsString(ESPERADO_NO_JSON))));
+
+        contar(empresa.operadora(), sessao, "1.00", null)
+                .andExpect(jsonPath("$.status").value("FECHADA"))
+                .andExpect(jsonPath("$.movimentos[1].valor").value(157.0));
+        detalhe(empresa.operadora(), sessao).andExpect(jsonPath("$.movimentos[1].valor").value(157.0));
+    }
+
     @Test
     void adminRecebe() throws Exception {
         detalhe(empresa.admin(), sessao).andExpect(jsonPath("$.dinheiroNaGaveta").value(157.0))

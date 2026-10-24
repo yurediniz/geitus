@@ -31,6 +31,11 @@ import com.geitus.app.iam.UsuarioRepository;
  * recebe o esperado. Depois da contagem, o esperado e a fotografia gravada e
  * todos o veem.
  *
+ * <p>Nos movimentos vale a mesma regra: com a sessao aberta e o modo cego, o
+ * OPERADOR so recebe o valor do que ele mesmo lancou; o lancamento de outra
+ * pessoa (um suprimento do ADMIN, por exemplo) sai sem o valor, para o
+ * esperado nao ser deduzido pela soma (spec 3.6).
+ *
  * <p>Exige a transacao de quem chama (le movimentos, nomes e o ponto).
  */
 @Component
@@ -59,8 +64,10 @@ class RespostasDaSessao {
         movimentos.forEach(movimento -> usuarios.add(movimento.getUsuarioId()));
         Map<Long, String> nomes = nomes(usuarios);
         ModoDaEmpresa modo = new ModoDaEmpresa(() -> configuracaoService.fechamentoCego(sessao.getEmpresaId()));
+        boolean escondeValores = escondeOEsperado(sessao, quemVe, modo);
         List<MovimentoDeCaixaResponse> respostasDosMovimentos = movimentos.stream()
-                .map(movimento -> resposta(movimento, nomes))
+                .map(movimento -> resposta(movimento, nomes,
+                        escondeValores && !movimento.getUsuarioId().equals(quemVe.usuarioId())))
                 .toList();
         return resposta(sessao, quemVe, nomes, modo, () -> soma(movimentos), respostasDosMovimentos);
     }
@@ -86,9 +93,9 @@ class RespostasDaSessao {
 
     private SessaoDeCaixaResponse resposta(SessaoDeCaixa sessao, UsuarioAutenticado quemVe, Map<Long, String> nomes,
             ModoDaEmpresa modo, Supplier<BigDecimal> esperadoAtual, List<MovimentoDeCaixaResponse> movimentos) {
-        boolean aberta = sessao.getStatus() == StatusDaSessao.ABERTA;
-        boolean cego = aberta ? modo.cego() : Boolean.TRUE.equals(sessao.getFechamentoCego());
-        BigDecimal dinheiroNaGaveta = dinheiroNaGaveta(sessao, quemVe, cego, esperadoAtual);
+        boolean cego = modoDaSessao(sessao, modo);
+        BigDecimal dinheiroNaGaveta = dinheiroNaGaveta(sessao, escondeOEsperado(sessao, quemVe, modo),
+                esperadoAtual);
         boolean podeOperar = sessao.getStatus().emAndamento()
                 && (quemVe.ehAdmin() || sessao.abertaPor(quemVe.usuarioId()));
         return new SessaoDeCaixaResponse(sessao.getUuid(),
@@ -100,19 +107,28 @@ class RespostasDaSessao {
                 noFuso(sessao.getFechadaEm()), movimentos, podeOperar);
     }
 
+    /** Com a sessao {@code ABERTA}, o modo atual da empresa; depois da contagem, o modo gravado. */
+    private static boolean modoDaSessao(SessaoDeCaixa sessao, ModoDaEmpresa modo) {
+        return sessao.getStatus() == StatusDaSessao.ABERTA
+                ? modo.cego()
+                : Boolean.TRUE.equals(sessao.getFechamentoCego());
+    }
+
+    /** OPERADOR, sessao ainda sem contagem e modo cego: o esperado nao pode sair nem ser deduzido. */
+    private static boolean escondeOEsperado(SessaoDeCaixa sessao, UsuarioAutenticado quemVe, ModoDaEmpresa modo) {
+        return !sessao.contada() && !quemVe.ehAdmin() && modoDaSessao(sessao, modo);
+    }
+
     /**
-     * Aberta: o esperado atual, escondido do OPERADOR no modo cego. Contada:
-     * a fotografia gravada (depois dela nao entra mais movimento).
+     * Aberta: o esperado atual, ou {@code null} quando escondido. Contada: a
+     * fotografia gravada (depois dela nao entra mais movimento).
      */
-    private static BigDecimal dinheiroNaGaveta(SessaoDeCaixa sessao, UsuarioAutenticado quemVe, boolean cego,
+    private static BigDecimal dinheiroNaGaveta(SessaoDeCaixa sessao, boolean escondido,
             Supplier<BigDecimal> esperadoAtual) {
         if (sessao.contada()) {
             return sessao.getValorEsperado();
         }
-        if (cego && !quemVe.ehAdmin()) {
-            return null;
-        }
-        return esperadoAtual.get();
+        return escondido ? null : esperadoAtual.get();
     }
 
     private BigDecimal esperadoNoBanco(SessaoDeCaixa sessao) {
@@ -127,8 +143,11 @@ class RespostasDaSessao {
                 .setScale(CASAS_DO_DINHEIRO, RoundingMode.UNNECESSARY);
     }
 
-    private MovimentoDeCaixaResponse resposta(MovimentoDeCaixa movimento, Map<Long, String> nomes) {
-        return new MovimentoDeCaixaResponse(movimento.getUuid(), movimento.getTipo(), movimento.getValor(),
+    /** {@code semValor}: lancamento de outra pessoa visto pelo OPERADOR no modo cego, com a sessao aberta. */
+    private MovimentoDeCaixaResponse resposta(MovimentoDeCaixa movimento, Map<Long, String> nomes,
+            boolean semValor) {
+        return new MovimentoDeCaixaResponse(movimento.getUuid(), movimento.getTipo(),
+                semValor ? null : movimento.getValor(),
                 movimento.getMotivo(), nomes.get(movimento.getUsuarioId()), noFuso(movimento.getCriadoEm()));
     }
 
