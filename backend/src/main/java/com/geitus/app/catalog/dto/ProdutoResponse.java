@@ -1,12 +1,12 @@
 package com.geitus.app.catalog.dto;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import com.geitus.app.catalog.MargemEMarkup;
 import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ResumoDeEstoque;
 import com.geitus.app.catalog.SituacaoEstoque;
@@ -114,9 +114,6 @@ public record ProdutoResponse(
         LocalDateTime criadoEm,
         LocalDateTime atualizadoEm) {
 
-    private static final BigDecimal CEM = new BigDecimal("100");
-    private static final int CASAS_PERCENTUAL = 2;
-
     /**
      * Monta a resposta do produto. {@code arvore} e a arvore de categorias da
      * empresa do produto (so e consultada quando o produto tem categoria);
@@ -163,8 +160,8 @@ public record ProdutoResponse(
                 produto.isVendidoBalanca(),
                 produto.isAtivo(),
                 podeExcluir,
-                calcularMargem(preco, custo),
-                calcularMarkup(preco, custo),
+                MargemEMarkup.margem(preco, custo),
+                MargemEMarkup.markup(preco, custo),
                 produto.getCriadoEm(),
                 produto.getAtualizadoEm());
     }
@@ -183,31 +180,5 @@ public record ProdutoResponse(
     /** Fator sem zeros a direita e com virgula decimal (pt-BR): 12.0000 → "12", 1.5000 → "1,5". */
     private static String formatarFator(BigDecimal fator) {
         return fator.stripTrailingZeros().toPlainString().replace('.', ',');
-    }
-
-    /**
-     * Margem sobre a venda: (preco - custo) / preco * 100. Exige custo informado
-     * e preco > 0 (evita divisao por zero).
-     */
-    private static BigDecimal calcularMargem(BigDecimal preco, BigDecimal custo) {
-        if (custo == null || preco == null || preco.signum() <= 0) {
-            return null;
-        }
-        return preco.subtract(custo)
-                .multiply(CEM)
-                .divide(preco, CASAS_PERCENTUAL, RoundingMode.HALF_UP);
-    }
-
-    /**
-     * Marcacao sobre o custo: (preco - custo) / custo * 100. Exige custo > 0
-     * (evita divisao por zero).
-     */
-    private static BigDecimal calcularMarkup(BigDecimal preco, BigDecimal custo) {
-        if (preco == null || custo == null || custo.signum() <= 0) {
-            return null;
-        }
-        return preco.subtract(custo)
-                .multiply(CEM)
-                .divide(custo, CASAS_PERCENTUAL, RoundingMode.HALF_UP);
     }
 }

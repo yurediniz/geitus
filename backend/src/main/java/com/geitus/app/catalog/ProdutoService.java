@@ -4,10 +4,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Clock;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -135,12 +133,7 @@ public class ProdutoService {
     /** So na corrida em que o outro produto mudou de codigo antes da releitura (o nome ja nao existe). */
     static final String MENSAGEM_CODIGO_DO_PRODUTO_EM_USO_SEM_NOME = "Este código já está em uso em outro produto.";
 
-    static final String MENSAGEM_CODIGO_REPETIDO = "Código de barras repetido na lista.";
     static final String MENSAGEM_LIMITE_DE_CODIGOS = "Informe no máximo 20 códigos de barras.";
-    static final String MENSAGEM_CODIGO_LONGO = "Código de barras deve ter no máximo 50 caracteres.";
-    static final String MENSAGEM_DIGITO_INVALIDO = "Código de barras %s com dígito verificador inválido. "
-            + "Confira a leitura.";
-    static final String MENSAGEM_CODIGO_EM_OUTRO_PRODUTO = "O código de barras %s já está cadastrado no produto \"%s\".";
     static final String MENSAGEM_EXCLUSAO_BLOQUEADA =
             "Este produto já teve movimentação de estoque e não pode ser excluído. Inative-o.";
     static final String MENSAGEM_CAMPO_DE_SUGESTAO_INVALIDO = "Campo de sugestão inválido.";
@@ -171,7 +164,6 @@ public class ProdutoService {
     static final String CAMPO_ESTOQUE_MAXIMO = "estoqueMaximo";
 
     static final int MAXIMO_CODIGOS_POR_PRODUTO = 20;
-    static final int TAMANHO_MAXIMO_CODIGO = 50;
     static final int LIMITE_DE_SUGESTOES = 10;
     static final int TAMANHO_MAXIMO_TERMO_DE_SUGESTAO = 50;
     /** Casas decimais da quantidade minima do atacado ({@code NUMERIC(12,3)}, V8). */
@@ -195,6 +187,8 @@ public class ProdutoService {
     private final UnidadeMedidaService unidadeService;
     private final CategoriaService categoriaService;
     private final HistoricoPrecoRepository historicoPrecoRepository;
+    private final HistoricoDePrecos historicoDePrecos;
+    private final ValidadorDeCodigosDeBarras validadorDeCodigos;
     private final UsoDoProdutoNoEstoque usoNoEstoque;
     private final RegistroDeEstoqueInicial registroDeEstoqueInicial;
     private final ConsultaDeProdutos consultaDeProdutos;
@@ -205,6 +199,7 @@ public class ProdutoService {
     public ProdutoService(ProdutoRepository produtoRepository, EmpresaRepository empresaRepository,
             UsuarioRepository usuarioRepository, UnidadeMedidaService unidadeService,
             CategoriaService categoriaService, HistoricoPrecoRepository historicoPrecoRepository,
+            HistoricoDePrecos historicoDePrecos, ValidadorDeCodigosDeBarras validadorDeCodigos,
             UsoDoProdutoNoEstoque usoNoEstoque, RegistroDeEstoqueInicial registroDeEstoqueInicial,
             ConsultaDeProdutos consultaDeProdutos, Numerador numerador,
             TamanhoDoCodigoNaEtiqueta tamanhoDoCodigoNaEtiqueta, Clock relogio) {
@@ -214,6 +209,8 @@ public class ProdutoService {
         this.unidadeService = unidadeService;
         this.categoriaService = categoriaService;
         this.historicoPrecoRepository = historicoPrecoRepository;
+        this.historicoDePrecos = historicoDePrecos;
+        this.validadorDeCodigos = validadorDeCodigos;
         this.usoNoEstoque = usoNoEstoque;
         this.registroDeEstoqueInicial = registroDeEstoqueInicial;
         this.consultaDeProdutos = consultaDeProdutos;
@@ -247,7 +244,7 @@ public class ProdutoService {
         Produto produto = new Produto(empresa, numero, dadosDoProduto(request, vinculos, sku));
         produto.substituirCodigos(codigos);
         Produto gravado = gravar(produto);
-        registrarHistorico(gravado, idUsuario, null, null);
+        historicoDePrecos.registrarCustoEPrecoDeVenda(gravado, idUsuario, null, null);
         if (request.estoqueInicial() != null) {
             registroDeEstoqueInicial.registrar(gravado, request.estoqueInicial(), idUsuario);
         }
@@ -284,7 +281,7 @@ public class ProdutoService {
         produto.atualizarDadosBasicos(dadosDoProduto(request, vinculos, sku));
         codigos.ifPresent(produto::substituirCodigos);
         Produto gravado = gravar(produto);
-        registrarHistorico(gravado, idUsuario, custoAnterior, precoAnterior);
+        historicoDePrecos.registrarCustoEPrecoDeVenda(gravado, idUsuario, custoAnterior, precoAnterior);
         return gravado;
     }
 
@@ -538,70 +535,21 @@ public class ProdutoService {
     // ---------- Codigos de barras (spec 4.3) ----------
 
     /**
-     * Valida a lista de codigos, nesta ordem: normaliza (descartando vazios) →
-     * repetidos no envio (400) → mais de 20 (400) → para cada codigo: se o
-     * produto ja o tem com o mesmo texto, mantem o formato gravado (inclusive
-     * {@code OUTRO} de um EAN com digito errado vindo da migracao — Review
-     * Focus 1); senao detecta o formato, rejeita candidato GS1 com digito
-     * invalido (400) e confere a unicidade na empresa (409 com o nome do
-     * produto da MESMA empresa — Review Focus 3). {@code produtoAtual} e
-     * {@code null} no cadastro.
+     * Codigos da unidade de venda (ate {@value #MAXIMO_CODIGOS_POR_PRODUTO}),
+     * pelas regras do {@link ValidadorDeCodigosDeBarras}. Um codigo que o
+     * produto ja tem mantem o formato gravado (Review Focus 1 da Fase B).
+     * {@code produtoAtual} e {@code null} no cadastro.
      */
     private List<CodigoBarrasValidado> validarCodigos(Long empresaId, List<String> informados, Produto produtoAtual) {
-        List<String> codigos = normalizarCodigos(informados);
-        exigirSemRepetidos(codigos);
-        if (codigos.size() > MAXIMO_CODIGOS_POR_PRODUTO) {
-            throw new RegraDeNegocioException(MENSAGEM_LIMITE_DE_CODIGOS, CAMPO_CODIGOS_BARRAS);
-        }
-        List<CodigoBarrasValidado> validados = new ArrayList<>(codigos.size());
-        for (String codigo : codigos) {
-            validados.add(codigoMantidoOuNovoValidado(empresaId, codigo, produtoAtual));
-        }
-        return validados;
+        Map<String, FormatoCodigoBarras> gravados = produtoAtual == null ? Map.of() : formatosGravados(produtoAtual);
+        return validadorDeCodigos.validar(empresaId, informados, MAXIMO_CODIGOS_POR_PRODUTO,
+                MENSAGEM_LIMITE_DE_CODIGOS, CAMPO_CODIGOS_BARRAS, gravados,
+                produtoAtual == null ? null : produtoAtual.getId());
     }
 
-    /** Lista normalizada: {@code null} vira vazia e codigos vazios/so espacos sao descartados. */
-    private static List<String> normalizarCodigos(List<String> informados) {
-        if (informados == null) {
-            return List.of();
-        }
-        return informados.stream()
-                .map(CodigoBarras::normalizar)
-                .filter(Objects::nonNull)
-                .toList();
-    }
-
-    private static void exigirSemRepetidos(List<String> codigos) {
-        Set<String> vistos = new HashSet<>();
-        for (String codigo : codigos) {
-            if (!vistos.add(codigo)) {
-                throw new RegraDeNegocioException(MENSAGEM_CODIGO_REPETIDO, CAMPO_CODIGOS_BARRAS);
-            }
-        }
-    }
-
-    private CodigoBarrasValidado codigoMantidoOuNovoValidado(Long empresaId, String codigo, Produto produtoAtual) {
-        if (produtoAtual != null) {
-            Optional<ProdutoCodigoBarras> gravado = produtoAtual.codigoGravado(codigo);
-            if (gravado.isPresent()) {
-                return new CodigoBarrasValidado(codigo, gravado.get().getFormato());
-            }
-        }
-        return codigoNovoValidado(empresaId, codigo, produtoAtual == null ? null : produtoAtual.getId());
-    }
-
-    private CodigoBarrasValidado codigoNovoValidado(Long empresaId, String codigo, Long produtoAtualId) {
-        if (codigo.length() > TAMANHO_MAXIMO_CODIGO) {
-            throw new RegraDeNegocioException(MENSAGEM_CODIGO_LONGO, CAMPO_CODIGOS_BARRAS);
-        }
-        if (CodigoBarras.ehCandidatoGs1(codigo) && !CodigoBarras.digitoVerificadorValido(codigo)) {
-            throw new RegraDeNegocioException(MENSAGEM_DIGITO_INVALIDO.formatted(codigo), CAMPO_CODIGOS_BARRAS);
-        }
-        produtoRepository.produtoComCodigo(empresaId, codigo, produtoAtualId).ifPresent(nomeDoProduto -> {
-            throw new ProdutoConflitoException(MENSAGEM_CODIGO_EM_OUTRO_PRODUTO.formatted(codigo, nomeDoProduto),
-                    CAMPO_CODIGOS_BARRAS);
-        });
-        return new CodigoBarrasValidado(codigo, CodigoBarras.detectarFormato(codigo));
+    private static Map<String, FormatoCodigoBarras> formatosGravados(Produto produto) {
+        return produto.getCodigosBarras().stream()
+                .collect(Collectors.toMap(ProdutoCodigoBarras::getCodigo, ProdutoCodigoBarras::getFormato));
     }
 
     // ---------- Codigo do produto e balanca (docs/modules/produtos-codigo-e-balanca.md, 2) ----------
@@ -938,34 +886,6 @@ public class ProdutoService {
         if (valor == null) {
             throw new RegraDeNegocioException(mensagem, campo);
         }
-    }
-
-    // ---------- Historico de precos (docs/modules/produtos-precos.md, 4.6) ----------
-
-    /**
-     * Uma linha por campo que mudou, comparando numericamente (10,00 = 10,0)
-     * e tratando nulo. No cadastro os anteriores sao nulos. Chamado depois do
-     * {@code save} (o produto novo ja tem id), na mesma transacao: se o produto
-     * nao for gravado, nada e registrado.
-     */
-    private void registrarHistorico(Produto produto, Long usuarioId, BigDecimal custoAnterior,
-            BigDecimal precoAnterior) {
-        registrarSeMudou(produto, usuarioId, CampoHistoricoPreco.PRECO_VENDA, precoAnterior, produto.getPrecoVenda());
-        registrarSeMudou(produto, usuarioId, CampoHistoricoPreco.CUSTO, custoAnterior, produto.getCusto());
-    }
-
-    private void registrarSeMudou(Produto produto, Long usuarioId, CampoHistoricoPreco campo, BigDecimal anterior,
-            BigDecimal novo) {
-        if (!mesmoValor(anterior, novo)) {
-            historicoPrecoRepository.save(new HistoricoPreco(produto, campo, anterior, novo, usuarioId));
-        }
-    }
-
-    private static boolean mesmoValor(BigDecimal anterior, BigDecimal novo) {
-        if (anterior == null || novo == null) {
-            return anterior == novo;
-        }
-        return anterior.compareTo(novo) == 0;
     }
 
     // ---------- Apoio ----------

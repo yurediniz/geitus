@@ -152,7 +152,9 @@ class ProdutoServiceTest {
     @BeforeEach
     void setUp() {
         produtoService = new ProdutoService(produtoRepository, empresaRepository, usuarioRepository,
-                unidadeService, categoriaService, historicoPrecoRepository, usoNoEstoque, registroDeEstoqueInicial,
+                unidadeService, categoriaService, historicoPrecoRepository,
+                new HistoricoDePrecos(historicoPrecoRepository), new ValidadorDeCodigosDeBarras(produtoRepository),
+                usoNoEstoque, registroDeEstoqueInicial,
                 consultaDeProdutos, numerador, tamanhoDoCodigoNaEtiqueta, RELOGIO);
         empresa = empresaComId(EMPRESA_ID);
         un = unidade(10L, empresa, "UN");
