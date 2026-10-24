@@ -97,6 +97,7 @@ Nenhum dado sensível fica no código. A aplicação lê as variáveis abaixo (t
 | `GEITUS_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origens liberadas no CORS (separadas por vírgula) |
 | `JWT_SECRET` | *(vazio)* | Segredo do JWT (HS256). **Obrigatório**: mínimo 32 bytes / 256 bits, senão a aplicação não sobe |
 | `JWT_EXPIRATION` | `86400000` | Expiração do token JWT em milissegundos |
+| `GEITUS_IMAGEM_SEGREDO` | *(vazio)* | Segredo do HMAC-SHA256 das URLs assinadas das imagens dos produtos. **Obrigatório**: mínimo 32 bytes, diferente do `JWT_SECRET` e diferente do valor de exemplo do `.env.example`, senão a aplicação não sobe |
 
 ### Bootstrap de usuário admin de desenvolvimento (opcional)
 

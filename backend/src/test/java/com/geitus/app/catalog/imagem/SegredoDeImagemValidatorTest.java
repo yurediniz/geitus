@@ -1,7 +1,14 @@
 package com.geitus.app.catalog.imagem;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
@@ -43,6 +50,25 @@ class SegredoDeImagemValidatorTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("JWT_SECRET")
                 .hasMessageNotContaining(SEGREDO_DO_JWT);
+    }
+
+    /** O valor de exemplo do .env.example e publico: copiado para producao, qualquer um assinaria URLs. */
+    @Test
+    void valorDeExemploDoEnvExampleImpedeASubidaSemMostrarOValor() {
+        String exemplo = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+        assertThatThrownBy(() -> new SegredoDeImagemValidator(exemplo, SEGREDO_DO_JWT).afterPropertiesSet())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(".env.example")
+                .hasMessageNotContaining(exemplo);
+    }
+
+    /** O valor recusado e o mesmo do .env.example da raiz: os dois nao podem divergir. */
+    @Test
+    void valorRecusadoEOMesmoDoEnvExample() throws IOException {
+        List<String> linhas = Files.readAllLines(Path.of("..", ".env.example"), StandardCharsets.UTF_8);
+
+        assertThat(linhas).contains("GEITUS_IMAGEM_SEGREDO=" + SegredoDeImagemValidator.SEGREDO_DE_EXEMPLO);
     }
 
     @Test

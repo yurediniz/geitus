@@ -41,6 +41,7 @@ import com.geitus.app.catalog.dto.CodigoBarrasResponse;
 import com.geitus.app.catalog.dto.EmbalagemRequest;
 import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
+import com.geitus.app.catalog.imagem.ImagemDoProduto;
 import com.geitus.app.catalog.imagem.ImagensDeTeste;
 import com.geitus.app.catalog.imagem.ImagensDoProduto;
 import com.geitus.app.catalog.listagem.ConsultaDeProdutos;
@@ -278,6 +279,28 @@ class ListagemDeProdutosIT {
                     assertThat(produto.imagem().largura()).isEqualTo(1200);
                     assertThat(produto.imagem().altura()).isEqualTo(900);
                 });
+    }
+
+    /**
+     * Fase F: listar e ler o detalhe nunca carregam a entidade
+     * {@link ImagemDoProduto} (que traria os bytes); so as projecoes do resumo.
+     */
+    @Test
+    void listagemEDetalheNaoCarregamAEntidadeDaImagem() {
+        Loja loja = novaLoja();
+        UUID produto = produtoService.cadastrarParaUsuario(loja.admin(), comUnidade(loja).nome("Com imagem").build())
+                .id();
+        enviarImagem(loja, produto);
+        Statistics estatisticas = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        estatisticas.clear();
+
+        ProdutoResponse listado = listar(loja, parametros(null, null, 0, 25)).itens().get(0);
+        ProdutoResponse detalhe = produtoService.buscarPorIdParaUsuario(loja.admin(), produto);
+
+        assertThat(listado.imagem()).isNotNull();
+        assertThat(detalhe.imagem()).isNotNull();
+        assertThat(estatisticas.getEntityStatistics(ImagemDoProduto.class.getName()).getLoadCount()).isZero();
+        assertThat(estatisticas.getEntityStatistics(ImagemDoProduto.class.getName()).getFetchCount()).isZero();
     }
 
     /**

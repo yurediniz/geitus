@@ -61,6 +61,58 @@ class CabecalhoDeImagemTest {
                 .hasMessage(DIMENSOES_ILEGIVEIS);
     }
 
+    @Test
+    void segmentoJpegComTamanhoZeroOuUmEIlegivel() {
+        assertThatThrownBy(() -> CabecalhoDeImagem.ler(ImagensDeTeste.jpegComAntesDoSof(10, 10, 0xFF, 0xE1, 0x00,
+                0x00)))
+                .isInstanceOf(ImagemInvalidaException.class)
+                .hasMessage(DIMENSOES_ILEGIVEIS);
+        assertThatThrownBy(() -> CabecalhoDeImagem.ler(ImagensDeTeste.jpegComAntesDoSof(10, 10, 0xFF, 0xE1, 0x00,
+                0x01)))
+                .isInstanceOf(ImagemInvalidaException.class)
+                .hasMessage(DIMENSOES_ILEGIVEIS);
+    }
+
+    @Test
+    void preenchimentoFfAntesDoMarcadorEIgnorado() {
+        assertThat(CabecalhoDeImagem.ler(ImagensDeTeste.jpegComAntesDoSof(320, 240, 0xFF, 0xFF, 0xFF)))
+                .contains(new Leitura(TipoDeImagem.JPEG, 320, 240));
+    }
+
+    /** DHT ({@code C4}) esta na faixa dos SOF mas e uma tabela; DQT ({@code DB}) tambem vem antes do SOF. */
+    @Test
+    void tabelasDhtEDqtAntesDoSofSaoPuladas() {
+        assertThat(CabecalhoDeImagem.ler(ImagensDeTeste.jpegComAntesDoSof(640, 480,
+                0xFF, 0xDB, 0x00, 0x05, 0x00, 0x01, 0x02,
+                0xFF, 0xC4, 0x00, 0x06, 0x00, 0x01, 0x02, 0x03)))
+                .contains(new Leitura(TipoDeImagem.JPEG, 640, 480));
+    }
+
+    @Test
+    void inicioDosDadosAntesDoSofEIlegivel() {
+        assertThatThrownBy(() -> CabecalhoDeImagem.ler(ImagensDeTeste.jpegComAntesDoSof(10, 10, 0xFF, 0xDA, 0x00,
+                0x02)))
+                .isInstanceOf(ImagemInvalidaException.class)
+                .hasMessage(DIMENSOES_ILEGIVEIS);
+    }
+
+    /** RST ({@code D0} a {@code D7}) e TEM ({@code 01}) nao tem o campo de tamanho. */
+    @Test
+    void marcadoresSemTamanhoSaoPulados() {
+        assertThat(CabecalhoDeImagem.ler(ImagensDeTeste.jpegComAntesDoSof(100, 50, 0xFF, 0xD0, 0xFF, 0xD7, 0xFF,
+                0x01)))
+                .contains(new Leitura(TipoDeImagem.JPEG, 100, 50));
+    }
+
+    /** Depois de um segmento (APP0 vazio), o proximo byte precisa ser um marcador {@code FF}. */
+    @Test
+    void byteForaDeMarcadorEntreSegmentosEIlegivel() {
+        assertThatThrownBy(() -> CabecalhoDeImagem.ler(ImagensDeTeste.jpegComAntesDoSof(10, 10, 0xFF, 0xE0, 0x00,
+                0x02, 0x00)))
+                .isInstanceOf(ImagemInvalidaException.class)
+                .hasMessage(DIMENSOES_ILEGIVEIS);
+    }
+
     // ---------- WebP ----------
 
     @Test
@@ -97,6 +149,24 @@ class CabecalhoDeImagemTest {
                 .isInstanceOf(ImagemInvalidaException.class)
                 .hasMessage(DIMENSOES_ILEGIVEIS);
         assertThatThrownBy(() -> CabecalhoDeImagem.ler(Arrays.copyOf(ImagensDeTeste.webpVp8x(10, 10), 14)))
+                .isInstanceOf(ImagemInvalidaException.class)
+                .hasMessage(DIMENSOES_ILEGIVEIS);
+    }
+
+    @Test
+    void webpVp8lComAssinaturaErradaEIlegivel() {
+        byte[] webp = ImagensDeTeste.webpVp8l(100, 100);
+        webp[20] = 0x2E;
+
+        assertThatThrownBy(() -> CabecalhoDeImagem.ler(webp))
+                .isInstanceOf(ImagemInvalidaException.class)
+                .hasMessage(DIMENSOES_ILEGIVEIS);
+    }
+
+    /** A altura do VP8X ocupa os bytes 27 a 29: cortado no 29, falta o ultimo. */
+    @Test
+    void webpVp8xTruncadoNoByte29EIlegivel() {
+        assertThatThrownBy(() -> CabecalhoDeImagem.ler(Arrays.copyOf(ImagensDeTeste.webpVp8x(1000, 1000), 29)))
                 .isInstanceOf(ImagemInvalidaException.class)
                 .hasMessage(DIMENSOES_ILEGIVEIS);
     }

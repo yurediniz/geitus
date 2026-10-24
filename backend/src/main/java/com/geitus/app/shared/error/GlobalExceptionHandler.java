@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +17,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.ConflitoDeUsuarioException;
@@ -50,6 +52,8 @@ import jakarta.validation.ConstraintViolationException;
 public class GlobalExceptionHandler {
 
     static final String MENSAGEM_ENVIO_GRANDE_DEMAIS = "A imagem enviada é grande demais.";
+    static final String MENSAGEM_RECURSO_NAO_ENCONTRADO = "Recurso não encontrado.";
+    static final String MENSAGEM_METODO_NAO_PERMITIDO = "Método não permitido para este recurso.";
 
     /**
      * Erros de validacao de corpo de requisicao anotado com {@code @Valid}.
@@ -125,6 +129,39 @@ public class GlobalExceptionHandler {
                 request.getRequestURI());
 
         return ResponseEntity.badRequest().body(corpo);
+    }
+
+    /**
+     * Caminho sem nenhuma rota (nem recurso estatico) -> 404 com mensagem fixa,
+     * sem ecoar o caminho na mensagem. Antes caia no tratamento generico (500).
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiError> tratarRecursoNaoEncontrado(NoResourceFoundException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.NOT_FOUND.value(),
+                HttpStatus.NOT_FOUND.getReasonPhrase(),
+                MENSAGEM_RECURSO_NAO_ENCONTRADO,
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(corpo);
+    }
+
+    /**
+     * Metodo HTTP que a rota nao tem (por exemplo POST na imagem do produto)
+     * -> 405 com mensagem fixa e o cabecalho {@code Allow} com os metodos
+     * aceitos. Antes caia no tratamento generico (500).
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiError> tratarMetodoNaoPermitido(HttpRequestMethodNotSupportedException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.METHOD_NOT_ALLOWED.value(),
+                HttpStatus.METHOD_NOT_ALLOWED.getReasonPhrase(),
+                MENSAGEM_METODO_NAO_PERMITIDO,
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).headers(ex.getHeaders()).body(corpo);
     }
 
     /**

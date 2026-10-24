@@ -1,7 +1,6 @@
 package com.geitus.app.catalog.imagem;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -12,6 +11,8 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -38,9 +39,16 @@ import com.geitus.app.iam.UsuarioRepository;
  *
  * <p>Leitura publica: acha a imagem pelo UUID do produto e pela versao; a
  * assinatura da URL ja foi conferida pelo controller.
+ *
+ * <p><b>Rastro provisorio</b> ate existir a auditoria (como a exclusao do
+ * produto): log {@code INFO} do envio e da remocao so com identificadores
+ * (usuario, empresa, UUID publico do produto e versao), nunca nome do produto
+ * nem os bytes. O log vem depois do {@code flush}, quando o banco ja aceitou.
  */
 @Service
 public class ImagensDoProduto {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ImagensDoProduto.class);
 
     private final ImagemDoProdutoRepository imagemRepository;
     private final ProdutoRepository produtoRepository;
@@ -71,17 +79,25 @@ public class ImagensDoProduto {
                 })
                 .orElseGet(() -> new ImagemDoProduto(empresaId, produto.getId(), conferida, idUsuario, agora));
         imagemRepository.saveAndFlush(imagem);
+        LOG.info("Imagem do produto enviada: usuario={} empresa={} produto={} versao={}", idUsuario, empresaId,
+                produtoId, imagem.getVersao());
         return ImagemResponse.de(imagem.resumo(produto.getUuid()), assinatura);
     }
 
-    /** Remove a imagem do produto; sem imagem, 404. */
+    /**
+     * Remove a imagem do produto; sem imagem, 404. O resumo (sem bytes) e lido
+     * antes so para o rastro levar a versao removida; a trava do produto
+     * impede uma troca no meio.
+     */
     @Transactional
     public void remover(Long idUsuario, UUID produtoId) {
         Long empresaId = resolverEmpresaId(idUsuario);
         Produto produto = travarProduto(empresaId, produtoId);
-        if (imagemRepository.remover(empresaId, produto.getId()) == 0) {
-            throw new ImagemNaoEncontradaException();
-        }
+        ResumoDaImagem removida = imagemRepository.resumo(empresaId, produto.getId())
+                .orElseThrow(ImagemNaoEncontradaException::new);
+        imagemRepository.remover(empresaId, produto.getId());
+        LOG.info("Imagem do produto removida: usuario={} empresa={} produto={} versao={}", idUsuario, empresaId,
+                produtoId, removida.versao());
     }
 
     /** Os bytes de uma versao, se ela ainda for a atual do produto (versao trocada ou removida: vazio). */
@@ -113,7 +129,11 @@ public class ImagensDoProduto {
                 .orElseThrow(ProdutoNaoEncontradoException::new);
     }
 
-    /** Parte ausente ou vazia vira {@code null}: a conferencia responde "Envie a imagem grande e a miniatura.". */
+    /**
+     * Parte ausente ou vazia vira {@code null}: a conferencia responde "Envie a
+     * imagem grande e a miniatura.". A parte que nao pode ser lida (envio
+     * interrompido) tem a mesma resposta (400), nunca 500.
+     */
     private static byte[] bytesDe(MultipartFile parte) {
         if (parte == null || parte.isEmpty()) {
             return null;
@@ -121,7 +141,7 @@ public class ImagensDoProduto {
         try {
             return parte.getBytes();
         } catch (IOException falhaNaLeitura) {
-            throw new UncheckedIOException("Nao foi possivel ler a parte enviada.", falhaNaLeitura);
+            throw new ImagemInvalidaException(ConferenciaDaImagem.MENSAGEM_FALTA_PARTE);
         }
     }
 

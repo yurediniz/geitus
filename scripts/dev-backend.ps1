@@ -101,6 +101,9 @@ try {
     if (-not $env:JWT_SECRET) {
         Write-Warning 'JWT_SECRET nao definido: a aplicacao nao sobe sem um segredo de no minimo 32 bytes.'
     }
+    if (-not $env:GEITUS_IMAGEM_SEGREDO) {
+        Write-Warning 'GEITUS_IMAGEM_SEGREDO nao definido: a aplicacao nao sobe sem um segredo de no minimo 32 bytes, diferente do JWT_SECRET.'
+    }
 
     Write-Host ("Subindo o backend (Java {0}, porta {1})..." -f $versaoJava, $(if ($env:SERVER_PORT) { $env:SERVER_PORT } else { '8080' }))
     Push-Location $backendDir

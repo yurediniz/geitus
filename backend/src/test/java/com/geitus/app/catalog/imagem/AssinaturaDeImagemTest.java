@@ -2,10 +2,15 @@ package com.geitus.app.catalog.imagem;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.HexFormat;
 import java.util.UUID;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.util.MultiValueMap;
@@ -35,6 +40,22 @@ class AssinaturaDeImagemTest {
         assertThat(partes.getPath()).isEqualTo("/api/imagens/produtos/" + PRODUTO + "/" + VERSAO + "/miniatura");
         assertThat(partes.getQueryParams().getFirst("expira")).isEqualTo(String.valueOf(FIM_DO_DIA_SEGUINTE_A_24_10));
         assertThat(partes.getQueryParams().getFirst("assinatura")).matches("[0-9a-f]{64}");
+    }
+
+    /**
+     * A mensagem assinada tem o prefixo de dominio e versao do formato
+     * ({@code imagem-produto|v1|}): a mesma chave nunca produz uma assinatura
+     * que sirva para outro uso, e o formato pode mudar sem ambiguidade.
+     */
+    @Test
+    void assinaturaEOHmacDaMensagemComOPrefixo() throws Exception {
+        String url = assinaturaEm("2026-10-24T15:30:00Z").url(PRODUTO, VERSAO, TamanhoDaImagem.GRANDE);
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(SEGREDO.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        String mensagem = "imagem-produto|v1|" + PRODUTO + "|" + VERSAO + "|grande|" + FIM_DO_DIA_SEGUINTE_A_24_10;
+
+        assertThat(parametros(url).getFirst("assinatura"))
+                .isEqualTo(HexFormat.of().formatHex(mac.doFinal(mensagem.getBytes(StandardCharsets.UTF_8))));
     }
 
     /** A URL e a mesma durante o dia UTC inteiro, para o cache do navegador funcionar. */

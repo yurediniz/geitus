@@ -22,7 +22,7 @@ import org.springframework.stereotype.Component;
  *
  * <ul>
  *   <li><b>Assinatura:</b> HMAC-SHA256, em hexadecimal, de
- *       {@code produtoUuid|versao|tamanho|expira}, com o segredo proprio
+ *       {@code imagem-produto|v1|produtoUuid|versao|tamanho|expira}, com o segredo proprio
  *       {@code geitus.imagens.segredo} (validado na subida pelo
  *       {@link SegredoDeImagemValidator}). Trocar qualquer parte da URL a
  *       invalida; a comparacao e em tempo constante.</li>
@@ -40,6 +40,12 @@ public class AssinaturaDeImagem {
     static final String CAMINHO = "/api/imagens/produtos/";
     private static final String ALGORITMO = "HmacSHA256";
     private static final String SEPARADOR = "|";
+    /**
+     * Dominio e versao do formato no inicio da mensagem: a chave so assina
+     * URLs de imagem de produto, e um formato futuro ({@code v2}) nunca e
+     * confundido com este.
+     */
+    private static final String PREFIXO_DA_MENSAGEM = "imagem-produto" + SEPARADOR + "v1" + SEPARADOR;
     private static final int DIAS_ATE_A_VALIDADE = 2;
     private static final HexFormat HEXADECIMAL = HexFormat.of();
 
@@ -82,7 +88,7 @@ public class AssinaturaDeImagem {
     }
 
     private String assinar(UUID produtoUuid, UUID versao, TamanhoDaImagem tamanho, long expira) {
-        String mensagem = produtoUuid + SEPARADOR + versao + SEPARADOR + tamanho.noCaminho() + SEPARADOR + expira;
+        String mensagem = PREFIXO_DA_MENSAGEM + produtoUuid + SEPARADOR + versao + SEPARADOR + tamanho.noCaminho() + SEPARADOR + expira;
         try {
             Mac mac = Mac.getInstance(ALGORITMO);
             mac.init(new SecretKeySpec(segredo.getBytes(StandardCharsets.UTF_8), ALGORITMO));

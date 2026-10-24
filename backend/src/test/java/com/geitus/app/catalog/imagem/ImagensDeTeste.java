@@ -29,6 +29,21 @@ public final class ImagensDeTeste {
         return saida.toByteArray();
     }
 
+    /**
+     * JPEG com os bytes informados entre o inicio (SOI) e um SOF0 de
+     * {@code largura} x {@code altura}: marcadores, segmentos e preenchimento
+     * montados no teste.
+     */
+    public static byte[] jpegComAntesDoSof(int largura, int altura, int... antesDoSof) {
+        ByteArrayOutputStream saida = new ByteArrayOutputStream();
+        escrever(saida, 0xFF, 0xD8);
+        escrever(saida, antesDoSof);
+        escrever(saida, 0xFF, SOF0, 0x00, 0x11, 0x08, altura >> 8, altura & 0xFF, largura >> 8, largura & 0xFF,
+                0x03, 0x01, 0x22, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01);
+        escrever(saida, 0xFF, 0xD9);
+        return saida.toByteArray();
+    }
+
     /** JPEG so com APP0 e o fim: nenhum SOF. */
     public static byte[] jpegSemSof() {
         byte[] completo = jpeg(SOF0, 10, 10);

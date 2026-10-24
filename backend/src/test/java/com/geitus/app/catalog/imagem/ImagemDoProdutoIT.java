@@ -161,7 +161,9 @@ class ImagemDoProdutoIT {
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL,
                         matchesPattern("private, max-age=\\d+, immutable")))
                 .andExpect(header().string(HttpHeaders.ETAG, containsString("-grande\"")))
-                .andExpect(header().doesNotExist(HttpHeaders.PRAGMA));
+                .andExpect(header().doesNotExist(HttpHeaders.PRAGMA))
+                .andExpect(header().string("Content-Security-Policy", "default-src 'none'; sandbox"))
+                .andExpect(header().string("Cross-Origin-Resource-Policy", "same-site"));
         mockMvc.perform(get(imagem.get("miniaturaUrl").asText()))
                 .andExpect(status().isOk())
                 .andExpect(content().bytes(MINIATURA));
@@ -308,12 +310,29 @@ class ImagemDoProdutoIT {
         MultiValueMap<String, Object> partes = new LinkedMultiValueMap<>();
         partes.add("grande", recurso("grande.webp", ImagensDeTeste.comTamanho(GRANDE, 600 * 1024)));
         partes.add("miniatura", recurso("miniatura.webp", MINIATURA));
-        HttpHeaders cabecalhos = new HttpHeaders();
-        cabecalhos.setContentType(MediaType.MULTIPART_FORM_DATA);
-        cabecalhos.set(HttpHeaders.AUTHORIZATION, token(loja.admin()));
 
-        ResponseEntity<String> resposta = restTemplate.exchange("/api/produtos/{id}/imagem", HttpMethod.PUT,
-                new HttpEntity<>(partes, cabecalhos), String.class, produto);
+        ResponseEntity<String> resposta = enviarPeloServidor(loja, produto, partes);
+
+        assertThat(resposta.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
+        assertThat(resposta.getBody()).contains("A imagem enviada é grande demais.");
+        assertThat(imagensGravadas(produto)).isZero();
+    }
+
+    /**
+     * Spec 4.1: cada parte cabe no limite por parte (512 KB), mas a soma passa
+     * de 1 MB por requisicao: 413. Partes de 524 287 bytes (1 abaixo do limite
+     * por parte) mais os cabecalhos do multipart passam de 1 048 576 bytes.
+     */
+    @Test
+    void requisicaoAcimaDoLimiteTotalResponde413() {
+        Loja loja = novaLoja();
+        UUID produto = novoProduto(loja);
+        int quaseOLimiteDaParte = 512 * 1024 - 1;
+        MultiValueMap<String, Object> partes = new LinkedMultiValueMap<>();
+        partes.add("grande", recurso("grande.webp", ImagensDeTeste.comTamanho(GRANDE, quaseOLimiteDaParte)));
+        partes.add("miniatura", recurso("miniatura.webp", ImagensDeTeste.comTamanho(MINIATURA, quaseOLimiteDaParte)));
+
+        ResponseEntity<String> resposta = enviarPeloServidor(loja, produto, partes);
 
         assertThat(resposta.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
         assertThat(resposta.getBody()).contains("A imagem enviada é grande demais.");
@@ -407,10 +426,12 @@ class ImagemDoProdutoIT {
         UUID produto = novoProduto(loja);
         JsonNode imagem = enviarComSucesso(loja, produto, GRANDE, MINIATURA);
 
+        Long idInterno = jdbcTemplate.queryForObject("SELECT id FROM produtos WHERE uuid = ?", Long.class, produto);
+        assertThat(imagensDoIdInterno(idInterno)).isEqualTo(1);
+
         produtoService.excluirParaUsuario(loja.admin(), produto);
 
-        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM produto_imagens i WHERE NOT EXISTS"
-                + " (SELECT 1 FROM produtos p WHERE p.id = i.produto_id)", Long.class)).isZero();
+        assertThat(imagensDoIdInterno(idInterno)).isZero();
         mockMvc.perform(get(imagem.get("grandeUrl").asText())).andExpect(status().isNotFound());
     }
 
@@ -502,6 +523,12 @@ class ImagemDoProdutoIT {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get(url.getPath()).param("expira", "1").param("assinatura", hex))
                 .andExpect(status().isForbidden());
+        mockMvc.perform(get(url.getPath()).param("expira", "amanha").param("assinatura", hex))
+                .andExpect(status().isForbidden())
+                .andExpect(content().string(emptyString()));
+        mockMvc.perform(get(url.getPath()).param("expira", "99999999999999999999").param("assinatura", hex))
+                .andExpect(status().isForbidden())
+                .andExpect(content().string(emptyString()));
     }
 
     /** Sem enumeracao: versao inexistente, mesmo com assinatura valida, da 404 sem corpo. */
@@ -523,6 +550,28 @@ class ImagemDoProdutoIT {
         String url = enviarComSucesso(loja, produto, GRANDE, MINIATURA).get("grandeUrl").asText();
 
         mockMvc.perform(get(url.replace("/grande?", "/media?"))).andExpect(status().isNotFound());
+    }
+
+    /** Caminho que nao existe sob a rota publica: 404 com ApiError e mensagem fixa, nunca 500. */
+    @Test
+    void caminhoInexistenteNaRotaPublicaDa404() throws Exception {
+        mockMvc.perform(get("/api/imagens/produtos/x"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.mensagem").value("Recurso não encontrado."));
+    }
+
+    /** Metodo que a rota nao tem: 405 com ApiError e mensagem fixa, nunca 500. */
+    @Test
+    void metodoNaoSuportadoNoEnvioDa405() throws Exception {
+        Loja loja = novaLoja();
+        UUID produto = novoProduto(loja);
+
+        mockMvc.perform(post("/api/produtos/{id}/imagem", produto)
+                        .header(HttpHeaders.AUTHORIZATION, token(loja.admin())))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.status").value(405))
+                .andExpect(jsonPath("$.mensagem").value("Método não permitido para este recurso."));
     }
 
     /** A rota publica so aceita GET: POST, PUT e DELETE nunca dao 200, com ou sem JWT. */
@@ -565,6 +614,15 @@ class ImagemDoProdutoIT {
         return new MockMultipartFile(nome, nome + ".webp", "image/webp", bytes);
     }
 
+    /** PUT pelo Tomcat de verdade (porta aleatoria), onde valem os limites do multipart. */
+    private ResponseEntity<String> enviarPeloServidor(Loja loja, UUID produto, MultiValueMap<String, Object> partes) {
+        HttpHeaders cabecalhos = new HttpHeaders();
+        cabecalhos.setContentType(MediaType.MULTIPART_FORM_DATA);
+        cabecalhos.set(HttpHeaders.AUTHORIZATION, token(loja.admin()));
+        return restTemplate.exchange("/api/produtos/{id}/imagem", HttpMethod.PUT, new HttpEntity<>(partes, cabecalhos),
+                String.class, produto);
+    }
+
     private static ByteArrayResource recurso(String nomeDoArquivo, byte[] bytes) {
         return new ByteArrayResource(bytes) {
             @Override
@@ -581,6 +639,11 @@ class ImagemDoProdutoIT {
     private static String versao(String url) {
         List<String> segmentos = partes(url).getPathSegments();
         return segmentos.get(segmentos.size() - 2);
+    }
+
+    private long imagensDoIdInterno(Long produtoId) {
+        return jdbcTemplate.queryForObject("SELECT count(*) FROM produto_imagens WHERE produto_id = ?", Long.class,
+                produtoId);
     }
 
     private long imagensGravadas(UUID produto) {

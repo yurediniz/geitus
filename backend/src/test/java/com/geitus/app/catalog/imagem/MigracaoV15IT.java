@@ -11,10 +11,15 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.postgresql.util.PSQLException;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -129,6 +134,38 @@ class MigracaoV15IT {
                 .extracting(erro -> ((SQLException) erro).getSQLState()).isEqualTo(VIOLACAO_DE_CHECK);
     }
 
+    /**
+     * Cada uma das 6 CHECKs de bytes e dimensoes, nos dois lados do intervalo
+     * (0 e o maximo + 1), recusada pela propria constraint (pelo nome).
+     */
+    @ParameterizedTest(name = "{0} = {1} -> {2}")
+    @MethodSource("limitesDasChecks")
+    void cadaLimiteEBarradoPelaSuaCheck(String coluna, int valor, String constraint) {
+        Linha linha = new Linha(empresa, produto, usuario).com(coluna, valor);
+
+        assertThatThrownBy(() -> inserirImagem(linha))
+                .isInstanceOfSatisfying(PSQLException.class, erro -> {
+                    assertThat(erro.getSQLState()).isEqualTo(VIOLACAO_DE_CHECK);
+                    assertThat(erro.getServerErrorMessage().getConstraint()).isEqualTo(constraint);
+                });
+    }
+
+    static Stream<Arguments> limitesDasChecks() {
+        return Stream.of(
+                Arguments.of("grande", 0, "ck_produto_imagem_grande_bytes"),
+                Arguments.of("grande", GRANDE_MAXIMA_EM_BYTES + 1, "ck_produto_imagem_grande_bytes"),
+                Arguments.of("grande_largura", 0, "ck_produto_imagem_grande_largura"),
+                Arguments.of("grande_largura", 1201, "ck_produto_imagem_grande_largura"),
+                Arguments.of("grande_altura", 0, "ck_produto_imagem_grande_altura"),
+                Arguments.of("grande_altura", 1201, "ck_produto_imagem_grande_altura"),
+                Arguments.of("miniatura", 0, "ck_produto_imagem_miniatura_bytes"),
+                Arguments.of("miniatura", MINIATURA_MAXIMA_EM_BYTES + 1, "ck_produto_imagem_miniatura_bytes"),
+                Arguments.of("miniatura_largura", 0, "ck_produto_imagem_miniatura_largura"),
+                Arguments.of("miniatura_largura", 201, "ck_produto_imagem_miniatura_largura"),
+                Arguments.of("miniatura_altura", 0, "ck_produto_imagem_miniatura_altura"),
+                Arguments.of("miniatura_altura", 201, "ck_produto_imagem_miniatura_altura"));
+    }
+
     @Test
     void versaoRepetidaEmOutroProdutoEBarrada() throws SQLException {
         UUID versao = UUID.randomUUID();
@@ -209,6 +246,20 @@ class MigracaoV15IT {
 
         Linha dimensoes(int grandeLargura, int grandeAltura, int miniaturaLargura, int miniaturaAltura) {
             this.dimensoes = new int[] {grandeLargura, grandeAltura, miniaturaLargura, miniaturaAltura};
+            return this;
+        }
+
+        /** Muda so uma coluna: os bytes pelo tamanho ({@code grande}, {@code miniatura}) ou uma dimensao. */
+        Linha com(String coluna, int valor) {
+            switch (coluna) {
+                case "grande" -> bytesDaGrande = valor;
+                case "miniatura" -> bytesDaMiniatura = valor;
+                case "grande_largura" -> dimensoes[0] = valor;
+                case "grande_altura" -> dimensoes[1] = valor;
+                case "miniatura_largura" -> dimensoes[2] = valor;
+                case "miniatura_altura" -> dimensoes[3] = valor;
+                default -> throw new IllegalArgumentException("Coluna sem CHECK de limite: " + coluna);
+            }
             return this;
         }
     }
