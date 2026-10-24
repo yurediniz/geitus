@@ -688,7 +688,10 @@ function numeroOuNulo(valor: string): number | null {
  * O estoque inicial so existe no cadastro (`novo`) e com o controle ligado; o
  * PATCH nem leva a chave.
  */
-export function montarRequest(valores: ProdutoFormValues, { novo = false }: { novo?: boolean } = {}): ProdutoRequest {
+export function montarRequest(
+  valores: ProdutoFormValues,
+  { novo = false, incluirFornecedores = true }: { novo?: boolean; incluirFornecedores?: boolean } = {},
+): ProdutoRequest {
   const estoqueInicial = novo
     ? { estoqueInicial: valores.controlaEstoque ? interpretarQuantidade(valores.estoqueInicial) : null }
     : {}
@@ -703,8 +706,13 @@ export function montarRequest(valores: ProdutoFormValues, { novo = false }: { no
     unidadeId: valores.unidadeId,
     categoriaId: valores.categoriaId,
     marcaId: valores.marcaId,
-    fornecedorIds: valores.fornecedores.map((fornecedor) => fornecedor.id),
-    fornecedorUltimaCompraId: valores.fornecedorUltimaCompraId,
+    // Sem `incluirFornecedores` (edicao sem mexer neles), as chaves nem vao: o backend mantem os gravados.
+    ...(incluirFornecedores
+      ? {
+          fornecedorIds: valores.fornecedores.map((fornecedor) => fornecedor.id),
+          fornecedorUltimaCompraId: valores.fornecedorUltimaCompraId,
+        }
+      : {}),
     descricao: textoOuNulo(valores.descricao),
     precoVenda: Number(valores.precoVenda),
     custo: numeroOuNulo(valores.custo),

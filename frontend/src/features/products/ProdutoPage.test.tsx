@@ -2038,8 +2038,11 @@ describe('ProdutoPage', () => {
 
       expect(listaDeFornecedores()).toHaveTextContent('Fornecedor Antigo (inativo)')
       fireEvent.click(botaoSalvar())
+      // Sem mexer nos fornecedores, a lista nem vai: o backend mantem o inativo ligado.
+      await waitFor(() => expect(atualizarProdutoMock).toHaveBeenCalledTimes(1))
+      expect(atualizarProdutoMock.mock.calls[0][1]).not.toHaveProperty('fornecedorIds')
       await waitFor(() =>
-        expect(atualizarProdutoMock).toHaveBeenCalledWith(ID_ARROZ, expect.objectContaining({ fornecedorIds: ['velho'] })),
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(ID_ARROZ, expect.objectContaining({ nome: 'Arroz 5kg' })),
       )
     })
 
@@ -2091,12 +2094,146 @@ describe('ProdutoPage', () => {
       await waitFor(() => expect(campoUltimaCompra()).toHaveValue('norte'))
       expect(listaDeFornecedores()).toHaveTextContent('Atacadão Norte')
       fireEvent.click(botaoSalvar())
-      await waitFor(() =>
-        expect(atualizarProdutoMock).toHaveBeenCalledWith(
-          ID_ARROZ,
-          expect.objectContaining({ fornecedorIds: ['norte', 'dist-sul'], fornecedorUltimaCompraId: 'norte' }),
-        ),
+      // A tela ficou igual ao banco: salvar nao manda a lista (o backend mantem a da compra).
+      await waitFor(() => expect(atualizarProdutoMock).toHaveBeenCalledTimes(1))
+      expect(atualizarProdutoMock.mock.calls[0][1]).not.toHaveProperty('fornecedorIds')
+      expect(atualizarProdutoMock.mock.calls[0][1]).not.toHaveProperty('fornecedorUltimaCompraId')
+    })
+
+    /** Abre o modal e registra a compra de 5 UN a R$ 18,00 do fornecedor de nome `nome`. */
+    async function comprarPeloModal(nome: string, depois: Produto) {
+      ajustarEstoqueMock.mockResolvedValue({
+        id: 'mov-compra',
+        tipo: 'ENTRADA',
+        motivo: 'COMPRA',
+        origem: 'AJUSTE_MANUAL',
+        quantidade: 5,
+        saldoAnterior: 12,
+        saldoNovo: 17,
+        observacao: null,
+        usuarioNome: 'Ana Souza',
+        criadoEm: '2026-10-24T10:15:00',
+        embalagem: null,
+        custoInformado: 18,
+        custoUnitario: 18,
+        fornecedor: { id: 'x', nome },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Ajustar estoque' }))
+      const modal = screen.getByRole('dialog', { name: 'Ajustar estoque' })
+      const campo = within(modal).getByRole('button', { name: /^Fornecedor \(opcional\)/ })
+      if (!campo.textContent?.includes(nome)) {
+        fireEvent.click(campo)
+        fireEvent.click(await screen.findByRole('option', { name: new RegExp(nome) }))
+      }
+      fireEvent.change(within(modal).getByRole('textbox', { name: /^quantidade/i }), { target: { value: '5' } })
+      fireEvent.change(within(modal).getByRole('textbox', { name: /^custo por UN/i }), { target: { value: '18,00' } })
+      buscarProdutoMock.mockResolvedValue(depois)
+      fireEvent.click(modal.querySelector('button[type="submit"]') as HTMLElement)
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Ajustar estoque' })).not.toBeInTheDocument())
+    }
+
+    function nomesNaLista(): string[] {
+      return within(listaDeFornecedores()).getAllByRole('listitem').map((item) => item.textContent ?? '')
+    }
+
+    it('NORTE adicionado na tela e depois comprado pelo modal aparece uma vez só e vira o último', async () => {
+      const depois: Produto = {
+        ...produtoAtivo,
+        estoqueAtual: 17,
+        fornecedores: [
+          { id: 'norte', numero: 2, nome: 'Atacadão Norte', ativo: true },
+          { id: 'dist-sul', numero: 1, nome: 'Distribuidora Sul', ativo: true },
+        ],
+        fornecedorUltimaCompra: { id: 'norte', numero: 2, nome: 'Atacadão Norte' },
+      }
+      renderEdicao()
+      await esperarFormulario()
+      await adicionarFornecedor('Atacadão Norte')
+
+      await comprarPeloModal('Atacadão Norte', depois)
+
+      await waitFor(() => expect(campoUltimaCompra()).toHaveValue('norte'))
+      expect(nomesNaLista().filter((nome) => nome === 'Atacadão Norte')).toHaveLength(1)
+      expect(nomesNaLista()).toHaveLength(2)
+    })
+
+    it('a compra de um fornecedor tirado da tela o põe de volta como o último, mesmo sem o banco mudar', async () => {
+      atualizarProdutoMock.mockResolvedValue(produtoAtivo)
+      renderEdicao()
+      await esperarFormulario()
+      fireEvent.click(within(listaDeFornecedores()).getByRole('button', { name: 'Remover Distribuidora Sul' }))
+      expect(campoUltimaCompra()).toHaveValue('')
+
+      // O banco ja tinha a Sul na lista e como a ultima: a recarga nao muda os fornecedores.
+      await comprarPeloModal('Distribuidora Sul', { ...produtoAtivo, estoqueAtual: 17 })
+
+      await waitFor(() => expect(campoUltimaCompra()).toHaveValue('dist-sul'))
+      expect(nomesNaLista()).toEqual(['Distribuidora Sul'])
+      // Igual ao gravado: salvar nao manda a lista.
+      fireEvent.click(botaoSalvar())
+      await waitFor(() => expect(atualizarProdutoMock).toHaveBeenCalledTimes(1))
+      expect(atualizarProdutoMock.mock.calls[0][1]).not.toHaveProperty('fornecedorIds')
+    })
+
+    it('20 na tela mais 1 ligado pela compra: salvar avisa o limite e não envia', async () => {
+      const dezenove = Array.from({ length: 19 }, (_, indice) => ({
+        id: `f${indice + 1}`,
+        numero: indice + 10,
+        nome: `Fornecedor ${indice + 1}`,
+        ativo: true,
+      }))
+      const produto: Produto = { ...produtoAtivo, fornecedores: dezenove, fornecedorUltimaCompra: null }
+      renderEdicao(produto)
+      await esperarFormulario()
+      await adicionarFornecedor('Distribuidora Sul')
+      expect(nomesNaLista()).toHaveLength(20)
+
+      await comprarPeloModal('Atacadão Norte', {
+        ...produto,
+        estoqueAtual: 17,
+        fornecedores: [...dezenove, { id: 'norte', numero: 2, nome: 'Atacadão Norte', ativo: true }],
+        fornecedorUltimaCompra: { id: 'norte', numero: 2, nome: 'Atacadão Norte' },
+      })
+      await waitFor(() => expect(nomesNaLista()).toHaveLength(21))
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('Informe no máximo 20 fornecedores.')).toBeInTheDocument()
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('com 20 fornecedores, "Adicionar outro fornecedor" fica desabilitado e explica o limite', async () => {
+      const vinte = Array.from({ length: 20 }, (_, indice) => ({
+        id: `f${indice + 1}`,
+        numero: indice + 10,
+        nome: `Fornecedor ${indice + 1}`,
+        ativo: true,
+      }))
+      renderEdicao({ ...produtoAtivo, fornecedores: vinte, fornecedorUltimaCompra: null })
+      await esperarFormulario()
+
+      const botao = botaoAdicionarFornecedor()
+      expect(botao).toHaveTextContent('Adicionar outro fornecedor')
+      expect(botao).toBeDisabled()
+      expect(screen.getByText('Máximo de 20 fornecedores.')).toBeInTheDocument()
+      expect(botao).toHaveAccessibleDescription(
+        'Quem vende este produto para você. Pode ter mais de um. Máximo de 20 fornecedores.',
       )
+    })
+
+    it('salvar sem mexer nos fornecedores não envia fornecedorIds nem o da última compra', async () => {
+      atualizarProdutoMock.mockResolvedValue(produtoAtivo)
+      renderEdicao()
+      await esperarFormulario()
+
+      fireEvent.change(campoNome(), { target: { value: 'Arroz 5kg tipo 1' } })
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(atualizarProdutoMock).toHaveBeenCalledTimes(1))
+      const request = atualizarProdutoMock.mock.calls[0][1]
+      expect(request).toMatchObject({ nome: 'Arroz 5kg tipo 1' })
+      expect(request).not.toHaveProperty('fornecedorIds')
+      expect(request).not.toHaveProperty('fornecedorUltimaCompraId')
     })
 
     it('com os fornecedores alterados na tela, a compra pelo modal mescla: o novo entra e a escolha do usuário fica', async () => {

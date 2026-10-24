@@ -18,6 +18,7 @@ import {
   CAMPOS_NA_ORDEM,
   campoDoErroDoServidor,
   fornecedorSchema,
+  indicesDosRepresentantesEnviados,
   montarRequest,
   valoresDoFornecedor,
   valoresIniciais,
@@ -100,14 +101,17 @@ function mensagemErroExcluir(erro: unknown): string {
 }
 
 /** Erros do backend por campo: o caminho no formulario e a mensagem; os sem campo voltam em `restantes`. */
-function errosDoServidor(erro: unknown): { porCampo: [string, string][]; restantes: string[] } {
+function errosDoServidor(
+  erro: unknown,
+  indicesEnviados: readonly number[],
+): { porCampo: [string, string][]; restantes: string[] } {
   if (!(erro instanceof HttpError) || !erro.campos) {
     return { porCampo: [], restantes: [] }
   }
   const porCampo: [string, string][] = []
   const restantes: string[] = []
   for (const [chave, mensagem] of Object.entries(erro.campos)) {
-    const campo = campoDoErroDoServidor(chave)
+    const campo = campoDoErroDoServidor(chave, indicesEnviados)
     if (campo) {
       porCampo.push([campo, mensagem])
     } else {
@@ -363,9 +367,9 @@ function FormularioFornecedor({ fornecedor, voltarPara, somenteLeitura }: Formul
       setErroGeral(null)
       setMensagemSucesso(MENSAGEM_SALVO)
     },
-    onError: (erro) => {
+    onError: (erro, valores) => {
       setMensagemSucesso(null)
-      const { porCampo, restantes } = errosDoServidor(erro)
+      const { porCampo, restantes } = errosDoServidor(erro, indicesDosRepresentantesEnviados(valores))
       for (const [campo, mensagem] of porCampo) {
         setError(campo as FieldPath<FornecedorFormValues>, { type: 'server', message: mensagem })
       }
@@ -561,6 +565,7 @@ function FormularioFornecedor({ fornecedor, voltarPara, somenteLeitura }: Formul
           {fornecedorAtual ? (
             <ProdutosDoFornecedor
               fornecedorId={fornecedorAtual.id}
+              fornecedorAtivo={fornecedorAtual.ativo}
               somenteLeitura={somenteLeitura}
               aoInformar={(feedback) => {
                 if ('sucesso' in feedback) {

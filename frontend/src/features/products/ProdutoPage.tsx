@@ -524,7 +524,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   )
 
   // Uma entrada por compra com fornecedor (modal de estoque) muda os fornecedores gravados com a pagina aberta.
-  useFornecedoresGravados(produto, form)
+  const { registrarCompra } = useFornecedoresGravados(produto, form)
 
   useEffect(() => {
     if (saida) {
@@ -687,7 +687,11 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
 
   const salvarMutation = useMutation<Produto, unknown, { valores: ProdutoFormValues; acao: AcaoAposSalvar }>({
     mutationFn: ({ valores }) => {
-      const request = montarRequest(valores, { novo: !produto })
+      // Na edicao, os fornecedores so vao se mudaram na tela: ausentes, o backend mantem os gravados
+      // (uma compra registrada em outra aba nao e desfeita por um salvamento que nao mexeu neles).
+      const fornecedoresAlterados =
+        getFieldState('fornecedores').isDirty || getFieldState('fornecedorUltimaCompraId').isDirty
+      const request = montarRequest(valores, { novo: !produto, incluirFornecedores: !produto || fornecedoresAlterados })
       return produto ? atualizarProduto(produto.id, request) : cadastrarProduto(request)
     },
     onSuccess: (salvo, { valores, acao }) => {
@@ -1091,9 +1095,12 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
               desabilitado={desabilitado}
               somenteLeitura={somenteLeitura}
               aoAlterarCampo={aoAlterarCampo}
-              aoAjustarEstoque={(mensagem) => {
+              aoAjustarEstoque={(mensagem, fornecedorDaCompra) => {
                 setErroGeral(null)
                 setMensagemSucesso(mensagem)
+                if (fornecedorDaCompra) {
+                  registrarCompra(fornecedorDaCompra)
+                }
               }}
             />
           </SecaoDaPagina>

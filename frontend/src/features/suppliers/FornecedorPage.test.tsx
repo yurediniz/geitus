@@ -5,7 +5,7 @@ import { createMemoryRouter, RouterProvider, useLocation } from 'react-router-do
 
 import { FornecedorPage } from '@/features/suppliers/FornecedorPage'
 import { useAuth } from '@/hooks/useAuth'
-import { buscarCep } from '@/services/cepService'
+import { consultarCep } from '@/services/cepService'
 import {
   adicionarProdutoAoFornecedor,
   atualizarFornecedor,
@@ -47,7 +47,7 @@ vi.mock('@/services/produtoService', () => ({
 }))
 
 vi.mock('@/services/cepService', () => ({
-  buscarCep: vi.fn(),
+  consultarCep: vi.fn(),
 }))
 
 vi.mock('@/hooks/useAuth', () => ({
@@ -65,7 +65,7 @@ const excluirFornecedorMock = vi.mocked(excluirFornecedor)
 const inativarFornecedorMock = vi.mocked(inativarFornecedor)
 const reativarFornecedorMock = vi.mocked(reativarFornecedor)
 const listarProdutosMock = vi.mocked(listarProdutos)
-const buscarCepMock = vi.mocked(buscarCep)
+const consultarCepMock = vi.mocked(consultarCep)
 const useAuthMock = vi.mocked(useAuth)
 
 function definirPerfil(perfil: 'ADMIN' | 'OPERADOR') {
@@ -213,7 +213,7 @@ describe('FornecedorPage', () => {
     listarMarcasMock.mockResolvedValue(MARCAS)
     listarProdutosDoFornecedorMock.mockResolvedValue(pagina([]))
     listarProdutosMock.mockResolvedValue(pagina([]))
-    buscarCepMock.mockResolvedValue(null)
+    consultarCepMock.mockResolvedValue({ tipo: 'nao-encontrado' })
   })
 
   afterEach(() => {
@@ -296,17 +296,82 @@ describe('FornecedorPage', () => {
     })
 
     it('o CEP preenche logradouro, bairro, município e UF', async () => {
-      buscarCepMock.mockResolvedValue({ logradouro: 'Praça da Sé', bairro: 'Sé', municipio: 'São Paulo', uf: 'SP' })
+      consultarCepMock.mockResolvedValue({
+        tipo: 'encontrado',
+        endereco: { logradouro: 'Praça da Sé', bairro: 'Sé', municipio: 'São Paulo', uf: 'SP' },
+      })
       await renderNovo()
 
       fireEvent.change(screen.getByLabelText('CEP (opcional)'), { target: { value: '01001000' } })
 
       expect(screen.getByLabelText('CEP (opcional)')).toHaveValue('01001-000')
       await waitFor(() => expect(screen.getByLabelText('Logradouro (opcional)')).toHaveValue('Praça da Sé'))
-      expect(buscarCepMock).toHaveBeenCalledWith('01001000')
+      expect(consultarCepMock).toHaveBeenCalledWith('01001000')
       expect(screen.getByLabelText('Bairro (opcional)')).toHaveValue('Sé')
       expect(screen.getByLabelText('Município (opcional)')).toHaveValue('São Paulo')
       expect(screen.getByLabelText('UF')).toHaveValue('SP')
+    })
+
+    it('ignora a resposta atrasada de um CEP que não é mais o do campo', async () => {
+      let responderAntigo: (valor: Awaited<ReturnType<typeof consultarCep>>) => void = () => undefined
+      consultarCepMock.mockImplementation((cep) =>
+        cep === '01001000'
+          ? new Promise((resolver) => {
+              responderAntigo = resolver
+            })
+          : Promise.resolve({
+              tipo: 'encontrado',
+              endereco: { logradouro: 'Rua Nova', bairro: 'Centro', municipio: 'Itu', uf: 'SP' },
+            }),
+      )
+      await renderNovo()
+
+      fireEvent.change(screen.getByLabelText('CEP (opcional)'), { target: { value: '01001000' } })
+      fireEvent.change(screen.getByLabelText('CEP (opcional)'), { target: { value: '13300000' } })
+      await waitFor(() => expect(screen.getByLabelText('Logradouro (opcional)')).toHaveValue('Rua Nova'))
+      act(() => responderAntigo({
+        tipo: 'encontrado',
+        endereco: { logradouro: 'Praça da Sé', bairro: 'Sé', municipio: 'São Paulo', uf: 'SP' },
+      }))
+
+      await waitFor(() => expect(screen.getByLabelText('Município (opcional)')).toHaveValue('Itu'))
+      expect(screen.getByLabelText('Logradouro (opcional)')).toHaveValue('Rua Nova')
+    })
+
+    it('o CEP genérico (sem rua nem bairro) não apaga o que já estava preenchido', async () => {
+      consultarCepMock.mockResolvedValue({
+        tipo: 'encontrado',
+        endereco: { logradouro: '', bairro: '', municipio: 'Itu', uf: 'SP' },
+      })
+      await renderNovo()
+      fireEvent.change(screen.getByLabelText('Logradouro (opcional)'), { target: { value: 'Rua das Flores' } })
+      fireEvent.change(screen.getByLabelText('Bairro (opcional)'), { target: { value: 'Vila Nova' } })
+
+      fireEvent.change(screen.getByLabelText('CEP (opcional)'), { target: { value: '13300000' } })
+
+      await waitFor(() => expect(screen.getByLabelText('Município (opcional)')).toHaveValue('Itu'))
+      expect(screen.getByLabelText('Logradouro (opcional)')).toHaveValue('Rua das Flores')
+      expect(screen.getByLabelText('Bairro (opcional)')).toHaveValue('Vila Nova')
+      expect(screen.getByLabelText('UF')).toHaveValue('SP')
+    })
+
+    it('na falha da consulta do CEP, avisa e deixa buscar de novo o mesmo CEP', async () => {
+      consultarCepMock.mockResolvedValueOnce({ tipo: 'falha' })
+      consultarCepMock.mockResolvedValueOnce({
+        tipo: 'encontrado',
+        endereco: { logradouro: 'Praça da Sé', bairro: 'Sé', municipio: 'São Paulo', uf: 'SP' },
+      })
+      await renderNovo()
+
+      fireEvent.change(screen.getByLabelText('CEP (opcional)'), { target: { value: '01001000' } })
+
+      expect(await screen.findByText('Não foi possível buscar o CEP agora. Tente de novo.')).toBeInTheDocument()
+      expect(screen.queryByText(/Não encontramos esse CEP/)).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }))
+
+      await waitFor(() => expect(screen.getByLabelText('Logradouro (opcional)')).toHaveValue('Praça da Sé'))
+      expect(consultarCepMock).toHaveBeenCalledTimes(2)
+      expect(consultarCepMock).toHaveBeenLastCalledWith('01001000')
     })
 
     it('avisa quando o CEP não é encontrado', async () => {
@@ -344,6 +409,41 @@ describe('FornecedorPage', () => {
       expect((await screen.findAllByText('Informe o nome do representante.')).length).toBe(1)
       await waitFor(() => expect(nomeDoRepresentante(3)).toHaveFocus())
       expect(cadastrarFornecedorMock).not.toHaveBeenCalled()
+    })
+
+    it('o erro do backend de um representante vai para a linha certa, mesmo com uma linha em branco antes', async () => {
+      cadastrarFornecedorMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { 'representantes[0].telefone': 'Telefone inválido.' }),
+      )
+      await renderNovo()
+      fireEvent.change(screen.getByLabelText(/^Razão social/), { target: { value: 'Distribuidora Sul' } })
+      const representantes = secao('Representantes')
+      fireEvent.click(within(representantes).getByRole('button', { name: 'Adicionar representante' }))
+      fireEvent.click(within(representantes).getByRole('button', { name: 'Adicionar representante' }))
+      fireEvent.change(nomeDoRepresentante(2), { target: { value: 'Ana' } })
+      fireEvent.change(within(representante(2)).getByLabelText('Telefone (opcional)'), {
+        target: { value: '11987654321' },
+      })
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(cadastrarFornecedorMock).toHaveBeenCalledTimes(1))
+      // So a Ana foi enviada (a linha 1, em branco, foi descartada): o [0] do backend e ela.
+      expect(ultimoRequest().representantes).toEqual([{ nome: 'Ana', telefone: '11987654321', email: null }])
+      const telefoneDaAna = within(representante(2)).getByLabelText('Telefone (opcional)')
+      expect(await within(representante(2)).findByText('Telefone inválido.')).toBeInTheDocument()
+      expect(telefoneDaAna).toHaveAttribute('aria-invalid', 'true')
+      expect(within(representante(1)).getByLabelText(/^Nome/)).not.toHaveAttribute('aria-invalid')
+    })
+
+    it('o representante já gravado apagado até ficar em branco não é descartado: pede o nome', async () => {
+      await renderEdicao()
+
+      fireEvent.change(nomeDoRepresentante(1), { target: { value: '' } })
+      fireEvent.change(within(representante(1)).getByLabelText('Telefone (opcional)'), { target: { value: '' } })
+      fireEvent.click(botaoSalvar())
+
+      expect(await within(representante(1)).findByText('Informe o nome do representante.')).toBeInTheDocument()
+      expect(atualizarFornecedorMock).not.toHaveBeenCalled()
     })
 
     it('o representante deixado em branco é descartado ao salvar', async () => {
@@ -687,6 +787,33 @@ describe('FornecedorPage', () => {
   })
 
   describe('produtos que vende', () => {
+    it('fornecedor inativo: sem a busca de adicionar, com o aviso; remover continua', async () => {
+      listarProdutosDoFornecedorMock.mockResolvedValue(pagina([produtoDoFornecedor()]))
+      removerProdutoMock.mockResolvedValue(undefined)
+      await renderEdicao({ ...FORNECEDOR, ativo: false })
+
+      const produtos = secao('Produtos que vende')
+      expect(within(produtos).getByText('Reative o fornecedor para ligar produtos.')).toBeInTheDocument()
+      expect(within(produtos).queryByLabelText('Adicionar produto')).not.toBeInTheDocument()
+      fireEvent.click(await within(produtos).findByRole('button', { name: 'Remover Arroz 5kg' }))
+      await waitFor(() => expect(removerProdutoMock).toHaveBeenCalledWith('dist-sul', produtoAtivo.id))
+    })
+
+    it('a marca inativa já ligada aparece como chip "(inativa)" e é mantida no request', async () => {
+      listarMarcasMock.mockResolvedValue([
+        ...MARCAS,
+        { ...MARCAS[0], id: 'antiga', nome: 'Antiga', caminho: 'Antiga', parentId: null, ativo: false, selecionavel: false },
+      ])
+      atualizarFornecedorMock.mockResolvedValue(FORNECEDOR)
+      await renderEdicao({ ...FORNECEDOR, marcas: [{ id: 'antiga', nome: 'Antiga', caminho: 'Antiga' }] })
+
+      const chips = screen.getByRole('list', { name: 'Marcas escolhidas' })
+      await waitFor(() => expect(chips).toHaveTextContent('Antiga (inativa)'))
+      fireEvent.click(botaoSalvar())
+      await waitFor(() => expect(atualizarFornecedorMock).toHaveBeenCalledTimes(1))
+      expect(ultimoRequest().marcaIds).toEqual(['antiga'])
+    })
+
     it('o produto já ligado (200) avisa e fica marcado "Já ligado" na busca', async () => {
       listarProdutosMock.mockResolvedValue(pagina([produtoSimples]))
       adicionarProdutoMock.mockResolvedValue({ produto: produtoDoFornecedor({ id: produtoSimples.id }), criado: false })

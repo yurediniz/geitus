@@ -32,6 +32,8 @@ const ID_TITULO_PRODUTOS_DO_FORNECEDOR = 'secao-produtos-titulo'
 
 interface ProdutosDoFornecedorProps {
   fornecedorId: string
+  /** Inativo: a busca de adicionar some (remover continua). */
+  fornecedorAtivo: boolean
   somenteLeitura: boolean
   /** Feedback da pagina: "Produto adicionado ao fornecedor." / "Produto removido do fornecedor." ou o erro. */
   aoInformar: (feedback: { sucesso: string } | { erro: string }) => void
@@ -68,7 +70,12 @@ function mensagemDeErro(erro: unknown, acao: 'adicionar' | 'remover'): string {
  * fornecedor da ultima compra de um produto pede confirmacao (o backend limpa
  * esse campo do produto).
  */
-export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar }: ProdutosDoFornecedorProps) {
+export function ProdutosDoFornecedor({
+  fornecedorId,
+  fornecedorAtivo,
+  somenteLeitura,
+  aoInformar,
+}: ProdutosDoFornecedorProps) {
   const queryClient = useQueryClient()
   const idBusca = useId()
   const idResultados = useId()
@@ -98,7 +105,7 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
     queryKey: [...PRODUTOS_QUERY_KEY, 'busca-para-fornecedor', termoComAtraso],
     queryFn: ({ signal }) =>
       listarProdutos({ ...FILTROS_PADRAO, busca: termoComAtraso, status: 'todos', tamanho: TAMANHO_DA_BUSCA }, signal),
-    enabled: !somenteLeitura && termoComAtraso !== '',
+    enabled: !somenteLeitura && fornecedorAtivo && termoComAtraso !== '',
   })
 
   const dados = listaQuery.data
@@ -193,7 +200,10 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
 
   return (
     <div className="space-y-4">
-      {!somenteLeitura && (
+      {!somenteLeitura && !fornecedorAtivo && (
+        <p className="text-sm text-muted-foreground">Reative o fornecedor para ligar produtos.</p>
+      )}
+      {!somenteLeitura && fornecedorAtivo && (
         <div className="max-w-xl space-y-2">
           <label htmlFor={idBusca} className="text-sm font-medium">
             Adicionar produto

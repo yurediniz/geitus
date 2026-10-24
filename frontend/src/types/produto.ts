@@ -215,10 +215,13 @@ export interface ProdutoRequest {
   categoriaId: string | null
   /** UUID da marca (qualquer nivel da arvore); null = sem marca. */
   marcaId: string | null
-  /** Lista completa dos fornecedores do produto (UUIDs, ate 20); o PATCH a substitui. */
-  fornecedorIds: string[]
+  /**
+   * Lista completa dos fornecedores do produto (UUIDs, ate 20); o PATCH a substitui.
+   * Ausente no PATCH (junto do `fornecedorUltimaCompraId`) mantem os gravados.
+   */
+  fornecedorIds?: string[]
   /** Um dos `fornecedorIds`; null = nenhum. */
-  fornecedorUltimaCompraId: string | null
+  fornecedorUltimaCompraId?: string | null
   descricao: string | null
   precoVenda: number
   custo: number | null

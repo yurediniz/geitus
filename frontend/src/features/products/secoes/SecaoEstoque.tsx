@@ -13,7 +13,7 @@ import { fornecedorParaACompra } from '@/features/products/fornecedoresGravados'
 import type { ProdutoFormValues } from '@/features/products/produtoFormulario'
 import { conversaoEmEmbalagens, embalagemPrincipal } from '@/lib/embalagem'
 import { interpretarQuantidade } from '@/lib/quantidade'
-import type { Produto } from '@/types/produto'
+import type { FornecedorDoProduto, Produto } from '@/types/produto'
 
 export interface SecaoEstoqueProps {
   /** Produto gravado (saldo e situacao); null no cadastro. */
@@ -25,7 +25,8 @@ export interface SecaoEstoqueProps {
   somenteLeitura: boolean
   aoAlterarCampo: () => void
   /** Ajuste gravado: a pagina mostra a mensagem (ex.: "Estoque atualizado: 10 UN."). */
-  aoAjustarEstoque: (mensagem: string) => void
+  /** Ajuste gravado: a mensagem e, na compra com fornecedor, o fornecedor (a pagina o poe na lista). */
+  aoAjustarEstoque: (mensagem: string, fornecedorDaCompra: FornecedorDoProduto | null) => void
 }
 
 /** Campos de nivel: texto com teclado decimal (aceitam virgula, como as demais quantidades). */
@@ -266,9 +267,9 @@ export function SecaoEstoque({
           fornecedorDaCompra={fornecedorParaACompra(produto)}
           aoFechar={() => setAjustando(false)}
           focoAoFechar={() => botaoAjustarRef.current}
-          aoConcluir={(movimento) => {
+          aoConcluir={(movimento, fornecedorDaCompra) => {
             setAjustando(false)
-            aoAjustarEstoque(mensagemDeSucesso(movimento, produto.unidade.sigla, produto.custo))
+            aoAjustarEstoque(mensagemDeSucesso(movimento, produto.unidade.sigla, produto.custo), fornecedorDaCompra)
           }}
         />
       )}

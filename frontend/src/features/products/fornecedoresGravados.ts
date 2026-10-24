@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { UseFormReturn } from 'react-hook-form'
 
 import { fornecedoresDoProduto, type ProdutoFormValues } from '@/features/products/produtoFormulario'
@@ -71,10 +71,36 @@ export function mesclarFornecedores(
   return { lista, ultimaCompraId }
 }
 
+/** Mesma lista (em qualquer ordem) e mesmo da ultima compra. */
+function mesmoConteudo(a: FornecedoresGravados, b: FornecedoresGravados): boolean {
+  const idsDeB = new Set(b.lista.map((fornecedor) => fornecedor.id))
+  return (
+    a.ultimaCompraId === b.ultimaCompraId &&
+    a.lista.length === b.lista.length &&
+    a.lista.every((fornecedor) => idsDeB.has(fornecedor.id))
+  )
+}
+
+/**
+ * A tela depois de uma compra com o fornecedor `comprado` (decisao do CTO): ele
+ * sempre entra na lista (se faltar) e vira o da ultima compra.
+ */
+export function aplicarCompra(naTela: FornecedoresGravados, comprado: FornecedorDoProduto): FornecedoresGravados {
+  const jaNaLista = naTela.lista.some((fornecedor) => fornecedor.id === comprado.id)
+  return {
+    lista: jaNaLista ? naTela.lista : [...naTela.lista, { ...comprado }],
+    ultimaCompraId: comprado.id,
+  }
+}
+
 /**
  * Mantem os campos de fornecedores da pagina do produto em dia com o produto
  * gravado (recarregado depois de um ajuste de estoque). Intocados, os campos
- * passam a ser os gravados sem contar como alteracao; alterados, recebem a mescla.
+ * passam a ser os gravados sem contar como alteracao; alterados, recebem a
+ * mescla (que, igual ao gravado, deixa de contar como alteracao).
+ *
+ * Devolve `registrarCompra`: chamado quando o modal grava uma entrada por
+ * compra com fornecedor, ja o poe na lista e como o da ultima compra.
  */
 export function useFornecedoresGravados(produto: Produto | null, form: UseFormReturn<ProdutoFormValues>) {
   const { getFieldState, getValues, resetField, setValue } = form
@@ -98,7 +124,26 @@ export function useFornecedoresGravados(produto: Produto | null, form: UseFormRe
     }
     const naTela = { lista: getValues('fornecedores'), ultimaCompraId: getValues('fornecedorUltimaCompraId') }
     const mesclado = mesclarFornecedores(anterior, gravado, naTela)
+    if (mesmoConteudo(mesclado, gravado)) {
+      // A tela ficou igual ao banco: nao ha alteracao a salvar.
+      resetField('fornecedores', { defaultValue: gravado.lista })
+      resetField('fornecedorUltimaCompraId', { defaultValue: gravado.ultimaCompraId })
+      return
+    }
     setValue('fornecedores', mesclado.lista, { shouldDirty: true })
     setValue('fornecedorUltimaCompraId', mesclado.ultimaCompraId, { shouldDirty: true })
   }, [produto, getFieldState, getValues, resetField, setValue])
+
+  const registrarCompra = useCallback(
+    (comprado: FornecedorDoProduto) => {
+      const naTela = { lista: getValues('fornecedores'), ultimaCompraId: getValues('fornecedorUltimaCompraId') }
+      const depois = aplicarCompra(naTela, comprado)
+      // shouldDirty compara com o gravado: igual a ele, nao conta como alteracao.
+      setValue('fornecedores', depois.lista, { shouldDirty: true, shouldValidate: getFieldState('fornecedores').invalid })
+      setValue('fornecedorUltimaCompraId', depois.ultimaCompraId, { shouldDirty: true })
+    },
+    [getValues, setValue, getFieldState],
+  )
+
+  return { registrarCompra }
 }

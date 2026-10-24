@@ -102,8 +102,12 @@ describe('fornecedorFormulario', () => {
     expect(erros({ ...BASE, representantes: [{ ...representante, nome: ' ', telefone: '(11) 98765-4321' }] })).toEqual({
       'representantes.0.nome': 'Informe o nome do representante.',
     })
-    // Totalmente em branco nao e erro: e descartado ao salvar.
+    // A linha nova totalmente em branco nao e erro: e descartada ao salvar.
     expect(erros({ ...BASE, representantes: [{ ...representante, nome: ' ' }] })).toEqual({})
+    // A gravada (com id) apagada ate ficar em branco continua pedindo o nome.
+    expect(erros({ ...BASE, representantes: [{ ...representante, id: 'r1', nome: ' ' }] })).toEqual({
+      'representantes.0.nome': 'Informe o nome do representante.',
+    })
     expect(erros({ ...BASE, representantes: [{ ...representante, email: 'x' }] })).toEqual({
       'representantes.0.email': 'E-mail inválido.',
     })
@@ -178,6 +182,12 @@ describe('fornecedorFormulario', () => {
       representantes: [{ nome: 'Ana', telefone: null, email: null }],
     })
     expect(request.representantes[0]).not.toHaveProperty('id')
+  })
+
+  it('o indice do representante no erro do backend vira o da tela (as linhas em branco nao foram)', () => {
+    expect(campoDoErroDoServidor('representantes[0].telefone', [1, 3])).toBe('representantes.1.telefone')
+    expect(campoDoErroDoServidor('representantes[1].nome', [1, 3])).toBe('representantes.3.nome')
+    expect(campoDoErroDoServidor('representantes[5].nome', [1, 3])).toBe('representantes')
   })
 
   it('leva as chaves de erro do backend ao campo da tela', () => {

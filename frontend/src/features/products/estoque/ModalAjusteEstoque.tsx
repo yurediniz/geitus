@@ -72,8 +72,11 @@ export interface ModalAjusteEstoqueProps {
   aoFechar: () => void
   /** Quem recebe o foco ao fechar (ex.: o botao que abriu; no Safari o clique nao foca o botao). */
   focoAoFechar?: () => HTMLElement | null
-  /** Ajuste gravado (201, ou 200 com a chave repetida): quem abriu fecha o modal e avisa. */
-  aoConcluir: (movimento: MovimentoEstoque) => void
+  /**
+   * Ajuste gravado (201, ou 200 com a chave repetida): quem abriu fecha o modal e avisa.
+   * Na entrada por compra com fornecedor, recebe tambem o fornecedor escolhido.
+   */
+  aoConcluir: (movimento: MovimentoEstoque, fornecedorDaCompra: FornecedorDoProduto | null) => void
 }
 
 /**
@@ -213,7 +216,7 @@ function ConteudoAjuste({
         // O fornecedor pode ter entrado na lista do produto (a contagem de produtos dele mudou).
         void queryClient.invalidateQueries({ queryKey: FORNECEDORES_QUERY_KEY })
       }
-      aoConcluir(movimento)
+      aoConcluir(movimento, ajuste.fornecedorId ? fornecedor : null)
     },
     onError: (erro, ajuste) => {
       // Em qualquer falha o saldo e recarregado: o envio pode ter chegado ao

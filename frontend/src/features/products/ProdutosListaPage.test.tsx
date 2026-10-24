@@ -1073,6 +1073,19 @@ describe('ProdutosListaPage', () => {
       ).toBeInTheDocument()
     })
 
+    it('o modal aberto pela lista vem com o fornecedor da ultima compra na entrada por compra', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
+      renderLista()
+      const card = await cardDoProduto('Arroz 5kg')
+
+      fireEvent.click(within(card).getByRole('button', { name: 'Ajustar estoque de Arroz 5kg' }))
+
+      const modal = await screen.findByRole('dialog', { name: 'Ajustar estoque' })
+      expect(within(modal).getByRole('button', { name: /^Fornecedor \(opcional\)/ })).toHaveTextContent(
+        'Distribuidora Sul',
+      )
+    })
+
     it('"Ajustar estoque" abre o modal; no sucesso recarrega e devolve o foco ao botao de origem', async () => {
       const SAIDA: MovimentoEstoque = {
         id: 'mov-1',

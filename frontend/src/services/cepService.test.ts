@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-import { buscarCep } from '@/services/cepService'
+import { buscarCep, consultarCep } from '@/services/cepService'
 
 /** Monta um `Response` fake com o corpo JSON informado. */
-function respostaJson(corpo: unknown, ok = true): Response {
+function respostaJson(corpo: unknown, ok = true, status = ok ? 200 : 500): Response {
   return {
     ok,
+    status,
     json: async () => corpo,
   } as unknown as Response
 }
@@ -17,6 +18,23 @@ describe('cepService', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  it('consultarCep separa o CEP inexistente da falha da consulta', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockResolvedValueOnce(respostaJson({ erro: true }))
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    fetchMock.mockResolvedValueOnce(respostaJson({}, false, 503))
+    fetchMock.mockResolvedValueOnce(respostaJson({ logradouro: '', bairro: '', localidade: 'Itu', uf: 'SP' }))
+
+    await expect(consultarCep('99999999')).resolves.toEqual({ tipo: 'nao-encontrado' })
+    await expect(consultarCep('01001000')).resolves.toEqual({ tipo: 'falha' })
+    await expect(consultarCep('01001000')).resolves.toEqual({ tipo: 'falha' })
+    await expect(consultarCep('13300000')).resolves.toEqual({
+      tipo: 'encontrado',
+      endereco: { logradouro: '', bairro: '', municipio: 'Itu', uf: 'SP' },
+    })
+    await expect(consultarCep('123')).resolves.toEqual({ tipo: 'nao-encontrado' })
   })
 
   it('retorna o trecho de endereco em caso de sucesso, mapeando localidade -> municipio', async () => {

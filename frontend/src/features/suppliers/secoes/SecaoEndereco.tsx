@@ -2,12 +2,20 @@ import { useRef, useState } from 'react'
 import { useFormContext } from 'react-hook-form'
 import { Info, Loader2 } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
+
 import { NativeSelect } from '@/components/ui/native-select'
 import { ErroDoCampo } from '@/features/products/CamposFormulario'
 import type { FornecedorFormValues } from '@/features/suppliers/fornecedorFormulario'
 import { CampoComMascara, CampoDeTexto, SecaoDoFornecedor } from '@/features/suppliers/secoes/CamposDoFornecedor'
 import { UFS, apenasDigitos, mascararCep } from '@/lib/documentos'
-import { buscarCep } from '@/services/cepService'
+import { consultarCep } from '@/services/cepService'
+
+const MENSAGEM_CEP_NAO_ENCONTRADO = 'Não encontramos esse CEP. Preencha o endereço manualmente.'
+const MENSAGEM_FALHA_NO_CEP = 'Não foi possível buscar o CEP agora. Tente de novo.'
+
+/** Campos que a busca de CEP preenche (o numero e o complemento ficam com o usuario). */
+const CAMPOS_DO_CEP = ['logradouro', 'bairro', 'municipio', 'uf'] as const
 
 interface SecaoEnderecoProps {
   desabilitado: boolean
@@ -23,35 +31,58 @@ export function SecaoEndereco({ desabilitado, aoAlterarCampo }: SecaoEnderecoPro
   const {
     register,
     setValue,
+    getValues,
     clearErrors,
     formState: { errors },
   } = useFormContext<FornecedorFormValues>()
   const [buscando, setBuscando] = useState(false)
   const [aviso, setAviso] = useState<string | null>(null)
+  // Na falha da consulta, o botao "Tentar de novo" repete a busca do mesmo CEP.
+  const [falhou, setFalhou] = useState(false)
+  // Ultimo CEP buscado com resposta (nao repete a busca a cada tecla) e o CEP que esta no campo agora.
   const cepBuscadoRef = useRef<string | null>(null)
+  const cepAtualRef = useRef<string>('')
 
-  const aoMudarCep = async (valor: string) => {
-    const digitos = apenasDigitos(valor)
-    setAviso(null)
-    if (digitos.length !== 8 || digitos === cepBuscadoRef.current) {
+  const buscar = async (digitos: string) => {
+    cepBuscadoRef.current = digitos
+    setFalhou(false)
+    setBuscando(true)
+    const resultado = await consultarCep(digitos)
+    // Resposta atrasada de um CEP que ja nao e o do campo: ignorada.
+    if (cepAtualRef.current !== digitos) {
       return
     }
-    cepBuscadoRef.current = digitos
-    setBuscando(true)
-    try {
-      const endereco = await buscarCep(digitos)
-      if (endereco) {
-        const opcoes = { shouldDirty: true, shouldValidate: true }
-        setValue('logradouro', endereco.logradouro, opcoes)
-        setValue('bairro', endereco.bairro, opcoes)
-        setValue('municipio', endereco.municipio, opcoes)
-        setValue('uf', endereco.uf, opcoes)
-        clearErrors(['logradouro', 'bairro', 'municipio', 'uf'])
-      } else {
-        setAviso('Não encontramos esse CEP. Preencha o endereço manualmente.')
+    setBuscando(false)
+    if (resultado.tipo === 'encontrado') {
+      const opcoes = { shouldDirty: true, shouldValidate: true }
+      for (const campo of CAMPOS_DO_CEP) {
+        // CEP generico (de cidade) vem sem logradouro e bairro: o que ja estava preenchido fica.
+        const valor = resultado.endereco[campo]
+        if (valor.trim() !== '' || getValues(campo).trim() === '') {
+          setValue(campo, valor, opcoes)
+        }
       }
-    } finally {
+      clearErrors([...CAMPOS_DO_CEP])
+    } else if (resultado.tipo === 'falha') {
+      cepBuscadoRef.current = null
+      setFalhou(true)
+      setAviso(MENSAGEM_FALHA_NO_CEP)
+    } else {
+      setAviso(MENSAGEM_CEP_NAO_ENCONTRADO)
+    }
+  }
+
+  const aoMudarCep = (valor: string) => {
+    const digitos = apenasDigitos(valor)
+    cepAtualRef.current = digitos
+    setAviso(null)
+    setFalhou(false)
+    if (digitos.length !== 8) {
       setBuscando(false)
+      return
+    }
+    if (digitos !== cepBuscadoRef.current) {
+      void buscar(digitos)
     }
   }
 
@@ -73,9 +104,20 @@ export function SecaoEndereco({ desabilitado, aoAlterarCampo }: SecaoEnderecoPro
                   Buscando endereço...
                 </span>
               ) : aviso ? (
-                <span role="status" className="inline-flex items-center gap-1">
+                <span role="status" className="inline-flex flex-wrap items-center gap-1">
                   <Info className="h-3.5 w-3.5" aria-hidden="true" />
                   {aviso}
+                  {falhou && !desabilitado && (
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-xs pointer-coarse:min-h-11"
+                      onClick={() => void buscar(cepAtualRef.current)}
+                    >
+                      Tentar de novo
+                    </Button>
+                  )}
                 </span>
               ) : (
                 'Com o CEP, o endereço é preenchido sozinho.'
@@ -83,7 +125,7 @@ export function SecaoEndereco({ desabilitado, aoAlterarCampo }: SecaoEnderecoPro
             }
             desabilitado={desabilitado}
             aoAlterar={aoAlterarCampo}
-            aoMudarValor={(formatado) => void aoMudarCep(formatado)}
+            aoMudarValor={aoMudarCep}
           />
         </div>
         <div className="md:col-span-4">

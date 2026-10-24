@@ -360,7 +360,7 @@ describe('ModalAjusteEstoque', () => {
 
       confirmar()
 
-      await waitFor(() => expect(aoConcluir).toHaveBeenCalledWith(MOVIMENTO))
+      await waitFor(() => expect(aoConcluir).toHaveBeenCalledWith(MOVIMENTO, null))
       expect(ajustarEstoqueMock).toHaveBeenCalledTimes(2)
       expect(ultimoAjuste().chave).toBe(primeiraChave)
     })
@@ -428,7 +428,7 @@ describe('ModalAjusteEstoque', () => {
 
       confirmar()
 
-      await waitFor(() => expect(aoConcluir).toHaveBeenCalledWith(MOVIMENTO))
+      await waitFor(() => expect(aoConcluir).toHaveBeenCalledWith(MOVIMENTO, null))
       for (const chave of chaves) {
         expect(queryClient.getQueryState(chave)?.isInvalidated).toBe(true)
       }
@@ -974,7 +974,7 @@ describe('ModalAjusteEstoque', () => {
 
     it('vem preenchido com o da última compra e vai no envio', async () => {
       ajustarEstoqueMock.mockResolvedValue({ ...MOVIMENTO, tipo: 'ENTRADA', motivo: 'COMPRA', quantidade: 10, saldoNovo: 22 })
-      renderModal({ fornecedorDaCompra: SUL })
+      const { aoConcluir } = renderModal({ fornecedorDaCompra: SUL })
 
       expect(campoFornecedor()).toHaveTextContent('Distribuidora Sul')
       expect(campoFornecedor()).toHaveAccessibleDescription(
@@ -985,6 +985,8 @@ describe('ModalAjusteEstoque', () => {
 
       await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
       expect(ultimoAjuste()).toMatchObject({ tipo: 'ENTRADA', motivo: 'COMPRA', custo: 9.5, fornecedorId: 'dist-sul' })
+      // Quem abriu recebe o fornecedor da compra (a pagina do produto o poe na lista).
+      await waitFor(() => expect(aoConcluir).toHaveBeenCalledWith(expect.objectContaining({ tipo: 'ENTRADA' }), SUL))
     })
 
     it('busca outro fornecedor ativo, ou nenhum', async () => {

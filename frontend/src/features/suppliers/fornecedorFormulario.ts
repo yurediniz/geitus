@@ -56,16 +56,38 @@ const representanteSchema = z
     email: emailOpcional,
   })
   .superRefine((representante, ctx) => {
-    // Totalmente em branco: e descartado ao salvar. Com algo preenchido, o nome e obrigatorio.
-    if (representante.nome === '' && !representanteEmBranco(representante)) {
+    // So a linha nova totalmente em branco e descartada; nas demais (inclusive a gravada apagada
+    // ate ficar em branco, que se tira pelo "Remover"), o nome e obrigatorio.
+    if (representante.nome === '' && !representanteDescartavel(representante)) {
       ctx.addIssue({ path: ['nome'], code: 'custom', message: 'Informe o nome do representante.' })
     }
   })
 
-/** Nome, telefone e e-mail vazios: um "+ Adicionar representante" que nao foi usado. */
-export function representanteEmBranco(representante: { nome: string; telefone: string; email: string }): boolean {
+/**
+ * Linha nova (sem `id`) com nome, telefone e e-mail vazios: um "+ Adicionar
+ * representante" que nao foi usado. E descartada ao salvar, sem bloquear.
+ */
+export function representanteDescartavel(representante: {
+  id: string
+  nome: string
+  telefone: string
+  email: string
+}): boolean {
   return (
-    representante.nome.trim() === '' && apenasDigitos(representante.telefone) === '' && representante.email.trim() === ''
+    representante.id === '' &&
+    representante.nome.trim() === '' &&
+    apenasDigitos(representante.telefone) === '' &&
+    representante.email.trim() === ''
+  )
+}
+
+/**
+ * Indice na tela de cada representante enviado no request (os descartaveis nao
+ * vao): o erro `representantes[j]` do backend e da linha `enviados[j]` da tela.
+ */
+export function indicesDosRepresentantesEnviados(valores: FornecedorFormValues): number[] {
+  return valores.representantes.flatMap((representante, indice) =>
+    representanteDescartavel(representante) ? [] : [indice],
   )
 }
 
@@ -279,7 +301,7 @@ export function montarRequest(valores: FornecedorFormValues): FornecedorRequest 
     email: textoOuNulo(valores.email),
     observacoes: textoOuNulo(valores.observacoes),
     // O representante deixado em branco nao vai (nao bloqueia o salvamento).
-    representantes: valores.representantes.filter((item) => !representanteEmBranco(item)).map(representanteDoRequest),
+    representantes: valores.representantes.filter((item) => !representanteDescartavel(item)).map(representanteDoRequest),
     marcaIds: valores.marcaIds,
   }
 }
@@ -290,11 +312,15 @@ const CAMPOS_DO_FORMULARIO: ReadonlySet<string> = new Set(CAMPOS_NA_ORDEM)
  * Caminho no formulario de uma chave de erro do backend (os campos tem os
  * nomes do request): "representantes[2].nome" -> "representantes.2.nome",
  * "marcaIds[3]" -> "marcaIds". Chave desconhecida -> null (vira mensagem geral).
+ * Com `indicesEnviados` (ver `indicesDosRepresentantesEnviados`), o indice do
+ * request vira o da tela (as linhas em branco nao foram enviadas).
  */
-export function campoDoErroDoServidor(chave: string): string | null {
+export function campoDoErroDoServidor(chave: string, indicesEnviados?: readonly number[]): string | null {
   const doRepresentante = /^representantes\[(\d+)]\.(nome|telefone|email)$/.exec(chave)
   if (doRepresentante) {
-    return `representantes.${doRepresentante[1]}.${doRepresentante[2]}`
+    const doRequest = Number(doRepresentante[1])
+    const naTela = indicesEnviados ? indicesEnviados[doRequest] : doRequest
+    return naTela === undefined ? 'representantes' : `representantes.${naTela}.${doRepresentante[2]}`
   }
   const raiz = chave.split(/[[.]/)[0]
   return CAMPOS_DO_FORMULARIO.has(raiz) ? raiz : null
