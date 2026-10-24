@@ -4,13 +4,16 @@ import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.geitus.app.catalog.EntradaDeCompra;
 import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.RegistroDeEstoqueInicial;
 import com.geitus.app.catalog.ResumoDeEstoque;
@@ -62,6 +65,24 @@ public class EstoqueDoCatalogo implements UsoDoProdutoNoEstoque, RegistroDeEstoq
     @Transactional(readOnly = true)
     public boolean algumProdutoDaUnidadeTemMovimentos(Long empresaId, Long unidadeId) {
         return movimentoRepository.existeMovimentoDeProdutoDaUnidade(empresaId, unidadeId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<EntradaDeCompra> ultimaEntradaDeCompra(Long empresaId, Long produtoId) {
+        return movimentoRepository.entradasDeCompraDoProduto(empresaId, produtoId, PageRequest.of(0, 1)).stream()
+                .findFirst();
+    }
+
+    /** Uma consulta, qualquer que seja o tamanho da pagina; nenhuma sem ids. */
+    @Override
+    @Transactional(readOnly = true)
+    public Map<Long, EntradaDeCompra> entradasDeCompra(Long empresaId, Collection<Long> movimentoIds) {
+        if (movimentoIds.isEmpty()) {
+            return Map.of();
+        }
+        return movimentoRepository.entradasDosMovimentos(empresaId, movimentoIds).stream()
+                .collect(Collectors.toMap(EntradaDoMovimento::movimentoId, EntradaDoMovimento::entrada));
     }
 
     /** Na transacao do cadastro: se o produto nao for gravado, o estoque inicial tambem nao e. */

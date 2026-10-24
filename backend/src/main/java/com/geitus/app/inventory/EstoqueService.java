@@ -15,6 +15,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import com.geitus.app.catalog.CatalogoNaoEncontradoException;
+import com.geitus.app.catalog.CustoDeEntrada;
 import com.geitus.app.catalog.Paginacao;
 import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ProdutoConflitoException;
@@ -48,6 +49,10 @@ import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
  * <p>Fase B3 (docs/modules/produtos-embalagens.md, 6): a entrada e a saida
  * podem ser informadas em embalagens do produto ({@code embalagemId}); o
  * movimento continua em unidades de venda e guarda o retrato da embalagem.
+ *
+ * <p>Fase B4 (docs/modules/produtos-custo-entrada.md, 2; DEC-038): a entrada
+ * por compra exige o custo, gravado no movimento; o {@link CustoDeEntrada} do
+ * catalogo o aplica no produto, na mesma transacao.
  */
 @Service
 public class EstoqueService {
@@ -56,6 +61,7 @@ public class EstoqueService {
     static final String CAMPO_MOTIVO = "motivo";
     static final String CAMPO_OBSERVACAO = "observacao";
     static final String CAMPO_EMBALAGEM = "embalagemId";
+    static final String CAMPO_CUSTO = "custo";
 
     static final String MENSAGEM_SEM_CONTROLE = "Este produto não controla estoque.";
     static final String MENSAGEM_MOTIVO_DO_SISTEMA = "Este motivo é registrado só pelo sistema.";
@@ -68,6 +74,9 @@ public class EstoqueService {
     static final String MENSAGEM_CONTAGEM_EM_EMBALAGEM = "A contagem é feita na unidade de venda.";
     static final String MENSAGEM_EMBALAGEM_NAO_ENCONTRADA = "Embalagem não encontrada.";
     static final String MENSAGEM_EMBALAGENS_INTEIRAS = "Informe um número inteiro de embalagens.";
+    static final String MENSAGEM_CUSTO_FORA_DA_COMPRA = "O custo só é informado na entrada por compra.";
+    static final String MENSAGEM_INFORME_O_CUSTO = "Informe o custo da compra.";
+    static final String MENSAGEM_CUSTO_NAO_POSITIVO = "O custo deve ser maior que zero.";
 
     /** Maior valor de {@code NUMERIC(12,3)}: acima disso o banco recusaria com erro generico. */
     static final BigDecimal SALDO_MAXIMO = QuantidadeDeEstoque.MAXIMO;
@@ -78,15 +87,17 @@ public class EstoqueService {
     private final UsuarioRepository usuarioRepository;
     private final EstoqueSaldoRepository saldoRepository;
     private final MovimentoEstoqueRepository movimentoRepository;
+    private final CustoDeEntrada custoDeEntrada;
     private final TransactionTemplate transacao;
 
     public EstoqueService(ProdutoRepository produtoRepository, UsuarioRepository usuarioRepository,
             EstoqueSaldoRepository saldoRepository, MovimentoEstoqueRepository movimentoRepository,
-            PlatformTransactionManager gerenciadorDeTransacoes) {
+            CustoDeEntrada custoDeEntrada, PlatformTransactionManager gerenciadorDeTransacoes) {
         this.produtoRepository = produtoRepository;
         this.usuarioRepository = usuarioRepository;
         this.saldoRepository = saldoRepository;
         this.movimentoRepository = movimentoRepository;
+        this.custoDeEntrada = custoDeEntrada;
         this.transacao = new TransactionTemplate(gerenciadorDeTransacoes);
     }
 
@@ -150,15 +161,21 @@ public class EstoqueService {
     MovimentoEstoque registrarMovimento(Produto produto, TipoMovimento tipo, MotivoMovimento motivo,
             OrigemMovimento origem, BigDecimal quantidadeInformada, String observacao, Long usuarioId, UUID chave) {
         return registrarMovimento(produto, tipo, motivo, origem,
-                new QuantidadeDoAjuste(quantidadeInformada, null), observacao, usuarioId, chave);
+                new ValoresDoMovimento(new QuantidadeDoAjuste(quantidadeInformada, null), null), observacao,
+                usuarioId, chave);
     }
 
     /** Quantidade do ajuste em unidades de venda e, se informada em embalagens, o retrato da embalagem. */
     record QuantidadeDoAjuste(BigDecimal emUnidades, RetratoDaEmbalagem embalagem) {
     }
 
+    /** Quantidade validada e, so na entrada por compra (Fase B4), o custo; {@code null} nos demais. */
+    record ValoresDoMovimento(QuantidadeDoAjuste quantidade, CustoDaCompra custo) {
+    }
+
     private MovimentoEstoque registrarMovimento(Produto produto, TipoMovimento tipo, MotivoMovimento motivo,
-            OrigemMovimento origem, QuantidadeDoAjuste quantidade, String observacao, Long usuarioId, UUID chave) {
+            OrigemMovimento origem, ValoresDoMovimento valores, String observacao, Long usuarioId, UUID chave) {
+        QuantidadeDoAjuste quantidade = valores.quantidade();
         BigDecimal quantidadeInformada = quantidade.emUnidades();
         EstoqueSaldo saldo = travarSaldo(produto);
         BigDecimal anterior = saldo.getSaldo();
@@ -170,15 +187,16 @@ public class EstoqueService {
         }
         saldo.aplicar(variacao);
         return movimentoRepository.save(new MovimentoEstoque(produto, tipo, motivo, origem, variacao, anterior, novo,
-                observacao, usuarioId, chave, quantidade.embalagem()));
+                observacao, usuarioId, chave, quantidade.embalagem(), valores.custo()));
     }
 
     // ---------- Ajuste manual ----------
 
     /**
      * Ordem da spec: chave -> produto (trava, 404) -> chave de novo -> regras ->
-     * movimento. A chave repetida devolve o movimento gravado antes de procurar
-     * a embalagem, que pode ter saido do produto depois (Review Focus 5 da B3).
+     * movimento -> custo do produto (Fase B4). A chave repetida devolve o
+     * movimento gravado antes de procurar a embalagem, que pode ter saido do
+     * produto depois (Review Focus 5 da B3), e sem tocar no custo.
      */
     private ResultadoAjuste ajustar(Long idUsuario, UUID produtoId, AjusteEstoqueRequest request) {
         Usuario usuario = resolverUsuario(idUsuario);
@@ -195,14 +213,22 @@ public class EstoqueService {
         if (repetido.isPresent()) {
             return repetido.get();
         }
-        QuantidadeDoAjuste quantidade = validarAjusteManual(produto, request);
+        ValoresDoMovimento valores = validarAjusteManual(produto, request);
         MovimentoEstoque movimento = registrarMovimento(produto, request.tipo(), request.motivo(),
-                OrigemMovimento.AJUSTE_MANUAL, quantidade, normalizarOuNulo(request.observacao()),
+                OrigemMovimento.AJUSTE_MANUAL, valores, normalizarOuNulo(request.observacao()),
                 usuario.getId(), request.chave());
+        if (valores.custo() != null) {
+            custoDeEntrada.registrar(produto, valores.custo().porUnidade(), movimento.getId(), usuario.getId());
+        }
         return new ResultadoAjuste(MovimentoEstoqueResponse.de(movimento, usuario.getNome()), true);
     }
 
-    private static QuantidadeDoAjuste validarAjusteManual(Produto produto, AjusteEstoqueRequest request) {
+    /**
+     * Regras do ajuste manual, nesta ordem: controle de estoque, motivo,
+     * observacao em "Outro", quantidade (em unidades ou em embalagens) e, por
+     * ultimo, o custo (Fase B4).
+     */
+    private static ValoresDoMovimento validarAjusteManual(Produto produto, AjusteEstoqueRequest request) {
         if (!produto.isControlaEstoque()) {
             throw new RegraDeNegocioException(MENSAGEM_SEM_CONTROLE);
         }
@@ -210,9 +236,13 @@ public class EstoqueService {
         if (request.motivo() == MotivoMovimento.OUTRO && !StringUtils.hasText(request.observacao())) {
             throw new RegraDeNegocioException(MENSAGEM_DESCREVA_O_MOTIVO, CAMPO_OBSERVACAO);
         }
-        if (request.embalagemId() != null) {
-            return emEmbalagens(produto, request);
-        }
+        QuantidadeDoAjuste quantidade = request.embalagemId() != null
+                ? emEmbalagens(produto, request)
+                : emUnidades(produto, request);
+        return new ValoresDoMovimento(quantidade, custoDaCompra(request, quantidade.embalagem()));
+    }
+
+    private static QuantidadeDoAjuste emUnidades(Produto produto, AjusteEstoqueRequest request) {
         if (request.tipo() == TipoMovimento.AJUSTE) {
             QuantidadeDeEstoque.validarNaoNegativa(request.quantidade(), produto.getUnidade(), CAMPO_QUANTIDADE);
         } else {
@@ -244,6 +274,30 @@ public class EstoqueService {
                 embalagens.intValueExact()));
     }
 
+    /**
+     * Custo da compra (spec 2.1 e 2.3), nesta ordem: so na entrada por compra
+     * (400 nos demais), obrigatorio nela (400) e maior que zero, no digitado e
+     * no por unidade (400). {@code null} fora da entrada por compra.
+     */
+    private static CustoDaCompra custoDaCompra(AjusteEstoqueRequest request, RetratoDaEmbalagem embalagem) {
+        boolean entradaPorCompra = request.tipo() == TipoMovimento.ENTRADA
+                && request.motivo() == MotivoMovimento.COMPRA;
+        if (!entradaPorCompra) {
+            if (request.custo() != null) {
+                throw new RegraDeNegocioException(MENSAGEM_CUSTO_FORA_DA_COMPRA, CAMPO_CUSTO);
+            }
+            return null;
+        }
+        if (request.custo() == null) {
+            throw new RegraDeNegocioException(MENSAGEM_INFORME_O_CUSTO, CAMPO_CUSTO);
+        }
+        CustoDaCompra custo = CustoDaCompra.de(request.custo(), embalagem);
+        if (!custo.positivo()) {
+            throw new RegraDeNegocioException(MENSAGEM_CUSTO_NAO_POSITIVO, CAMPO_CUSTO);
+        }
+        return custo;
+    }
+
     private static void validarMotivo(TipoMovimento tipo, MotivoMovimento motivo) {
         if (!motivo.manual()) {
             throw new RegraDeNegocioException(MENSAGEM_MOTIVO_DO_SISTEMA, CAMPO_MOTIVO);
@@ -267,13 +321,24 @@ public class EstoqueService {
                 });
     }
 
-    /** Mesmo produto, tipo, motivo, quantidade informada e observacao (aparada; vazia = sem). */
+    /**
+     * Mesmo produto, tipo, motivo, quantidade informada, observacao (aparada;
+     * vazia = sem) e custo (Fase B4: 10 = 10,00; sem custo = sem custo).
+     */
     private static boolean mesmoPedido(MovimentoEstoque gravado, UUID produtoId, AjusteEstoqueRequest request) {
         return gravado.getProduto().getUuid().equals(produtoId)
                 && gravado.getTipo() == request.tipo()
                 && gravado.getMotivo() == request.motivo()
                 && mesmaQuantidade(gravado, request)
-                && Objects.equals(gravado.getObservacao(), normalizarOuNulo(request.observacao()));
+                && Objects.equals(gravado.getObservacao(), normalizarOuNulo(request.observacao()))
+                && mesmoCusto(gravado.getCustoInformado(), request.custo());
+    }
+
+    private static boolean mesmoCusto(BigDecimal gravado, BigDecimal pedido) {
+        if (gravado == null || pedido == null) {
+            return gravado == pedido;
+        }
+        return gravado.compareTo(pedido) == 0;
     }
 
     /**

@@ -1795,12 +1795,14 @@ class ProdutoServiceTest {
     void historicoConsultaAPaginaDoProdutoDaEmpresa() {
         usuarioAtivoDaEmpresa(9L);
         produtoExistente();
+        LocalDateTime alteradoEm = LocalDateTime.of(2026, 10, 21, 14, 3, 12);
+        LinhaDoHistoricoDePreco linha = new LinhaDoHistoricoDePreco(CampoHistoricoPreco.PRECO_VENDA,
+                new BigDecimal("10.00"), new BigDecimal("11.50"), null, "Ana Souza", alteradoEm, null, null);
         HistoricoPrecoResponse item = new HistoricoPrecoResponse(CampoHistoricoPreco.PRECO_VENDA,
-                new BigDecimal("10.00"), new BigDecimal("11.50"), null, "Ana Souza",
-                LocalDateTime.of(2026, 10, 21, 14, 3, 12));
+                new BigDecimal("10.00"), new BigDecimal("11.50"), null, "Ana Souza", alteradoEm, null, null);
         when(historicoPrecoRepository.historicoDoProduto(EMPRESA_ID, PRODUTO_ID,
                 PageRequest.of(1, 2)))
-                .thenReturn(new PageImpl<>(List.of(item), PageRequest.of(1, 2), 3));
+                .thenReturn(new PageImpl<>(List.of(linha), PageRequest.of(1, 2), 3));
 
         PaginaResponse<HistoricoPrecoResponse> pagina = produtoService.historicoDePrecosParaUsuario(9L, produtoUuid,
                 1, 2);

@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import com.geitus.app.catalog.EntradaDeCompra;
 import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
 
 /**
@@ -33,7 +34,7 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
             SELECT new com.geitus.app.inventory.dto.MovimentoEstoqueResponse(
                        m.uuid, m.tipo, m.motivo, m.origem, m.quantidade, m.saldoAnterior, m.saldoNovo,
                        m.observacao, u.nome, m.criadoEm, m.embalagemRotulo, m.embalagemQuantidade,
-                       m.quantidadeEmbalagens)
+                       m.quantidadeEmbalagens, m.custoInformado, m.custoUnitario)
               FROM MovimentoEstoque m
               JOIN Usuario u ON u.id = m.usuarioId AND u.empresa.id = m.empresaId
              WHERE m.empresaId = :empresaId
@@ -48,6 +49,35 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
             """)
     Page<MovimentoEstoqueResponse> movimentosDoProduto(@Param("empresaId") Long empresaId,
             @Param("produtoId") Long produtoId, Pageable pageable);
+
+    /**
+     * Entradas por compra com custo do produto (Fase B4), da mais recente para
+     * a mais antiga: a primeira e a ultima compra. As compras anteriores a V13
+     * (sem custo) ficam de fora. Use com {@code PageRequest.of(0, 1)}; atende o
+     * indice {@code ix_movimento_estoque_produto}.
+     */
+    @Query("""
+            SELECT new com.geitus.app.catalog.EntradaDeCompra(
+                       m.quantidade, m.quantidadeEmbalagens, m.embalagemRotulo, m.criadoEm)
+              FROM MovimentoEstoque m
+             WHERE m.empresaId = :empresaId
+               AND m.produto.id = :produtoId
+               AND m.custoInformado IS NOT NULL
+             ORDER BY m.criadoEm DESC, m.id DESC
+            """)
+    List<EntradaDeCompra> entradasDeCompraDoProduto(@Param("empresaId") Long empresaId,
+            @Param("produtoId") Long produtoId, Pageable pageable);
+
+    /** Quantidade, retrato e data dos movimentos informados que sao da empresa (DEC-016), em uma consulta. */
+    @Query("""
+            SELECT new com.geitus.app.inventory.EntradaDoMovimento(
+                       m.id, m.quantidade, m.quantidadeEmbalagens, m.embalagemRotulo, m.criadoEm)
+              FROM MovimentoEstoque m
+             WHERE m.empresaId = :empresaId
+               AND m.id IN :movimentoIds
+            """)
+    List<EntradaDoMovimento> entradasDosMovimentos(@Param("empresaId") Long empresaId,
+            @Param("movimentoIds") Collection<Long> movimentoIds);
 
     /**
      * Contagem de movimentos por produto, em uma consulta: o total e os que nao

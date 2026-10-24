@@ -91,7 +91,7 @@ class EstoqueControllerTest {
         return new MovimentoEstoqueResponse(UUID.fromString("00000000-0000-0000-0000-0000000000a1"),
                 TipoMovimento.SAIDA, MotivoMovimento.PERDA_AVARIA, OrigemMovimento.AJUSTE_MANUAL,
                 new BigDecimal("-2.000"), new BigDecimal("12.000"), new BigDecimal("10.000"), "Caixa amassada",
-                "Ana Souza", LocalDateTime.of(2026, 10, 21, 15, 20), null);
+                "Ana Souza", LocalDateTime.of(2026, 10, 21, 15, 20), null, null, null);
     }
 
     // ---------- Ajuste ----------
@@ -133,7 +133,7 @@ class EstoqueControllerTest {
 
         verify(estoqueService).ajustarParaUsuario(1L, PRODUTO_ID, new AjusteEstoqueRequest(TipoMovimento.SAIDA,
                 new BigDecimal("2"), MotivoMovimento.PERDA_AVARIA, "Caixa amassada", CHAVE,
-                null));
+                null, null));
     }
 
     /** Fase B3: o {@code embalagemId} chega ao service e o retrato da embalagem sai na resposta. */
@@ -145,23 +145,26 @@ class EstoqueControllerTest {
                 MotivoMovimento.COMPRA, OrigemMovimento.AJUSTE_MANUAL, new BigDecimal("36.000"),
                 new BigDecimal("10.000"), new BigDecimal("46.000"), null, "Ana Souza",
                 LocalDateTime.of(2026, 10, 24, 9, 0),
-                new MovimentoEstoqueResponse.EmbalagemDoMovimento("CX c/ 18 UN", new BigDecimal("18.000"), 2));
+                new MovimentoEstoqueResponse.EmbalagemDoMovimento("CX c/ 18 UN", new BigDecimal("18.000"), 2),
+                new BigDecimal("180.00"), new BigDecimal("10.0000"));
         when(estoqueService.ajustarParaUsuario(eq(1L), eq(PRODUTO_ID), any(AjusteEstoqueRequest.class)))
                 .thenReturn(new ResultadoAjuste(entrada, true));
 
         mockMvc.perform(postarAjuste("""
                         { "tipo": "ENTRADA", "quantidade": 2, "motivo": "COMPRA",
                           "chave": "2c1f0000-0000-0000-0000-000000000001",
-                          "embalagemId": "00000000-0000-0000-0000-0000000000c1" }
+                          "embalagemId": "00000000-0000-0000-0000-0000000000c1", "custo": 180.00 }
                         """).header("Authorization", token(1L, "ADMIN")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.quantidade").value(36.0))
+                .andExpect(jsonPath("$.custoInformado").value(180.0))
+                .andExpect(jsonPath("$.custoUnitario").value(10.0))
                 .andExpect(jsonPath("$.embalagem.rotulo").value("CX c/ 18 UN"))
                 .andExpect(jsonPath("$.embalagem.quantidadePorEmbalagem").value(18.0))
                 .andExpect(jsonPath("$.embalagem.quantidadeDeEmbalagens").value(2));
 
         verify(estoqueService).ajustarParaUsuario(1L, PRODUTO_ID, new AjusteEstoqueRequest(TipoMovimento.ENTRADA,
-                new BigDecimal("2"), MotivoMovimento.COMPRA, null, CHAVE, caixa));
+                new BigDecimal("2"), MotivoMovimento.COMPRA, null, CHAVE, caixa, new BigDecimal("180.00")));
     }
 
     @Test

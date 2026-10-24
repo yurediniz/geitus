@@ -112,10 +112,25 @@ class CenarioDeEstoque {
     /** Como o request minimo, com a lista de embalagens ({@code null} = campo ausente). */
     static ProdutoRequest produto(UUID unidadeId, String nome, boolean controlaEstoque, String estoqueInicial,
             List<EmbalagemRequest> embalagens) {
+        return produtoComCusto(unidadeId, nome, null, controlaEstoque, estoqueInicial, embalagens);
+    }
+
+    /** Fase B4: como o request com embalagens, com o custo do cadastro ({@code null} = sem custo). */
+    static ProdutoRequest produtoComCusto(UUID unidadeId, String nome, String custo, boolean controlaEstoque,
+            String estoqueInicial, List<EmbalagemRequest> embalagens) {
         return new ProdutoRequest(nome, null, null, null, null, unidadeId, null,
-                new BigDecimal("10.00"), null, null, null, null, null, List.of(), embalagens, null, null, null, null,
-                null, controlaEstoque,
+                new BigDecimal("10.00"), custo == null ? null : new BigDecimal(custo), null, null, null, null,
+                List.of(), embalagens, null, null, null, null, null, controlaEstoque,
                 estoqueInicial == null ? null : new BigDecimal(estoqueInicial));
+    }
+
+    /**
+     * Fase B4: PATCH do cadastro de um produto em UN com o nome e o custo
+     * informados, mantendo as embalagens (campo ausente).
+     */
+    ProdutoResponse editarProduto(EmpresaDeTeste empresa, UUID produto, String nome, String custo) {
+        return produtoService.atualizarDadosBasicosParaUsuario(empresa.admin(), produto,
+                produtoComCusto(unidade(empresa, "UN"), nome, custo, true, null, null));
     }
 
     /**

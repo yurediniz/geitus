@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -25,6 +27,7 @@ import org.postgresql.util.PSQLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -100,6 +103,12 @@ import com.geitus.app.shared.numeracao.TipoNumeracao;
  * <p>Fase E (docs/modules/produtos-listagem.md): a listagem e paginada no
  * servidor, com busca sem acento, filtros e ordenacao feitos no banco pela
  * {@link ConsultaDeProdutos}.
+ *
+ * <p>Fase B4 (docs/modules/produtos-custo-entrada.md, 3 e 4): o custo que muda
+ * no cadastro ou na edicao marca a origem {@code EDICAO} no produto e no
+ * historico; o mesmo custo nao mexe na origem. A resposta do detalhe traz a
+ * ultima entrada por compra, e o historico traz a entrada ligada a cada linha
+ * de custo, lida em lote.
  */
 @Service
 public class ProdutoService {
@@ -250,6 +259,7 @@ public class ProdutoService {
 
         long numero = numerador.proximo(empresaId, TipoNumeracao.PRODUTO);
         Produto produto = new Produto(empresa, numero, dadosDoProduto(request, vinculos, sku));
+        marcarCustoSeEditado(produto, null);
         Produto gravado = gravar(produto, () -> aplicarCodigosEEmbalagens(produto, codigos, embalagens));
         registrarHistorico(gravado, idUsuario, null, null, embalagens);
         if (request.estoqueInicial() != null) {
@@ -293,6 +303,7 @@ public class ProdutoService {
         BigDecimal custoAnterior = produto.getCusto();
         BigDecimal precoAnterior = produto.getPrecoVenda();
         produto.atualizarDadosBasicos(dadosDoProduto(request, vinculos, sku));
+        marcarCustoSeEditado(produto, custoAnterior);
         Produto gravado = gravar(produto, () -> aplicarCodigosEEmbalagens(produto, codigos.orElse(null),
                 embalagens));
         registrarHistorico(gravado, idUsuario, custoAnterior, precoAnterior, embalagens);
@@ -323,6 +334,17 @@ public class ProdutoService {
         embalagensDoProduto.aplicarInclusoes(produto, embalagens);
         if (embalagens.alteraEmbalagens()) {
             produto.registrarAlteracaoDasEmbalagens();
+        }
+    }
+
+    /**
+     * Fase B4 (spec 4): o custo que mudou no cadastro ou na edicao (inclusive
+     * vazio <-> valor) marca a origem {@code EDICAO}, ou a limpa sem custo;
+     * salvar com o mesmo custo mantem a origem atual (Review Focus 2).
+     */
+    private void marcarCustoSeEditado(Produto produto, BigDecimal custoAnterior) {
+        if (!HistoricoDePrecos.mesmoValor(custoAnterior, produto.getCusto())) {
+            produto.marcarCustoEditado(LocalDateTime.now(relogio).truncatedTo(ChronoUnit.MICROS));
         }
     }
 
@@ -561,7 +583,7 @@ public class ProdutoService {
                 .map(porId::get)
                 .filter(Objects::nonNull)
                 .map(produto -> responder(produto, arvore, hoje,
-                        estoques.getOrDefault(produto.getId(), ResumoDeEstoque.VAZIO)))
+                        estoques.getOrDefault(produto.getId(), ResumoDeEstoque.VAZIO), null))
                 .toList();
     }
 
@@ -569,7 +591,8 @@ public class ProdutoService {
      * Historico de custo e preco de venda do produto, do mais recente para o
      * mais antigo (spec 5). Leitura para qualquer autenticado; produto de
      * outra empresa responde 404 (DEC-016); pagina ou tamanho fora dos
-     * limites, 400.
+     * limites, 400. Fase B4: as entradas por compra ligadas as linhas de custo
+     * da pagina vem em uma consulta so.
      */
     @Transactional(readOnly = true)
     public PaginaResponse<HistoricoPrecoResponse> historicoDePrecosParaUsuario(Long idUsuario, UUID produtoId,
@@ -577,8 +600,13 @@ public class ProdutoService {
         Paginacao.validar(pagina, tamanho);
         Long empresaId = resolverEmpresaId(idUsuario);
         Produto produto = buscarPorId(empresaId, produtoId);
-        return PaginaResponse.de(historicoPrecoRepository.historicoDoProduto(empresaId, produto.getId(),
-                PageRequest.of(pagina, tamanho)));
+        Page<LinhaDoHistoricoDePreco> linhas = historicoPrecoRepository.historicoDoProduto(empresaId,
+                produto.getId(), PageRequest.of(pagina, tamanho));
+        Map<Long, EntradaDeCompra> entradas = usoNoEstoque.entradasDeCompra(empresaId, linhas.stream()
+                .map(LinhaDoHistoricoDePreco::movimentoId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet()));
+        return PaginaResponse.de(linhas.map(linha -> linha.resposta(entradas)));
     }
 
     @Transactional(readOnly = true)
@@ -993,17 +1021,29 @@ public class ProdutoService {
         return Boolean.TRUE.equals(request.vendidoBalanca());
     }
 
-    /** Resposta de um produto; a arvore so e carregada se o produto tiver categoria. */
+    /**
+     * Resposta de um produto; a arvore so e carregada se o produto tiver
+     * categoria, e a ultima compra (Fase B4) so com a origem do custo
+     * {@code ENTRADA_COMPRA}.
+     */
     private ProdutoResponse responder(Produto produto) {
         CategoriaArvore arvore = produto.getCategoria() == null
                 ? CategoriaArvore.de(List.of())
                 : categoriaService.arvoreDaEmpresa(produto.getEmpresaId());
-        return responder(produto, arvore, SituacaoPromocao.hoje(relogio), resumoDeEstoque(produto));
+        return responder(produto, arvore, SituacaoPromocao.hoje(relogio), resumoDeEstoque(produto),
+                ultimaCompra(produto));
+    }
+
+    private EntradaDeCompra ultimaCompra(Produto produto) {
+        if (produto.getCustoOrigem() != OrigemDoCusto.ENTRADA_COMPRA) {
+            return null;
+        }
+        return usoNoEstoque.ultimaEntradaDeCompra(produto.getEmpresaId(), produto.getId()).orElse(null);
     }
 
     private static ProdutoResponse responder(Produto produto, CategoriaArvore arvore, LocalDate hoje,
-            ResumoDeEstoque estoque) {
-        return ProdutoResponse.de(produto, arvore, estoque.permiteExcluir(), hoje, estoque);
+            ResumoDeEstoque estoque, EntradaDeCompra ultimaCompra) {
+        return ProdutoResponse.de(produto, arvore, estoque.permiteExcluir(), hoje, estoque, ultimaCompra);
     }
 
     /**

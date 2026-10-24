@@ -20,7 +20,9 @@ import jakarta.validation.constraints.Size;
  * saida, ou o saldo contado no ajuste. Precisao e limite espelham o
  * {@code NUMERIC(12,3)} da V9. A {@code chave} (UUID gerado ao abrir o modal)
  * torna o pedido idempotente. As regras que dependem do produto (fracao,
- * saldo, motivo do tipo, observacao em "Outro", embalagem) ficam no service.
+ * saldo, motivo do tipo, observacao em "Outro", embalagem) e as do custo da
+ * compra (Fase B4: obrigatorio, maior que zero, so na entrada por compra)
+ * ficam no service.
  */
 @Schema(description = "Ajuste manual de estoque do produto")
 public record AjusteEstoqueRequest(
@@ -55,5 +57,12 @@ public record AjusteEstoqueRequest(
         @Schema(description = "Fase B3: UUID da embalagem do produto em que a quantidade foi informada (so em "
                 + "ENTRADA e SAIDA); com ela, a quantidade e o numero de embalagens (inteiro) e o movimento e "
                 + "gravado em unidades de venda. Ausente = quantidade na unidade de venda")
-        UUID embalagemId) {
+        UUID embalagemId,
+
+        @Schema(description = "Fase B4: custo da compra, obrigatorio e maior que zero so em ENTRADA com motivo "
+                + "COMPRA (ausente nos demais). Com embalagemId, e o custo de 1 embalagem; o custo por unidade e a "
+                + "divisao pela quantidade dela", example = "180.00")
+        @Digits(integer = 10, fraction = 2,
+                message = "O custo deve ter no máximo 10 dígitos inteiros e 2 casas decimais.")
+        BigDecimal custo) {
 }

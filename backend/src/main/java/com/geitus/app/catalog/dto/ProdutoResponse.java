@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import com.geitus.app.catalog.EntradaDeCompra;
 import com.geitus.app.catalog.MargemEMarkup;
 import com.geitus.app.catalog.PrecoAplicado;
 import com.geitus.app.catalog.PrecoDeVenda;
@@ -52,6 +53,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * <p>Fase B2 (docs/modules/produtos-codigo-e-balanca.md, 8): {@code numero}
  * (numero de registro na empresa), {@code codigo} (sem zeros a esquerda, ou
  * {@code null}) e {@code vendidoBalanca}.
+ *
+ * <p>Fase B4 (docs/modules/produtos-custo-entrada.md, 4): {@code custoOrigem}
+ * diz de onde veio o custo atual ({@code null} sem origem); a quantidade e a
+ * embalagem da ultima compra so vem no detalhe e nas respostas de gravacao.
  */
 @Schema(description = "Dados publicos de um produto")
 public record ProdutoResponse(
@@ -75,6 +80,8 @@ public record ProdutoResponse(
         String descricao,
         BigDecimal precoVenda,
         BigDecimal custo,
+        @Schema(description = "Fase B4: de onde veio o custo atual; null sem custo ou com a origem desconhecida")
+        CustoOrigemResponse custoOrigem,
         BigDecimal precoMinimo,
         @Schema(description = "Promocao com a situacao na data de hoje; null se nao houver")
         PromocaoResponse promocao,
@@ -122,6 +129,16 @@ public record ProdutoResponse(
      */
     public static ProdutoResponse de(Produto produto, CategoriaArvore arvore, boolean podeExcluir,
             LocalDate hoje, ResumoDeEstoque estoque) {
+        return de(produto, arvore, podeExcluir, hoje, estoque, null);
+    }
+
+    /**
+     * Como a resposta sem a ultima compra, com a {@code ultimaCompra} do
+     * produto (Fase B4) no detalhe da origem do custo ({@code null} = sem
+     * detalhe, como na listagem).
+     */
+    public static ProdutoResponse de(Produto produto, CategoriaArvore arvore, boolean podeExcluir,
+            LocalDate hoje, ResumoDeEstoque estoque, EntradaDeCompra ultimaCompra) {
         BigDecimal preco = produto.getPrecoVenda();
         BigDecimal custo = produto.getCusto();
         PromocaoResponse promocao = PromocaoResponse.deOuNulo(produto, hoje);
@@ -138,6 +155,7 @@ public record ProdutoResponse(
                 produto.getDescricao(),
                 preco,
                 custo,
+                CustoOrigemResponse.deOuNulo(produto, ultimaCompra),
                 produto.getPrecoMinimo(),
                 promocao,
                 promocao != null && promocao.vigente(),

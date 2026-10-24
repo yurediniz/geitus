@@ -129,6 +129,18 @@ public class MovimentoEstoque {
     public MovimentoEstoque(Produto produto, TipoMovimento tipo, MotivoMovimento motivo, OrigemMovimento origem,
             BigDecimal quantidade, BigDecimal saldoAnterior, BigDecimal saldoNovo, String observacao,
             Long usuarioId, UUID chaveIdempotencia, RetratoDaEmbalagem embalagem) {
+        this(produto, tipo, motivo, origem, quantidade, saldoAnterior, saldoNovo, observacao, usuarioId,
+                chaveIdempotencia, embalagem, null);
+    }
+
+    /**
+     * Fase B4: como o construtor com embalagem, com o custo da entrada por
+     * compra ({@code null} = sem custo). A V13 confere que so a entrada manual
+     * por compra tem custo e a coerencia do por unidade com o retrato.
+     */
+    MovimentoEstoque(Produto produto, TipoMovimento tipo, MotivoMovimento motivo, OrigemMovimento origem,
+            BigDecimal quantidade, BigDecimal saldoAnterior, BigDecimal saldoNovo, String observacao,
+            Long usuarioId, UUID chaveIdempotencia, RetratoDaEmbalagem embalagem, CustoDaCompra custo) {
         this.produto = produto;
         this.empresaId = produto.getEmpresaId();
         this.tipo = tipo;
@@ -144,6 +156,10 @@ public class MovimentoEstoque {
             this.embalagemRotulo = embalagem.rotulo();
             this.embalagemQuantidade = embalagem.quantidadePorEmbalagem();
             this.quantidadeEmbalagens = embalagem.quantidadeDeEmbalagens();
+        }
+        if (custo != null) {
+            this.custoInformado = custo.informado();
+            this.custoUnitario = custo.porUnidade();
         }
     }
 

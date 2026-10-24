@@ -67,6 +67,8 @@ class EstoqueServiceIT {
     /** Rodadas do teste concorrente: sem a trava, ao menos uma costuma quebrar a cadeia. */
     private static final int RODADAS_CONCORRENTES = 10;
     private static final long ESPERA_MAXIMA_SEGUNDOS = 30;
+    /** Fase B4: toda entrada por compra exige o custo. */
+    private static final BigDecimal CUSTO_DA_COMPRA = new BigDecimal("10.00");
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
@@ -98,7 +100,7 @@ class EstoqueServiceIT {
 
     private static AjusteEstoqueRequest entrada(String quantidade, UUID chave) {
         return new AjusteEstoqueRequest(TipoMovimento.ENTRADA, new BigDecimal(quantidade), MotivoMovimento.COMPRA,
-                null, chave, null);
+                null, chave, null, CUSTO_DA_COMPRA);
     }
 
     // ---------- Concorrencia (Review Focus 1) ----------
@@ -188,7 +190,7 @@ class EstoqueServiceIT {
             try {
                 estoqueService.ajustarParaUsuario(idUsuario, produto, new AjusteEstoqueRequest(TipoMovimento.SAIDA,
                         new BigDecimal("3"), MotivoMovimento.PERDA_AVARIA, null, UUID.randomUUID(),
-                        null));
+                        null, null));
                 return "criado";
             } catch (RegraDeNegocioException regra) {
                 return regra.getMessage();
@@ -297,9 +299,9 @@ class EstoqueServiceIT {
         estoqueService.ajustarParaUsuario(empresa.admin(), produto, entrada("10"));
         estoqueService.ajustarParaUsuario(empresa.admin(), produto, new AjusteEstoqueRequest(TipoMovimento.SAIDA,
                 new BigDecimal("2.5"), MotivoMovimento.PERDA_AVARIA, "Saco rasgado", UUID.randomUUID(),
-                null));
+                null, null));
         estoqueService.ajustarParaUsuario(empresa.admin(), produto, new AjusteEstoqueRequest(TipoMovimento.AJUSTE,
-                new BigDecimal("7"), MotivoMovimento.CONTAGEM, null, UUID.randomUUID(), null));
+                new BigDecimal("7"), MotivoMovimento.CONTAGEM, null, UUID.randomUUID(), null, null));
 
         PaginaResponse<MovimentoEstoqueResponse> primeira = estoqueService.movimentosParaUsuario(empresa.admin(),
                 produto, 0, 2);
@@ -369,9 +371,13 @@ class EstoqueServiceIT {
 
     // ---------- Em embalagens (Fase B3, docs/modules/produtos-embalagens.md, 6) ----------
 
+    /** Fase B4: a entrada por compra leva o custo (de 1 caixa); os demais, nenhum. */
     private static AjusteEstoqueRequest emCaixas(TipoMovimento tipo, String caixas, MotivoMovimento motivo,
             UUID embalagemId, UUID chave) {
-        return new AjusteEstoqueRequest(tipo, new BigDecimal(caixas), motivo, null, chave, embalagemId);
+        BigDecimal custo = tipo == TipoMovimento.ENTRADA && motivo == MotivoMovimento.COMPRA
+                ? CUSTO_DA_COMPRA
+                : null;
+        return new AjusteEstoqueRequest(tipo, new BigDecimal(caixas), motivo, null, chave, embalagemId, custo);
     }
 
     private static UUID caixa(ProdutoResponse produto) {

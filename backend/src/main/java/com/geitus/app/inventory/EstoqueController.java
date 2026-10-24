@@ -57,7 +57,8 @@ public class EstoqueController {
             description = "Entrada, saida ou \"contar e ajustar para\" o saldo informado, com motivo. 201 quando "
                     + "grava; 200 com o movimento ja gravado quando a chave se repete com os mesmos dados; 409 "
                     + "quando a chave ja foi usada com outros dados; 400 para saldo insuficiente, fracao em "
-                    + "unidade nao fracionada, motivo fora do tipo ou produto sem controle de estoque.",
+                    + "unidade nao fracionada, motivo fora do tipo, produto sem controle de estoque ou custo da "
+                    + "compra ausente, zero ou fora da entrada por compra (Fase B4).",
             security = @SecurityRequirement(name = "bearer-jwt"))
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Movimento gravado",

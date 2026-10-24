@@ -6,8 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
-
 /** Acesso ao historico de precos do produto (tabela so de insercao, V8). */
 public interface HistoricoPrecoRepository extends JpaRepository<HistoricoPreco, Long> {
 
@@ -15,11 +13,14 @@ public interface HistoricoPrecoRepository extends JpaRepository<HistoricoPreco, 
      * Historico do produto, do mais recente para o mais antigo (desempate pelo
      * id), ja com o nome do usuario. Filtra pela empresa alem do produto
      * (DEC-016) e atende o indice {@code ix_historico_preco_produto}. O
-     * {@code pageable} nao deve trazer ordenacao: a ordem e a da consulta.
+     * {@code pageable} nao deve trazer ordenacao: a ordem e a da consulta. Fase
+     * B4: a linha traz o id interno do movimento da compra, que o service troca
+     * pela entrada (em lote) antes de responder.
      */
     @Query(value = """
-            SELECT new com.geitus.app.catalog.dto.HistoricoPrecoResponse(
-                       h.campo, h.valorAnterior, h.valorNovo, h.embalagemRotulo, u.nome, h.alteradoEm)
+            SELECT new com.geitus.app.catalog.LinhaDoHistoricoDePreco(
+                       h.campo, h.valorAnterior, h.valorNovo, h.embalagemRotulo, u.nome, h.alteradoEm,
+                       h.origem, h.movimentoId)
               FROM HistoricoPreco h
               JOIN Usuario u ON u.id = h.usuarioId AND u.empresa.id = h.empresaId
              WHERE h.empresaId = :empresaId
@@ -32,6 +33,6 @@ public interface HistoricoPrecoRepository extends JpaRepository<HistoricoPreco, 
              WHERE h.empresaId = :empresaId
                AND h.produto.id = :produtoId
             """)
-    Page<HistoricoPrecoResponse> historicoDoProduto(@Param("empresaId") Long empresaId,
+    Page<LinhaDoHistoricoDePreco> historicoDoProduto(@Param("empresaId") Long empresaId,
             @Param("produtoId") Long produtoId, Pageable pageable);
 }

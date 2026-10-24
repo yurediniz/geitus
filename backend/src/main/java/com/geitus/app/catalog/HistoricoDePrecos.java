@@ -33,6 +33,15 @@ public class HistoricoDePrecos {
         registrarCustoSeMudou(produto, usuarioId, OrigemDoCusto.EDICAO, custoAnterior, null);
     }
 
+    /**
+     * Custo que mudou por uma entrada por compra (Fase B4, 3): origem
+     * {@code ENTRADA_COMPRA}, ligada ao movimento; so se o valor mudou.
+     */
+    public void registrarCustoDeEntradaSeMudou(Produto produto, Long usuarioId, BigDecimal custoAnterior,
+            Long movimentoId) {
+        registrarCustoSeMudou(produto, usuarioId, OrigemDoCusto.ENTRADA_COMPRA, custoAnterior, movimentoId);
+    }
+
     private void registrarCustoSeMudou(Produto produto, Long usuarioId, OrigemDoCusto origem,
             BigDecimal anterior, Long movimentoId) {
         if (!mesmoValor(anterior, produto.getCusto())) {
@@ -50,7 +59,8 @@ public class HistoricoDePrecos {
         }
     }
 
-    private static boolean mesmoValor(BigDecimal anterior, BigDecimal novo) {
+    /** Comparacao numerica (10,00 = 10,0) que trata nulo; tambem usada para saber se o custo mudou. */
+    static boolean mesmoValor(BigDecimal anterior, BigDecimal novo) {
         if (anterior == null || novo == null) {
             return anterior == novo;
         }

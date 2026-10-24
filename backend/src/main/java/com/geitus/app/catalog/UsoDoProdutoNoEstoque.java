@@ -2,6 +2,7 @@ package com.geitus.app.catalog;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Consultas do catalogo ao estoque (docs/modules/produtos-estoque.md, 4.7 e
@@ -20,4 +21,18 @@ public interface UsoDoProdutoNoEstoque {
 
     /** Se algum produto da empresa com esta unidade de venda ja teve movimento de estoque. */
     boolean algumProdutoDaUnidadeTemMovimentos(Long empresaId, Long unidadeId);
+
+    /**
+     * Fase B4: a ultima entrada por compra com custo do produto (a origem do
+     * custo {@code ENTRADA_COMPRA}), se houver. Uma consulta; usada so no
+     * detalhe e nas respostas de gravacao, nunca na listagem.
+     */
+    Optional<EntradaDeCompra> ultimaEntradaDeCompra(Long empresaId, Long produtoId);
+
+    /**
+     * Fase B4: as entradas por compra dos movimentos (ids internos) ligados as
+     * linhas de custo de uma pagina do historico, em uma consulta. Movimento
+     * de outra empresa fica fora do mapa.
+     */
+    Map<Long, EntradaDeCompra> entradasDeCompra(Long empresaId, Collection<Long> movimentoIds);
 }

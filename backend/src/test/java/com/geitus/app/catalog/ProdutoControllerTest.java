@@ -1339,7 +1339,7 @@ class ProdutoControllerTest {
     void historicoComOperador_200ComPaginaPadrao() throws Exception {
         HistoricoPrecoResponse item = new HistoricoPrecoResponse(CampoHistoricoPreco.PRECO_VENDA,
                 new BigDecimal("10.00"), new BigDecimal("11.50"), null, "Ana Souza",
-                LocalDateTime.of(2026, 10, 21, 14, 3, 12));
+                LocalDateTime.of(2026, 10, 21, 14, 3, 12), null, null);
         when(produtoService.historicoDePrecosParaUsuario(2L, PRODUTO_ID, 0, 20))
                 .thenReturn(new PaginaResponse<>(List.of(item), 0, 20, 1));
 
