@@ -170,7 +170,7 @@ Aditiva sobre a V11, que não é editada.
 - **Onde:** no modal "Ajustar estoque", em **Entrada** e **Saída**, quando o produto tem embalagem.
   - Ao lado da quantidade, há um seletor "Em: {sigla de venda} / CX c/ 18 UN / …"; o padrão é a unidade de venda.
   - Na **Entrada** com motivo Compra, o padrão é a embalagem de compra, se houver.
-- **Quantidade em embalagem:** inteira e > 0.
+- **Quantidade em embalagem:** inteira e > 0; senão, 400 "Informe um número inteiro de embalagens.".
 - **Prévia:** "2 CX c/ 18 UN = +36 UN · saldo 10 → 46".
 - **Gravação:**
   - o movimento continua em unidades (`quantidade = ±2 × 18`);
@@ -180,7 +180,7 @@ Aditiva sobre a V11, que não é editada.
 - **API:** `POST /api/produtos/{id}/estoque/ajustes` ganha `embalagemId` (UUID, opcional). Com ele:
   - a `quantidade` é o **número de embalagens**;
   - com o tipo AJUSTE, dá 400 "A contagem é feita na unidade de venda.";
-  - com uma embalagem de outro produto ou inexistente, dá 404.
+  - com uma embalagem de outro produto ou inexistente, dá 404 "Embalagem não encontrada.".
   - A resposta do movimento ganha `embalagem: {rotulo, quantidadePorEmbalagem, quantidadeDeEmbalagens} | null`.
 
 ## 7. API do produto
@@ -188,7 +188,7 @@ Aditiva sobre a V11, que não é editada.
   - **Ganha:** `embalagens: [{ id?, unidadeId, quantidade, preco?, deCompra, codigosBarras: [] }]`.
     - É a lista completa, com o mesmo comportamento da lista de códigos de barras: no PATCH, a lista informada substitui a atual e a lista ausente mantém a atual.
     - `id` (UUID) identifica a embalagem que continua. Embalagem sem `id` é nova, e embalagem ausente da lista é removida.
-    - Um `id` de outro produto dá 404.
+    - Um `id` de outro produto dá 404 "Embalagem não encontrada.".
   - **Perde:** `unidadeCompraId` e `fatorConversao`.
 - **Response:**
   - **Ganha:** `embalagens: [{ id, unidade: {id, sigla, descricao, fracionada}, quantidade, rotulo, preco, precoEfetivo, origemPreco, custo, margem, markup, deCompra, codigosBarras: [{codigo, formato}] }]`, na ordem.
