@@ -338,8 +338,8 @@ export function ArvoreDoCadastro<T extends ItemDaArvore>({
                       size="icon"
                       tabIndex={focavel ? 0 : -1}
                       className="size-9 pointer-coarse:size-11"
-                      aria-label={`Adicionar ${textos.sub} em ${item.nome}`}
-                      title={`Adicionar ${textos.sub}`}
+                      aria-label={textos.filho.acaoEm(item.nome)}
+                      title={textos.filho.acao}
                       onClick={() => acoes.onAdicionarSub(item)}
                     >
                       <FolderPlus className="h-4 w-4" />

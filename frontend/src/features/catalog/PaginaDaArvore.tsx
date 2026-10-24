@@ -71,7 +71,6 @@ interface PaginaDaArvoreProps<T extends ItemDaArvore> {
 export function PaginaDaArvore<T extends ItemDaArvore>({ configuracao }: PaginaDaArvoreProps<T>) {
   const { textos, servico } = configuracao
   const singularMaiusculo = comMaiuscula(textos.singular)
-  const subMaiusculo = comMaiuscula(textos.sub)
   const textosErro = {
     naoEncontrado: `Esta ${textos.singular} não existe mais. A lista foi atualizada.`,
     semPermissao: `Somente administradores podem gerenciar ${textos.plural}.`,
@@ -179,7 +178,7 @@ export function PaginaDaArvore<T extends ItemDaArvore>({ configuracao }: PaginaD
       // Criacao em sequencia: o campo continua aberto, vazio e com foco (Esc fecha).
       if (acao.tipo === 'sub') {
         expandir([acao.pai.id])
-        setMensagemSucesso(`${subMaiusculo} "${salvo.nome}" criada em "${acao.pai.caminho}".`)
+        setMensagemSucesso(textos.filho.criado(salvo.nome, acao.pai.caminho))
       } else {
         setMensagemSucesso(`${singularMaiusculo} "${salvo.nome}" criada.`)
       }

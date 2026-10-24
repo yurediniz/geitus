@@ -57,6 +57,9 @@ export function CamposFornecedoresDoProduto({ desabilitado, aoAlterarCampo }: Ca
         <span id="fornecedores-rotulo" className="block text-sm font-medium">
           Fornecedores (opcional)
         </span>
+        <p id="fornecedores-ajuda" className="text-xs text-muted-foreground">
+          Quem vende este produto para você. Pode ter mais de um.
+        </p>
         {fornecedores.length > 0 && (
           <ul className="flex flex-wrap gap-2" aria-labelledby="fornecedores-rotulo">
             {fornecedores.map((fornecedor) => (
@@ -97,8 +100,9 @@ export function CamposFornecedoresDoProduto({ desabilitado, aoAlterarCampo }: Ca
             desabilitado={noLimite}
             invalido={erroDaLista !== undefined}
             idsDescricao={
-              [noLimite && 'fornecedores-limite', erroDaLista && 'fornecedores-erro'].filter(Boolean).join(' ') ||
-              undefined
+              ['fornecedores-ajuda', noLimite && 'fornecedores-limite', erroDaLista && 'fornecedores-erro']
+                .filter(Boolean)
+                .join(' ')
             }
           />
         )}
@@ -151,7 +155,7 @@ export function CamposFornecedoresDoProduto({ desabilitado, aoAlterarCampo }: Ca
               ? 'O fornecedor da última compra saiu da lista; o campo ficou vazio.'
               : fornecedores.length === 0
                 ? 'Adicione um fornecedor à lista para escolher.'
-                : 'A entrada por compra no estoque atualiza este campo.'}
+                : 'De quem você comprou da última vez. A entrada por compra no estoque preenche sozinho.'}
           </p>
         )}
         <ErroDoCampo id="fornecedorUltimaCompraId-erro" mensagem={errors.fornecedorUltimaCompraId?.message} />

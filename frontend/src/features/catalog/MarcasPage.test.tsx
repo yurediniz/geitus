@@ -164,12 +164,12 @@ describe('MarcasPage', () => {
     renderPagina()
 
     await screen.findByRole('tree')
-    fireEvent.click(screen.getByRole('button', { name: 'Adicionar submarca em Boehringer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar marca ou linha em Boehringer' }))
     fireEvent.change(screen.getByLabelText('Nome da submarca de Boehringer'), { target: { value: ' Frontline ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar' }))
 
     await waitFor(() => expect(cadastrarMarcaMock).toHaveBeenCalledWith({ nome: 'Frontline', parentId: 'boehringer' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('Submarca "Frontline" criada em "Boehringer".')
+    expect(await screen.findByRole('status')).toHaveTextContent('"Frontline" criada dentro de "Boehringer".')
   })
 
   it('valida o nome vazio com o texto da marca', async () => {

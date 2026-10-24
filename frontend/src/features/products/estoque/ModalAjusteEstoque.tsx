@@ -191,6 +191,8 @@ function ConteudoAjuste({
   }))
   // Fornecedor da compra (spec B5 §6): so vai no envio da Entrada com Compra.
   const [fornecedor, setFornecedor] = useState<FornecedorDoProduto | null>(fornecedorDaCompra)
+  // Ainda o que veio preenchido (o da ultima compra): a ajuda diz de onde ele veio.
+  const [fornecedorIntocado, setFornecedorIntocado] = useState(true)
   // Escolhida no seletor: trocar o tipo ou o motivo deixa de trocar a embalagem pelo padrao.
   const [embalagemEscolhida, setEmbalagemEscolhida] = useState(false)
   const [errosEnvio, setErrosEnvio] = useState<Partial<Record<CampoAjuste, string>>>({})
@@ -570,6 +572,7 @@ function ConteudoAjuste({
               valor={fornecedor}
               onChange={(escolhido) => {
                 setFornecedor(escolhido)
+                setFornecedorIntocado(false)
                 setErrosEnvio(({ fornecedorId: _fornecedor, ...demais }) => demais)
               }}
               textoSemValor="Nenhum"
@@ -582,7 +585,10 @@ function ConteudoAjuste({
             />
             {!errosEnvio.fornecedorId && (
               <p id={`${ID_CAMPO.fornecedorId}-ajuda`} className="text-xs text-muted-foreground">
-                Com fornecedor, ele entra na lista do produto como o da última compra.
+                {fornecedorIntocado && fornecedorDaCompra && fornecedor
+                  ? 'Preenchido com o fornecedor da última compra. '
+                  : ''}
+                O fornecedor escolhido entra na lista do produto e passa a ser o da última compra.
               </p>
             )}
             <ErroDoCampo id={`${ID_CAMPO.fornecedorId}-erro`} mensagem={errosEnvio.fornecedorId} />

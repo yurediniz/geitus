@@ -1899,6 +1899,7 @@ describe('ProdutoPage', () => {
       fireEvent.change(await screen.findByRole('combobox', { name: 'Buscar marca' }), { target: { value: 'Premier' } })
       fireEvent.click(screen.getByRole('button', { name: /^nova marca/i }))
       expect(screen.getByLabelText('Nome da marca')).toHaveValue('Premier')
+      expect(within(screen.getByLabelText('Dentro de (opcional)')).getByRole('option', { name: 'Nenhum — no primeiro nível (fabricante)' })).toBeInTheDocument()
       fireEvent.change(screen.getByLabelText('Dentro de (opcional)'), { target: { value: 'golden' } })
       fireEvent.click(screen.getByRole('button', { name: /criar e selecionar/i }))
 
@@ -1968,6 +1969,9 @@ describe('ProdutoPage', () => {
       await esperarFormulario()
       await preencherMinimo()
 
+      expect(botaoAdicionarFornecedor()).toHaveAccessibleDescription('Quem vende este produto para você. Pode ter mais de um.')
+      expect(campoUltimaCompra()).toHaveAccessibleDescription('Adicione um fornecedor à lista para escolher.')
+
       expect(campoUltimaCompra()).toBeDisabled()
       await adicionarFornecedor('Distribuidora Sul')
       await adicionarFornecedor('Atacadão Norte')
@@ -1981,10 +1985,13 @@ describe('ProdutoPage', () => {
         expect.anything(),
       )
       fireEvent.click(botaoAdicionarFornecedor())
-      expect(await screen.findByText('Todos os fornecedores ativos já foram escolhidos.')).toBeInTheDocument()
+      expect(await screen.findByText('Todos os fornecedores ativos já estão na lista.')).toBeInTheDocument()
       fireEvent.keyDown(screen.getByRole('combobox', { name: 'Buscar fornecedor' }), { key: 'Escape' })
 
       expect(rotulosDasOpcoes(campoUltimaCompra())).toEqual(['Nenhum', 'Distribuidora Sul', 'Atacadão Norte'])
+      expect(campoUltimaCompra()).toHaveAccessibleDescription(
+        'De quem você comprou da última vez. A entrada por compra no estoque preenche sozinho.',
+      )
       fireEvent.change(campoUltimaCompra(), { target: { value: 'norte' } })
       fireEvent.click(botaoSalvar())
 
@@ -2158,7 +2165,9 @@ describe('ProdutoPage', () => {
 
       expect(await screen.findByText(mensagem)).toBeInTheDocument()
       expect(botaoAdicionarFornecedor()).toHaveAttribute('aria-invalid', 'true')
-      expect(botaoAdicionarFornecedor()).toHaveAccessibleDescription(mensagem)
+      expect(botaoAdicionarFornecedor()).toHaveAccessibleDescription(
+        `Quem vende este produto para você. Pode ter mais de um. ${mensagem}`,
+      )
     })
 
     it('o 400 do último fornecedor fora da lista aparece no campo', async () => {

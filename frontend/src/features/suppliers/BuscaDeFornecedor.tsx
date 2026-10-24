@@ -22,8 +22,9 @@ function tamanhoDoPedido(ocultos: number): number {
   return Math.min(FORNECEDORES_NA_BUSCA + ocultos, MAXIMO_DO_PEDIDO)
 }
 
-/** Texto abaixo da lista quando ha mais fornecedores do que os trazidos. */
-const MENSAGEM_HA_MAIS = 'Mostrando os 10 primeiros. Digite para buscar os demais.'
+/** Textos abaixo da lista quando ha mais fornecedores do que os trazidos. */
+const MENSAGEM_HA_MAIS = 'Mostrando os 10 primeiros. Digite para encontrar os outros.'
+const MENSAGEM_HA_MAIS_NA_BUSCA = 'Mostrando os 10 primeiros resultados. Digite mais para refinar.'
 
 export interface BuscaDeFornecedorProps {
   /** Fornecedor escolhido; null = nenhum. */
@@ -116,15 +117,18 @@ export function BuscaDeFornecedor({
       if (total === 0) {
         return termoComAtraso
           ? `Nenhum fornecedor ativo encontrado para "${termoComAtraso}".`
-          : 'Nenhum fornecedor ativo para escolher.'
+          : 'Nenhum fornecedor ativo. Cadastre em Produtos › Fornecedores.'
       }
       if (total <= trazidos) {
         return termoComAtraso
-          ? 'Os fornecedores encontrados já foram escolhidos.'
-          : 'Todos os fornecedores ativos já foram escolhidos.'
+          ? 'Os fornecedores encontrados já estão na lista.'
+          : 'Todos os fornecedores ativos já estão na lista.'
       }
     }
-    return total > trazidos ? MENSAGEM_HA_MAIS : null
+    if (total <= trazidos) {
+      return null
+    }
+    return termoComAtraso ? MENSAGEM_HA_MAIS_NA_BUSCA : MENSAGEM_HA_MAIS
   }
 
   useEffect(() => {

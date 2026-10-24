@@ -99,14 +99,27 @@ describe('fornecedorFormulario', () => {
 
   it('representantes: nome obrigatorio e no maximo 10', () => {
     const representante = { id: '', nome: 'Carlos', telefone: '', email: '' }
-    expect(erros({ ...BASE, representantes: [{ ...representante, nome: ' ' }] })).toEqual({
+    expect(erros({ ...BASE, representantes: [{ ...representante, nome: ' ', telefone: '(11) 98765-4321' }] })).toEqual({
       'representantes.0.nome': 'Informe o nome do representante.',
     })
+    // Totalmente em branco nao e erro: e descartado ao salvar.
+    expect(erros({ ...BASE, representantes: [{ ...representante, nome: ' ' }] })).toEqual({})
     expect(erros({ ...BASE, representantes: [{ ...representante, email: 'x' }] })).toEqual({
       'representantes.0.email': 'E-mail inválido.',
     })
     const onze = Array.from({ length: MAXIMO_REPRESENTANTES + 1 }, () => representante)
     expect(erros({ ...BASE, representantes: onze })).toEqual({ representantes: 'Informe no máximo 10 representantes.' })
+  })
+
+  it('o representante totalmente em branco nao vai no request', () => {
+    const request = montarRequest({
+      ...BASE,
+      representantes: [
+        { id: '', nome: '', telefone: '', email: ' ' },
+        { id: 'r1', nome: 'Carlos', telefone: '', email: '' },
+      ],
+    })
+    expect(request.representantes).toEqual([{ id: 'r1', nome: 'Carlos', telefone: null, email: null }])
   })
 
   it('marcas: no maximo 200', () => {

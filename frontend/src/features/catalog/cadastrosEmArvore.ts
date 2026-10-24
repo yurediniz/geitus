@@ -73,6 +73,18 @@ export interface TextosDaArvore {
   usadoPor: string
   /** Textos do item do primeiro nivel (categoria principal, fabricante). */
   principal: TextosDoPrincipal
+  /** Textos do item criado dentro de outro (subcategoria; marca ou linha). */
+  filho: TextosDoFilho
+}
+
+/** O item criado dentro de outro. */
+export interface TextosDoFilho {
+  /** Dica do botao do no: "Adicionar subcategoria". */
+  acao: string
+  /** Nome acessivel do botao do no: "Adicionar subcategoria em Ração". */
+  acaoEm: (nomeDoPai: string) => string
+  /** Mensagem depois de criar: 'Subcategoria "Filhote" criada em "Ração › Seca".' */
+  criado: (nome: string, caminhoDoPai: string) => string
 }
 
 /** O primeiro nivel da arvore: "categoria principal" nas categorias, "fabricante" nas marcas. */
@@ -135,6 +147,11 @@ export const CONFIGURACAO_CATEGORIAS: ConfiguracaoDaArvore<Categoria> = {
       virou: (nome) => `"${nome}" agora é uma categoria principal.`,
       semPai: 'Nenhuma — criar como categoria principal',
     },
+    filho: {
+      acao: 'Adicionar subcategoria',
+      acaoEm: (nome) => `Adicionar subcategoria em ${nome}`,
+      criado: (nome, caminho) => `Subcategoria "${nome}" criada em "${caminho}".`,
+    },
   },
   rota: '/produtos/categorias',
   chave: CATEGORIAS_QUERY_KEY,
@@ -177,7 +194,12 @@ export const CONFIGURACAO_MARCAS: ConfiguracaoDaArvore<Marca> = {
       descricaoDoNovo: 'Ele fica no primeiro nível da árvore; depois você pode adicionar as marcas e linhas dele.',
       tornar: 'Mover para o primeiro nível (fabricante)',
       virou: (nome) => `"${nome}" agora está no primeiro nível (fabricante).`,
-      semPai: 'Nenhum — criar como fabricante',
+      semPai: 'Nenhum — no primeiro nível (fabricante)',
+    },
+    filho: {
+      acao: 'Adicionar marca ou linha',
+      acaoEm: (nome) => `Adicionar marca ou linha em ${nome}`,
+      criado: (nome, caminho) => `"${nome}" criada dentro de "${caminho}".`,
     },
   },
   rota: '/produtos/marcas',

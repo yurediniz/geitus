@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { FORNECEDORES_QUERY_KEY, TODAS_MARCAS_QUERY_KEY, ehMensagemGenerica } from '@/features/catalog/catalogoQuery'
 import { ConfirmarExclusaoDialog } from '@/features/catalog/ConfirmarExclusaoDialog'
 import { AvisoSomenteLeitura, ErroInline, FeedbackCatalogo } from '@/features/catalog/FeedbackCatalogo'
+import { pluralizar } from '@/features/catalog/textosCatalogo'
 import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { sucessoDaNavegacao } from '@/features/products/navegacaoProdutos'
 import { rolarEFocarCampo } from '@/features/products/secoes/rolagem'
@@ -53,6 +54,8 @@ import type { Fornecedor } from '@/types/fornecedor'
 const ID_FORMULARIO = 'formulario-fornecedor'
 const ID_TITULO = 'fornecedor-titulo'
 const MENSAGEM_SALVO = 'Fornecedor salvo.'
+/** Ao abrir o fornecedor recem-criado: os produtos so podem ser ligados depois de salvo. */
+const MENSAGEM_CRIADO = 'Fornecedor salvo. Agora você pode adicionar os produtos que ele vende, no fim da página.'
 
 /** Tecla do atalho de salvar (Cmd no Mac, Ctrl nos demais). */
 const TECLA_ATALHO = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.userAgent) ? '⌘' : 'Ctrl'
@@ -352,7 +355,7 @@ function FormularioFornecedor({ fornecedor, voltarPara, somenteLeitura }: Formul
       setErroSalvar(null)
       if (modoNovo) {
         // O fornecedor novo abre na edicao: os produtos que ele vende so podem ser ligados depois de salvo.
-        setSaida({ para: rotaDoFornecedor(salvo.id), estado: { voltarPara, sucesso: MENSAGEM_SALVO } })
+        setSaida({ para: rotaDoFornecedor(salvo.id), estado: { voltarPara, sucesso: MENSAGEM_CRIADO } })
         return
       }
       setFornecedorAtual(salvo)
@@ -498,12 +501,18 @@ function FormularioFornecedor({ fornecedor, voltarPara, somenteLeitura }: Formul
         <AvisoSomenteLeitura texto="Somente administradores podem alterar fornecedores. Você está no modo leitura." />
       )}
       <div onKeyDown={aoTeclar} className="max-w-4xl space-y-4">
-        {!somenteLeitura && (
-          <p className="text-sm text-muted-foreground">
-            Campos com <span aria-hidden="true">*</span>
-            <span className="sr-only">asterisco</span> são obrigatórios; os demais são opcionais.
-          </p>
-        )}
+        {!somenteLeitura &&
+          (modoNovo ? (
+            <p className="text-sm text-muted-foreground">
+              Só o nome é obrigatório. Os outros dados (CNPJ, endereço, representantes) você completa quando quiser, por
+              exemplo com a nota fiscal em mãos.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Campos com <span aria-hidden="true">*</span>
+              <span className="sr-only">asterisco</span> são obrigatórios; os demais são opcionais.
+            </p>
+          ))}
         {(mensagemSucesso || erroGeral || erroSalvar) && (
           <div className="sticky top-0 z-20 -mx-1 space-y-2 bg-background/95 px-1 py-2">
             <FeedbackCatalogo sucesso={mensagemSucesso} erro={erroGeral} fixo={false} />
@@ -540,7 +549,15 @@ function FormularioFornecedor({ fornecedor, voltarPara, somenteLeitura }: Formul
           </form>
         </FormProvider>
 
-        <SecaoDoFornecedor id="secao-produtos" titulo="Produtos que vende">
+        <SecaoDoFornecedor
+          id="secao-produtos"
+          titulo="Produtos que vende"
+          descricao={
+            fornecedorAtual
+              ? 'Os produtos são ligados e removidos na hora, sem precisar salvar. É a mesma lista que aparece no cadastro do produto.'
+              : undefined
+          }
+        >
           {fornecedorAtual ? (
             <ProdutosDoFornecedor
               fornecedorId={fornecedorAtual.id}
@@ -594,7 +611,7 @@ function FormularioFornecedor({ fornecedor, voltarPara, somenteLeitura }: Formul
             comProdutosLigados ? (
               <>
                 <p>
-                  {`Este fornecedor tem ${fornecedorAtual.quantidadeProdutos} produto(s) ligados. Inative-o para tirá-lo das escolhas; dá para reativar depois.`}
+                  {`Este fornecedor tem ${pluralizar(fornecedorAtual.quantidadeProdutos, 'produto ligado', 'produtos ligados')}. Inative-o para tirá-lo das escolhas; dá para reativar depois.`}
                 </p>
                 {!fornecedorAtual.ativo && <p>Ele já está inativo.</p>}
               </>

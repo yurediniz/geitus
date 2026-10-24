@@ -47,13 +47,27 @@ const emailOpcional = z
 /** Telefone opcional (com mascara na tela). */
 const telefoneOpcional = z.string().refine((valor) => apenasDigitos(valor) === '' || telefoneValido(valor), MENSAGEM_TELEFONE)
 
-const representanteSchema = z.object({
-  /** UUID do representante gravado; vazio no novo. */
-  id: z.string(),
-  nome: z.string().trim().min(1, 'Informe o nome do representante.').max(120, 'Nome deve ter no máximo 120 caracteres.'),
-  telefone: telefoneOpcional,
-  email: emailOpcional,
-})
+const representanteSchema = z
+  .object({
+    /** UUID do representante gravado; vazio no novo. */
+    id: z.string(),
+    nome: z.string().trim().max(120, 'Nome deve ter no máximo 120 caracteres.'),
+    telefone: telefoneOpcional,
+    email: emailOpcional,
+  })
+  .superRefine((representante, ctx) => {
+    // Totalmente em branco: e descartado ao salvar. Com algo preenchido, o nome e obrigatorio.
+    if (representante.nome === '' && !representanteEmBranco(representante)) {
+      ctx.addIssue({ path: ['nome'], code: 'custom', message: 'Informe o nome do representante.' })
+    }
+  })
+
+/** Nome, telefone e e-mail vazios: um "+ Adicionar representante" que nao foi usado. */
+export function representanteEmBranco(representante: { nome: string; telefone: string; email: string }): boolean {
+  return (
+    representante.nome.trim() === '' && apenasDigitos(representante.telefone) === '' && representante.email.trim() === ''
+  )
+}
 
 export type RepresentanteFormValues = z.infer<typeof representanteSchema>
 
@@ -264,7 +278,8 @@ export function montarRequest(valores: FornecedorFormValues): FornecedorRequest 
     telefone: telefoneOuNulo(valores.telefone),
     email: textoOuNulo(valores.email),
     observacoes: textoOuNulo(valores.observacoes),
-    representantes: valores.representantes.map(representanteDoRequest),
+    // O representante deixado em branco nao vai (nao bloqueia o salvamento).
+    representantes: valores.representantes.filter((item) => !representanteEmBranco(item)).map(representanteDoRequest),
     marcaIds: valores.marcaIds,
   }
 }

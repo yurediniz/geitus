@@ -137,6 +137,9 @@ describe('FornecedoresPage', () => {
     expect(linha).toHaveTextContent('(11) 3210-4000')
     expect(linha).toHaveTextContent('Carlos Lima')
     expect(linha).toHaveTextContent('(11) 98765-4321')
+    // Os telefones ligam ao tocar.
+    expect(within(linha).getByRole('link', { name: '(11) 3210-4000' })).toHaveAttribute('href', 'tel:1132104000')
+    expect(within(linha).getByRole('link', { name: '(11) 98765-4321' })).toHaveAttribute('href', 'tel:11987654321')
     expect(within(tabela).getAllByRole('row')[2]).toHaveTextContent('111.444.777-35')
     // Na tabela o status fica so na coluna Status (o selo nao se repete junto do nome).
     expect(within(within(tabela).getAllByRole('row')[2]).getAllByText('Inativo')).toHaveLength(1)
@@ -144,6 +147,11 @@ describe('FornecedoresPage', () => {
     const cards = screen.getByRole('list', { name: 'Fornecedores' })
     expect(cards).toHaveClass('lg:hidden')
     expect(within(cards).getByRole('article', { name: 'João da Silva' })).toHaveTextContent('Inativo')
+    expect(
+      within(within(cards).getByRole('article', { name: 'Distribuidora Sul Ltda' })).getByRole('link', {
+        name: '(11) 3210-4000',
+      }),
+    ).toHaveAttribute('href', 'tel:1132104000')
     expect(listarFornecedoresMock).toHaveBeenCalledWith({ busca: '', status: 'ativos', pagina: 1 }, expect.anything())
   })
 

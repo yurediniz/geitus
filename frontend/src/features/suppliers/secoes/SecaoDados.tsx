@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { useFormContext, useWatch } from 'react-hook-form'
+import { Info } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -18,6 +20,25 @@ const OPCOES_DE_TIPO: { valor: TipoPessoaFornecedor; rotulo: string }[] = [
   { valor: 'PF', rotulo: 'Pessoa física' },
 ]
 
+/** "O CNPJ foi apagado ao trocar para pessoa física." (e a IE, se havia); null se nada foi apagado. */
+function textoDoQueFoiApagado(
+  anterior: TipoPessoaFornecedor,
+  proximo: TipoPessoaFornecedor,
+  documento: string,
+  inscricaoEstadual: string,
+): string | null {
+  const destino = proximo === 'PF' ? 'pessoa física' : 'pessoa jurídica'
+  const documentoApagado = documento.trim() !== ''
+  const ieApagada = anterior === 'PJ' && inscricaoEstadual.trim() !== ''
+  if (documentoApagado && ieApagada) {
+    return `O ${rotuloDoDocumento(anterior)} e a inscrição estadual foram apagados ao trocar para ${destino}.`
+  }
+  if (documentoApagado) {
+    return `O ${rotuloDoDocumento(anterior)} foi apagado ao trocar para ${destino}.`
+  }
+  return ieApagada ? `A inscrição estadual foi apagada ao trocar para ${destino}.` : null
+}
+
 interface SecaoDadosProps {
   /** Nº do fornecedor na edicao; null no cadastro. */
   numero: number | null
@@ -34,16 +55,20 @@ export function SecaoDados({ numero, desabilitado, aoAlterarCampo }: SecaoDadosP
   const {
     control,
     setValue,
+    getValues,
     clearErrors,
     formState: { errors },
   } = useFormContext<FornecedorFormValues>()
   const tipo = useWatch({ control, name: 'tipoPessoa' })
   const pj = tipo === 'PJ'
+  // O que a troca de tipo apagou (some na proxima alteracao do documento ou da IE).
+  const [avisoDaTroca, setAvisoDaTroca] = useState<string | null>(null)
 
   const trocarTipo = (proximo: TipoPessoaFornecedor) => {
     if (proximo === tipo) {
       return
     }
+    setAvisoDaTroca(textoDoQueFoiApagado(tipo, proximo, getValues('documento'), getValues('inscricaoEstadual')))
     setValue('tipoPessoa', proximo, { shouldDirty: true })
     setValue('documento', '', { shouldDirty: true })
     setValue('inscricaoEstadual', '', { shouldDirty: true })
@@ -91,6 +116,12 @@ export function SecaoDados({ numero, desabilitado, aoAlterarCampo }: SecaoDadosP
           })}
         </div>
       </fieldset>
+      {avisoDaTroca && (
+        <p role="status" className="flex items-start gap-1.5 text-sm text-muted-foreground">
+          <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          {avisoDaTroca}
+        </p>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <CampoComMascara
@@ -102,13 +133,17 @@ export function SecaoDados({ numero, desabilitado, aoAlterarCampo }: SecaoDadosP
           mascara={(valor) => mascararDocumento(tipo, valor)}
           erro={errors.documento?.message}
           desabilitado={desabilitado}
-          aoAlterar={aoAlterarCampo}
+          aoAlterar={() => {
+            setAvisoDaTroca(null)
+            aoAlterarCampo()
+          }}
         />
         <CampoDeTexto
           nome="razaoSocial"
           rotulo={rotuloDoNome(tipo)}
           obrigatorio
           maxLength={180}
+          ajuda={pj ? 'Como aparece na nota fiscal. Se não souber, use o nome pelo qual você conhece o fornecedor.' : undefined}
           erro={errors.razaoSocial?.message}
           desabilitado={desabilitado}
           aoAlterar={aoAlterarCampo}
@@ -131,7 +166,10 @@ export function SecaoDados({ numero, desabilitado, aoAlterarCampo }: SecaoDadosP
             ajuda="Só números, ou ISENTO."
             erro={errors.inscricaoEstadual?.message}
             desabilitado={desabilitado}
-            aoAlterar={aoAlterarCampo}
+            aoAlterar={() => {
+              setAvisoDaTroca(null)
+              aoAlterarCampo()
+            }}
             acessorio={
               !desabilitado && (
                 <Button

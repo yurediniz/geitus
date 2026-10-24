@@ -7,6 +7,7 @@ import { SeloStatus } from '@/features/products/SeloStatus'
 import { documentoFormatado, telefoneFormatado } from '@/features/suppliers/formatacaoFornecedor'
 import { rotaDoFornecedor, type EstadoParaFornecedor } from '@/features/suppliers/navegacaoFornecedores'
 import { pluralizar } from '@/features/catalog/textosCatalogo'
+import { cn } from '@/lib/utils'
 import type { FornecedorItemLista } from '@/types/fornecedor'
 
 export interface ListaDeFornecedoresProps {
@@ -49,16 +50,32 @@ function NomeDoFornecedor({
   )
 }
 
+/** Telefone que liga ao tocar (`tel:`), com o numero formatado. */
+function LinkDoTelefone({ digitos, className }: { digitos: string; className?: string }) {
+  return (
+    <a
+      href={`tel:${digitos}`}
+      className={cn(
+        'tabular-nums underline-offset-4 outline-none hover:underline focus-visible:underline pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center',
+        className,
+      )}
+    >
+      {telefoneFormatado(digitos)}
+    </a>
+  )
+}
+
 function Representante({ fornecedor }: { fornecedor: FornecedorItemLista }) {
   const representante = fornecedor.representantePrincipal
   if (!representante) {
     return <SemValor motivo="Sem representante" />
   }
-  const telefone = telefoneFormatado(representante.telefone)
   return (
     <span>
       {representante.nome}
-      {telefone && <span className="block text-xs text-muted-foreground tabular-nums">{telefone}</span>}
+      {representante.telefone && (
+        <LinkDoTelefone digitos={representante.telefone} className="block text-xs text-muted-foreground" />
+      )}
     </span>
   )
 }
@@ -139,7 +156,6 @@ export function ListaDeFornecedores({
           <tbody className="divide-y">
             {fornecedores.map((fornecedor) => {
               const documento = documentoFormatado(fornecedor.tipoPessoa, fornecedor.documento)
-              const telefone = telefoneFormatado(fornecedor.telefone)
               return (
                 <tr key={fornecedor.id} className="align-middle">
                   <td className="px-3 py-3 text-muted-foreground tabular-nums">{fornecedor.numero}</td>
@@ -150,7 +166,11 @@ export function ListaDeFornecedores({
                     {documento ?? <SemValor motivo="Sem documento" />}
                   </td>
                   <td className="px-3 py-3 whitespace-nowrap tabular-nums">
-                    {telefone ?? <SemValor motivo="Sem telefone" />}
+                    {fornecedor.telefone ? (
+                      <LinkDoTelefone digitos={fornecedor.telefone} />
+                    ) : (
+                      <SemValor motivo="Sem telefone" />
+                    )}
                   </td>
                   <td className="px-3 py-3">
                     <Representante fornecedor={fornecedor} />
@@ -178,7 +198,6 @@ export function ListaDeFornecedores({
       <ul className="grid gap-3 lg:hidden" aria-label="Fornecedores">
         {fornecedores.map((fornecedor) => {
           const documento = documentoFormatado(fornecedor.tipoPessoa, fornecedor.documento)
-          const telefone = telefoneFormatado(fornecedor.telefone)
           return (
             <li key={fornecedor.id}>
               <article className="space-y-3 rounded-md border p-4" aria-label={fornecedor.razaoSocial}>
@@ -193,10 +212,12 @@ export function ListaDeFornecedores({
                       <dd className="tabular-nums">{documento}</dd>
                     </div>
                   )}
-                  {telefone && (
+                  {fornecedor.telefone && (
                     <div>
                       <dt className="sr-only">Telefone</dt>
-                      <dd className="tabular-nums">{telefone}</dd>
+                      <dd>
+                        <LinkDoTelefone digitos={fornecedor.telefone} />
+                      </dd>
                     </div>
                   )}
                   {fornecedor.representantePrincipal && (

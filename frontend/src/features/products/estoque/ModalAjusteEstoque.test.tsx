@@ -977,6 +977,9 @@ describe('ModalAjusteEstoque', () => {
       renderModal({ fornecedorDaCompra: SUL })
 
       expect(campoFornecedor()).toHaveTextContent('Distribuidora Sul')
+      expect(campoFornecedor()).toHaveAccessibleDescription(
+        'Preenchido com o fornecedor da última compra. O fornecedor escolhido entra na lista do produto e passa a ser o da última compra.',
+      )
       preencherCompra()
       confirmar()
 
@@ -1010,6 +1013,10 @@ describe('ModalAjusteEstoque', () => {
       fireEvent.click(campoFornecedor())
       fireEvent.click(await screen.findByRole('option', { name: /Atacadão Norte/ }))
       expect(campoFornecedor()).toHaveTextContent('Atacadão Norte')
+      // Trocado pelo usuario: a ajuda nao diz mais que veio da ultima compra.
+      expect(campoFornecedor()).toHaveAccessibleDescription(
+        'O fornecedor escolhido entra na lista do produto e passa a ser o da última compra.',
+      )
       expect(listarFornecedoresMock).toHaveBeenCalledWith(
         { busca: '', status: 'ativos', pagina: 1, tamanho: 10 },
         expect.anything(),

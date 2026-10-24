@@ -224,6 +224,18 @@ describe('FornecedorPage', () => {
     it('mostra as seções na ordem e pede para salvar antes dos produtos', async () => {
       await renderNovo()
 
+      expect(
+        screen.getByText(
+          'Só o nome é obrigatório. Os outros dados (CNPJ, endereço, representantes) você completa quando quiser, por exemplo com a nota fiscal em mãos.',
+        ),
+      ).toBeInTheDocument()
+      const ajudaDaRazaoSocial =
+        'Como aparece na nota fiscal. Se não souber, use o nome pelo qual você conhece o fornecedor.'
+      expect(screen.getByLabelText(/^Razão social/)).toHaveAccessibleDescription(ajudaDaRazaoSocial)
+      fireEvent.click(screen.getByRole('radio', { name: 'Pessoa física' }))
+      expect(campoNomePf()).not.toHaveAccessibleDescription(ajudaDaRazaoSocial)
+      fireEvent.click(screen.getByRole('radio', { name: 'Pessoa jurídica' }))
+
       expect(screen.getByRole('heading', { level: 1, name: 'Novo fornecedor' })).toBeInTheDocument()
       const titulos = screen.getAllByRole('heading', { level: 2 }).map((titulo) => titulo.textContent)
       expect(titulos).toEqual(['Dados', 'Endereço', 'Contato', 'Representantes', 'Marcas que vende', 'Produtos que vende'])
@@ -324,10 +336,27 @@ describe('FornecedorPage', () => {
       expect(within(representantes).getByText('Máximo de 10 representantes.')).toBeInTheDocument()
 
       fireEvent.change(screen.getByLabelText(/^Razão social/), { target: { value: 'Distribuidora Sul' } })
+      // Os em branco sao descartados; o 3, com telefone e sem nome, barra o salvamento e recebe o foco.
+      fireEvent.change(within(representante(3)).getByLabelText('Telefone (opcional)'), {
+        target: { value: '11987654321' },
+      })
       fireEvent.click(botaoSalvar())
-      // Os novos estao sem nome: o primeiro com erro recebe o foco.
-      expect((await screen.findAllByText('Informe o nome do representante.')).length).toBe(9)
-      await waitFor(() => expect(nomeDoRepresentante(2)).toHaveFocus())
+      expect((await screen.findAllByText('Informe o nome do representante.')).length).toBe(1)
+      await waitFor(() => expect(nomeDoRepresentante(3)).toHaveFocus())
+      expect(cadastrarFornecedorMock).not.toHaveBeenCalled()
+    })
+
+    it('o representante deixado em branco é descartado ao salvar', async () => {
+      cadastrarFornecedorMock.mockResolvedValue(FORNECEDOR)
+      buscarFornecedorMock.mockResolvedValue(FORNECEDOR)
+      await renderNovo()
+
+      fireEvent.change(screen.getByLabelText(/^Razão social/), { target: { value: 'Distribuidora Sul' } })
+      fireEvent.click(within(secao('Representantes')).getByRole('button', { name: 'Adicionar representante' }))
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(cadastrarFornecedorMock).toHaveBeenCalledTimes(1))
+      expect(ultimoRequest().representantes).toEqual([])
     })
 
     it('marcas que vende: escolhe pela árvore, mostra o caminho como chip e remove', async () => {
@@ -356,7 +385,7 @@ describe('FornecedorPage', () => {
       expect(ultimoRequest().marcaIds).toEqual(['tio-joao'])
     })
 
-    it('salva com o request normalizado e abre o fornecedor com "Fornecedor salvo."', async () => {
+    it('salva com o request normalizado e abre o fornecedor, que já pode receber os produtos', async () => {
       cadastrarFornecedorMock.mockResolvedValue(FORNECEDOR)
       buscarFornecedorMock.mockResolvedValue(FORNECEDOR)
       const router = await renderNovo()
@@ -388,7 +417,14 @@ describe('FornecedorPage', () => {
       })
       await waitFor(() => expect(router.state.location.pathname).toBe('/produtos/fornecedores/dist-sul'))
       expect(await screen.findByRole('form', { name: 'Editar Distribuidora Sul Ltda' })).toBeInTheDocument()
-      expect(await screen.findByText('Fornecedor salvo.')).toBeInTheDocument()
+      expect(
+        await screen.findByText('Fornecedor salvo. Agora você pode adicionar os produtos que ele vende, no fim da página.'),
+      ).toBeInTheDocument()
+      expect(
+        within(secao('Produtos que vende')).getByText(
+          'Os produtos são ligados e removidos na hora, sem precisar salvar. É a mesma lista que aparece no cadastro do produto.',
+        ),
+      ).toBeInTheDocument()
       // O aviso de alteracoes nao bloqueou a saida.
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
@@ -492,6 +528,28 @@ describe('FornecedorPage', () => {
   })
 
   describe('tipo de pessoa (Review Focus 4)', () => {
+    it('avisa o que a troca de tipo apagou', async () => {
+      await renderNovo()
+
+      // Sem nada preenchido, nao ha aviso.
+      fireEvent.click(screen.getByRole('radio', { name: 'Pessoa física' }))
+      expect(screen.queryByText(/foi apagad|foram apagados/)).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('radio', { name: 'Pessoa jurídica' }))
+
+      fireEvent.change(screen.getByLabelText('CNPJ (opcional)'), { target: { value: '11222333000181' } })
+      fireEvent.click(screen.getByRole('radio', { name: 'Pessoa física' }))
+      expect(screen.getByText('O CNPJ foi apagado ao trocar para pessoa física.')).toBeInTheDocument()
+
+      fireEvent.change(screen.getByLabelText('CPF (opcional)'), { target: { value: '11144477735' } })
+      expect(screen.queryByText(/foi apagado/)).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('radio', { name: 'Pessoa jurídica' }))
+      expect(screen.getByText('O CPF foi apagado ao trocar para pessoa jurídica.')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Isento' }))
+      fireEvent.click(screen.getByRole('radio', { name: 'Pessoa física' }))
+      expect(screen.getByText('A inscrição estadual foi apagada ao trocar para pessoa física.')).toBeInTheDocument()
+    })
+
     it('PJ -> PF -> PJ volta com a IE vazia', async () => {
       await renderNovo()
 
@@ -558,7 +616,7 @@ describe('FornecedorPage', () => {
       fireEvent.click(botaoExcluir())
       const dialogo = await screen.findByRole('dialog', { name: 'Não é possível excluir "Distribuidora Sul Ltda"' })
       expect(dialogo).toHaveTextContent(
-        'Este fornecedor tem 2 produto(s) ligados. Inative-o para tirá-lo das escolhas; dá para reativar depois.',
+        'Este fornecedor tem 2 produtos ligados. Inative-o para tirá-lo das escolhas; dá para reativar depois.',
       )
       expect(within(dialogo).queryByRole('button', { name: 'Excluir' })).not.toBeInTheDocument()
       fireEvent.click(within(dialogo).getByRole('button', { name: 'Inativar' }))
@@ -741,10 +799,11 @@ describe('FornecedorPage', () => {
 
       await waitFor(() => expect(adicionarProdutoMock).toHaveBeenCalledWith('dist-sul', produtoSimples.id))
       expect(listarProdutosMock).toHaveBeenCalledWith(expect.objectContaining({ busca: 'simples' }), expect.anything())
-      expect(await screen.findByText('Produto adicionado ao fornecedor.')).toBeInTheDocument()
-      // O foco volta a busca, para adicionar o proximo.
+      expect(await screen.findByText('"Produto Simples" adicionado ao fornecedor.')).toBeInTheDocument()
+      // O foco volta a busca, com o termo, para adicionar o proximo; o adicionado fica "Já ligado".
       await waitFor(() => expect(within(produtos).getByLabelText('Adicionar produto')).toHaveFocus())
-      expect(within(produtos).getByLabelText('Adicionar produto')).toHaveValue('')
+      expect(within(produtos).getByLabelText('Adicionar produto')).toHaveValue('simples')
+      expect(within(produtos).getByText('Já ligado')).toBeInTheDocument()
       // A lista do fornecedor e recarregada.
       await waitFor(() => expect(listarProdutosDoFornecedorMock.mock.calls.length).toBeGreaterThan(1))
     })

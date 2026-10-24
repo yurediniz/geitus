@@ -64,7 +64,7 @@ describe('BuscaDeFornecedor', () => {
 
     abrir()
 
-    expect(await screen.findByText('Mostrando os 10 primeiros. Digite para buscar os demais.')).toBeInTheDocument()
+    expect(await screen.findByText('Mostrando os 10 primeiros. Digite para encontrar os outros.')).toBeInTheDocument()
     expect(listarFornecedoresMock).toHaveBeenCalledWith(
       { busca: '', status: 'ativos', pagina: 1, tamanho: 12 },
       expect.anything(),
@@ -72,7 +72,18 @@ describe('BuscaDeFornecedor', () => {
     const nomes = opcoes()
     expect(nomes).toHaveLength(10)
     expect(nomes[0]).toContain('Fornecedor 03')
-    expect(screen.queryByText('Nenhum fornecedor ativo para escolher.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Nenhum fornecedor ativo. Cadastre em Produtos › Fornecedores.')).not.toBeInTheDocument()
+  })
+
+  it('com termo, o aviso de mais resultados pede para refinar', async () => {
+    listarFornecedoresMock.mockResolvedValue(pagina(Array.from({ length: 10 }, (_, i) => fornecedor(i + 1)), 40))
+    renderBusca()
+
+    abrir()
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Buscar fornecedor' }), { target: { value: 'forn' } })
+
+    expect(await screen.findByText('Mostrando os 10 primeiros resultados. Digite mais para refinar.')).toBeInTheDocument()
+    expect(listarFornecedoresMock).toHaveBeenLastCalledWith(expect.objectContaining({ busca: 'forn' }), expect.anything())
   })
 
   it('pede no máximo 30, mesmo com muitos escolhidos', async () => {
@@ -92,7 +103,7 @@ describe('BuscaDeFornecedor', () => {
 
     abrir()
 
-    expect(await screen.findByText('Nenhum fornecedor ativo para escolher.')).toBeInTheDocument()
+    expect(await screen.findByText('Nenhum fornecedor ativo. Cadastre em Produtos › Fornecedores.')).toBeInTheDocument()
   })
 
   it('todos já escolhidos: diz isso, sem "nenhum ativo"', async () => {
@@ -101,8 +112,8 @@ describe('BuscaDeFornecedor', () => {
 
     abrir()
 
-    expect(await screen.findByText('Todos os fornecedores ativos já foram escolhidos.')).toBeInTheDocument()
-    expect(screen.queryByText('Nenhum fornecedor ativo para escolher.')).not.toBeInTheDocument()
+    expect(await screen.findByText('Todos os fornecedores ativos já estão na lista.')).toBeInTheDocument()
+    expect(screen.queryByText('Nenhum fornecedor ativo. Cadastre em Produtos › Fornecedores.')).not.toBeInTheDocument()
   })
 
   it('na falha, "Tentar novamente" busca de novo', async () => {

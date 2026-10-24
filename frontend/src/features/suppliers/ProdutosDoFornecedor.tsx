@@ -146,13 +146,12 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
     onSuccess: async ({ criado }, produto) => {
       setLigadosAgora((anteriores) => new Set([...anteriores, produto.id]))
       await atualizar()
-      if (criado) {
-        setTermo('')
-        aoInformar({ sucesso: 'Produto adicionado ao fornecedor.' })
-      } else {
-        // 200: ja estava ligado. A busca fica, com o produto marcado "Já ligado".
-        aoInformar({ sucesso: `${produto.nome} já estava ligado a este fornecedor.` })
-      }
+      // A busca fica (com o produto marcado "Já ligado"), para adicionar o proximo do mesmo termo.
+      aoInformar({
+        sucesso: criado
+          ? `"${produto.nome}" adicionado ao fornecedor.`
+          : `${produto.nome} já estava ligado a este fornecedor.`,
+      })
       buscaRef.current?.focus()
     },
     onError: async (erro) => {
