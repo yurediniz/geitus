@@ -246,7 +246,7 @@ Exemplo rápido para subir um PostgreSQL local com Docker (opcional):
 docker run --name geitus-postgres \
   -e POSTGRES_DB=geitus_db \
   -e POSTGRES_USER=geitus \
-  -e POSTGRES_PASSWORD=geitus \
+  -e POSTGRES_PASSWORD=<senha-do-.env> \
   -p 5432:5432 -d postgres:16
 ```
 
