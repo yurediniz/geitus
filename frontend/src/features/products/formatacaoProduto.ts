@@ -36,6 +36,16 @@ export function formatarVariacao(anterior: number | null, novo: number | null): 
   return variacao > 0 ? `+${texto}` : texto
 }
 
+/** So a data "24/10/2026" de um `LocalDateTime` do backend, com as mesmas regras de `formatarDataHora`. */
+export function formatarData(valor: string): string {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})/.exec(valor)
+  if (!partes) {
+    return valor
+  }
+  const [, ano, mes, dia] = partes
+  return `${dia}/${mes}/${ano}`
+}
+
 /**
  * Data e hora "21/10/2026 14:03" de um `LocalDateTime` do backend
  * ("2026-10-21T14:03:12"), lidas do texto e exibidas como vieram, sem

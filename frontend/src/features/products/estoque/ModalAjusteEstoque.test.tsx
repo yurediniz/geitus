@@ -27,6 +27,8 @@ const MOVIMENTO: MovimentoEstoque = {
   usuarioNome: 'Ana Souza',
   criadoEm: '2026-10-21T15:20:00',
   embalagem: null,
+  custoInformado: null,
+  custoUnitario: null,
 }
 
 const CHAVE_DO_PRODUTO = [...PRODUTOS_QUERY_KEY, 'detalhe', ID_ARROZ]
@@ -68,6 +70,19 @@ function campoQuantidade(): HTMLElement {
 
 function campoMotivo(): HTMLElement {
   return screen.getByRole('combobox', { name: /^motivo/i })
+}
+
+function campoCusto(): HTMLElement {
+  return screen.getByRole('textbox', { name: /^custo/i })
+}
+
+function campoCustoAusente(): boolean {
+  return screen.queryByRole('textbox', { name: /^custo/i }) === null
+}
+
+/** Valor no campo de dinheiro (o texto inteiro e interpretado como numero: "180,00" -> 180.00). */
+function preencherCusto(valor: string) {
+  fireEvent.change(campoCusto(), { target: { value: valor } })
 }
 
 function campoObservacao(): HTMLElement {
@@ -607,10 +622,11 @@ describe('ModalAjusteEstoque', () => {
       expect(ajustarEstoqueMock).not.toHaveBeenCalled()
     })
 
-    it('envia o embalagemId e a quantidade em embalagens', async () => {
+    it('envia o embalagemId, a quantidade em embalagens e o custo de 1 embalagem', async () => {
       ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
       renderModal({ saldo: 10, embalagens: EMBALAGENS })
       fireEvent.change(campoQuantidade(), { target: { value: '2' } })
+      preencherCusto('180,00')
 
       confirmar()
 
@@ -622,6 +638,8 @@ describe('ModalAjusteEstoque', () => {
         observacao: null,
         chave: expect.any(String),
         embalagemId: 'emb-cx18',
+        // O custo da caixa, como digitado: o backend divide pela quantidade dela.
+        custo: 180,
       })
     })
 
@@ -630,6 +648,7 @@ describe('ModalAjusteEstoque', () => {
       renderModal({ saldo: 10, embalagens: EMBALAGENS })
       fireEvent.change(seletorEm(), { target: { value: '' } })
       fireEvent.change(campoQuantidade(), { target: { value: '2' } })
+      preencherCusto('10,00')
 
       confirmar()
 
@@ -641,6 +660,7 @@ describe('ModalAjusteEstoque', () => {
       ajustarEstoqueMock.mockRejectedValue(new HttpError(404, 'Embalagem não encontrada.'))
       const { rerender, queryClient } = renderModal({ saldo: 10, embalagens: EMBALAGENS })
       fireEvent.change(campoQuantidade(), { target: { value: '2' } })
+      preencherCusto('180,00')
 
       confirmar()
 
@@ -667,10 +687,188 @@ describe('ModalAjusteEstoque', () => {
       renderModal({ saldo: 10, embalagens: EMBALAGENS })
       fireEvent.change(seletorEm(), { target: { value: '' } })
       fireEvent.change(campoQuantidade(), { target: { value: '2' } })
+      preencherCusto('10,00')
 
       confirmar()
 
       expect(await within(dialogo()).findByText('Este produto não existe mais. Atualize a tela.')).toBeInTheDocument()
+    })
+  })
+
+  describe('custo na entrada por compra (Fase B4)', () => {
+    const CAIXA_18 = { id: 'emb-cx18', rotulo: 'CX c/ 18 UN', quantidade: 18, deCompra: true }
+    const CAIXA_3 = { id: 'emb-cx3', rotulo: 'CX c/ 3 UN', quantidade: 3, deCompra: true }
+
+    function seletorEm(): HTMLElement {
+      return within(dialogo()).getByRole('combobox', { name: 'Em (unidade ou embalagem)' })
+    }
+
+    it('aparece só na Entrada com Compra, logo abaixo da quantidade, obrigatório', () => {
+      renderModal()
+
+      expect(campoCusto()).toHaveAccessibleName(/^Custo por UN\s*\(obrigatório\)$/)
+      expect(campoCusto()).toHaveValue('')
+      // Entre a quantidade e a previa.
+      expect(campoQuantidade().compareDocumentPosition(campoCusto()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(campoCusto().compareDocumentPosition(regiaoDaPrevia()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+      fireEvent.change(campoMotivo(), { target: { value: 'DEVOLUCAO_CLIENTE' } })
+      expect(campoCustoAusente()).toBe(true)
+      fireEvent.change(campoMotivo(), { target: { value: 'OUTRO' } })
+      expect(campoCustoAusente()).toBe(true)
+      escolherTipo('Saída')
+      expect(campoCustoAusente()).toBe(true)
+      escolherTipo('Contagem')
+      expect(campoCustoAusente()).toBe(true)
+    })
+
+    it('trocar de motivo ou de tipo descarta o custo digitado', () => {
+      renderModal()
+      preencherCusto('10,00')
+      expect(campoCusto()).toHaveValue('10,00')
+
+      fireEvent.change(campoMotivo(), { target: { value: 'DEVOLUCAO_CLIENTE' } })
+      fireEvent.change(campoMotivo(), { target: { value: 'COMPRA' } })
+      expect(campoCusto()).toHaveValue('')
+
+      preencherCusto('10,00')
+      escolherTipo('Saída')
+      escolherTipo('Entrada')
+      expect(campoMotivo()).toHaveValue('COMPRA')
+      expect(campoCusto()).toHaveValue('')
+    })
+
+    it('"Zerar estoque" também descarta o custo', () => {
+      renderModal()
+      preencherCusto('10,00')
+
+      fireEvent.click(within(dialogo()).getByRole('button', { name: 'Zerar estoque' }))
+      escolherTipo('Entrada')
+
+      expect(campoCusto()).toHaveValue('')
+    })
+
+    it('em embalagem, o rótulo é o da embalagem; na unidade de venda, "por UN"', () => {
+      renderModal({ saldo: 10, embalagens: [CAIXA_18] })
+
+      expect(campoCusto()).toHaveAccessibleName(/^Custo da CX c\/ 18 UN\s*\(obrigatório\)$/)
+      fireEvent.change(seletorEm(), { target: { value: '' } })
+      expect(campoCusto()).toHaveAccessibleName(/^Custo por UN\s*\(obrigatório\)$/)
+    })
+
+    it('a dica do último custo aparece só com custo no produto (Review Focus 5)', () => {
+      const { rerender, queryClient } = renderModal({ custo: 9.5 })
+      expect(campoCusto()).toHaveAccessibleDescription(/^Último custo: R\$\s9,50 por UN\.$/)
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <ModalAjusteEstoque {...PROPS_PADRAO} custo={null} />
+        </QueryClientProvider>,
+      )
+      expect(within(dialogo()).queryByText(/Último custo/)).not.toBeInTheDocument()
+    })
+
+    it('em embalagem, mostra o custo por unidade ao digitar: CX c/ 3 a R$ 100,00 dá "= R$ 33,33 por UN" (Review Focus 3)', () => {
+      renderModal({ saldo: 10, embalagens: [CAIXA_3] })
+      expect(within(dialogo()).queryByText(/^= R\$/)).not.toBeInTheDocument()
+
+      preencherCusto('100,00')
+
+      expect(within(dialogo()).getByText(/^= R\$\s33,33 por UN$/)).toBeInTheDocument()
+      expect(campoCusto()).toHaveAccessibleDescription(/= R\$\s33,33 por UN/)
+
+      // Na unidade de venda o custo ja e por UN: sem a conta.
+      fireEvent.change(seletorEm(), { target: { value: '' } })
+      expect(within(dialogo()).queryByText(/^= R\$/)).not.toBeInTheDocument()
+    })
+
+    it('a prévia inclui a mudança de custo, ou "(sem mudança)" com o custo igual ao atual', () => {
+      renderModal({ saldo: 10, embalagens: [CAIXA_18], custo: 9.5 })
+      fireEvent.change(campoQuantidade(), { target: { value: '2' } })
+      expect(regiaoDaPrevia()).toHaveTextContent(/^2 CX c\/ 18 UN = \+36 UN · Saldo: 10 UN → 46 UN$/)
+
+      preencherCusto('180,00')
+
+      expect(regiaoDaPrevia()).toHaveTextContent(
+        '2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN · Custo: R$ 9,50 → R$ 10,00 por UN',
+      )
+
+      preencherCusto('171,00')
+      expect(regiaoDaPrevia()).toHaveTextContent('Custo: R$ 9,50 por UN (sem mudança)')
+    })
+
+    it('confirmar sem custo mostra "Informe o custo da compra." no campo, com o foco nele, sem enviar', async () => {
+      renderModal()
+      fireEvent.change(campoQuantidade(), { target: { value: '5' } })
+
+      confirmar()
+
+      expect(await screen.findByText('Informe o custo da compra.')).toBeInTheDocument()
+      await waitFor(() => expect(campoCusto()).toHaveFocus())
+      expect(campoCusto()).toHaveAttribute('aria-invalid', 'true')
+      expect(campoCusto()).toHaveAccessibleDescription('Informe o custo da compra.')
+      expect(ajustarEstoqueMock).not.toHaveBeenCalled()
+
+      // Digitar tira o erro.
+      preencherCusto('10,00')
+      expect(screen.queryByText('Informe o custo da compra.')).not.toBeInTheDocument()
+    })
+
+    it('custo zero: "O custo deve ser maior que zero."', async () => {
+      renderModal()
+      fireEvent.change(campoQuantidade(), { target: { value: '5' } })
+      preencherCusto('0')
+      expect(campoCusto()).toHaveValue('0,00')
+
+      confirmar()
+
+      expect(await screen.findByText('O custo deve ser maior que zero.')).toBeInTheDocument()
+      expect(ajustarEstoqueMock).not.toHaveBeenCalled()
+    })
+
+    it('envia o custo na compra em unidades', async () => {
+      ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
+      renderModal()
+      fireEvent.change(campoQuantidade(), { target: { value: '5' } })
+      preencherCusto('9,90')
+
+      confirmar()
+
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
+      expect(ultimoAjuste()).toEqual({
+        tipo: 'ENTRADA',
+        quantidade: 5,
+        motivo: 'COMPRA',
+        observacao: null,
+        chave: expect.any(String),
+        custo: 9.9,
+      })
+    })
+
+    it('fora da compra, o request não leva custo', async () => {
+      ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
+      renderModal()
+      fireEvent.change(campoQuantidade(), { target: { value: '5' } })
+      fireEvent.change(campoMotivo(), { target: { value: 'DEVOLUCAO_CLIENTE' } })
+
+      confirmar()
+
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
+      expect(ultimoAjuste()).not.toHaveProperty('custo')
+    })
+
+    it('400 do servidor no custo aparece no campo', async () => {
+      ajustarEstoqueMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { custo: 'O custo deve ser maior que zero.' }),
+      )
+      renderModal()
+      fireEvent.change(campoQuantidade(), { target: { value: '5' } })
+      preencherCusto('10,00')
+
+      confirmar()
+
+      expect(await screen.findByText('O custo deve ser maior que zero.')).toBeInTheDocument()
+      await waitFor(() => expect(campoCusto()).toHaveFocus())
     })
   })
 })

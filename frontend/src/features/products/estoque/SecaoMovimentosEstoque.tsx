@@ -47,7 +47,7 @@ export function SecaoMovimentosEstoque({ produtoId, sigla, controlaEstoque }: Se
 
 /** Um movimento: tipo e motivo em destaque; quando, quem e a observacao como apoio; quantidade e saldos a direita. */
 function LinhaMovimento({ movimento, sigla }: { movimento: MovimentoEstoque; sigla: string }) {
-  const { titulo, quantidade, saldos, saldosFalados } = textoMovimento(movimento, sigla)
+  const { titulo, quantidade, saldos, saldosFalados, custo } = textoMovimento(movimento, sigla)
   return (
     <li className="flex flex-wrap items-start justify-between gap-x-6 gap-y-1 py-3 first:pt-0 last:pb-0">
       <div className="min-w-0 space-y-0.5">
@@ -60,8 +60,12 @@ function LinhaMovimento({ movimento, sigla }: { movimento: MovimentoEstoque; sig
         </p>
         {movimento.observacao && <p className="text-sm text-muted-foreground break-words">{movimento.observacao}</p>}
       </div>
-      <div className="flex items-baseline gap-3 text-sm tabular-nums">
-        <span className="font-semibold">{quantidade}</span>
+      <div className="flex flex-wrap items-baseline justify-end gap-x-3 gap-y-0.5 text-sm tabular-nums">
+        <span>
+          <span className="font-semibold">{quantidade}</span>
+          {/* Na entrada por compra, o custo (spec B4 §7.2): "· R$ 180,00 por CX (R$ 10,00 por UN)". */}
+          {custo && <span className="text-muted-foreground">{` · ${custo}`}</span>}
+        </span>
         <span className="text-muted-foreground">
           <span aria-hidden="true">{saldos}</span>
           <span className="sr-only">{saldosFalados}</span>

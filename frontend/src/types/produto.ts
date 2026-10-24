@@ -93,6 +93,23 @@ export interface EmbalagemRequest {
   codigosBarras: string[]
 }
 
+/**
+ * De onde veio o custo atual do produto (Fase B4): da ultima entrada por compra
+ * ou de uma edicao no cadastro.
+ */
+export type OrigemDoCusto = 'ENTRADA_COMPRA' | 'EDICAO'
+
+/** Origem do custo atual do produto (spec B4 §4). */
+export interface CustoOrigem {
+  tipo: OrigemDoCusto
+  /** Quando a origem foi registrada (yyyy-mm-ddThh:mm:ss, horario do servidor). */
+  em: string
+  /** Quantidade da ultima entrada por compra, em unidades de venda; null em `EDICAO`. */
+  quantidade: number | null
+  /** Rotulo da embalagem da ultima compra ("CX c/ 18 UN"); null em `EDICAO` ou com a compra em unidades. */
+  embalagemRotulo: string | null
+}
+
 /** Campos de texto livre com sugestoes dos valores ja usados na empresa. */
 export type CampoSugestaoProduto = 'marca' | 'fornecedor'
 
@@ -121,6 +138,8 @@ export interface Produto {
   descricao: string | null
   precoVenda: number
   custo: number | null
+  /** De onde veio o custo atual; null sem custo ou com a origem desconhecida (custo anterior a Fase B4). */
+  custoOrigem: CustoOrigem | null
   precoMinimo: number | null
   /** Promocao gravada (vigente, agendada ou encerrada); null sem promocao. */
   promocao: PromocaoProduto | null
@@ -258,9 +277,21 @@ export interface HistoricoPreco {
   valorNovo: number | null
   /** Rotulo da embalagem no momento da alteracao ("CX c/ 3 UN"); so em `PRECO_EMBALAGEM`. */
   embalagemRotulo: string | null
+  /** De onde veio a alteracao de custo (so em `CUSTO`; null nos precos). */
+  origem: OrigemDoCusto | null
+  /** A entrada por compra que mudou o custo; so com a origem `ENTRADA_COMPRA`. */
+  entrada: EntradaDoHistoricoPreco | null
   usuarioNome: string
   /** Momento da gravacao (yyyy-mm-ddThh:mm:ss, horario do servidor). */
   alteradoEm: string
+}
+
+/** Quantidade e embalagem da entrada por compra ligada a uma linha de custo. */
+export interface EntradaDoHistoricoPreco {
+  /** Em unidades de venda (36). */
+  quantidade: number
+  /** "CX c/ 18 UN"; null com a compra em unidades. */
+  embalagemRotulo: string | null
 }
 
 /** Pagina de uma consulta paginada do backend (`pagina` comeca em 0). */

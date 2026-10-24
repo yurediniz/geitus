@@ -383,11 +383,12 @@ export function ProdutosListaPage() {
           saldo={ajuste.produto.estoqueAtual}
           sigla={ajuste.produto.unidade.sigla}
           fracionada={ajuste.produto.unidade.fracionada}
+          custo={ajuste.produto.custo}
           aoFechar={() => setAjuste(null)}
           focoAoFechar={() => (ajuste.origem.isConnected ? ajuste.origem : null)}
           aoConcluir={(movimento) => {
             // O modal ja invalidou os produtos: a lista recarrega com o saldo novo.
-            const mensagem = mensagemDeSucesso(movimento, ajuste.produto.unidade.sigla)
+            const mensagem = mensagemDeSucesso(movimento, ajuste.produto.unidade.sigla, ajuste.produto.custo)
             setAjuste(null)
             setErroGeral(null)
             setMensagemSucesso(`${ajuste.produto.nome}: ${mensagem.charAt(0).toLowerCase()}${mensagem.slice(1)}`)

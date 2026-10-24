@@ -3,7 +3,8 @@
  * por tipo, previa do saldo, validacao do modal e o texto de uma linha do
  * historico. O backend aplica as mesmas regras; aqui elas evitam o envio.
  */
-import { formatarQuantidade } from '@/features/products/formatacaoProduto'
+import { formatarMoeda, formatarQuantidade } from '@/features/products/formatacaoProduto'
+import { digitosParaValor, valorParaDigitos } from '@/lib/moeda'
 import { MENSAGEM_QUANTIDADE, validarQuantidade } from '@/lib/quantidade'
 import type { MotivoMovimento, MovimentoEstoque, TipoMovimento } from '@/types/estoque'
 
@@ -157,13 +158,21 @@ export function rotuloConfirmar(
   return previa.saldoNovo === 0 ? 'Zerar estoque' : `Ajustar para ${formatarQuantidade(previa.saldoNovo, sigla)}`
 }
 
-/** Mensagem da tela depois do ajuste gravado. */
-export function mensagemDeSucesso(movimento: MovimentoEstoque, sigla: string): string {
+/**
+ * Mensagem da tela depois do ajuste gravado. Na entrada por compra, com o
+ * custo do produto antes do ajuste (`custoAnterior`), avisa o custo novo
+ * quando ele mudou: "... Custo atualizado para R$ 10,00." (spec B4 §7.1).
+ */
+export function mensagemDeSucesso(movimento: MovimentoEstoque, sigla: string, custoAnterior?: number | null): string {
   const saldoNovo = formatarQuantidade(movimento.saldoNovo, sigla)
   const variacao = formatarVariacaoQuantidade(movimento.quantidade, sigla)
   const quantidade = `${formatarQuantidade(Math.abs(movimento.quantidade), sigla)}${textoDoRetrato(movimento)}`
   if (movimento.tipo === 'ENTRADA') {
-    return `Entrada de ${quantidade} registrada. Saldo: ${saldoNovo}.`
+    const custoNovo = movimento.custoUnitario === null ? null : centavosDoCustoUnitario(movimento.custoUnitario)
+    const custoMudou =
+      custoNovo !== null && custoAnterior !== undefined && (custoAnterior === null || centavosDe(custoAnterior) !== custoNovo)
+    const aviso = custoMudou ? ` Custo atualizado para ${formatarMoeda(Number(custoNovo) / 100)}.` : ''
+    return `Entrada de ${quantidade} registrada. Saldo: ${saldoNovo}.${aviso}`
   }
   if (movimento.tipo === 'SAIDA') {
     return `Saída de ${quantidade} registrada. Saldo: ${saldoNovo}.`
@@ -179,6 +188,12 @@ export interface DadosAjuste {
   observacao: string
   /** UUID da embalagem em que a quantidade foi informada; ''/ausente = na unidade de venda. */
   embalagemId?: string
+  /**
+   * Custo da compra no formato do campo de dinheiro ("180.00"), so na Entrada
+   * com Compra: o de 1 unidade de venda ou, com embalagem, o de 1 embalagem.
+   * ''/ausente = nao informado.
+   */
+  custo?: string
 }
 
 /** Embalagem gravada do produto, como o modal a oferece. */
@@ -201,7 +216,7 @@ export interface ContextoAjuste {
   embalagens?: readonly EmbalagemDoAjuste[]
 }
 
-export type CampoAjuste = 'tipo' | 'quantidade' | 'embalagemId' | 'motivo' | 'observacao'
+export type CampoAjuste = 'tipo' | 'quantidade' | 'embalagemId' | 'custo' | 'motivo' | 'observacao'
 
 /**
  * Embalagem que o seletor "Em" traz ao trocar o tipo ou o motivo (spec B3 §6):
@@ -281,9 +296,9 @@ export const MENSAGEM_EMBALAGENS_INTEIRAS = 'Informe um número inteiro de embal
 
 /**
  * Validacao do modal antes do envio: quantidade (formato, > 0 na entrada e na
- * saida, fracao pela unidade e saldo insuficiente), motivo do tipo e
- * observacao obrigatoria em "Outro". A contagem igual ao saldo nao e erro: vem
- * em `confere`.
+ * saida, fracao pela unidade e saldo insuficiente), o custo da entrada por
+ * compra (obrigatorio e > 0), motivo do tipo e observacao obrigatoria em
+ * "Outro". A contagem igual ao saldo nao e erro: vem em `confere`.
  */
 export function validarAjuste(dados: DadosAjuste, contexto: ContextoAjuste): ResultadoValidacaoAjuste {
   const erros: Partial<Record<CampoAjuste, string>> = {}
@@ -291,12 +306,124 @@ export function validarAjuste(dados: DadosAjuste, contexto: ContextoAjuste): Res
   if (erro) {
     erros.quantidade = erro
   }
+  if (exigeCusto(dados.tipo, dados.motivo)) {
+    const custo = dados.custo?.trim() ?? ''
+    if (custo === '') {
+      erros.custo = MENSAGEM_CUSTO_OBRIGATORIO
+    } else if (!(Number(custo) > 0)) {
+      erros.custo = MENSAGEM_CUSTO_POSITIVO
+    }
+  }
   if (dados.motivo === '' || !MOTIVOS_POR_TIPO[dados.tipo].includes(dados.motivo)) {
     erros.motivo = 'Selecione o motivo.'
   } else if (dados.motivo === 'OUTRO' && dados.observacao.trim() === '') {
     erros.observacao = 'Descreva o motivo.'
   }
   return { quantidade: valor, erros, confere }
+}
+
+// --- Custo da entrada por compra (Fase B4, docs/modules/produtos-custo-entrada.md) ---
+
+export const MENSAGEM_CUSTO_OBRIGATORIO = 'Informe o custo da compra.'
+export const MENSAGEM_CUSTO_POSITIVO = 'O custo deve ser maior que zero.'
+
+/** So a Entrada com motivo Compra/recebimento exige (e aceita) o custo (spec B4 §2.1). */
+export function exigeCusto(tipo: TipoMovimento, motivo: MotivoMovimento | ''): boolean {
+  return tipo === 'ENTRADA' && motivo === 'COMPRA'
+}
+
+/** Divisao inteira com meio para cima (numerador e divisor > 0): (2a + b) / 2b. */
+function dividirArredondando(numerador: bigint, divisor: bigint): bigint {
+  return (2n * numerador + divisor) / (2n * divisor)
+}
+
+/** Centavos de um valor em reais (custo do produto, NUMERIC(12,2)). */
+function centavosDe(valor: number): bigint {
+  return BigInt(valorParaDigitos(valor.toFixed(2)) || '0')
+}
+
+/** Centavos do custo unitario do movimento (NUMERIC(14,4)), meio para cima: o custo que o produto recebe. */
+function centavosDoCustoUnitario(valor: number): bigint {
+  const [inteiros, decimais = ''] = valor.toFixed(4).split('.')
+  return dividirArredondando(BigInt(`${inteiros}${decimais}`), 100n)
+}
+
+/**
+ * Custo por unidade de venda de um custo digitado ("180.00" e 18 -> "10.00"),
+ * a mesma conta do backend: na embalagem, informado / quantidade com 4 casas
+ * (o do movimento) e depois a centavos (o do produto), as duas meio para cima
+ * ("100.00" e 3 -> 33,3333 -> "33.33"). Sem embalagem, o proprio custo. Null
+ * sem custo ou com custo zero.
+ */
+export function custoPorUnidade(custoInformado: string, quantidadePorEmbalagem: number | null): string | null {
+  const centavos = BigInt(valorParaDigitos(custoInformado) || '0')
+  if (centavos <= 0n) {
+    return null
+  }
+  if (quantidadePorEmbalagem === null) {
+    return digitosParaValor(centavos.toString())
+  }
+  // Quantidade em milesimos (NUMERIC(12,3)): custo / quantidade em decimos de milesimo = centavos x 100.000 / milesimos.
+  const milesimos = BigInt(Math.round(quantidadePorEmbalagem * 1000))
+  const quatroCasas = dividirArredondando(centavos * 100_000n, milesimos)
+  return digitosParaValor(dividirArredondando(quatroCasas, 100n).toString())
+}
+
+/** Rotulo do campo: "Custo por UN" na unidade de venda; "Custo da CX c/ 18 UN" na embalagem. */
+export function rotuloDoCusto(sigla: string, embalagem?: { rotulo: string }): string {
+  return embalagem ? `Custo da ${embalagem.rotulo}` : `Custo por ${sigla}`
+}
+
+/** "Último custo: R$ 9,50 por UN."; null sem custo no produto. */
+export function dicaDoUltimoCusto(custoAtual: number | null, sigla: string): string | null {
+  return custoAtual === null ? null : `Último custo: ${formatarMoeda(custoAtual)} por ${sigla}.`
+}
+
+/** "= R$ 10,00 por UN": o custo por unidade de uma compra em embalagem. */
+export function textoDoCustoPorUnidade(custoUnidade: string, sigla: string): string {
+  return `= ${formatarMoeda(Number(custoUnidade))} por ${sigla}`
+}
+
+/**
+ * Previa do saldo com o custo (spec B4 §7.1): "... · Custo: R$ 9,50 → R$ 10,00
+ * por UN", "... · Custo: R$ 10,00 por UN (sem mudança)" com o custo igual ao
+ * atual, e "... · Custo: R$ 10,00 por UN" no produto ainda sem custo. Sem custo
+ * digitado, a previa fica como era; sem previa, null.
+ */
+export function textoDaPreviaComCusto(
+  previa: string | null,
+  custoUnidade: string | null,
+  custoAtual: number | null,
+  sigla: string,
+): string | null {
+  if (previa === null || custoUnidade === null) {
+    return previa
+  }
+  const novo = `${formatarMoeda(Number(custoUnidade))} por ${sigla}`
+  if (custoAtual === null) {
+    return `${previa} · Custo: ${novo}`
+  }
+  const igual = centavosDe(custoAtual) === BigInt(valorParaDigitos(custoUnidade) || '0')
+  return igual ? `${previa} · Custo: ${novo} (sem mudança)` : `${previa} · Custo: ${formatarMoeda(custoAtual)} → ${novo}`
+}
+
+/** Sigla da embalagem pelo rotulo ("CX c/ 18 UN" -> "CX"), como o backend o monta. */
+export function siglaDoRotulo(rotulo: string): string {
+  return rotulo.split(' c/ ')[0]
+}
+
+/** Custo do movimento de compra: "R$ 180,00 por CX (R$ 10,00 por UN)" ou "R$ 10,00 por UN"; null sem custo. */
+function textoDoCustoDoMovimento(movimento: MovimentoEstoque, sigla: string): string | null {
+  const { custoInformado, custoUnitario, embalagem } = movimento
+  if (custoInformado === null || custoUnitario === null) {
+    return null
+  }
+  const informado = formatarMoeda(custoInformado)
+  if (!embalagem) {
+    return `${informado} por ${sigla}`
+  }
+  const porUnidade = formatarMoeda(Number(centavosDoCustoUnitario(custoUnitario)) / 100)
+  return `${informado} por ${siglaDoRotulo(embalagem.rotulo)} (${porUnidade} por ${sigla})`
 }
 
 /** Numero pt-BR sem a sigla ("2,5"), como nos saldos da linha do historico. */
@@ -313,6 +440,8 @@ export interface TextoMovimento {
   saldos: string
   /** Os saldos para o leitor de tela, no lugar da seta: "saldo de 12 para 10". */
   saldosFalados: string
+  /** Custo da entrada por compra: "R$ 180,00 por CX (R$ 10,00 por UN)"; null nos demais movimentos. */
+  custo: string | null
 }
 
 /** " (2 CX c/ 18 UN)" do movimento informado em embalagens; '' sem o retrato. */
@@ -328,5 +457,6 @@ export function textoMovimento(movimento: MovimentoEstoque, sigla: string): Text
     quantidade: `${formatarVariacaoQuantidade(movimento.quantidade, sigla)}${textoDoRetrato(movimento)}`,
     saldos: `${numero(movimento.saldoAnterior)} → ${numero(movimento.saldoNovo)}`,
     saldosFalados: `saldo de ${numero(movimento.saldoAnterior)} para ${numero(movimento.saldoNovo)}`,
+    custo: textoDoCustoDoMovimento(movimento, sigla),
   }
 }

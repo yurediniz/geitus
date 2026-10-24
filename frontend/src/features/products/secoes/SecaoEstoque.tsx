@@ -261,11 +261,12 @@ export function SecaoEstoque({
           sigla={produto.unidade.sigla}
           fracionada={produto.unidade.fracionada}
           embalagens={embalagensDoAjuste}
+          custo={produto.custo}
           aoFechar={() => setAjustando(false)}
           focoAoFechar={() => botaoAjustarRef.current}
           aoConcluir={(movimento) => {
             setAjustando(false)
-            aoAjustarEstoque(mensagemDeSucesso(movimento, produto.unidade.sigla))
+            aoAjustarEstoque(mensagemDeSucesso(movimento, produto.unidade.sigla, produto.custo))
           }}
         />
       )}

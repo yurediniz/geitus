@@ -50,6 +50,14 @@ export interface MovimentoEstoque {
   criadoEm: string
   /** Retrato da embalagem do ajuste informado em embalagens; null quando foi na unidade de venda. */
   embalagem: RetratoEmbalagemMovimento | null
+  /**
+   * Custo digitado na entrada por compra (Fase B4): o de 1 unidade de venda ou,
+   * com embalagem, o de 1 embalagem. Null nos demais movimentos (e nas compras
+   * gravadas antes da Fase B4).
+   */
+  custoInformado: number | null
+  /** Custo por unidade de venda, com 4 casas (informado / unidades da embalagem); null junto com `custoInformado`. */
+  custoUnitario: number | null
 }
 
 /** Embalagem como estava no ajuste (o movimento e imutavel e sobrevive a remocao dela). */
@@ -77,4 +85,10 @@ export interface AjusteEstoqueRequest {
    * numero (inteiro) de embalagens. Ausente = quantidade na unidade de venda.
    */
   embalagemId?: string
+  /**
+   * Custo da compra (Fase B4): obrigatorio e > 0 so na ENTRADA com motivo
+   * COMPRA, e ausente nos demais. Com `embalagemId`, e o custo de 1 embalagem
+   * (o backend divide pela quantidade dela).
+   */
+  custo?: number
 }

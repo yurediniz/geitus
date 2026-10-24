@@ -1024,7 +1024,12 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
             />
           </SecaoDaPagina>
           <SecaoDaPagina secao="precos">
-            <SecaoPrecos siglaPorId={siglaPorId} desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
+            <SecaoPrecos
+              produto={produto}
+              siglaPorId={siglaPorId}
+              desabilitado={desabilitado}
+              aoAlterarCampo={aoAlterarCampo}
+            />
           </SecaoDaPagina>
           <SecaoDaPagina secao="embalagens">
             <SecaoEmbalagens

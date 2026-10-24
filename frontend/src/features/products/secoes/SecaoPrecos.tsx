@@ -12,6 +12,7 @@ import {
   GrupoCampos,
 } from '@/features/products/CamposFormulario'
 import { formatarMoeda, formatarPercentual } from '@/features/products/formatacaoProduto'
+import { notaDaOrigemDoCusto } from '@/features/products/origemDoCusto'
 import {
   CAMPOS_ATACADO,
   CAMPOS_PROMOCAO,
@@ -30,9 +31,11 @@ import {
   type ProdutoFormValues,
 } from '@/features/products/produtoFormulario'
 import { cn } from '@/lib/utils'
-import type { SituacaoPromocao } from '@/types/produto'
+import type { Produto, SituacaoPromocao } from '@/types/produto'
 
 export interface SecaoPrecosProps {
+  /** Produto gravado (custo e a origem dele, para a nota abaixo do campo); null no cadastro. */
+  produto: Produto | null
   /** Sigla por id de unidade, para "Quantidade mínima (UN)". */
   siglaPorId: ReadonlyMap<string, string>
   desabilitado: boolean
@@ -182,7 +185,7 @@ function textoSemMargem(precoVenda: string): string {
  * venda e essencial e fica na secao Geral (cadastro rapido); aqui so aparece
  * como referencia.
  */
-export function SecaoPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: SecaoPrecosProps) {
+export function SecaoPrecos({ produto, siglaPorId, desabilitado, aoAlterarCampo }: SecaoPrecosProps) {
   const {
     control,
     register,
@@ -223,6 +226,8 @@ export function SecaoPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: SecaoP
   const valorPrecoVenda = numeroValido(precoVenda)
   const avisoPrecoVenda = textoAbaixoDoCusto(precoVenda, custo)
   const siglaVenda = siglaPorId.get(unidadeId)
+  // De onde veio o custo gravado (spec B4 §4): vem do backend, entao so muda depois de salvar ou ajustar.
+  const notaDoCusto = produto ? notaDaOrigemDoCusto(produto.custo, produto.custoOrigem) : null
 
   const hoje = dataHojeSaoPaulo()
   const situacao = situacaoPromocaoLocal(promocaoInicio, promocaoFim, hoje)
@@ -272,6 +277,7 @@ export function SecaoPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: SecaoP
           id="custo"
           label="Custo (opcional)"
           erro={errors.custo?.message}
+          ajuda={notaDoCusto}
           aoAlterar={aoAlterarCampo}
           disabled={desabilitado}
         />

@@ -5,6 +5,7 @@ import { ListaHistorico } from '@/features/products/secoes/ListaHistorico'
 import { useJaApareceu } from '@/features/products/secoes/useSecaoVisivel'
 import { SecaoMovimentosEstoque } from '@/features/products/estoque/SecaoMovimentosEstoque'
 import { formatarDataHora, formatarMoeda, formatarVariacao } from '@/features/products/formatacaoProduto'
+import { textoDaOrigemNoHistorico } from '@/features/products/origemDoCusto'
 import { listarHistoricoDePrecos } from '@/services/produtoService'
 import type { CampoHistoricoPreco, HistoricoPreco } from '@/types/produto'
 
@@ -88,7 +89,8 @@ export function SecaoHistorico({ produtoId, sigla, controlaEstoque }: SecaoHisto
 function ValoresDaAlteracao({ item }: { item: HistoricoPreco }) {
   const { valorAnterior: anterior, valorNovo: novo } = item
   const vazio = SEM_VALOR[item.campo]
-  if (anterior === null && item.campo !== 'PRECO_EMBALAGEM') {
+  // A primeira compra de um produto sem custo nao e o cadastro: "sem custo → R$ 10,00" (spec B4, Review Focus 5).
+  if (anterior === null && item.campo !== 'PRECO_EMBALAGEM' && item.origem !== 'ENTRADA_COMPRA') {
     return <span>{`${formatarMoeda(novo)} (valor inicial)`}</span>
   }
   const textoAnterior = anterior === null ? vazio : formatarMoeda(anterior)
@@ -104,10 +106,15 @@ function ValoresDaAlteracao({ item }: { item: HistoricoPreco }) {
 /** Uma alteracao: campo e valores em destaque; quando e quem, como apoio. */
 function LinhaHistorico({ item }: { item: HistoricoPreco }) {
   const variacao = formatarVariacao(item.valorAnterior, item.valorNovo)
+  // Nas linhas de custo, de onde veio a alteracao (spec B4 §3): "Entrada de compra (2 CX c/ 18 UN)" ou "Editado".
+  const origem = textoDaOrigemNoHistorico(item)
   return (
     <li className="flex flex-wrap items-start justify-between gap-x-6 gap-y-1 py-3 first:pt-0 last:pb-0">
       <div className="min-w-0 space-y-0.5">
-        <p className="text-sm font-medium">{rotuloDaLinha(item)}</p>
+        <p className="text-sm">
+          <span className="font-medium">{rotuloDaLinha(item)}</span>
+          {origem && <span className="text-muted-foreground">{` · ${origem}`}</span>}
+        </p>
         <p className="text-xs text-muted-foreground">
           <span>{formatarDataHora(item.alteradoEm)}</span>
           <span aria-hidden="true"> · </span>

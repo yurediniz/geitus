@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Check, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { CampoMoeda } from '@/components/ui/campo-moeda'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
@@ -14,13 +15,19 @@ import {
   ROTULO_TIPO,
   TIPOS_MOVIMENTO,
   calcularPrevia,
+  custoPorUnidade,
+  dicaDoUltimoCusto,
   embalagemDoAjuste,
   embalagemPadrao,
+  exigeCusto,
   motivoPadrao,
   motivosDoTipo,
   quantidadeEmUnidades,
   rotuloConfirmar,
+  rotuloDoCusto,
   textoDaPrevia,
+  textoDaPreviaComCusto,
+  textoDoCustoPorUnidade,
   validarAjuste,
   type CampoAjuste,
   type ContextoAjuste,
@@ -50,6 +57,11 @@ export interface ModalAjusteEstoqueProps {
    * ganham o seletor "Em" e a quantidade pode ser informada em embalagens.
    */
   embalagens?: readonly EmbalagemDoAjuste[]
+  /**
+   * Custo atual do produto (por unidade de venda), para a dica "Último custo"
+   * e a previa da entrada por compra (spec B4 §7.1). Null/ausente = sem custo.
+   */
+  custo?: number | null
   aoFechar: () => void
   /** Quem recebe o foco ao fechar (ex.: o botao que abriu; no Safari o clique nao foca o botao). */
   focoAoFechar?: () => HTMLElement | null
@@ -83,15 +95,18 @@ const ID_CAMPO: Readonly<Record<CampoAjuste, string>> = {
   tipo: 'ajuste-tipo',
   quantidade: 'ajuste-quantidade',
   embalagemId: 'ajuste-embalagem',
+  custo: 'ajuste-custo',
   motivo: 'ajuste-motivo',
   observacao: 'ajuste-observacao',
 }
 const ID_ERRO_GERAL = 'ajuste-erro-geral'
 const ID_PREVIA = 'ajuste-previa'
 const ID_AJUDA_CONTAGEM = 'ajuste-quantidade-ajuda'
+const ID_DICA_CUSTO = 'ajuste-custo-dica'
+const ID_CUSTO_POR_UNIDADE = 'ajuste-custo-por-unidade'
 
 /** Ordem de foco quando ha erro (a ordem da tela). */
-const ORDEM_CAMPOS: readonly CampoAjuste[] = ['tipo', 'quantidade', 'embalagemId', 'motivo', 'observacao']
+const ORDEM_CAMPOS: readonly CampoAjuste[] = ['tipo', 'quantidade', 'embalagemId', 'custo', 'motivo', 'observacao']
 
 function ehCampoAjuste(chave: string): chave is CampoAjuste {
   return (ORDEM_CAMPOS as readonly string[]).includes(chave)
@@ -119,6 +134,12 @@ function previaDe(dados: DadosAjuste, contexto: ContextoAjuste): PreviaSaldo | n
   return total === null ? null : calcularPrevia(dados.tipo, total, contexto.saldo, contexto.sigla)
 }
 
+/** Os erros sem o do custo (o campo saiu da tela). */
+function semErroDeCusto(erros: Partial<Record<CampoAjuste, string>>): Partial<Record<CampoAjuste, string>> {
+  const { custo: _custo, ...demais } = erros
+  return demais
+}
+
 /** Sem embalagens por padrao: referencia estavel (o contexto e montado a cada render). */
 const SEM_EMBALAGENS: readonly EmbalagemDoAjuste[] = []
 
@@ -130,6 +151,7 @@ function ConteudoAjuste({
   sigla,
   fracionada,
   embalagens = SEM_EMBALAGENS,
+  custo: custoAtual = null,
   aoFechar,
   focoAoFechar,
   aoConcluir,
@@ -143,6 +165,8 @@ function ConteudoAjuste({
     motivo: motivoPadrao('ENTRADA'),
     observacao: '',
     embalagemId: embalagemPadrao('ENTRADA', motivoPadrao('ENTRADA'), embalagens),
+    // Comeca vazio (spec B4 §7.1): o ultimo custo aparece so como dica.
+    custo: '',
   }))
   // Escolhida no seletor: trocar o tipo ou o motivo deixa de trocar a embalagem pelo padrao.
   const [embalagemEscolhida, setEmbalagemEscolhida] = useState(false)
@@ -235,12 +259,16 @@ function ConteudoAjuste({
   const alterar = (campo: Exclude<CampoAjuste, 'tipo' | 'embalagemId'>, valor: string) => {
     setDados((atuais) => {
       const novos = { ...atuais, [campo]: valor }
+      if (campo !== 'motivo') {
+        return novos
+      }
+      // Fora da compra o campo de custo some, e o valor digitado com ele (spec B4 §7.1).
+      const custo = exigeCusto(novos.tipo, novos.motivo) ? novos.custo : ''
       // O motivo muda o padrao do seletor (Compra traz a embalagem de compra), ate o usuario escolher.
-      return campo === 'motivo' && !embalagemEscolhida
-        ? { ...novos, embalagemId: embalagemPadrao(novos.tipo, novos.motivo, embalagens) }
-        : novos
+      const embalagemId = embalagemEscolhida ? novos.embalagemId : embalagemPadrao(novos.tipo, novos.motivo, embalagens)
+      return { ...novos, custo, embalagemId }
     })
-    setErrosEnvio(({ [campo]: _removido, ...demais }) => demais)
+    setErrosEnvio(({ [campo]: _removido, ...demais }) => (campo === 'motivo' ? semErroDeCusto(demais) : demais))
   }
 
   const escolherEmbalagem = (embalagemId: string) => {
@@ -255,7 +283,9 @@ function ConteudoAjuste({
       const motivo =
         atuais.motivo !== '' && motivosDoTipo(tipo).includes(atuais.motivo) ? atuais.motivo : motivoPadrao(tipo)
       const embalagemId = embalagemEscolhida ? atuais.embalagemId : embalagemPadrao(tipo, motivo, embalagens)
-      return { ...atuais, tipo, motivo, embalagemId }
+      // Trocar o tipo descarta o custo digitado (spec B4 §7.1).
+      const custo = tipo === atuais.tipo ? atuais.custo : ''
+      return { ...atuais, tipo, motivo, embalagemId, custo }
     })
     // A quantidade muda de sentido com o tipo (na contagem e o saldo contado).
     setErrosEnvio({})
@@ -263,12 +293,13 @@ function ConteudoAjuste({
 
   /** Atalho: contagem com saldo contado 0 e motivo Contagem/inventario (que pode ser trocado). */
   const zerar = () => {
-    setDados((atuais) => ({ ...atuais, tipo: 'AJUSTE', quantidade: '0', motivo: 'CONTAGEM' }))
+    setDados((atuais) => ({ ...atuais, tipo: 'AJUSTE', quantidade: '0', motivo: 'CONTAGEM', custo: '' }))
     setErrosEnvio({})
   }
 
   const previa = previaDe(dados, contexto)
   const embalagem = embalagemDoAjuste(dados, contexto)
+  const comCusto = exigeCusto(dados.tipo, dados.motivo)
 
   const confirmar = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -301,6 +332,8 @@ function ConteudoAjuste({
       observacao: dados.observacao.trim() || null,
       chave,
       ...(embalagem ? { embalagemId: embalagem.id } : {}),
+      // Com embalagem, o custo de 1 embalagem, como digitado: o backend divide.
+      ...(comCusto ? { custo: Number(dados.custo) } : {}),
     })
   }
 
@@ -314,7 +347,18 @@ function ConteudoAjuste({
   const quantidadeDigitada = interpretarQuantidade(dados.quantidade)
   const emEmbalagem =
     embalagem && quantidadeDigitada !== null ? { quantidade: quantidadeDigitada, rotulo: embalagem.rotulo } : undefined
-  const textoPrevia = previa && quantidadeAceita ? textoDaPrevia(dados.tipo, saldo, previa, sigla, emEmbalagem) : null
+  // Custo por unidade de venda do custo digitado (a conta do backend); null sem custo valido.
+  const custoUnidade = comCusto ? custoPorUnidade(dados.custo ?? '', embalagem?.quantidade ?? null) : null
+  const previaDoSaldo = previa && quantidadeAceita ? textoDaPrevia(dados.tipo, saldo, previa, sigla, emEmbalagem) : null
+  const textoPrevia = comCusto ? textoDaPreviaComCusto(previaDoSaldo, custoUnidade, custoAtual, sigla) : previaDoSaldo
+  const dicaCusto = dicaDoUltimoCusto(custoAtual, sigla)
+  // So na embalagem: na unidade de venda o custo digitado ja e por unidade.
+  const custoPorUnidadeTexto = embalagem && custoUnidade !== null ? textoDoCustoPorUnidade(custoUnidade, sigla) : null
+  const erroCusto = errosEnvio.custo
+  const descricaoCusto =
+    [custoPorUnidadeTexto && ID_CUSTO_POR_UNIDADE, dicaCusto && ID_DICA_CUSTO, erroCusto && `${ID_CAMPO.custo}-erro`]
+      .filter(Boolean)
+      .join(' ') || undefined
   // Em embalagens, o botao diz o total em unidades ("Registrar entrada de 36 UN").
   const totalEmEmbalagens = emEmbalagem && quantidadeAceita ? (quantidadeEmUnidades(dados, contexto) ?? undefined) : undefined
   const erroDaPrevia = errosEnvio.quantidade ? null : (previa?.erro ?? null)
@@ -447,6 +491,35 @@ function ConteudoAjuste({
             </div>
           )}
         </div>
+
+        {/* Custo da compra (spec B4 §7.1): so na Entrada com Compra, logo abaixo da quantidade. */}
+        {comCusto && (
+          <div className="space-y-1.5">
+            <label htmlFor={ID_CAMPO.custo} className="text-sm font-medium">
+              {rotuloDoCusto(sigla, embalagem)}
+              <MarcaObrigatorio />
+            </label>
+            <CampoMoeda
+              id={ID_CAMPO.custo}
+              value={dados.custo ?? ''}
+              onChange={(valor) => alterar('custo', valor)}
+              disabled={enviando}
+              aria-invalid={erroCusto ? true : undefined}
+              aria-describedby={descricaoCusto}
+            />
+            {custoPorUnidadeTexto && (
+              <p id={ID_CUSTO_POR_UNIDADE} className="text-sm font-medium tabular-nums">
+                {custoPorUnidadeTexto}
+              </p>
+            )}
+            {dicaCusto && (
+              <p id={ID_DICA_CUSTO} className="text-xs text-muted-foreground tabular-nums">
+                {dicaCusto}
+              </p>
+            )}
+            <ErroDoCampo id={`${ID_CAMPO.custo}-erro`} mensagem={erroCusto} />
+          </div>
+        )}
 
         {/* Regiao viva, logo abaixo da quantidade: a previa, o erro de saldo (antes do envio) ou a contagem que confere. */}
         <div id={ID_PREVIA} aria-live="polite" className="min-h-5 text-sm tabular-nums">

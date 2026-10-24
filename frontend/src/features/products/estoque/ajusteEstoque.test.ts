@@ -1,17 +1,25 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  MENSAGEM_CUSTO_OBRIGATORIO,
+  MENSAGEM_CUSTO_POSITIVO,
   ROTULO_MOTIVO,
   ROTULO_TIPO,
   calcularPrevia,
+  custoPorUnidade,
+  dicaDoUltimoCusto,
   embalagemDoAjuste,
   embalagemPadrao,
   mensagemDeSucesso,
   motivoPadrao,
   motivosDoTipo,
+  exigeCusto,
   quantidadeEmUnidades,
   rotuloConfirmar,
+  rotuloDoCusto,
   textoDaPrevia,
+  textoDaPreviaComCusto,
+  textoDoCustoPorUnidade,
   textoMovimento,
   validarAjuste,
   type DadosAjuste,
@@ -30,6 +38,13 @@ const MOVIMENTO: MovimentoEstoque = {
   usuarioNome: 'Ana Souza',
   criadoEm: '2026-10-21T15:20:00',
   embalagem: null,
+  custoInformado: null,
+  custoUnitario: null,
+}
+
+/** O "R$" do Intl vem com espaco nao separavel: os textos esperados usam o espaco comum. */
+function semNbsp(texto: string | null | undefined): string | null | undefined {
+  return texto?.replace(/\u00a0/g, ' ')
 }
 
 describe('ajusteEstoque', () => {
@@ -196,6 +211,7 @@ describe('ajusteEstoque', () => {
         quantidade: '−2 UN',
         saldos: '12 → 10',
         saldosFalados: 'saldo de 12 para 10',
+        custo: null,
       })
     })
 
@@ -218,6 +234,7 @@ describe('ajusteEstoque', () => {
         quantidade: '+2,5 KG',
         saldos: '0 → 2,5',
         saldosFalados: 'saldo de 0 para 2,5',
+        custo: null,
       })
       expect(textoMovimento({ ...MOVIMENTO, tipo: 'AJUSTE', motivo: 'CONTAGEM' }, 'UN').titulo).toBe(
         'Ajuste · Contagem/inventário',
@@ -242,7 +259,14 @@ describe('ajusteEstoque', () => {
     const FARDO = { id: 'fd6', rotulo: 'FD c/ 6 UN', quantidade: 6, deCompra: false }
     const CAIXA = { id: 'cx18', rotulo: 'CX c/ 18 UN', quantidade: 18, deCompra: true }
     const contexto = { saldo: 10, sigla: 'UN', fracionada: false, embalagens: [FARDO, CAIXA] }
-    const entrada: DadosAjuste = { tipo: 'ENTRADA', quantidade: '2', motivo: 'COMPRA', observacao: '', embalagemId: 'cx18' }
+    const entrada: DadosAjuste = {
+      tipo: 'ENTRADA',
+      quantidade: '2',
+      motivo: 'COMPRA',
+      observacao: '',
+      embalagemId: 'cx18',
+      custo: '180.00',
+    }
 
     it('padrão: a embalagem de compra na Entrada com Compra; senão a unidade de venda', () => {
       expect(embalagemPadrao('ENTRADA', 'COMPRA', [FARDO, CAIXA])).toBe('cx18')
@@ -310,6 +334,131 @@ describe('ajusteEstoque', () => {
         embalagem: { rotulo: 'CX c/ 18 UN', quantidadePorEmbalagem: 18, quantidadeDeEmbalagens: 2 },
       }
       expect(mensagemDeSucesso(movimento, 'UN')).toBe('Entrada de 36 UN (2 CX c/ 18 UN) registrada. Saldo: 46 UN.')
+    })
+  })
+
+  describe('custo na entrada por compra (Fase B4)', () => {
+    const contexto = { saldo: 10, sigla: 'UN', fracionada: false }
+    const compra: DadosAjuste = { tipo: 'ENTRADA', quantidade: '10', motivo: 'COMPRA', observacao: '', custo: '10.00' }
+
+    it('só a Entrada com motivo Compra exige o custo', () => {
+      expect(exigeCusto('ENTRADA', 'COMPRA')).toBe(true)
+      expect(exigeCusto('ENTRADA', 'DEVOLUCAO_CLIENTE')).toBe(false)
+      expect(exigeCusto('ENTRADA', 'OUTRO')).toBe(false)
+      expect(exigeCusto('SAIDA', 'PERDA_AVARIA')).toBe(false)
+      expect(exigeCusto('AJUSTE', 'CONTAGEM')).toBe(false)
+    })
+
+    it('compra sem custo ou com custo zero é barrada; com custo, passa', () => {
+      expect(MENSAGEM_CUSTO_OBRIGATORIO).toBe('Informe o custo da compra.')
+      expect(MENSAGEM_CUSTO_POSITIVO).toBe('O custo deve ser maior que zero.')
+      expect(validarAjuste(compra, contexto).erros).toEqual({})
+      expect(validarAjuste({ ...compra, custo: '' }, contexto).erros).toEqual({ custo: 'Informe o custo da compra.' })
+      expect(validarAjuste({ ...compra, custo: undefined }, contexto).erros).toEqual({
+        custo: 'Informe o custo da compra.',
+      })
+      expect(validarAjuste({ ...compra, custo: '0.00' }, contexto).erros).toEqual({
+        custo: 'O custo deve ser maior que zero.',
+      })
+    })
+
+    it('fora da compra, o custo não é validado', () => {
+      expect(validarAjuste({ ...compra, motivo: 'DEVOLUCAO_CLIENTE', custo: '' }, contexto).erros).toEqual({})
+      const saida: DadosAjuste = { ...compra, tipo: 'SAIDA', motivo: 'PERDA_AVARIA', quantidade: '2', custo: '' }
+      expect(validarAjuste(saida, contexto).erros).toEqual({})
+    })
+
+    it('custoPorUnidade: o informado na unidade; na embalagem, ÷ quantidade com 4 casas e depois centavos, meio para cima', () => {
+      expect(custoPorUnidade('10.00', null)).toBe('10.00')
+      expect(custoPorUnidade('180.00', 18)).toBe('10.00')
+      // Review Focus 3: 100 / 3 = 33,3333 no movimento e 33,33 no produto.
+      expect(custoPorUnidade('100.00', 3)).toBe('33.33')
+      expect(custoPorUnidade('200.00', 3)).toBe('66.67')
+      // Os dois arredondamentos do backend: 1,34 / 4 = 0,335 -> 0,3350 -> 0,34.
+      expect(custoPorUnidade('1.34', 4)).toBe('0.34')
+      // 0,03 / 7 = 0,0042857 -> 0,0043 -> 0,00 (a mesma conta, mesmo quando zera).
+      expect(custoPorUnidade('0.03', 7)).toBe('0.00')
+      // Embalagem fracionada (SC c/ 25,5 KG): 127,50 / 25,5 = 5,00.
+      expect(custoPorUnidade('127.50', 25.5)).toBe('5.00')
+      expect(custoPorUnidade('', 18)).toBeNull()
+      expect(custoPorUnidade('0.00', 18)).toBeNull()
+    })
+
+    it('rótulo do campo: por unidade de venda ou da embalagem', () => {
+      expect(rotuloDoCusto('UN')).toBe('Custo por UN')
+      expect(rotuloDoCusto('UN', { rotulo: 'CX c/ 18 UN' })).toBe('Custo da CX c/ 18 UN')
+    })
+
+    it('dica do último custo só com custo no produto (Review Focus 5)', () => {
+      expect(semNbsp(dicaDoUltimoCusto(9.5, 'UN'))).toBe('Último custo: R$ 9,50 por UN.')
+      expect(dicaDoUltimoCusto(null, 'UN')).toBeNull()
+    })
+
+    it('custo por unidade da embalagem: "= R$ 10,00 por UN"', () => {
+      expect(semNbsp(textoDoCustoPorUnidade('10.00', 'UN'))).toBe('= R$ 10,00 por UN')
+      expect(semNbsp(textoDoCustoPorUnidade('33.33', 'UN'))).toBe('= R$ 33,33 por UN')
+    })
+
+    it('prévia com o custo: a mudança, "(sem mudança)" e o primeiro custo', () => {
+      const base = '2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN'
+      expect(semNbsp(textoDaPreviaComCusto(base, '10.00', 9.5, 'UN'))).toBe(
+        '2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN · Custo: R$ 9,50 → R$ 10,00 por UN',
+      )
+      expect(semNbsp(textoDaPreviaComCusto(base, '10.00', 10, 'UN'))).toBe(
+        '2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN · Custo: R$ 10,00 por UN (sem mudança)',
+      )
+      // Sem custo no produto, nao ha de onde vir a seta.
+      expect(semNbsp(textoDaPreviaComCusto(base, '10.00', null, 'UN'))).toBe(
+        '2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN · Custo: R$ 10,00 por UN',
+      )
+      // Sem custo digitado, a previa fica como era; sem previa, nada.
+      expect(textoDaPreviaComCusto(base, null, 9.5, 'UN')).toBe(base)
+      expect(textoDaPreviaComCusto(null, '10.00', 9.5, 'UN')).toBeNull()
+    })
+
+    it('a mensagem de sucesso diz o custo novo só quando ele mudou', () => {
+      const compraGravada: MovimentoEstoque = {
+        ...MOVIMENTO,
+        tipo: 'ENTRADA',
+        motivo: 'COMPRA',
+        quantidade: 36,
+        saldoAnterior: 10,
+        saldoNovo: 46,
+        embalagem: { rotulo: 'CX c/ 18 UN', quantidadePorEmbalagem: 18, quantidadeDeEmbalagens: 2 },
+        custoInformado: 180,
+        custoUnitario: 10,
+      }
+      expect(semNbsp(mensagemDeSucesso(compraGravada, 'UN', 9.5))).toBe(
+        'Entrada de 36 UN (2 CX c/ 18 UN) registrada. Saldo: 46 UN. Custo atualizado para R$ 10,00.',
+      )
+      expect(semNbsp(mensagemDeSucesso(compraGravada, 'UN', null))).toBe(
+        'Entrada de 36 UN (2 CX c/ 18 UN) registrada. Saldo: 46 UN. Custo atualizado para R$ 10,00.',
+      )
+      expect(mensagemDeSucesso(compraGravada, 'UN', 10)).toBe('Entrada de 36 UN (2 CX c/ 18 UN) registrada. Saldo: 46 UN.')
+      // 33,3333 no movimento e 33,33 no produto: igual ao custo de antes, sem o aviso.
+      expect(mensagemDeSucesso({ ...compraGravada, custoInformado: 100, custoUnitario: 33.3333 }, 'UN', 33.33)).toBe(
+        'Entrada de 36 UN (2 CX c/ 18 UN) registrada. Saldo: 46 UN.',
+      )
+    })
+
+    it('o movimento de compra mostra o custo, por embalagem e por unidade', () => {
+      const compraEmCaixa: MovimentoEstoque = {
+        ...MOVIMENTO,
+        tipo: 'ENTRADA',
+        motivo: 'COMPRA',
+        quantidade: 36,
+        saldoAnterior: 10,
+        saldoNovo: 46,
+        embalagem: { rotulo: 'CX c/ 18 UN', quantidadePorEmbalagem: 18, quantidadeDeEmbalagens: 2 },
+        custoInformado: 180,
+        custoUnitario: 10,
+      }
+      expect(semNbsp(textoMovimento(compraEmCaixa, 'UN').custo)).toBe('R$ 180,00 por CX (R$ 10,00 por UN)')
+      const emUnidades: MovimentoEstoque = { ...compraEmCaixa, embalagem: null, custoInformado: 10, custoUnitario: 10 }
+      expect(semNbsp(textoMovimento(emUnidades, 'UN').custo)).toBe('R$ 10,00 por UN')
+      const terco: MovimentoEstoque = { ...compraEmCaixa, custoInformado: 100, custoUnitario: 33.3333 }
+      expect(semNbsp(textoMovimento(terco, 'UN').custo)).toBe('R$ 100,00 por CX (R$ 33,33 por UN)')
+      expect(textoMovimento(MOVIMENTO, 'UN').custo).toBeNull()
     })
   })
 })

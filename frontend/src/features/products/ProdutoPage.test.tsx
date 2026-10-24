@@ -3397,6 +3397,8 @@ describe('ProdutoPage', () => {
       usuarioNome: 'Ana Souza',
       alteradoEm: '2026-10-21T14:03:12',
       embalagemRotulo: null,
+      origem: null,
+      entrada: null,
     }
     const cadastroCusto: HistoricoPreco = {
       campo: 'CUSTO',
@@ -3405,6 +3407,8 @@ describe('ProdutoPage', () => {
       usuarioNome: 'Bruno Lima',
       alteradoEm: '2026-10-20T09:05:00',
       embalagemRotulo: null,
+      origem: 'EDICAO',
+      entrada: null,
     }
 
     function pagina(itens: HistoricoPreco[], numero: number, totalItens: number): PaginaResponse<HistoricoPreco> {
@@ -3542,6 +3546,8 @@ describe('ProdutoPage', () => {
         valorAnterior: 209.9,
         valorNovo: 199.9,
         embalagemRotulo: 'CX c/ 3 UN',
+        origem: null,
+        entrada: null,
         usuarioNome: 'Ana Souza',
         alteradoEm: '2026-10-24T10:00:00',
       }
@@ -3579,6 +3585,134 @@ describe('ProdutoPage', () => {
         expect(within(apagado).getByText(/^R\$\s209,90 → sem preço próprio$/)).toBeInTheDocument()
         expect(within(apagado).getByText(/^de R\$\s209,90 para sem preço próprio$/)).toHaveClass('sr-only')
         expect(within(criado).getByText(/^sem preço próprio → R\$\s209,90$/)).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('origem do custo (Fase B4)', () => {
+    const COMPRA_EM_CAIXAS: Produto = {
+      ...produtoAtivo,
+      custo: 10,
+      custoOrigem: { tipo: 'ENTRADA_COMPRA', em: '2026-10-24T10:15:00', quantidade: 36, embalagemRotulo: 'CX c/ 18 UN' },
+    }
+
+    function campoCusto(): HTMLElement {
+      return screen.getByLabelText(/^custo/i)
+    }
+
+    it('Preços: após uma entrada por compra em embalagem, a nota diz o custo, a data e as embalagens', async () => {
+      renderEdicao(COMPRA_EM_CAIXAS)
+      await esperarFormulario()
+
+      expect(campoCusto()).toHaveAccessibleDescription(
+        /^Último custo de entrada: R\$\s10,00 em 24\/10\/2026 \(2 CX c\/ 18 UN\)\.$/,
+      )
+    })
+
+    it('Preços: na compra em unidades, a nota fica sem a embalagem', async () => {
+      renderEdicao({
+        ...COMPRA_EM_CAIXAS,
+        custoOrigem: { tipo: 'ENTRADA_COMPRA', em: '2026-10-24T10:15:00', quantidade: 10, embalagemRotulo: null },
+      })
+      await esperarFormulario()
+
+      expect(campoCusto()).toHaveAccessibleDescription(/^Último custo de entrada: R\$\s10,00 em 24\/10\/2026\.$/)
+    })
+
+    it('Preços: com o custo editado à mão, "Custo editado manualmente em …"', async () => {
+      renderEdicao({
+        ...produtoAtivo,
+        custo: 10.5,
+        custoOrigem: { tipo: 'EDICAO', em: '2026-10-24T11:00:00', quantidade: null, embalagemRotulo: null },
+      })
+      await esperarFormulario()
+
+      expect(campoCusto()).toHaveAccessibleDescription('Custo editado manualmente em 24/10/2026.')
+    })
+
+    it('Preços: sem origem (produto anterior à Fase B4) ou no cadastro novo, nenhuma nota', async () => {
+      renderEdicao()
+      await esperarFormulario()
+
+      expect(screen.queryByText(/Último custo de entrada|Custo editado manualmente/)).not.toBeInTheDocument()
+      expect(campoCusto()).not.toHaveAttribute('aria-describedby')
+    })
+
+    describe('Histórico', () => {
+      const CUSTO_DA_COMPRA: HistoricoPreco = {
+        campo: 'CUSTO',
+        valorAnterior: 9.5,
+        valorNovo: 10,
+        embalagemRotulo: null,
+        origem: 'ENTRADA_COMPRA',
+        entrada: { quantidade: 36, embalagemRotulo: 'CX c/ 18 UN' },
+        usuarioNome: 'Ana Souza',
+        alteradoEm: '2026-10-24T10:15:00',
+      }
+      const CUSTO_EDITADO: HistoricoPreco = {
+        ...CUSTO_DA_COMPRA,
+        valorAnterior: 10,
+        valorNovo: 10.5,
+        origem: 'EDICAO',
+        entrada: null,
+        usuarioNome: 'Bruno Lima',
+        alteradoEm: '2026-10-24T11:00:00',
+      }
+
+      function linhasDePreco(): HTMLElement[] {
+        return within(screen.getByRole('list', { name: 'Alterações de preço e custo' })).getAllByRole('listitem')
+      }
+
+      it('as linhas de custo mostram a origem: "Entrada de compra (2 CX c/ 18 UN)" e "Editado"', async () => {
+        listarHistoricoDePrecosMock.mockResolvedValue({
+          itens: [CUSTO_EDITADO, CUSTO_DA_COMPRA],
+          pagina: 0,
+          tamanho: 20,
+          totalItens: 2,
+        })
+        renderEdicao()
+        await esperarFormulario()
+        mostrarHistorico()
+        await screen.findByText('Bruno Lima')
+
+        const [editado, compra] = linhasDePreco()
+        expect(within(editado).getByText('Custo')).toBeInTheDocument()
+        expect(within(editado).getByText('· Editado')).toBeInTheDocument()
+        expect(within(compra).getByText('· Entrada de compra (2 CX c/ 18 UN)')).toBeInTheDocument()
+        expect(within(compra).getByText(/^R\$\s9,50 → R\$\s10,00$/)).toBeInTheDocument()
+      })
+
+      it('primeira compra num produto sem custo: "sem custo → R$ 10,00" (Review Focus 5)', async () => {
+        listarHistoricoDePrecosMock.mockResolvedValue({
+          itens: [{ ...CUSTO_DA_COMPRA, valorAnterior: null }],
+          pagina: 0,
+          tamanho: 20,
+          totalItens: 1,
+        })
+        renderEdicao()
+        await esperarFormulario()
+        mostrarHistorico()
+        await screen.findByText('Ana Souza')
+
+        const [linha] = linhasDePreco()
+        expect(within(linha).getByText(/^sem custo → R\$\s10,00$/)).toBeInTheDocument()
+        expect(within(linha).getByText('· Entrada de compra (2 CX c/ 18 UN)')).toBeInTheDocument()
+      })
+
+      it('as linhas de preço continuam sem origem', async () => {
+        listarHistoricoDePrecosMock.mockResolvedValue({
+          itens: [{ ...CUSTO_DA_COMPRA, campo: 'PRECO_VENDA', origem: null, entrada: null }],
+          pagina: 0,
+          tamanho: 20,
+          totalItens: 1,
+        })
+        renderEdicao()
+        await esperarFormulario()
+        mostrarHistorico()
+        await screen.findByText('Ana Souza')
+
+        const [linha] = linhasDePreco()
+        expect(within(linha).queryByText(/Entrada de compra|Editado/)).not.toBeInTheDocument()
       })
     })
   })
@@ -3750,6 +3884,8 @@ describe('ProdutoPage', () => {
         usuarioNome: 'Ana Souza',
         alteradoEm: '2026-10-21T14:03:12',
         embalagemRotulo: null,
+        origem: null,
+        entrada: null,
       }
       listarHistoricoDePrecosMock
         .mockResolvedValueOnce({ itens: [linha], pagina: 0, tamanho: 20, totalItens: 2 })
@@ -4079,6 +4215,8 @@ describe('ProdutoPage', () => {
       usuarioNome: 'Ana Souza',
       criadoEm: '2026-10-21T15:20:00',
       embalagem: null,
+      custoInformado: null,
+      custoUnitario: null,
     }
 
     function botaoAjustar(): HTMLElement {
@@ -4251,6 +4389,34 @@ describe('ProdutoPage', () => {
       expect(atualizarProdutoMock).not.toHaveBeenCalled()
     })
 
+    it('entrada por compra: a dica do último custo e o aviso do custo novo na mensagem (Fase B4)', async () => {
+      const compra: MovimentoEstoque = {
+        ...SAIDA,
+        tipo: 'ENTRADA',
+        motivo: 'COMPRA',
+        quantidade: 5,
+        saldoAnterior: 12,
+        saldoNovo: 17,
+        custoInformado: 10,
+        custoUnitario: 10,
+      }
+      ajustarEstoqueMock.mockResolvedValue(compra)
+      await abrirEstoqueDaEdicao()
+
+      fireEvent.click(botaoAjustar())
+      const modal = screen.getByRole('dialog', { name: 'Ajustar estoque' })
+      const campoCusto = within(modal).getByRole('textbox', { name: /^custo por UN/i })
+      expect(campoCusto).toHaveAccessibleDescription(/^Último custo: R\$\s18,00 por UN\.$/)
+      fireEvent.change(within(modal).getByRole('textbox', { name: /^quantidade/i }), { target: { value: '5' } })
+      fireEvent.change(campoCusto, { target: { value: '10,00' } })
+      confirmarNoModal()
+
+      expect(
+        await screen.findByText(/^Entrada de 5 UN registrada\. Saldo: 17 UN\. Custo atualizado para R\$\s10,00\.$/),
+      ).toBeInTheDocument()
+      expect(ajustarEstoqueMock).toHaveBeenCalledWith(ID_ARROZ, expect.objectContaining({ custo: 10 }))
+    })
+
     it('Ctrl+Enter dentro do modal não salva o produto', async () => {
       await abrirEstoqueDaEdicao()
       fireEvent.click(botaoAjustar())
@@ -4278,6 +4444,8 @@ describe('ProdutoPage', () => {
       usuarioNome: 'Carla Dias',
       criadoEm: '2026-10-21T15:20:00',
       embalagem: null,
+      custoInformado: null,
+      custoUnitario: null,
     }
     const INICIAL: MovimentoEstoque = {
       id: 'mov-1',
@@ -4291,6 +4459,8 @@ describe('ProdutoPage', () => {
       usuarioNome: 'Davi Reis',
       criadoEm: '2026-10-20T09:00:00',
       embalagem: null,
+      custoInformado: null,
+      custoUnitario: null,
     }
 
     function paginaDeMovimentos(
@@ -4333,6 +4503,41 @@ describe('ProdutoPage', () => {
 
       const [linha] = await waitFor(() => linhasDeEstoque())
       expect(within(linha).getByText('+36 UN (2 CX c/ 18 UN)')).toBeInTheDocument()
+    })
+
+    it('o movimento de compra mostra o custo, por embalagem e por unidade (Fase B4)', async () => {
+      const compraEmCaixas: MovimentoEstoque = {
+        ...SAIDA,
+        id: 'mov-4',
+        tipo: 'ENTRADA',
+        motivo: 'COMPRA',
+        quantidade: 36,
+        saldoAnterior: 10,
+        saldoNovo: 46,
+        observacao: null,
+        embalagem: { rotulo: 'CX c/ 18 UN', quantidadePorEmbalagem: 18, quantidadeDeEmbalagens: 2 },
+        custoInformado: 180,
+        custoUnitario: 10,
+      }
+      const compraEmUnidades: MovimentoEstoque = {
+        ...compraEmCaixas,
+        id: 'mov-5',
+        quantidade: 10,
+        saldoAnterior: 0,
+        saldoNovo: 10,
+        embalagem: null,
+        custoInformado: 9.5,
+        custoUnitario: 9.5,
+      }
+      listarMovimentosDeEstoqueMock.mockResolvedValue(paginaDeMovimentos([compraEmCaixas, compraEmUnidades], 0, 2))
+      renderEdicao()
+      await esperarFormulario()
+      mostrarHistorico()
+
+      const [caixas, unidades] = await waitFor(() => linhasDeEstoque())
+      expect(within(caixas).getByText('+36 UN (2 CX c/ 18 UN)')).toBeInTheDocument()
+      expect(within(caixas).getByText(/^· R\$\s180,00 por CX \(R\$\s10,00 por UN\)$/)).toBeInTheDocument()
+      expect(within(unidades).getByText(/^· R\$\s9,50 por UN$/)).toBeInTheDocument()
     })
 
     it('tem as listas de estoque (primeiro) e de preços, cada uma com a sua consulta', async () => {

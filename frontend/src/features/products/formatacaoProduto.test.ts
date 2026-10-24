@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatarDataHora, formatarVariacao } from '@/features/products/formatacaoProduto'
+import { formatarData, formatarDataHora, formatarVariacao } from '@/features/products/formatacaoProduto'
 
 describe('formatacaoProduto', () => {
   describe('formatarVariacao', () => {
@@ -20,6 +20,13 @@ describe('formatacaoProduto', () => {
       [null, null],
     ])('de %s para %s nao e calculavel (null)', (anterior, novo) => {
       expect(formatarVariacao(anterior, novo)).toBeNull()
+    })
+  })
+
+  describe('formatarData', () => {
+    it('so a data, lida do texto e sem converter fuso; fora do formato volta como veio', () => {
+      expect(formatarData('2026-10-24T23:59:12')).toBe('24/10/2026')
+      expect(formatarData('ontem')).toBe('ontem')
     })
   })
 
