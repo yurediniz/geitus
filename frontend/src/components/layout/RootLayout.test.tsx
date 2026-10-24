@@ -148,6 +148,46 @@ describe('RootLayout - item de Usuarios por perfil', () => {
   })
 })
 
+describe('RootLayout - Caixa e Configurações', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  it('Caixa leva a /caixa para todos, sem "em breve"', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue({ ...usuarioFake, perfil: 'OPERADOR' })
+
+    renderLayout()
+
+    await screen.findByText('Ana Souza')
+    const caixa = screen.getByRole('link', { name: /^caixa$/i })
+    expect(caixa).toHaveAttribute('href', '/caixa')
+    expect(within(caixa).queryByText(/^em breve$/i)).not.toBeInTheDocument()
+  })
+
+  it('mostra "Configurações" para ADMIN, levando a /configuracoes', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    renderLayout()
+
+    await screen.findByText('Ana Souza')
+    expect(screen.getByRole('link', { name: /configurações/i })).toHaveAttribute('href', '/configuracoes')
+  })
+
+  it('OPERADOR não vê "Configurações"', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue({ ...usuarioFake, perfil: 'OPERADOR' })
+
+    renderLayout()
+
+    await screen.findByText('Ana Souza')
+    expect(screen.queryByRole('link', { name: /configurações/i })).not.toBeInTheDocument()
+    expect(screen.queryByText('Configurações')).not.toBeInTheDocument()
+  })
+})
+
 describe('RootLayout - navegacao mobile (drawer)', () => {
   beforeEach(() => {
     vi.clearAllMocks()

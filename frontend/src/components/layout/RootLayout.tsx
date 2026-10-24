@@ -11,6 +11,7 @@ import {
   Building2,
   LogOut,
   Menu,
+  Settings,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
@@ -36,9 +37,9 @@ interface NavItem {
 }
 
 /**
- * Monta os itens da sidebar. "Usuários" (gestao) so aparece para ADMIN — o
- * RBAC do backend tambem exige ADMIN nessas rotas; aqui e apenas a UX de nao
- * expor uma area sem permissao.
+ * Monta os itens da sidebar. "Usuários" (gestao) e "Configurações" so aparecem
+ * para ADMIN — o RBAC do backend tambem exige ADMIN nessas rotas (e a rota fica
+ * sob o AdminRoute); aqui e apenas a UX de nao expor uma area sem permissao.
  */
 function montarItensNavegacao(ehAdmin: boolean): NavItem[] {
   return [
@@ -46,10 +47,15 @@ function montarItensNavegacao(ehAdmin: boolean): NavItem[] {
     { rotulo: 'Produtos', to: '/produtos', icone: Package },
     { rotulo: 'Clientes', to: '/clientes', icone: Users },
     { rotulo: 'PDV', icone: ShoppingCart, emBreve: true },
-    { rotulo: 'Caixa', icone: Wallet, emBreve: true },
+    { rotulo: 'Caixa', to: '/caixa', icone: Wallet },
     { rotulo: 'Financeiro', icone: LineChart, emBreve: true },
     { rotulo: 'Empresa', to: '/empresa', icone: Building2 },
-    ...(ehAdmin ? [{ rotulo: 'Usuários', to: '/usuarios', icone: UserCog }] : []),
+    ...(ehAdmin
+      ? [
+          { rotulo: 'Usuários', to: '/usuarios', icone: UserCog },
+          { rotulo: 'Configurações', to: '/configuracoes', icone: Settings },
+        ]
+      : []),
   ]
 }
 

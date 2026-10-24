@@ -10,6 +10,7 @@ import { EmpresaPage } from '@/features/company/EmpresaPage'
 import { ClientesPage } from '@/features/customers/ClientesPage'
 import { ProdutoPage } from '@/features/products/ProdutoPage'
 import { ProdutosListaPage } from '@/features/products/ProdutosListaPage'
+import { ConfiguracoesPage } from '@/features/settings/ConfiguracoesPage'
 import { FornecedoresPage } from '@/features/suppliers/FornecedoresPage'
 import { FornecedorPage } from '@/features/suppliers/FornecedorPage'
 import { UsuariosPage } from '@/features/usuarios/UsuariosPage'
@@ -70,7 +71,10 @@ const privateRoutes: RouteObject[] = [
           {
             // Area restrita a ADMIN (RBAC no frontend; o backend tambem exige ADMIN).
             element: <AdminRoute />,
-            children: [{ path: 'usuarios', element: <UsuariosPage /> }],
+            children: [
+              { path: 'usuarios', element: <UsuariosPage /> },
+              { path: 'configuracoes', element: <ConfiguracoesPage /> },
+            ],
           },
         ],
       },
