@@ -481,6 +481,55 @@ class EstoqueServiceIT {
         assertThat(cenario.contarMovimentos(sache.id())).isEqualTo(1);
     }
 
+    /** Unidade fracionada: KG com SC c/ 25,5; o total em KG segue a regra de saldo da Fase D. */
+    @Test
+    void sacoDeVinteECincoEMeioQuilos() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ProdutoResponse racao = cenario.novoProdutoComEmbalagem(empresa, "KG", "Ração a granel", "SC", "25.5", true);
+        UUID saco = racao.embalagens().get(0).id();
+        estoqueService.ajustarParaUsuario(empresa.admin(), racao.id(), entrada("10"));
+
+        MovimentoEstoqueResponse entrada = estoqueService.ajustarParaUsuario(empresa.admin(), racao.id(),
+                emCaixas(TipoMovimento.ENTRADA, "2", MotivoMovimento.COMPRA, saco, UUID.randomUUID())).movimento();
+
+        assertThat(entrada.quantidade()).isEqualByComparingTo("51.000");
+        assertThat(entrada.saldoNovo()).isEqualByComparingTo("61");
+        assertThat(entrada.embalagem().rotulo()).isEqualTo("SC c/ 25,5 KG");
+        assertThat(entrada.embalagem().quantidadePorEmbalagem()).isEqualByComparingTo("25.5");
+        assertThat(entrada.embalagem().quantidadeDeEmbalagens()).isEqualTo(2);
+        assertThatThrownBy(() -> estoqueService.ajustarParaUsuario(empresa.admin(), racao.id(),
+                emCaixas(TipoMovimento.SAIDA, "3", MotivoMovimento.PERDA_AVARIA, saco, UUID.randomUUID())))
+                .isInstanceOfSatisfying(RegraDeNegocioException.class,
+                        erro -> assertThat(erro.campo()).contains("quantidade"))
+                .hasMessage("Saldo insuficiente: há 61 KG.");
+        assertThat(cenario.saldo(racao.id())).isEqualByComparingTo("61");
+    }
+
+    /** Sem controle de estoque, a regra do produto vem antes da embalagem: 400, nao 404. */
+    @Test
+    void produtoSemControleComEmbalagem400() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ProdutoResponse sache = cenario.novoProdutoComEmbalagem(empresa, "UN", "Sachê", "CX", "18", false);
+
+        assertThatThrownBy(() -> estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(),
+                emCaixas(TipoMovimento.ENTRADA, "2", MotivoMovimento.COMPRA, caixa(sache), UUID.randomUUID())))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Este produto não controla estoque.");
+    }
+
+    @Test
+    void zeroEmbalagem400() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ProdutoResponse sache = cenario.novoProdutoComCaixa(empresa, "Sachê", "18");
+
+        assertThatThrownBy(() -> estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(),
+                emCaixas(TipoMovimento.ENTRADA, "0", MotivoMovimento.COMPRA, caixa(sache), UUID.randomUUID())))
+                .isInstanceOfSatisfying(RegraDeNegocioException.class,
+                        erro -> assertThat(erro.campo()).contains("quantidade"))
+                .hasMessage("Informe um número inteiro de embalagens.");
+        assertThat(cenario.contarMovimentos(sache.id())).isZero();
+    }
+
     /** UUID de embalagem de produto de outra empresa no ajuste pela API: 404 (DEC-016). */
     @Test
     void embalagemDeOutraEmpresaNoAjuste404() throws Exception {

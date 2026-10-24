@@ -288,13 +288,138 @@ class ProdutoEmbalagensIT {
         Loja loja = novaLoja();
         JsonNode criado = corpoDe(cadastrar(loja, nexgard(loja)));
         UUID produto = id(criado);
+        Map<String, Object> renomeado = comEmbalagens(loja, criado,
+                embalagem(idDaEmbalagem(criado, 0), loja.unidade("CX"), "3", "209.90", false, EAN_CAIXA),
+                embalagem(idDaEmbalagem(criado, 1), loja.unidade("FD"), "12", null, true, EAN_FARDO));
+        renomeado.put("nome", "Nexgard Combo Cães");
+        atualizar(loja, produto, renomeado).andExpect(status().isOk());
+        String antes = atualizadoEm(produto);
+        assertThat(antes).isNotNull();
         Map<String, Object> semCodigoDaCaixa = comEmbalagens(loja, criado,
                 embalagem(idDaEmbalagem(criado, 0), loja.unidade("CX"), "3", "209.90", false),
                 embalagem(idDaEmbalagem(criado, 1), loja.unidade("FD"), "12", null, true, EAN_FARDO));
+        semCodigoDaCaixa.put("nome", "Nexgard Combo Cães");
 
         atualizar(loja, produto, semCodigoDaCaixa).andExpect(status().isOk());
 
-        assertThat(atualizadoEm(produto)).isNotNull();
+        assertThat(atualizadoEm(produto)).isNotEqualTo(antes);
+    }
+
+    // ---------- Limites e bordas (rodada final do qa-reviewer) ----------
+
+    /** Limite cheio: 10 embalagens com 5 codigos cada e 20 codigos na unidade; o PATCH igual nao muda nada. */
+    @Test
+    void limiteCheioDeEmbalagensECodigos() throws Exception {
+        Loja loja = novaLoja();
+        Map<String, Object> cheio = produto(loja, "Limite cheio", "UN", "10.00");
+        List<String> codigosDaUnidade = new ArrayList<>();
+        for (int indice = 1; indice <= 20; indice++) {
+            codigosDaUnidade.add("U-" + indice);
+        }
+        cheio.put("codigosBarras", codigosDaUnidade);
+        List<Map<String, Object>> embalagens = new ArrayList<>();
+        for (int quantidade = 2; quantidade <= 11; quantidade++) {
+            embalagens.add(embalagem(null, loja.unidade("CX"), String.valueOf(quantidade),
+                    String.valueOf(quantidade * 10) + ".00", quantidade == 2, codigosDaEmbalagem(quantidade)));
+        }
+        cheio.put("embalagens", embalagens);
+
+        JsonNode criado = corpoDe(cadastrar(loja, cheio));
+
+        assertThat(criado.at("/codigosBarras").size()).isEqualTo(20);
+        assertThat(criado.at("/embalagens").size()).isEqualTo(10);
+        int codigosNasEmbalagens = 0;
+        for (int indice = 0; indice < 10; indice++) {
+            assertThat(criado.at("/embalagens/" + indice + "/rotulo").asText()).isEqualTo("CX c/ " + (indice + 2)
+                    + " UN");
+            assertThat(criado.at("/embalagens/" + indice + "/codigosBarras/0/codigo").asText())
+                    .isEqualTo("E" + (indice + 2) + "-1");
+            codigosNasEmbalagens += criado.at("/embalagens/" + indice + "/codigosBarras").size();
+        }
+        assertThat(codigosNasEmbalagens).isEqualTo(50);
+        UUID produto = id(criado);
+        long linhasDeHistorico = historicoDasEmbalagens(produto).size();
+        String atualizadoAntes = atualizadoEm(produto);
+
+        List<Map<String, Object>> mesmasComId = new ArrayList<>();
+        for (int indice = 0; indice < 10; indice++) {
+            Map<String, Object> mesma = new LinkedHashMap<>(embalagens.get(indice));
+            mesma.put("id", criado.at("/embalagens/" + indice + "/id").asText());
+            mesmasComId.add(mesma);
+        }
+        Map<String, Object> igual = new LinkedHashMap<>(cheio);
+        igual.put("embalagens", mesmasComId);
+        atualizar(loja, produto, igual)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.embalagens.length()").value(10));
+
+        assertThat(historicoDasEmbalagens(produto)).hasSize((int) linhasDeHistorico);
+        assertThat(atualizadoEm(produto)).isEqualTo(atualizadoAntes);
+    }
+
+    private static String[] codigosDaEmbalagem(int quantidade) {
+        String[] codigos = new String[5];
+        for (int indice = 0; indice < 5; indice++) {
+            codigos[indice] = "E" + quantidade + "-" + (indice + 1);
+        }
+        return codigos;
+    }
+
+    /** PATCH sem a lista: o preco minimo novo e conferido contra as embalagens atuais. */
+    @Test
+    void patchSemEmbalagensConfereOPrecoMinimoNovo() throws Exception {
+        Loja loja = novaLoja();
+        JsonNode criado = corpoDe(cadastrar(loja, nexgard(loja)));
+        Map<String, Object> comMinimo = nexgard(loja);
+        comMinimo.remove("embalagens");
+        comMinimo.put("precoMinimo", "70.00");
+
+        erro(atualizar(loja, id(criado), comMinimo), 400,
+                "O preço da embalagem dá R$ 69,96 por UN, abaixo do preço mínimo (R$ 70,00).", "embalagens[0].preco");
+    }
+
+    /** A CX sai e o codigo dela vai para a lista da unidade no mesmo PATCH. */
+    @Test
+    void codigoDaEmbalagemRemovidaVaiParaAUnidade() throws Exception {
+        Loja loja = novaLoja();
+        JsonNode criado = corpoDe(cadastrar(loja, nexgard(loja)));
+        Map<String, Object> semACaixa = comEmbalagens(loja, criado,
+                embalagem(idDaEmbalagem(criado, 1), loja.unidade("FD"), "12", null, true, EAN_FARDO));
+        semACaixa.put("codigosBarras", List.of(EAN_UNIDADE, EAN_CAIXA));
+
+        atualizar(loja, id(criado), semACaixa)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.codigosBarras[1].codigo").value(EAN_CAIXA))
+                .andExpect(jsonPath("$.embalagens.length()").value(1));
+    }
+
+    /** A embalagem de compra sai e outra ja existente passa a ser a de compra no mesmo PATCH. */
+    @Test
+    void embalagemDeCompraRemovidaEOutraMarcada() throws Exception {
+        Loja loja = novaLoja();
+        JsonNode criado = corpoDe(cadastrar(loja, nexgard(loja)));
+
+        atualizar(loja, id(criado), comEmbalagens(loja, criado,
+                embalagem(idDaEmbalagem(criado, 0), loja.unidade("CX"), "3", "209.90", true, EAN_CAIXA)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.embalagens.length()").value(1))
+                .andExpect(jsonPath("$.embalagens[0].deCompra").value(true));
+    }
+
+    /** Quantidade e preco mudam juntos: a linha do historico usa o rotulo de depois do salvamento. */
+    @Test
+    void historicoUsaORotuloNovo() throws Exception {
+        Loja loja = novaLoja();
+        JsonNode criado = corpoDe(cadastrar(loja, nexgard(loja)));
+        UUID produto = id(criado);
+
+        atualizar(loja, produto, comEmbalagens(loja, criado,
+                embalagem(idDaEmbalagem(criado, 0), loja.unidade("CX"), "6", "399.90", false, EAN_CAIXA),
+                embalagem(idDaEmbalagem(criado, 1), loja.unidade("FD"), "12", null, true, EAN_FARDO)))
+                .andExpect(status().isOk());
+
+        assertThat(historicoDasEmbalagens(produto)).containsExactly(
+                "CX c/ 3 UN: null -> 209.90", "CX c/ 6 UN: 209.90 -> 399.90");
     }
 
     // ---------- Revisao da B3: lista, unicidade adiada, corrida e N+1 ----------
@@ -664,7 +789,10 @@ class ProdutoEmbalagensIT {
             embalagens.add(embalagem(null, loja.unidade("CX"), String.valueOf(quantidade), null, false));
         }
         onze.put("embalagens", embalagens);
-        erro(cadastrar(loja, onze), 400, null, "embalagens");
+        cadastrar(loja, onze)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("embalagens"))
+                .andExpect(jsonPath("$.campos[0].mensagem").value("Informe no máximo 10 embalagens."));
 
         Map<String, Object> seisCodigos = produto(loja, "Seis codigos", "UN", "10.00");
         seisCodigos.put("embalagens", List.of(embalagem(null, loja.unidade("CX"), "3", null, false,

@@ -73,4 +73,16 @@ class PrecoDaEmbalagemTest {
         assertThat(PrecoDeVenda.vigenteSemAtacado(promocaoVencida, hoje))
                 .isEqualTo(new PrecoAplicado(new BigDecimal("89.90"), OrigemPreco.NORMAL));
     }
+
+    /** Promocao de um dia so (inicio = fim = hoje): vale hoje. */
+    @Test
+    void vigenteSemAtacadoComPromocaoSoDeHoje() {
+        Empresa empresa = new Empresa("Empresa");
+        UnidadeMedida un = new UnidadeMedida(empresa, "UN", "Unidade", false);
+        LocalDate hoje = LocalDate.of(2026, 10, 24);
+        Produto promocaoDeHoje = ProdutoTesteBuilder.produto(empresa, un).precoVenda("89.90")
+                .promocao("79.90", hoje, hoje).build();
+
+        assertThat(PrecoDeVenda.vigenteSemAtacado(promocaoDeHoje, hoje).origem()).isEqualTo(OrigemPreco.PROMOCIONAL);
+    }
 }

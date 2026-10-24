@@ -13,6 +13,7 @@ import com.geitus.app.catalog.dto.EmbalagemRequest;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
+import com.geitus.app.catalog.unidade.dto.UnidadeMedidaRequest;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaResponse;
 import com.geitus.app.company.Empresa;
 import com.geitus.app.company.EmpresaRepository;
@@ -126,6 +127,25 @@ class CenarioDeEstoque {
                 null, true, List.of());
         return produtoService.cadastrarParaUsuario(empresa.admin(),
                 produto(unidade(empresa, "UN"), nome, true, null, List.of(caixa)));
+    }
+
+    /**
+     * Produto com uma embalagem de compra ({@code siglaDaEmbalagem} c/
+     * {@code quantidade} {@code siglaDeVenda}); cria a unidade da embalagem se
+     * ela nao for padrao (ex.: SC).
+     */
+    ProdutoResponse novoProdutoComEmbalagem(EmpresaDeTeste empresa, String siglaDeVenda, String nome,
+            String siglaDaEmbalagem, String quantidade, boolean controlaEstoque) {
+        boolean existe = unidadeService.listarParaUsuario(empresa.admin(), null).stream()
+                .anyMatch(unidade -> unidade.sigla().equals(siglaDaEmbalagem));
+        if (!existe) {
+            unidadeService.cadastrarParaUsuario(empresa.admin(),
+                    new UnidadeMedidaRequest(siglaDaEmbalagem, "Unidade " + siglaDaEmbalagem, false));
+        }
+        EmbalagemRequest embalagem = new EmbalagemRequest(null, unidade(empresa, siglaDaEmbalagem),
+                new BigDecimal(quantidade), null, true, List.of());
+        return produtoService.cadastrarParaUsuario(empresa.admin(),
+                produto(unidade(empresa, siglaDeVenda), nome, controlaEstoque, null, List.of(embalagem)));
     }
 
     /** Muda o conteudo da caixa (mesma embalagem, mesmo id) pelo PATCH do cadastro. */

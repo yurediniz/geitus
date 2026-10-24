@@ -245,6 +245,18 @@ class EmbalagensDoProdutoTest {
                 .hasMessage("Embalagem não encontrada.");
     }
 
+    /** O mesmo {@code id} duas vezes na lista: o segundo nao reconcilia com nada e da 404. */
+    @Test
+    void idRepetidoNaListaDa404() {
+        Produto produto = ProdutoTesteBuilder.produto(empresa, un).id(5L).embalagem(cx, "3", null, false).build();
+        UUID caixa = produto.getEmbalagens().get(0).getUuid();
+
+        assertThatThrownBy(() -> embalagens.planejar(EMPRESA_ID, produto, un, null,
+                List.of(embalagem(caixa, cx, "3", null, false), embalagem(caixa, cx, "6", null, false)), List.of()))
+                .isInstanceOf(CatalogoNaoEncontradoException.class)
+                .hasMessage("Embalagem não encontrada.");
+    }
+
     @Test
     void planoSeparaMantidasNovasERemovidas() {
         Produto produto = ProdutoTesteBuilder.produto(empresa, un).id(5L)
