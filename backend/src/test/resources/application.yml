@@ -1,7 +1,16 @@
 # Configuracao de testes do backend do Geitus.
 #
-# Fornece um segredo JWT valido (>= 32 bytes) apenas para os testes, evitando
-# depender de variaveis de ambiente externas. Nenhum segredo real aqui.
+# Fornece um segredo JWT valido (>= 32 bytes) e o das URLs de imagem (outro
+# valor, >= 32 bytes) apenas para os testes, evitando depender de variaveis de
+# ambiente externas. Nenhum segredo real aqui.
+#
+# Este arquivo SUBSTITUI o application.yml principal no classpath dos testes:
+# os limites do multipart sao repetidos aqui com os mesmos valores do principal.
+spring:
+  servlet:
+    multipart:
+      max-file-size: 512KB
+      max-request-size: 1MB
 geitus:
   cors:
     allowed-origins: http://localhost:5173
@@ -9,3 +18,5 @@ geitus:
     jwt:
       secret: segredo-de-teste-apenas-para-os-testes-do-geitus-1234567890
       expiration: 86400000
+  imagens:
+    segredo: segredo-de-teste-das-imagens-do-geitus-0123456789abcdef

@@ -109,6 +109,11 @@ public class ImagemDoProduto implements Persistable<Long> {
         this.atualizadoEm = agora;
     }
 
+    /** O resumo sem os bytes, com o UUID publico do produto para as URLs. */
+    public ResumoDaImagem resumo(UUID produtoUuid) {
+        return new ResumoDaImagem(produtoId, produtoUuid, versao, tipo, grandeLargura, grandeAltura, atualizadoEm);
+    }
+
     @PostLoad
     @PostPersist
     void marcarComoGravada() {

@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.ConflitoDeUsuarioException;
@@ -23,6 +26,7 @@ import com.geitus.app.catalog.CatalogoNaoEncontradoException;
 import com.geitus.app.catalog.ProdutoConflitoException;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
 import com.geitus.app.catalog.RegraDeNegocioException;
+import com.geitus.app.catalog.imagem.ConferenciaDaImagem;
 import com.geitus.app.company.ConflitoDeEmpresaException;
 import com.geitus.app.company.DadosEmpresaInvalidosException;
 import com.geitus.app.customer.ClienteConflitoException;
@@ -44,6 +48,8 @@ import jakarta.validation.ConstraintViolationException;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    static final String MENSAGEM_ENVIO_GRANDE_DEMAIS = "A imagem enviada é grande demais.";
 
     /**
      * Erros de validacao de corpo de requisicao anotado com {@code @Valid}.
@@ -116,6 +122,39 @@ public class GlobalExceptionHandler {
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 identificadorDaRota ? "Identificador inválido." : "Parâmetro inválido.",
+                request.getRequestURI());
+
+        return ResponseEntity.badRequest().body(corpo);
+    }
+
+    /**
+     * Envio acima do limite do multipart do servidor (512 KB por parte, 1 MB
+     * por requisicao; docs/modules/produtos-imagem.md, 4.1) -> 413, com a
+     * mensagem da spec e sem os limites internos.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiError> tratarEnvioGrandeDemais(MaxUploadSizeExceededException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.PAYLOAD_TOO_LARGE.value(),
+                HttpStatus.PAYLOAD_TOO_LARGE.getReasonPhrase(),
+                MENSAGEM_ENVIO_GRANDE_DEMAIS,
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(corpo);
+    }
+
+    /**
+     * Parte obrigatoria ausente no multipart, pedido que nao e multipart ou
+     * multipart malformado -> 400. Hoje o unico envio multipart e o da imagem
+     * do produto, entao a mensagem e a dela (spec 4.1); nunca 500.
+     */
+    @ExceptionHandler({MissingServletRequestPartException.class, MultipartException.class})
+    public ResponseEntity<ApiError> tratarPartesAusentes(Exception ex, HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                ConferenciaDaImagem.MENSAGEM_FALTA_PARTE,
                 request.getRequestURI());
 
         return ResponseEntity.badRequest().body(corpo);

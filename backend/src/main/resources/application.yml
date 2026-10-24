@@ -29,6 +29,14 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+  # Envio da imagem do produto (Fase F, DEC-040): o navegador ja comprime a
+  # grande (ate 400 KB) e a miniatura (ate 40 KB). Acima disto o servidor
+  # recusa com 413 antes de ler o corpo inteiro.
+  servlet:
+    multipart:
+      max-file-size: 512KB
+      max-request-size: 1MB
+
 server:
   port: ${SERVER_PORT:8080}
 
@@ -59,6 +67,12 @@ geitus:
     jwt:
       secret: ${JWT_SECRET:}
       expiration: ${JWT_EXPIRATION:86400000}
+
+  imagens:
+    # Segredo do HMAC-SHA256 das URLs assinadas das imagens dos produtos
+    # (DEC-040). No minimo 32 bytes e DIFERENTE do JWT_SECRET; sem ele a
+    # aplicacao NAO sobe (fail-fast, ver SegredoDeImagemValidator).
+    segredo: ${GEITUS_IMAGEM_SEGREDO:}
 
 # Documentacao da API (springdoc / Swagger UI). Voltada ao desenvolvimento.
 # NAO expor em producao sem decisao futura (ver DEC-012 no decision-log).

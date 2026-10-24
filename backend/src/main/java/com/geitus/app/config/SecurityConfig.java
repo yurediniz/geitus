@@ -24,8 +24,10 @@ import com.geitus.app.iam.JwtAuthenticationFilter;
  * Configuracao de seguranca do Geitus.
  *
  * <p>API stateless com autenticacao via JWT (Bearer). Rotas publicas: health
- * checks, {@code POST /api/auth/login} e a documentacao (Swagger UI / api-docs,
- * liberada apenas para desenvolvimento nesta fase). Todo o restante exige token
+ * checks, {@code POST /api/auth/login}, a leitura das imagens dos produtos
+ * ({@code GET /api/imagens/**}, autorizada pela assinatura da URL) e a
+ * documentacao (Swagger UI / api-docs, liberada apenas para desenvolvimento
+ * nesta fase). Todo o restante exige token
  * valido. Respostas de erro seguem o formato {@link com.geitus.app.shared.error.ApiError}
  * (401 sem token/token invalido, 403 sem permissao), sem vazar detalhes internos.
  */
@@ -67,6 +69,9 @@ public class SecurityConfig {
             "/api/fornecedores/**"
     };
 
+    /** Leitura publica das imagens dos produtos por URL assinada (DEC-040). */
+    private static final String CAMINHO_IMAGENS = "/api/imagens/**";
+
     /** Configuracao e teste da etiqueta de balanca (DEC-036). */
     private static final String CAMINHO_ETIQUETA_BALANCA = "/api/etiqueta-balanca";
 
@@ -97,6 +102,11 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         // Login liberado (apenas POST)
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        // Imagem do produto por URL assinada (DEC-040): sem JWT, porque a tag <img> nao o
+                        // envia; quem autoriza e a assinatura, conferida no controller. So GET: qualquer
+                        // outro metodo sob o caminho e negado (401 sem token, 403 com token).
+                        .requestMatchers(HttpMethod.GET, CAMINHO_IMAGENS).permitAll()
+                        .requestMatchers(CAMINHO_IMAGENS).denyAll()
                         // Documentacao (Swagger UI / api-docs) liberada apenas nesta fase de desenvolvimento
                         .requestMatchers(CAMINHOS_SWAGGER).permitAll()
                         // Troca da propria senha: qualquer usuario autenticado (inclusive OPERADOR).
@@ -116,6 +126,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/produtos/sku/sugestao").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/produtos", "/api/produtos/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/produtos/**").hasRole("ADMIN")
+                        // Fase F (DEC-040): PUT /{id}/imagem envia ou troca a imagem; DELETE a remove.
+                        .requestMatchers(HttpMethod.PUT, "/api/produtos/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/produtos/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/produtos", "/api/produtos/**").authenticated()
                         // Clientes (DEC-029): inativar/reativar exige ADMIN; consultar,
