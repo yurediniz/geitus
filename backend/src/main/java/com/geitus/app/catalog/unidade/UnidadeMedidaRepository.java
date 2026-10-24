@@ -39,10 +39,11 @@ public interface UnidadeMedidaRepository extends JpaRepository<UnidadeMedida, Lo
      * uma vez). Bloqueia a exclusao.
      */
     @Query(value = """
-            SELECT count(*) FROM produtos p
-             WHERE p.unidade_id = :unidadeId
-                OR EXISTS (SELECT 1 FROM produto_embalagens e
-                            WHERE e.produto_id = p.id AND e.unidade_id = :unidadeId)
+            SELECT count(*) FROM (
+                SELECT p.id FROM produtos p WHERE p.unidade_id = :unidadeId
+                UNION
+                SELECT e.produto_id FROM produto_embalagens e WHERE e.unidade_id = :unidadeId
+            ) uso
             """, nativeQuery = true)
     long contarProdutosQueUsam(@Param("unidadeId") Long unidadeId);
 
@@ -51,17 +52,35 @@ public interface UnidadeMedidaRepository extends JpaRepository<UnidadeMedida, Lo
      * listagem). Cada linha: {@code [id da unidade, quantidade de produtos]};
      * unidades sem uso nao aparecem. Mesma regra de
      * {@link #contarProdutosQueUsam}: venda ou embalagem, produto contado uma
-     * vez.
+     * vez ({@code count(DISTINCT)}). As FKs compostas garantem que a unidade de
+     * cada linha e da mesma empresa.
      */
     @Query(value = """
-            SELECT u.id, count(DISTINCT p.id)
-              FROM unidades_medida u
-              JOIN produtos p ON p.empresa_id = u.empresa_id
-                             AND (p.unidade_id = u.id
-                                  OR EXISTS (SELECT 1 FROM produto_embalagens e
-                                              WHERE e.produto_id = p.id AND e.unidade_id = u.id))
-             WHERE u.empresa_id = :empresaId
-             GROUP BY u.id
+            SELECT uso.unidade_id, count(DISTINCT uso.produto_id)
+              FROM (SELECT p.unidade_id, p.id AS produto_id
+                      FROM produtos p
+                     WHERE p.empresa_id = :empresaId
+                    UNION ALL
+                    SELECT e.unidade_id, e.produto_id
+                      FROM produto_embalagens e
+                     WHERE e.empresa_id = :empresaId) uso
+             GROUP BY uso.unidade_id
             """, nativeQuery = true)
     List<Object[]> contarUsoPorUnidade(@Param("empresaId") Long empresaId);
+
+    /**
+     * Fase B3: se algum produto com esta unidade de venda tem embalagem com
+     * quantidade fracionada (ex.: SC c/ 25,5 KG). Impede desligar o
+     * fracionamento da unidade, que deixaria a embalagem invalida.
+     */
+    @Query(value = """
+            SELECT EXISTS (
+                SELECT 1 FROM produto_embalagens e
+                  JOIN produtos p ON p.empresa_id = e.empresa_id AND p.id = e.produto_id
+                 WHERE p.empresa_id = :empresaId
+                   AND p.unidade_id = :unidadeId
+                   AND e.quantidade <> trunc(e.quantidade))
+            """, nativeQuery = true)
+    boolean existeEmbalagemFracionadaDaUnidadeDeVenda(@Param("empresaId") Long empresaId,
+            @Param("unidadeId") Long unidadeId);
 }

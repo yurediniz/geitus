@@ -278,8 +278,11 @@ public class EstoqueService {
 
     /**
      * Em unidades, a quantidade informada; em embalagens, o numero de
-     * embalagens do retrato. O movimento nao guarda o id da embalagem (ela pode
-     * ter saido do produto): a repeticao e reconhecida sem procura-la.
+     * embalagens do retrato e, se a embalagem do pedido ainda existe no
+     * produto, o mesmo rotulo e o mesmo conteudo (uma chave reaproveitada com
+     * outra embalagem e outro pedido). O movimento nao guarda o id da
+     * embalagem: se ela ja saiu do produto, a repeticao e reconhecida pelo
+     * retrato (Review Focus 5 da B3).
      */
     private static boolean mesmaQuantidade(MovimentoEstoque gravado, AjusteEstoqueRequest request) {
         Optional<RetratoDaEmbalagem> retrato = gravado.getRetratoDaEmbalagem();
@@ -287,7 +290,15 @@ public class EstoqueService {
             return retrato.isEmpty() && gravado.quantidadeInformada().compareTo(request.quantidade()) == 0;
         }
         return retrato.isPresent()
-                && BigDecimal.valueOf(retrato.get().quantidadeDeEmbalagens()).compareTo(request.quantidade()) == 0;
+                && BigDecimal.valueOf(retrato.get().quantidadeDeEmbalagens()).compareTo(request.quantidade()) == 0
+                && gravado.getProduto().embalagem(request.embalagemId())
+                        .map(atual -> mesmaEmbalagem(retrato.get(), atual))
+                        .orElse(true);
+    }
+
+    private static boolean mesmaEmbalagem(RetratoDaEmbalagem retrato, ProdutoEmbalagem atual) {
+        return retrato.rotulo().equals(atual.rotulo())
+                && retrato.quantidadePorEmbalagem().compareTo(atual.getQuantidade()) == 0;
     }
 
     /** Se a violacao de integridade foi a da chave de idempotencia (e nao outra constraint). */

@@ -137,9 +137,8 @@ public record ProdutoRequest(
         @Schema(description = "Embalagens na ordem (ate 10). Lista informada substitui a lista inteira ([] remove "
                 + "todas; embalagem sem id e nova, embalagem ausente e removida com os codigos); no PATCH, ausente "
                 + "ou null mantem as atuais; no cadastro, ausente ou null = sem embalagens")
-        @Valid
         @Size(max = 10, message = "Informe no máximo 10 embalagens.")
-        List<EmbalagemRequest> embalagens,
+        List<@NotNull(message = "Informe a embalagem.") @Valid EmbalagemRequest> embalagens,
 
         @Schema(example = "SKU-001")
         @Size(max = 50, message = "SKU deve ter no máximo 50 caracteres.")

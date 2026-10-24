@@ -3,6 +3,7 @@ package com.geitus.app.inventory;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -23,6 +24,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -458,6 +460,46 @@ class EstoqueServiceIT {
         assertThatThrownBy(() -> estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(),
                 emCaixas(TipoMovimento.ENTRADA, "2", MotivoMovimento.COMPRA, caixa(sache), UUID.randomUUID())))
                 .isInstanceOf(CatalogoNaoEncontradoException.class);
+    }
+
+    /**
+     * Revisao da B3: a mesma chave com a embalagem ainda no produto, mas com
+     * outro conteudo (CX c/ 18 virou CX c/ 12), e outro pedido: 409.
+     */
+    @Test
+    void chaveRepetidaComAEmbalagemAlteradaDa409() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ProdutoResponse sache = cenario.novoProdutoComCaixa(empresa, "Sachê", "18");
+        AjusteEstoqueRequest duasCaixas = emCaixas(TipoMovimento.ENTRADA, "2", MotivoMovimento.COMPRA, caixa(sache),
+                UUID.randomUUID());
+        estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(), duasCaixas);
+        cenario.trocarQuantidadeDaCaixa(empresa, sache.id(), "Sachê", caixa(sache), "12");
+
+        assertThatThrownBy(() -> estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(), duasCaixas))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("Esta operação já foi registrada com outros dados.");
+        assertThat(cenario.contarMovimentos(sache.id())).isEqualTo(1);
+    }
+
+    /** UUID de embalagem de produto de outra empresa no ajuste pela API: 404 (DEC-016). */
+    @Test
+    void embalagemDeOutraEmpresaNoAjuste404() throws Exception {
+        CenarioDeEstoque.EmpresaDeTeste empresaA = cenario.novaEmpresa();
+        CenarioDeEstoque.EmpresaDeTeste empresaB = cenario.novaEmpresa();
+        ProdutoResponse daA = cenario.novoProdutoComCaixa(empresaA, "Sachê da A", "18");
+        ProdutoResponse daB = cenario.novoProdutoComCaixa(empresaB, "Sachê da B", "18");
+
+        mockMvc.perform(post("/api/produtos/" + daB.id() + "/estoque/ajustes")
+                        .header("Authorization", cenario.token(empresaB.admin()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                { "tipo": "ENTRADA", "quantidade": 2, "motivo": "COMPRA", "chave": "%s",
+                                  "embalagemId": "%s" }
+                                """.formatted(UUID.randomUUID(), caixa(daA))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensagem").value("Embalagem não encontrada."));
+        assertThat(cenario.contarMovimentos(daB.id())).isZero();
+        assertThat(cenario.contarMovimentos(daA.id())).isZero();
     }
 
     @Test

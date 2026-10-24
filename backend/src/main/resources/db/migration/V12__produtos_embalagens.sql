@@ -23,6 +23,43 @@
 --    (13 caracteres) + " " + a maior sigla de venda (20).
 
 -- =====================================================================
+-- Passo 0: valida antes de transformar. Para com erro se alguma unidade de
+-- compra nao puder virar embalagem; nada foi criado ainda.
+-- =====================================================================
+-- Inconvertiveis: unidade de compra diferente da de venda com fator <= 1, com
+-- fracao numa unidade de venda nao fracionada ou com mais de 3 casas (a
+-- quantidade da embalagem e NUMERIC(12,3)); ou a mesma unidade com fator
+-- diferente de 1 (a aplicacao nunca aceitou, mas o banco nao impedia). A
+-- mensagem traz o total e ate 10 produtos (empresa_id, numero) para corrigir.
+DO $$
+DECLARE
+    inconvertiveis BIGINT;
+    exemplos       TEXT;
+BEGIN
+    WITH problemas AS (
+        SELECT p.empresa_id, p.numero
+          FROM produtos p
+          JOIN unidades_medida venda ON venda.id = p.unidade_id
+         WHERE p.unidade_compra_id IS NOT NULL
+           AND ((p.unidade_compra_id = p.unidade_id AND p.fator_conversao <> 1)
+             OR (p.unidade_compra_id <> p.unidade_id
+                 AND (p.fator_conversao <= 1
+                   OR (p.fator_conversao <> trunc(p.fator_conversao) AND NOT venda.fracionada)
+                   OR p.fator_conversao <> round(p.fator_conversao, 3))))
+    )
+    SELECT (SELECT count(*) FROM problemas),
+           (SELECT string_agg('(' || empresa_id || ', ' || numero || ')', ', ')
+              FROM (SELECT empresa_id, numero FROM problemas ORDER BY empresa_id, numero LIMIT 10) amostra)
+      INTO inconvertiveis, exemplos;
+    IF inconvertiveis > 0 THEN
+        RAISE EXCEPTION 'V12: % produto(s) com unidade de compra que nao pode virar embalagem (fator ate 1, '
+            'fracao em unidade de venda nao fracionada, mais de 3 casas ou mesma unidade com fator diferente '
+            'de 1). Produtos (empresa_id, numero): %. Corrija o cadastro e rode a migracao de novo.',
+            inconvertiveis, exemplos;
+    END IF;
+END $$;
+
+-- =====================================================================
 -- Passo 1: embalagens do produto (0..N; o limite de 10 e da aplicacao).
 -- =====================================================================
 CREATE TABLE produto_embalagens (
@@ -84,39 +121,11 @@ ALTER TABLE produto_codigos_barras
 CREATE INDEX idx_codigo_barras_embalagem ON produto_codigos_barras (embalagem_id);
 
 -- =====================================================================
--- Passo 3: para com erro se alguma unidade de compra nao puder virar embalagem.
--- =====================================================================
--- Inconvertiveis: unidade de compra diferente da de venda com fator <= 1, com
--- fracao numa unidade de venda nao fracionada ou com mais de 3 casas (a
--- quantidade da embalagem e NUMERIC(12,3)); ou a mesma unidade com fator
--- diferente de 1 (a aplicacao nunca aceitou, mas o banco nao impedia).
-DO $$
-DECLARE
-    inconvertiveis BIGINT;
-BEGIN
-    SELECT count(*)
-      INTO inconvertiveis
-      FROM produtos p
-      JOIN unidades_medida venda ON venda.id = p.unidade_id
-     WHERE p.unidade_compra_id IS NOT NULL
-       AND ((p.unidade_compra_id = p.unidade_id AND p.fator_conversao <> 1)
-         OR (p.unidade_compra_id <> p.unidade_id
-             AND (p.fator_conversao <= 1
-               OR (p.fator_conversao <> trunc(p.fator_conversao) AND NOT venda.fracionada)
-               OR p.fator_conversao <> round(p.fator_conversao, 3))));
-    IF inconvertiveis > 0 THEN
-        RAISE EXCEPTION 'V12: % produto(s) com unidade de compra que nao pode virar embalagem (fator ate 1, '
-            'fracao em unidade de venda nao fracionada, mais de 3 casas ou mesma unidade com fator diferente '
-            'de 1). Corrija o cadastro e rode a migracao de novo.', inconvertiveis;
-    END IF;
-END $$;
-
--- =====================================================================
--- Passo 4: a unidade de compra vira a embalagem de compra.
+-- Passo 3: a unidade de compra vira a embalagem de compra.
 -- =====================================================================
 -- A unidade de compra igual a de venda (fator 1) nao gera embalagem: a
 -- informacao e vazia. O fator passa de NUMERIC(12,4) para NUMERIC(12,3) sem
--- perda (o Passo 3 garante no maximo 3 casas).
+-- perda (o Passo 0 garante no maximo 3 casas).
 INSERT INTO produto_embalagens (uuid, empresa_id, produto_id, unidade_id, quantidade, preco, de_compra, ordem)
 SELECT gen_random_uuid(), p.empresa_id, p.id, p.unidade_compra_id, p.fator_conversao, NULL, true, 0
   FROM produtos p
@@ -125,7 +134,7 @@ SELECT gen_random_uuid(), p.empresa_id, p.id, p.unidade_compra_id, p.fator_conve
  ORDER BY p.id;
 
 -- =====================================================================
--- Passo 5: sai a unidade de compra de produtos.
+-- Passo 4: sai a unidade de compra de produtos.
 -- =====================================================================
 DROP INDEX idx_produto_unidade_compra;
 
@@ -137,7 +146,7 @@ ALTER TABLE produtos
     DROP COLUMN fator_conversao;
 
 -- =====================================================================
--- Passo 6: historico do preco proprio da embalagem.
+-- Passo 5: historico do preco proprio da embalagem.
 -- =====================================================================
 -- Sem FK para a embalagem: a linha sobrevive a remocao dela, com o rotulo do
 -- momento da alteracao.
@@ -147,10 +156,12 @@ ALTER TABLE produto_historico_precos
     ADD CONSTRAINT ck_historico_preco_campo CHECK (campo IN ('CUSTO', 'PRECO_VENDA', 'PRECO_EMBALAGEM')),
     -- O rotulo vem so (e sempre) nas linhas do preco da embalagem.
     ADD CONSTRAINT ck_historico_preco_embalagem_rotulo
-        CHECK ((campo = 'PRECO_EMBALAGEM') = (embalagem_rotulo IS NOT NULL));
+        CHECK ((campo = 'PRECO_EMBALAGEM') = (embalagem_rotulo IS NOT NULL)),
+    ADD CONSTRAINT ck_historico_preco_embalagem_rotulo_valido
+        CHECK (embalagem_rotulo IS NULL OR btrim(embalagem_rotulo) <> '');
 
 -- =====================================================================
--- Passo 7: retrato da embalagem no movimento de estoque (ajuste informado em
+-- Passo 6: retrato da embalagem no movimento de estoque (ajuste informado em
 -- embalagens). O movimento continua em unidades de venda.
 -- =====================================================================
 -- Sem FK para a embalagem: o movimento e imutavel e guarda o retrato.
@@ -169,4 +180,6 @@ ALTER TABLE movimentos_estoque
         embalagem_rotulo IS NULL OR tipo IN ('ENTRADA', 'SAIDA')),
     -- O total em unidades e o numero de embalagens vezes o conteudo de cada uma.
     ADD CONSTRAINT ck_movimento_estoque_embalagem_total CHECK (
-        embalagem_rotulo IS NULL OR abs(quantidade) = quantidade_embalagens * embalagem_quantidade);
+        embalagem_rotulo IS NULL OR abs(quantidade) = quantidade_embalagens * embalagem_quantidade),
+    ADD CONSTRAINT ck_movimento_estoque_embalagem_rotulo_valido CHECK (
+        embalagem_rotulo IS NULL OR btrim(embalagem_rotulo) <> '');

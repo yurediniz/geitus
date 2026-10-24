@@ -2444,6 +2444,36 @@ class ProdutoServiceTest {
                 .satisfies(noCampo("embalagens[0].codigosBarras"));
     }
 
+    /**
+     * Revisao da B3: com embalagens, a unicidade adiada e conferida dentro do
+     * salvamento; a violacao segue para o 409 generico, nunca para o commit.
+     */
+    @Test
+    void unicidadeAdiadaDasEmbalagensConferidaAntesDoCommit() {
+        UnidadeMedida cx = unidade(12L, empresa, "CX");
+        unidadeDaEmpresa(un);
+        unidadeDaEmpresa(cx);
+        when(empresaRepository.findById(EMPRESA_ID)).thenReturn(Optional.of(empresa));
+        when(produtoRepository.save(any(Produto.class))).thenAnswer(invocacao -> invocacao.getArgument(0));
+        DataIntegrityViolationException violacao = violacaoDe("uq_embalagem_produto_unidade_quantidade");
+        doThrow(violacao).when(produtoRepository).conferirUnicidadeDasEmbalagensAgora();
+
+        assertThatThrownBy(() -> cadastrar(requestComUN()
+                .embalagens(new com.geitus.app.catalog.dto.EmbalagemRequest(null, cx.getUuid(), new BigDecimal("3"),
+                        null, false, List.of()))
+                .build()))
+                .isSameAs(violacao);
+    }
+
+    @Test
+    void semEmbalagensNaoConfereAUnicidadeAdiada() {
+        cadastroPermitido();
+
+        cadastrar(requestComUN().build());
+
+        verify(produtoRepository, never()).conferirUnicidadeDasEmbalagensAgora();
+    }
+
     /** Na corrida pelo codigo da unidade, sem dono na releitura (o outro mudou no meio tempo): 409 sem nome. */
     @Test
     void codigoDeBarrasEmCorridaSemDonoNaReleitura_409SemNome() {

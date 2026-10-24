@@ -321,6 +321,9 @@ public class ProdutoService {
             produto.substituirCodigos(codigosDaUnidade);
         }
         embalagensDoProduto.aplicarInclusoes(produto, embalagens);
+        if (embalagens.alteraEmbalagens()) {
+            produto.registrarAlteracaoDasEmbalagens();
+        }
     }
 
     /** Custo e preco de venda (anteriores nulos no cadastro) e o preco proprio de cada embalagem. */
@@ -652,14 +655,20 @@ public class ProdutoService {
      * gravou o mesmo codigo do produto depois da checagem) ou de
      * {@code uq_codigo_barras_empresa} (o mesmo para um codigo de barras, da
      * unidade ou de uma embalagem, Fase B3). A transacao atual foi abortada
-     * pelo PostgreSQL, entao o dono e lido numa transacao nova. Qualquer outra
-     * violacao segue como esta (409 generico do {@code GlobalExceptionHandler}).
+     * pelo PostgreSQL, entao o dono e lido numa transacao nova. Com
+     * embalagens, a unicidade adiada de unidade e quantidade e conferida aqui
+     * mesmo ({@code SET CONSTRAINTS ... IMMEDIATE}), e nao no commit. Qualquer
+     * outra violacao segue como esta (409 generico do
+     * {@code GlobalExceptionHandler}).
      */
     private Produto gravar(Produto produto, Runnable alteracoes) {
         try {
             alteracoes.run();
             Produto gravado = produtoRepository.save(produto);
             produtoRepository.flush();
+            if (!produto.getEmbalagens().isEmpty()) {
+                produtoRepository.conferirUnicidadeDasEmbalagensAgora();
+            }
             return gravado;
         } catch (DataIntegrityViolationException violacao) {
             if (violou(violacao, CONSTRAINT_CODIGO_DO_PRODUTO)) {

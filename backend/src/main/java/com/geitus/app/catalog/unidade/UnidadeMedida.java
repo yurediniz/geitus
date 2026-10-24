@@ -4,6 +4,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import org.hibernate.annotations.BatchSize;
+
 import com.geitus.app.company.Empresa;
 
 import jakarta.persistence.Column;
@@ -30,10 +32,17 @@ import jakarta.persistence.Table;
  * {@code ck_unidade_sigla_maiuscula} do banco e a ultima barreira.
  *
  * <p>Nao deve ser exposta diretamente na API: o controller usa DTOs.
+ *
+ * <p>{@code @BatchSize}: as unidades das embalagens de um produto (Fase B3)
+ * sao carregadas numa consulta so, e nao uma por embalagem.
  */
 @Entity
+@BatchSize(size = UnidadeMedida.TAMANHO_DO_LOTE)
 @Table(name = "unidades_medida")
 public class UnidadeMedida {
+
+    /** Unidades carregadas por consulta quando varios proxies sao inicializados (embalagens). */
+    static final int TAMANHO_DO_LOTE = 25;
 
     private static final String MENSAGEM_SEM_FRACAO = "A unidade %s não aceita quantidade fracionada.";
 

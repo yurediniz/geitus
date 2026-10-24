@@ -1,12 +1,14 @@
 package com.geitus.app.catalog;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -15,25 +17,38 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.geitus.app.catalog.dto.EmbalagemRequest;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
+import com.geitus.app.catalog.unidade.dto.UnidadeMedidaRequest;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaResponse;
 import com.geitus.app.company.Empresa;
 import com.geitus.app.company.EmpresaRepository;
@@ -43,6 +58,8 @@ import com.geitus.app.company.TipoPessoa;
 import com.geitus.app.iam.JwtService;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
+
+import jakarta.persistence.EntityManagerFactory;
 
 /**
  * Embalagens no cadastro do produto de ponta a ponta (filtro JWT, controller,
@@ -63,6 +80,9 @@ class ProdutoEmbalagensIT {
     private static final String EAN_UNIDADE = "7891000315507";
     private static final String EAN_CAIXA = "7894900011517";
     private static final String EAN_FARDO = "96385074";
+    /** Rodadas da corrida: sem o tratamento, ao menos uma costuma dar 500. */
+    private static final int RODADAS_CONCORRENTES = 5;
+    private static final long ESPERA_MAXIMA_SEGUNDOS = 30;
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
@@ -74,6 +94,7 @@ class ProdutoEmbalagensIT {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
+        registry.add("spring.jpa.properties.hibernate.generate_statistics", () -> "true");
     }
 
     @Autowired
@@ -99,6 +120,18 @@ class ProdutoEmbalagensIT {
 
     @Autowired
     private Clock relogio;
+
+    @Autowired
+    private ProdutoService produtoService;
+
+    @Autowired
+    private ProdutoRepository produtoRepository;
+
+    @Autowired
+    private PlatformTransactionManager gerenciadorDeTransacoes;
+
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
 
     // ---------- Ciclo da lista ----------
 
@@ -211,6 +244,236 @@ class ProdutoEmbalagensIT {
 
         assertThat(historicoDasEmbalagens(produto)).containsExactly(
                 "CX c/ 3 UN: null -> 209.90", "CX c/ 3 UN: 209.90 -> null");
+    }
+
+    // ---------- atualizadoEm (revisao da B3) ----------
+
+    /**
+     * {@code atualizado_em} so muda quando algo muda: o PATCH identico e o
+     * PATCH sem a lista nao carimbam; trocar so o preco de uma embalagem carimba.
+     */
+    @Test
+    void atualizadoEmSoMudaComAlteracaoReal() throws Exception {
+        Loja loja = novaLoja();
+        JsonNode criado = corpoDe(cadastrar(loja, nexgard(loja)));
+        UUID produto = id(criado);
+        Map<String, Object> renomeado = nexgard(loja);
+        renomeado.put("nome", "Nexgard Combo Cães");
+        renomeado.put("embalagens", List.of(
+                embalagem(idDaEmbalagem(criado, 0), loja.unidade("CX"), "3", "209.90", false, EAN_CAIXA),
+                embalagem(idDaEmbalagem(criado, 1), loja.unidade("FD"), "12", null, true, EAN_FARDO)));
+        atualizar(loja, produto, renomeado).andExpect(status().isOk());
+        String depoisDoNome = atualizadoEm(produto);
+        assertThat(depoisDoNome).isNotNull();
+
+        atualizar(loja, produto, renomeado).andExpect(status().isOk());
+        assertThat(atualizadoEm(produto)).as("PATCH identico").isEqualTo(depoisDoNome);
+
+        Map<String, Object> semLista = new LinkedHashMap<>(renomeado);
+        semLista.remove("embalagens");
+        atualizar(loja, produto, semLista).andExpect(status().isOk());
+        assertThat(atualizadoEm(produto)).as("PATCH sem a lista").isEqualTo(depoisDoNome);
+
+        Map<String, Object> outroPreco = new LinkedHashMap<>(renomeado);
+        outroPreco.put("embalagens", List.of(
+                embalagem(idDaEmbalagem(criado, 0), loja.unidade("CX"), "3", "199.90", false, EAN_CAIXA),
+                embalagem(idDaEmbalagem(criado, 1), loja.unidade("FD"), "12", null, true, EAN_FARDO)));
+        atualizar(loja, produto, outroPreco).andExpect(status().isOk());
+        assertThat(atualizadoEm(produto)).as("so o preco da embalagem").isNotEqualTo(depoisDoNome);
+    }
+
+    /** Trocar so um codigo de barras de uma embalagem tambem e uma alteracao do produto. */
+    @Test
+    void atualizadoEmMudaComOCodigoDaEmbalagem() throws Exception {
+        Loja loja = novaLoja();
+        JsonNode criado = corpoDe(cadastrar(loja, nexgard(loja)));
+        UUID produto = id(criado);
+        Map<String, Object> semCodigoDaCaixa = comEmbalagens(loja, criado,
+                embalagem(idDaEmbalagem(criado, 0), loja.unidade("CX"), "3", "209.90", false),
+                embalagem(idDaEmbalagem(criado, 1), loja.unidade("FD"), "12", null, true, EAN_FARDO));
+
+        atualizar(loja, produto, semCodigoDaCaixa).andExpect(status().isOk());
+
+        assertThat(atualizadoEm(produto)).isNotNull();
+    }
+
+    // ---------- Revisao da B3: lista, unicidade adiada, corrida e N+1 ----------
+
+    @Test
+    void itemNuloNaListaDa400() throws Exception {
+        Loja loja = novaLoja();
+        Map<String, Object> comNulo = produto(loja, "Com nulo", "UN", "10.00");
+        comNulo.put("embalagens", Arrays.asList((Object) null));
+
+        cadastrar(loja, comNulo)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("embalagens[0]"))
+                .andExpect(jsonPath("$.campos[0].mensagem").value("Informe a embalagem."));
+    }
+
+    /** A CX c/ 3 existente vira CX c/ 6 e entra uma CX c/ 3 nova no mesmo PATCH (unicidade conferida no fim). */
+    @Test
+    void embalagemExistenteMudaDeQuantidadeEUmaNovaOcupaAAntiga() throws Exception {
+        Loja loja = novaLoja();
+        JsonNode criado = corpoDe(cadastrar(loja, nexgard(loja)));
+
+        atualizar(loja, id(criado), comEmbalagens(loja, criado,
+                embalagem(idDaEmbalagem(criado, 0), loja.unidade("CX"), "6", "399.90", false, EAN_CAIXA),
+                embalagem(null, loja.unidade("CX"), "3", "209.90", false),
+                embalagem(idDaEmbalagem(criado, 1), loja.unidade("FD"), "12", null, true, EAN_FARDO)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.embalagens[0].id").value(idDaEmbalagem(criado, 0).toString()))
+                .andExpect(jsonPath("$.embalagens[0].rotulo").value("CX c/ 6 UN"))
+                .andExpect(jsonPath("$.embalagens[1].rotulo").value("CX c/ 3 UN"));
+    }
+
+    /**
+     * A conferencia antecipada da unicidade adiada recusa a repeticao ainda na
+     * transacao, como {@code DataIntegrityViolationException} (409 generico).
+     */
+    @Test
+    void conferenciaAntecipadaDaUnicidadeRecusaARepeticao() throws Exception {
+        Loja loja = novaLoja();
+        UUID produto = id(corpoDe(cadastrar(loja, produto(loja, "Nexgard", "UN", "89.90"))));
+        TransactionTemplate transacao = new TransactionTemplate(gerenciadorDeTransacoes);
+
+        assertThatThrownBy(() -> transacao.executeWithoutResult(status -> {
+            for (int vez = 0; vez < 2; vez++) {
+                jdbcTemplate.update("""
+                        INSERT INTO produto_embalagens (uuid, empresa_id, produto_id, unidade_id, quantidade, ordem)
+                        SELECT ?, p.empresa_id, p.id, u.id, 3, ?
+                          FROM produtos p JOIN unidades_medida u ON u.empresa_id = p.empresa_id AND u.sigla = 'CX'
+                         WHERE p.uuid = ?
+                        """, UUID.randomUUID(), vez, produto);
+            }
+            produtoRepository.conferirUnicidadeDasEmbalagensAgora();
+        })).isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(contar("SELECT count(*) FROM produto_embalagens e JOIN produtos p ON p.id = e.produto_id"
+                + " WHERE p.uuid = ?", produto)).isZero();
+    }
+
+    /**
+     * Corrida real: dois cadastros simultaneos com o mesmo codigo numa
+     * embalagem. Um grava (201) e o outro recebe o 409 com o dono, no campo da
+     * lista da embalagem, nunca 500.
+     */
+    @Test
+    void cadastrosSimultaneosComOMesmoCodigoNaEmbalagem() throws Exception {
+        Loja loja = novaLoja();
+        UUID un = UUID.fromString(loja.unidade("UN"));
+        UUID cx = UUID.fromString(loja.unidade("CX"));
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            for (int rodada = 1; rodada <= RODADAS_CONCORRENTES; rodada++) {
+                String codigo = "CAIXA-" + rodada;
+                CyclicBarrier largada = new CyclicBarrier(2);
+                Future<String> primeiro = executor.submit(cadastrarAoMesmoTempo(largada, loja, un, cx,
+                        "Nexgard A" + rodada, codigo));
+                Future<String> segundo = executor.submit(cadastrarAoMesmoTempo(largada, loja, un, cx,
+                        "Nexgard B" + rodada, codigo));
+
+                List<String> resultados = List.of(primeiro.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS),
+                        segundo.get(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS));
+
+                assertThat(resultados).as("rodada %d", rodada).contains("criado");
+                String conflitoEsperado = "embalagens\\[0]\\.codigosBarras: Este código já está em uso na "
+                        + "embalagem CX c/ 3 UN do produto Nexgard [AB]" + rodada + "\\.";
+                assertThat(resultados).as("rodada %d", rodada)
+                        .anySatisfy(resultado -> assertThat(resultado).matches(conflitoEsperado));
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    /** {@code "criado"} ou {@code "campo: mensagem"} do 409. Qualquer outro erro sobe e falha o teste. */
+    private Callable<String> cadastrarAoMesmoTempo(CyclicBarrier largada, Loja loja, UUID un, UUID cx, String nome,
+            String codigo) {
+        return () -> {
+            largada.await(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS);
+            try {
+                produtoService.cadastrarParaUsuario(loja.admin(), ProdutoRequestBuilder.comUnidade(un).nome(nome)
+                        .embalagens(new EmbalagemRequest(null, cx, new BigDecimal("3"), null, false, List.of(codigo)))
+                        .build());
+                return "criado";
+            } catch (ProdutoConflitoException conflito) {
+                return conflito.campo().orElse("?") + ": " + conflito.getMessage();
+            }
+        };
+    }
+
+    /** O detalhe nao faz uma consulta por embalagem: 1 e 5 embalagens com codigos custam o mesmo. */
+    @Test
+    void detalheSemConsultaPorEmbalagem() throws Exception {
+        Loja loja = novaLoja();
+        Map<String, Object> uma = produto(loja, "Uma embalagem", "UN", "10.00");
+        uma.put("embalagens", List.of(embalagem(null, loja.unidade("CX"), "3", null, false, "U-1")));
+        Map<String, Object> cinco = produto(loja, "Cinco embalagens", "UN", "10.00");
+        cinco.put("embalagens", List.of(
+                embalagem(null, loja.unidade("CX"), "3", null, false, "C-1", "C-2"),
+                embalagem(null, loja.unidade("FD"), "12", null, true, "F-1", "F-2"),
+                embalagem(null, loja.unidade("PCT"), "6", null, false, "P-1", "P-2"),
+                embalagem(null, loja.unidade("DZ"), "12", null, false, "D-1", "D-2"),
+                embalagem(null, loja.unidade("CX"), "24", null, false, "X-1", "X-2")));
+        UUID comUma = id(corpoDe(cadastrar(loja, uma)));
+        UUID comCinco = id(corpoDe(cadastrar(loja, cinco)));
+
+        long comandosComUma = comandosNoDetalhe(loja, comUma);
+        long comandosComCinco = comandosNoDetalhe(loja, comCinco);
+
+        assertThat(comandosComCinco).isEqualTo(comandosComUma);
+    }
+
+    private long comandosNoDetalhe(Loja loja, UUID produto) {
+        Statistics estatisticas = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        estatisticas.clear();
+        assertThat(produtoService.buscarPorIdParaUsuario(loja.admin(), produto).embalagens()).isNotEmpty();
+        return estatisticas.getPrepareStatementCount();
+    }
+
+    // ---------- Fracao da unidade de venda ----------
+
+    @Test
+    void naoDesligaAFracaoDaUnidadeComEmbalagemFracionada() throws Exception {
+        Loja loja = novaLoja();
+        Map<String, Object> racao = produto(loja, "Ração a granel", "KG", "12.99");
+        racao.put("embalagens", List.of(embalagem(null, loja.unidade("PCT"), "25.5", null, false)));
+        cadastrar(loja, racao).andExpect(status().isCreated());
+        UUID kg = UUID.fromString(loja.unidade("KG"));
+
+        assertThatThrownBy(() -> unidadeService.atualizarParaUsuario(loja.admin(), kg,
+                new UnidadeMedidaRequest("KG", "Quilograma", false)))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("Há embalagens com quantidade fracionada nesta unidade. Ajuste-as antes de desligar o "
+                        + "fracionamento.");
+    }
+
+    /** UUID de embalagem de outra empresa no PATCH: 404, como qualquer id que nao e do produto (DEC-016). */
+    @Test
+    void embalagemDeOutraEmpresaNoPatch404() throws Exception {
+        Loja loja = novaLoja();
+        Loja outra = novaLoja();
+        JsonNode daOutra = corpoDe(cadastrar(outra, nexgard(outra)));
+        Map<String, Object> bravecto = produto(loja, "Bravecto", "UN", "150.00");
+        JsonNode criado = corpoDe(cadastrar(loja, bravecto));
+
+        atualizar(loja, id(criado), comEmbalagens(loja, criado,
+                embalagem(idDaEmbalagem(daOutra, 0), loja.unidade("CX"), "3", null, false)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensagem").value("Embalagem não encontrada."));
+        assertThat(contar("SELECT count(*) FROM produto_embalagens e JOIN produtos p ON p.id = e.produto_id"
+                + " WHERE p.uuid = ?", id(daOutra))).isEqualTo(2);
+    }
+
+    @Test
+    void embalagemInteiraNaoImpedeDesligarAFracao() throws Exception {
+        Loja loja = novaLoja();
+        Map<String, Object> racao = produto(loja, "Ração 25kg", "KG", "12.99");
+        racao.put("embalagens", List.of(embalagem(null, loja.unidade("PCT"), "25", null, false)));
+        cadastrar(loja, racao).andExpect(status().isCreated());
+
+        assertThat(unidadeService.atualizarParaUsuario(loja.admin(), UUID.fromString(loja.unidade("KG")),
+                new UnidadeMedidaRequest("KG", "Quilograma", false)).fracionada()).isFalse();
     }
 
     // ---------- Conflitos de codigo ----------
@@ -620,6 +883,12 @@ class ProdutoEmbalagensIT {
                 SELECT c.id FROM produto_codigos_barras c JOIN produtos p ON p.id = c.produto_id
                  WHERE p.uuid = ? AND c.codigo = ?
                 """, Long.class, produto, codigo);
+    }
+
+    /** {@code atualizado_em} gravado, como texto (com microssegundos), ou {@code null}. */
+    private String atualizadoEm(UUID produto) {
+        return jdbcTemplate.queryForObject("SELECT atualizado_em::text FROM produtos WHERE uuid = ?", String.class,
+                produto);
     }
 
     private long contar(String sql, Object... parametros) {

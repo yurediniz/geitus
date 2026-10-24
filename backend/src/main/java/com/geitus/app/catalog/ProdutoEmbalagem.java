@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import org.hibernate.annotations.BatchSize;
+
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.company.Empresa;
 
@@ -77,6 +79,12 @@ public class ProdutoEmbalagem {
     @Column(nullable = false)
     private short ordem;
 
+    /**
+     * {@code @BatchSize}: no detalhe e no PATCH, os codigos das (ate 10)
+     * embalagens do produto vem numa consulta so (sem N+1); a listagem usa
+     * {@code ProdutoRepository#carregarCodigosDasEmbalagens}.
+     */
+    @BatchSize(size = EmbalagensDoProduto.MAXIMO_DE_EMBALAGENS)
     @OneToMany(mappedBy = "embalagem", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("ordem")
     private List<ProdutoCodigoBarras> codigosBarras = new ArrayList<>();

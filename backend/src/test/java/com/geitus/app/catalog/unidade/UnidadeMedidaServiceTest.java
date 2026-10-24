@@ -29,6 +29,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.geitus.app.catalog.CatalogoConflitoException;
 import com.geitus.app.catalog.CatalogoNaoEncontradoException;
+import com.geitus.app.catalog.ProdutoConflitoException;
 import com.geitus.app.catalog.RegraDeNegocioException;
 import com.geitus.app.catalog.UsoDoProdutoNoEstoque;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaRequest;
@@ -196,6 +197,22 @@ class UnidadeMedidaServiceTest {
 
         assertThat(resposta.fracionada()).isFalse();
         verify(usoNoEstoque).algumProdutoDaUnidadeTemMovimentos(ID_EMPRESA, ID_UNIDADE);
+    }
+
+    /** Fase B3: embalagem fracionada (SC c/ 25,5 KG) num produto em KG impede desligar a fracao. */
+    @Test
+    void desligarFracionadaComEmbalagemFracionada_409() {
+        UnidadeMedida kg = existenteFracionada("KG");
+        when(unidadeRepository.existeEmbalagemFracionadaDaUnidadeDeVenda(ID_EMPRESA, ID_UNIDADE)).thenReturn(true);
+
+        assertThatThrownBy(() -> unidadeService.atualizarParaUsuario(ID_USUARIO, kg.getUuid(),
+                new UnidadeMedidaRequest("KG", "Quilograma", false)))
+                .isInstanceOfSatisfying(ProdutoConflitoException.class,
+                        erro -> assertThat(erro.campo()).contains("fracionada"))
+                .hasMessage("Há embalagens com quantidade fracionada nesta unidade. Ajuste-as antes de desligar o "
+                        + "fracionamento.");
+        assertThat(kg.isFracionada()).isTrue();
+        verify(unidadeRepository, never()).save(any());
     }
 
     @Test

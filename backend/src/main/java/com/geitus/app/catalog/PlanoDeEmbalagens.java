@@ -10,10 +10,16 @@ import java.util.List;
  * dados e os codigos ja validados) e o que sai. Nada foi aplicado ao produto
  * ainda; a aplicacao e em duas fases ({@link EmbalagensDoProduto#aplicarRemocoes}
  * e {@link EmbalagensDoProduto#aplicarInclusoes}).
+ *
+ * @param alteraEmbalagens se o salvamento muda alguma embalagem (removida,
+ *        nova, ou mantida com outra unidade, quantidade, preco, "de compra",
+ *        ordem ou codigos); calculado antes da aplicacao, decide se o
+ *        {@code atualizadoEm} do produto e carimbado
  */
-public record PlanoDeEmbalagens(List<EmbalagemPlanejada> embalagens, List<EmbalagemRemovida> removidas) {
+public record PlanoDeEmbalagens(List<EmbalagemPlanejada> embalagens, List<EmbalagemRemovida> removidas,
+        boolean alteraEmbalagens) {
 
-    static final PlanoDeEmbalagens VAZIO = new PlanoDeEmbalagens(List.of(), List.of());
+    static final PlanoDeEmbalagens VAZIO = new PlanoDeEmbalagens(List.of(), List.of(), false);
 
     /**
      * Uma embalagem da lista final.

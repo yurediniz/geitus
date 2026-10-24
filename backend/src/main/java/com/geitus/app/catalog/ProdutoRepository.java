@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Propagation;
@@ -258,6 +259,17 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
               AND p.id IN :ids
             """)
     List<Produto> buscarComRelacoesPorIds(@Param("empresaId") Long empresaId, @Param("ids") Collection<Long> ids);
+
+    /**
+     * Fase B3: confere ja a unicidade adiada da V12
+     * ({@code uq_embalagem_produto_unidade_quantidade}, conferida no commit),
+     * para que uma violacao chegue como {@code DataIntegrityViolationException}
+     * dentro do salvamento (409) e nunca no commit (500). Vale ate o fim da
+     * transacao. Exige transacao.
+     */
+    @Modifying
+    @Query(value = "SET CONSTRAINTS uq_embalagem_produto_unidade_quantidade IMMEDIATE", nativeQuery = true)
+    void conferirUnicidadeDasEmbalagensAgora();
 
     // Nota (Fase B3): as embalagens e os codigos delas nao entram no SELECT de
     // buscarComRelacoesPorIds: duas colecoes (bags) no mesmo JOIN FETCH dariam

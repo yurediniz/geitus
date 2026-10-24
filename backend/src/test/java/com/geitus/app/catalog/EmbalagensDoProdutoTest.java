@@ -325,6 +325,41 @@ class EmbalagensDoProdutoTest {
                 .containsExactly(EAN8_VALIDO);
     }
 
+    /** A lista reenviada sem mudanca nao altera o produto; qualquer diferenca altera. */
+    @Test
+    void planoSabeSeAlteraAsEmbalagens() {
+        Produto produto = ProdutoTesteBuilder.produto(empresa, un).id(5L)
+                .embalagem(cx, "3", "209.90", false, EAN13_VALIDO).build();
+        UUID caixa = produto.getEmbalagens().get(0).getUuid();
+
+        assertThat(embalagens.planejar(EMPRESA_ID, produto, un, null,
+                List.of(embalagem(caixa, cx, "3.000", "209.9", false, EAN13_VALIDO)), List.of()).alteraEmbalagens())
+                .as("mesma lista").isFalse();
+        assertThat(embalagens.planejar(EMPRESA_ID, produto, un, null, null, List.of()).alteraEmbalagens())
+                .as("lista ausente").isFalse();
+        assertThat(embalagens.planejar(EMPRESA_ID, produto, un, null,
+                List.of(embalagem(caixa, cx, "3", "199.90", false, EAN13_VALIDO)), List.of()).alteraEmbalagens())
+                .as("preco").isTrue();
+        assertThat(embalagens.planejar(EMPRESA_ID, produto, un, null,
+                List.of(embalagem(caixa, cx, "3", "209.90", true, EAN13_VALIDO)), List.of()).alteraEmbalagens())
+                .as("de compra").isTrue();
+        assertThat(embalagens.planejar(EMPRESA_ID, produto, un, null,
+                List.of(embalagem(caixa, cx, "3", "209.90", false)), List.of()).alteraEmbalagens())
+                .as("codigos").isTrue();
+        assertThat(embalagens.planejar(EMPRESA_ID, produto, un, null, List.of(), List.of()).alteraEmbalagens())
+                .as("removida").isTrue();
+    }
+
+    /** {@code "embalagens": [null]} da 400 no item, nunca 500. */
+    @Test
+    void itemNuloNaLista() {
+        List<EmbalagemRequest> comNulo = new ArrayList<>();
+        comNulo.add(null);
+
+        erro400(() -> embalagens.planejar(EMPRESA_ID, null, un, null, comNulo, List.of()),
+                "Informe a embalagem.", "embalagens[0]");
+    }
+
     @Test
     void cadastroSemEmbalagensTemPlanoVazio() {
         PlanoDeEmbalagens plano = embalagens.planejar(EMPRESA_ID, null, un, null, null, new ArrayList<>());

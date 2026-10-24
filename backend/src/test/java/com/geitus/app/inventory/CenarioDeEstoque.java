@@ -128,6 +128,14 @@ class CenarioDeEstoque {
                 produto(unidade(empresa, "UN"), nome, true, null, List.of(caixa)));
     }
 
+    /** Muda o conteudo da caixa (mesma embalagem, mesmo id) pelo PATCH do cadastro. */
+    void trocarQuantidadeDaCaixa(EmpresaDeTeste empresa, UUID produto, String nome, UUID caixa, String quantidade) {
+        EmbalagemRequest outra = new EmbalagemRequest(caixa, unidade(empresa, "CX"), new BigDecimal(quantidade), null,
+                true, List.of());
+        produtoService.atualizarDadosBasicosParaUsuario(empresa.admin(), produto,
+                produto(unidade(empresa, "UN"), nome, true, null, List.of(outra)));
+    }
+
     /** Tira todas as embalagens do produto pelo PATCH do cadastro. */
     void removerEmbalagens(EmpresaDeTeste empresa, UUID produto, String nome) {
         produtoService.atualizarDadosBasicosParaUsuario(empresa.admin(), produto,

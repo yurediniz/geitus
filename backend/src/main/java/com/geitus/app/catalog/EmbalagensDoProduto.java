@@ -54,6 +54,7 @@ public class EmbalagensDoProduto {
     static final String MENSAGEM_LIMITE_DE_EMBALAGENS = "Informe no máximo 10 embalagens.";
     static final String MENSAGEM_LIMITE_DE_CODIGOS = "Informe no máximo 5 códigos de barras por embalagem.";
     static final String MENSAGEM_NAO_ENCONTRADA = "Embalagem não encontrada.";
+    static final String MENSAGEM_EMBALAGEM_OBRIGATORIA = "Informe a embalagem.";
     static final String MENSAGEM_UNIDADE_OBRIGATORIA = "Informe a unidade da embalagem.";
     static final String MENSAGEM_UNIDADE_INATIVA = "Esta unidade está inativa. Escolha uma unidade ativa.";
     static final String MENSAGEM_UNIDADE_DE_VENDA =
@@ -110,14 +111,21 @@ public class EmbalagensDoProduto {
         RegrasDaLista regras = new RegrasDaLista(unidadeDeVenda);
         for (int indice = 0; indice < lista.size(); indice++) {
             EmbalagemRequest informada = lista.get(indice);
+            if (informada == null) {
+                // Defesa alem do Bean Validation ("embalagens": [null]), para chamadas sem @Valid.
+                throw new RegraDeNegocioException(MENSAGEM_EMBALAGEM_OBRIGATORIA,
+                        CAMPO_EMBALAGENS + "[" + indice + "]");
+            }
             ProdutoEmbalagem existente = reconciliar(informada.id(), naoReconciliadas);
             existentes.add(existente);
             dados.add(validarEmbalagem(empresaId, informada, existente, precoMinimo, regras, indice));
         }
         List<List<CodigoBarrasValidado>> codigos = validarCodigos(empresaId, produtoAtual, lista, codigosDaUnidade,
                 listaInformada);
-        return new PlanoDeEmbalagens(planejadas(existentes, dados, codigos, unidadeDeVenda),
-                removidas(naoReconciliadas));
+        List<EmbalagemPlanejada> planejadas = planejadas(existentes, dados, codigos, unidadeDeVenda);
+        List<EmbalagemRemovida> removidas = removidas(naoReconciliadas);
+        return new PlanoDeEmbalagens(planejadas, removidas,
+                !removidas.isEmpty() || planejadas.stream().anyMatch(EmbalagensDoProduto::muda));
     }
 
     /**
@@ -362,6 +370,33 @@ public class EmbalagensDoProduto {
                     existente == null ? null : existente.getPreco()));
         }
         return planejadas;
+    }
+
+    /**
+     * Se a embalagem planejada e nova ou difere da gravada (unidade,
+     * quantidade, preco, "de compra", ordem ou a sequencia dos codigos). As
+     * comparacoes numericas usam {@code compareTo} (3 = 3,000).
+     */
+    private static boolean muda(EmbalagemPlanejada planejada) {
+        ProdutoEmbalagem existente = planejada.existente();
+        if (existente == null) {
+            return true;
+        }
+        DadosEmbalagem dados = planejada.dados();
+        return !Objects.equals(existente.getUnidade().getId(), dados.unidade().getId())
+                || existente.getQuantidade().compareTo(dados.quantidade()) != 0
+                || !mesmoValor(existente.getPreco(), dados.preco())
+                || existente.isDeCompra() != dados.deCompra()
+                || existente.getOrdem() != dados.ordem()
+                || !ListaDeCodigosDeBarras.textos(existente.getCodigosBarras())
+                        .equals(planejada.codigos().stream().map(CodigoBarrasValidado::codigo).toList());
+    }
+
+    private static boolean mesmoValor(BigDecimal anterior, BigDecimal novo) {
+        if (anterior == null || novo == null) {
+            return anterior == novo;
+        }
+        return anterior.compareTo(novo) == 0;
     }
 
     /** Rotulo e preco do momento, com a unidade de venda de antes do salvamento. */

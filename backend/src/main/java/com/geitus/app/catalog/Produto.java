@@ -330,9 +330,7 @@ public class Produto {
      * inclusao que reuse um codigo delas.
      */
     void removerEmbalagens(Collection<ProdutoEmbalagem> removidas) {
-        if (embalagens.removeAll(removidas) && jaGravado()) {
-            this.atualizadoEm = LocalDateTime.now();
-        }
+        embalagens.removeAll(removidas);
     }
 
     /**
@@ -341,10 +339,18 @@ public class Produto {
      * em cascata com os seus codigos.
      */
     void substituirEmbalagens(List<ProdutoEmbalagem> finais) {
-        boolean mudou = !embalagens.equals(finais);
         embalagens.clear();
         embalagens.addAll(finais);
-        if (mudou && jaGravado()) {
+    }
+
+    /**
+     * As embalagens ficam em outra tabela: mudar so elas nao deixaria o
+     * produto "sujo". Num produto ja gravado, carimba o {@code atualizadoEm}
+     * (o que dispara o UPDATE), como em {@link #substituirCodigos}. Quem decide
+     * se algo mudou e o plano do salvamento, calculado antes da aplicacao.
+     */
+    void registrarAlteracaoDasEmbalagens() {
+        if (jaGravado()) {
             this.atualizadoEm = LocalDateTime.now();
         }
     }

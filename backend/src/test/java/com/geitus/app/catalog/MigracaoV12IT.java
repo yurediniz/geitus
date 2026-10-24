@@ -121,9 +121,48 @@ class MigracaoV12IT {
 
         assertThatThrownBy(MigracaoV12IT::aplicarV12)
                 .isInstanceOf(FlywayException.class)
-                .hasMessageContaining("2 produto(s)");
+                .hasMessageContaining("2 produto(s)")
+                .hasMessageContaining("(" + empresa + ", " + (NUMERO.get() - 1) + "), (" + empresa + ", "
+                        + NUMERO.get() + ")");
+        // Valida antes de transformar e tudo e desfeito: nada da V12 fica no banco.
         assertThat(contar("SELECT count(*) FROM information_schema.columns WHERE table_name = 'produtos'"
                 + " AND column_name = 'unidade_compra_id'")).isEqualTo(1);
+        assertThat(texto("SELECT coalesce(to_regclass('produto_embalagens')::text, 'ausente')")).isEqualTo("ausente");
+
+        executar("UPDATE produtos SET fator_conversao = 6 WHERE empresa_id = " + empresa);
+        aplicarV12();
+
+        assertThat(contar("SELECT count(*) FROM produto_embalagens WHERE quantidade = 6")).isEqualTo(2);
+    }
+
+    /** A mensagem mostra no maximo 10 produtos, mas conta todos. */
+    @Test
+    void mensagemDaFalhaTrazAteDezProdutos() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        long un = unidade(empresa, "UN");
+        long cx = inserirUnidade(empresa, "CX", false);
+        for (int indice = 0; indice < 12; indice++) {
+            inserirProduto(empresa, "Meia caixa " + indice, un, cx, "0.5000");
+        }
+
+        assertThatThrownBy(MigracaoV12IT::aplicarV12)
+                .isInstanceOf(FlywayException.class)
+                .hasMessageContaining("12 produto(s)")
+                .satisfies(erro -> assertThat(ocorrencias(erro.getMessage(), "(" + empresa + ", ")).isEqualTo(10));
+    }
+
+    /** A unidade de compra inativada depois continua sendo a da embalagem: nada se perde. */
+    @Test
+    void unidadeDeCompraInativaPreservaAEmbalagem() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        long un = unidade(empresa, "UN");
+        long cx = inserirUnidade(empresa, "CX", false);
+        executar("UPDATE unidades_medida SET ativo = false WHERE id = " + cx);
+        long produto = inserirProduto(empresa, "Sachê", un, cx, "18.0000");
+
+        aplicarV12();
+
+        assertThat(contar("SELECT unidade_id FROM produto_embalagens WHERE produto_id = " + produto)).isEqualTo(cx);
     }
 
     @Test
@@ -213,6 +252,36 @@ class MigracaoV12IT {
     }
 
     @Test
+    void embalagemComProdutoDeOutraEmpresaViolaFk() throws SQLException {
+        long empresaA = inserirEmpresa("Empresa A");
+        long empresaB = inserirEmpresa("Empresa B");
+        long produtoDaA = inserirProduto(empresaA, "Nexgard", unidade(empresaA, "UN"), null, null);
+        long cxDaB = inserirUnidade(empresaB, "CX", false);
+
+        aplicarV12();
+
+        assertThatThrownBy(() -> inserirEmbalagem(empresaB, produtoDaA, cxDaB, "3", null, false, 0))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_FK, "fk_embalagem_produto"));
+    }
+
+    @Test
+    void excluirOProdutoApagaAsEmbalagensEOsCodigosDelas() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        long un = unidade(empresa, "UN");
+        long cx = inserirUnidade(empresa, "CX", false);
+        long nexgard = inserirProduto(empresa, "Nexgard", un, null, null);
+        aplicarV12();
+        long caixa = inserirEmbalagem(empresa, nexgard, cx, "3", null, false, 0);
+        inserirCodigo(empresa, nexgard, caixa, "7891000315507");
+        inserirCodigo(empresa, nexgard, null, "96385074");
+
+        executar("DELETE FROM produtos WHERE id = " + nexgard);
+
+        assertThat(contar("SELECT count(*) FROM produto_embalagens WHERE produto_id = " + nexgard)).isZero();
+        assertThat(contar("SELECT count(*) FROM produto_codigos_barras WHERE produto_id = " + nexgard)).isZero();
+    }
+
+    @Test
     void embalagemComUnidadeDeOutraEmpresaViolaFk() throws SQLException {
         long empresaA = inserirEmpresa("Empresa A");
         long empresaB = inserirEmpresa("Empresa B");
@@ -294,6 +363,11 @@ class MigracaoV12IT {
                 .doesNotThrowAnyException();
         assertThatCode(() -> inserirHistorico(empresa, produto, usuario, "PRECO_VENDA", null))
                 .doesNotThrowAnyException();
+        // Embalagem com preco removida: preco -> vazio.
+        assertThatCode(() -> inserirHistorico(empresa, produto, usuario, "PRECO_EMBALAGEM", "CX c/ 3 UN", "209.90",
+                "NULL")).doesNotThrowAnyException();
+        assertThatThrownBy(() -> inserirHistorico(empresa, produto, usuario, "PRECO_EMBALAGEM", "  "))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_historico_preco_embalagem_rotulo_valido"));
     }
 
     // ---------- Retrato da embalagem no movimento ----------
@@ -310,6 +384,11 @@ class MigracaoV12IT {
                 "18", "2")).doesNotThrowAnyException();
         assertThatCode(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "5", "NULL", "NULL",
                 "NULL")).doesNotThrowAnyException();
+        assertThatCode(() -> inserirMovimento(empresa, produto, usuario, "SAIDA", "PERDA_AVARIA", "-36",
+                "'CX c/ 18 UN'", "18", "2")).doesNotThrowAnyException();
+        assertThatThrownBy(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "36", "' '",
+                "18", "2"))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_embalagem_rotulo_valido"));
         assertThatThrownBy(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "36",
                 "'CX c/ 18 UN'", "18", "NULL"))
                 .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_embalagem_completa"));
@@ -475,18 +554,37 @@ class MigracaoV12IT {
 
     private static void inserirHistorico(long empresaId, long produtoId, long usuarioId, String campo,
             String rotulo) throws SQLException {
-        executar("INSERT INTO produto_historico_precos (empresa_id, produto_id, campo, valor_anterior, valor_novo,"
-                + " usuario_id, embalagem_rotulo) VALUES (" + empresaId + ", " + produtoId + ", '" + campo
-                + "', NULL, 10.00, " + usuarioId + ", " + (rotulo == null ? "NULL" : "'" + rotulo + "'") + ")");
+        inserirHistorico(empresaId, produtoId, usuarioId, campo, rotulo, "NULL", "10.00");
     }
 
-    /** Movimento partindo do saldo 0 (entrada) ou de 0 para a quantidade (ajuste). */
+    private static void inserirHistorico(long empresaId, long produtoId, long usuarioId, String campo,
+            String rotulo, String anterior, String novo) throws SQLException {
+        executar("INSERT INTO produto_historico_precos (empresa_id, produto_id, campo, valor_anterior, valor_novo,"
+                + " usuario_id, embalagem_rotulo) VALUES (" + empresaId + ", " + produtoId + ", '" + campo
+                + "', " + anterior + ", " + novo + ", " + usuarioId + ", "
+                + (rotulo == null ? "NULL" : "'" + rotulo + "'") + ")");
+    }
+
+    /**
+     * Movimento com a variacao informada: a entrada (ou o ajuste) parte do saldo
+     * 0 e a saida parte do saldo que ela zera, para os saldos nunca ficarem
+     * negativos.
+     */
     private static void inserirMovimento(long empresaId, long produtoId, long usuarioId, String tipo, String motivo,
             String quantidade, String rotulo, String porEmbalagem, String embalagens) throws SQLException {
+        String anterior = "greatest(0, -(" + quantidade + "))";
         executar("INSERT INTO movimentos_estoque (empresa_id, produto_id, tipo, motivo, origem, quantidade,"
                 + " saldo_anterior, saldo_novo, usuario_id, embalagem_rotulo, embalagem_quantidade,"
                 + " quantidade_embalagens) VALUES (" + empresaId + ", " + produtoId + ", '" + tipo + "', '" + motivo
-                + "', 'AJUSTE_MANUAL', " + quantidade + ", 0, " + quantidade + ", " + usuarioId + ", " + rotulo
-                + ", " + porEmbalagem + ", " + embalagens + ")");
+                + "', 'AJUSTE_MANUAL', " + quantidade + ", " + anterior + ", " + anterior + " + (" + quantidade
+                + "), " + usuarioId + ", " + rotulo + ", " + porEmbalagem + ", " + embalagens + ")");
+    }
+
+    private static int ocorrencias(String texto, String trecho) {
+        int vezes = 0;
+        for (int posicao = texto.indexOf(trecho); posicao >= 0; posicao = texto.indexOf(trecho, posicao + 1)) {
+            vezes++;
+        }
+        return vezes;
     }
 }
