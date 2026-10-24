@@ -11,18 +11,20 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import type { TextosDaArvore } from '@/features/catalog/cadastrosEmArvore'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
 import { useFocoDeOrigem, type DestinoFoco } from '@/features/catalog/useFocoDeOrigem'
 import { filtrarPorTermo, idsDescendentes } from '@/lib/arvoreCategorias'
-import type { Categoria } from '@/types/catalogo'
+import type { ItemDaArvore } from '@/types/catalogo'
 
-/** Valor do radio que representa "Tornar categoria principal" (parentId null). */
+/** Valor do radio que representa "Tornar ... principal" (parentId null). */
 const DESTINO_PRINCIPAL = ''
 
-interface MoverCategoriaDialogProps {
-  /** Categoria a mover; `null` mantem o dialogo fechado. */
-  categoria: Categoria | null
-  categorias: Categoria[]
+interface MoverNaArvoreDialogProps<T extends ItemDaArvore> {
+  /** Item a mover; `null` mantem o dialogo fechado. */
+  item: T | null
+  itens: T[]
+  textos: TextosDaArvore
   salvando: boolean
   erro: string | null
   onConfirmar: (parentId: string | null) => void
@@ -32,23 +34,24 @@ interface MoverCategoriaDialogProps {
 }
 
 /**
- * Dialogo para escolher o novo pai de uma categoria. Os destinos sao listados
- * pelo caminho completo e nunca incluem a propria categoria nem seus
- * descendentes (evita ciclo antes mesmo do backend recusar).
+ * Dialogo para escolher o novo pai de um item da arvore (categoria, marca). Os
+ * destinos sao listados pelo caminho completo e nunca incluem o proprio item
+ * nem seus descendentes (evita ciclo antes mesmo do backend recusar).
  */
-export function MoverCategoriaDialog({
-  categoria,
-  categorias,
+export function MoverNaArvoreDialog<T extends ItemDaArvore>({
+  item,
+  itens,
+  textos,
   salvando,
   erro,
   onConfirmar,
   onCancelar,
   destinoFoco,
-}: MoverCategoriaDialogProps) {
-  const devolverFoco = useFocoDeOrigem(categoria !== null, destinoFoco)
+}: MoverNaArvoreDialogProps<T>) {
+  const devolverFoco = useFocoDeOrigem(item !== null, destinoFoco)
   return (
     <Dialog
-      open={categoria !== null}
+      open={item !== null}
       onOpenChange={(abrir) => {
         if (!abrir && !salvando) {
           onCancelar()
@@ -56,11 +59,12 @@ export function MoverCategoriaDialog({
       }}
     >
       <DialogContent onCloseAutoFocus={devolverFoco}>
-        {categoria && (
+        {item && (
           <ConteudoMover
-            key={categoria.id}
-            categoria={categoria}
-            categorias={categorias}
+            key={item.id}
+            item={item}
+            itens={itens}
+            textos={textos}
             salvando={salvando}
             erro={erro}
             onConfirmar={onConfirmar}
@@ -72,21 +76,29 @@ export function MoverCategoriaDialog({
   )
 }
 
-interface ConteudoMoverProps extends Omit<MoverCategoriaDialogProps, 'categoria' | 'destinoFoco'> {
-  categoria: Categoria
+interface ConteudoMoverProps<T extends ItemDaArvore> extends Omit<MoverNaArvoreDialogProps<T>, 'item' | 'destinoFoco'> {
+  item: T
 }
 
-function ConteudoMover({ categoria, categorias, salvando, erro, onConfirmar, onCancelar }: ConteudoMoverProps) {
-  const paiAtual = categoria.parentId ?? DESTINO_PRINCIPAL
+function ConteudoMover<T extends ItemDaArvore>({
+  item,
+  itens,
+  textos,
+  salvando,
+  erro,
+  onConfirmar,
+  onCancelar,
+}: ConteudoMoverProps<T>) {
+  const paiAtual = item.parentId ?? DESTINO_PRINCIPAL
   const [destino, setDestino] = useState<string>(paiAtual)
   const [busca, setBusca] = useState('')
 
   const destinosPossiveis = useMemo(() => {
-    const bloqueados = idsDescendentes(categorias, categoria.id)
-    return categorias
-      .filter((candidata) => !bloqueados.has(candidata.id))
+    const bloqueados = idsDescendentes(itens, item.id)
+    return itens
+      .filter((candidato) => !bloqueados.has(candidato.id))
       .sort((a, b) => a.caminho.localeCompare(b.caminho, 'pt-BR'))
-  }, [categorias, categoria.id])
+  }, [itens, item.id])
 
   const destinosFiltrados = filtrarPorTermo(destinosPossiveis, busca)
 
@@ -100,9 +112,9 @@ function ConteudoMover({ categoria, categorias, salvando, erro, onConfirmar, onC
   return (
     <form onSubmit={aoSubmeter} className="grid gap-4">
       <DialogHeader>
-        <DialogTitle>Mover categoria</DialogTitle>
+        <DialogTitle>Mover {textos.singular}</DialogTitle>
         <DialogDescription>
-          Escolha onde &quot;{categoria.caminho}&quot; vai ficar. As subcategorias e os produtos vão junto.
+          Escolha onde &quot;{item.caminho}&quot; vai ficar. As {textos.subPlural} e os produtos vão junto.
         </DialogDescription>
       </DialogHeader>
 
@@ -121,29 +133,33 @@ function ConteudoMover({ categoria, categorias, salvando, erro, onConfirmar, onC
       </div>
 
       <fieldset className="max-h-72 space-y-0.5 overflow-y-auto rounded-md border p-1" disabled={salvando}>
-        <legend className="sr-only">Novo local da categoria</legend>
+        <legend className="sr-only">Novo local da {textos.singular}</legend>
         <OpcaoDestino
+          nome={`destino-${textos.singular}`}
           valor={DESTINO_PRINCIPAL}
-          rotulo="Tornar categoria principal"
+          rotulo={`Tornar ${textos.singular} principal`}
           atual={paiAtual === DESTINO_PRINCIPAL}
           selecionado={destino === DESTINO_PRINCIPAL}
           onSelecionar={setDestino}
           destaque
         />
-        {destinosFiltrados.map((candidata) => (
+        {destinosFiltrados.map((candidato) => (
           <OpcaoDestino
-            key={candidata.id}
-            valor={candidata.id}
-            rotulo={candidata.caminho}
-            inativa={!candidata.ativo}
-            atual={paiAtual === candidata.id}
-            selecionado={destino === candidata.id}
+            key={candidato.id}
+            nome={`destino-${textos.singular}`}
+            valor={candidato.id}
+            rotulo={candidato.caminho}
+            inativa={!candidato.ativo}
+            atual={paiAtual === candidato.id}
+            selecionado={destino === candidato.id}
             onSelecionar={setDestino}
           />
         ))}
         {destinosFiltrados.length === 0 && (
           <p className="px-3 py-2 text-sm text-muted-foreground">
-            {busca.trim() ? 'Nenhuma categoria encontrada para a busca.' : 'Não há outras categorias para usar como destino.'}
+            {busca.trim()
+              ? `Nenhuma ${textos.singular} encontrada para a busca.`
+              : `Não há outras ${textos.plural} para usar como destino.`}
           </p>
         )}
       </fieldset>
@@ -162,6 +178,8 @@ function ConteudoMover({ categoria, categorias, salvando, erro, onConfirmar, onC
 }
 
 interface OpcaoDestinoProps {
+  /** Nome do grupo de radios. */
+  nome: string
   valor: string
   rotulo: string
   atual: boolean
@@ -171,7 +189,7 @@ interface OpcaoDestinoProps {
   destaque?: boolean
 }
 
-function OpcaoDestino({ valor, rotulo, atual, selecionado, onSelecionar, inativa, destaque }: OpcaoDestinoProps) {
+function OpcaoDestino({ nome, valor, rotulo, atual, selecionado, onSelecionar, inativa, destaque }: OpcaoDestinoProps) {
   // Nome acessivel explicito: os spans visuais seriam lidos colados ("Raçãolocal atual").
   const rotuloAcessivel = [rotulo, inativa ? 'inativa' : null, atual ? 'local atual' : null]
     .filter(Boolean)
@@ -186,7 +204,7 @@ function OpcaoDestino({ valor, rotulo, atual, selecionado, onSelecionar, inativa
     >
       <input
         type="radio"
-        name="destino-categoria"
+        name={nome}
         value={valor}
         checked={selecionado}
         onChange={() => onSelecionar(valor)}

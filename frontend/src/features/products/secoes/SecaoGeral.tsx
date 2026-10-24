@@ -16,15 +16,16 @@ import {
   opcoesDeUnidade,
   type ProdutoFormValues,
 } from '@/features/products/produtoFormulario'
-import { SeletorCategoria } from '@/features/products/SeletorCategoria'
-import type { Categoria, UnidadeMedida } from '@/types/catalogo'
+import { SeletorCategoria, SeletorMarca } from '@/features/products/SeletorCategoria'
+import type { Categoria, Marca, UnidadeMedida } from '@/types/catalogo'
 import type { Produto } from '@/types/produto'
 
 export interface SecaoGeralProps {
-  /** Produto em edicao (null no cadastro): mantem unidade/categoria atuais mesmo inativas. */
+  /** Produto em edicao (null no cadastro): mantem unidade, categoria e marca atuais mesmo inativas. */
   produto: Produto | null
   unidadesQuery: UseQueryResult<UnidadeMedida[]>
   categoriasQuery: UseQueryResult<Categoria[]>
+  marcasQuery: UseQueryResult<Marca[]>
   /** Sigla por id de unidade (lista + unidades do produto), para "Preço de venda (por KG)". */
   siglaPorId: ReadonlyMap<string, string>
   desabilitado: boolean
@@ -71,6 +72,7 @@ export function SecaoGeral({
   produto,
   unidadesQuery,
   categoriasQuery,
+  marcasQuery,
   siglaPorId,
   desabilitado,
   somenteLeitura,
@@ -84,6 +86,7 @@ export function SecaoGeral({
 
   const unidades = useMemo(() => unidadesQuery.data ?? [], [unidadesQuery.data])
   const categorias = useMemo(() => categoriasQuery.data ?? [], [categoriasQuery.data])
+  const marcas = useMemo(() => marcasQuery.data ?? [], [marcasQuery.data])
   const [unidadeIdAtual, nomeAtual, nomeCurtoAtual, custoAtual] = useWatch({
     control,
     name: ['unidadeId', 'nome', 'nomeCurto', 'custo'],
@@ -176,27 +179,37 @@ export function SecaoGeral({
             onTentarNovamente={() => categoriasQuery.refetch()}
           />
         </div>
-        <Controller
-          control={control}
-          name="marca"
-          render={({ field }) => (
-            <CampoSugestao
-              id="marca"
-              rotulo="Marca (opcional)"
-              campo="marca"
-              valor={field.value}
-              onChange={(marca) => {
-                field.onChange(marca)
-                aoAlterarCampo()
-              }}
-              onBlur={field.onBlur}
-              desabilitado={desabilitado}
-              maxLength={100}
-              placeholder="Ex.: Tio João"
-              erro={errors.marca?.message}
-            />
-          )}
-        />
+        <div className="space-y-1.5">
+          <label id="marcaId-rotulo" htmlFor="marcaId" className="text-sm font-medium">
+            Marca (opcional)
+          </label>
+          <Controller
+            control={control}
+            name="marcaId"
+            render={({ field }) => (
+              <SeletorMarca
+                id="marcaId"
+                idRotulo="marcaId-rotulo"
+                marcas={marcas}
+                valor={field.value}
+                valorAtual={produto?.marca ?? null}
+                onChange={(marcaId) => {
+                  field.onChange(marcaId)
+                  aoAlterarCampo()
+                }}
+                podeCriar={!somenteLeitura}
+                desabilitado={desabilitado || marcasQuery.isPending}
+                invalido={errors.marcaId !== undefined}
+              />
+            )}
+          />
+          <ErroDoCampo id="marcaId-erro" mensagem={errors.marcaId?.message} />
+          <AvisoCatalogo
+            carregouComFalha={marcasQuery.isError}
+            mensagemFalha="Não foi possível carregar as marcas."
+            onTentarNovamente={() => marcasQuery.refetch()}
+          />
+        </div>
         <Controller
           control={control}
           name="fornecedor"

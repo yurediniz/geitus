@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 const ABAS = [
   { rotulo: 'Produtos', to: '/produtos' },
   { rotulo: 'Categorias', to: '/produtos/categorias' },
+  { rotulo: 'Marcas', to: '/produtos/marcas' },
   { rotulo: 'Unidades', to: '/produtos/unidades' },
   { rotulo: 'Balança', to: '/produtos/balanca' },
 ] as const

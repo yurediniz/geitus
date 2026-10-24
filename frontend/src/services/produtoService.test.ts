@@ -36,7 +36,7 @@ const produtoRequest: ProdutoRequest = {
   nomeCurto: null,
   unidadeId: '6f1c2b8e-0000-4000-8000-000000000001',
   categoriaId: null,
-  marca: null,
+  marcaId: null,
   fornecedor: null,
   descricao: null,
   precoVenda: 25.9,
@@ -175,11 +175,13 @@ describe('produtoService', () => {
     expect(apiGetMock).toHaveBeenCalledWith('/produtos/sku/sugestao', { autenticada: true })
   })
 
-  it('lista sugestoes de marca com o termo aparado', async () => {
-    apiGetMock.mockResolvedValue(['Golden'])
+  it('lista sugestoes de fornecedor com o termo aparado', async () => {
+    apiGetMock.mockResolvedValue(['Distribuidora Sul'])
 
-    await expect(listarSugestoes('marca', ' gol ')).resolves.toEqual(['Golden'])
-    expect(apiGetMock).toHaveBeenCalledWith('/produtos/sugestoes?campo=marca&termo=gol', { autenticada: true })
+    await expect(listarSugestoes('fornecedor', ' dist ')).resolves.toEqual(['Distribuidora Sul'])
+    expect(apiGetMock).toHaveBeenCalledWith('/produtos/sugestoes?campo=fornecedor&termo=dist', {
+      autenticada: true,
+    })
   })
 
   it('lista sugestoes de fornecedor sem termo (mais usados)', async () => {

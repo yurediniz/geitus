@@ -3,17 +3,28 @@ export function pluralizar(quantidade: number, singular: string, plural: string)
   return `${quantidade} ${quantidade === 1 ? singular : plural}`
 }
 
+/** Uma contagem com o substantivo no singular e no plural (ex.: produtos ligados a uma marca). */
+export interface Contagem {
+  quantidade: number
+  singular: string
+  plural: string
+}
+
 /**
- * Vinculos que impedem excluir uma categoria, em texto corrido e omitindo a
- * parte zerada: "2 subcategorias e 1 produto", "3 produtos". Vazio sem vinculos.
+ * Contagens em texto corrido, omitindo as zeradas: "2 subcategorias e 1 produto",
+ * "1 submarca, 4 produtos e 2 fornecedores", "3 produtos". Vazio sem nenhuma.
  */
-export function descreverVinculos(quantidadeSubcategorias: number, quantidadeProdutos: number): string {
-  const partes: string[] = []
-  if (quantidadeSubcategorias > 0) {
-    partes.push(pluralizar(quantidadeSubcategorias, 'subcategoria', 'subcategorias'))
+export function descreverVinculos(contagens: readonly Contagem[]): string {
+  const partes = contagens
+    .filter((contagem) => contagem.quantidade > 0)
+    .map((contagem) => pluralizar(contagem.quantidade, contagem.singular, contagem.plural))
+  if (partes.length <= 1) {
+    return partes.join('')
   }
-  if (quantidadeProdutos > 0) {
-    partes.push(pluralizar(quantidadeProdutos, 'produto', 'produtos'))
-  }
-  return partes.join(' e ')
+  return `${partes.slice(0, -1).join(', ')} e ${partes[partes.length - 1]}`
+}
+
+/** "categoria" -> "Categoria". */
+export function comMaiuscula(texto: string): string {
+  return texto.charAt(0).toLocaleUpperCase('pt-BR') + texto.slice(1)
 }

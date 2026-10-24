@@ -20,6 +20,7 @@ import {
   sugerirSku,
 } from '@/services/produtoService'
 import { cadastrarCategoria, listarCategorias } from '@/services/categoriaService'
+import { cadastrarMarca, listarMarcas } from '@/services/marcaService'
 import { ajustarEstoque, listarMovimentosDeEstoque } from '@/services/estoqueService'
 import { buscarConfiguracaoEtiqueta } from '@/services/etiquetaBalancaService'
 import { listarUnidades } from '@/services/unidadeService'
@@ -27,6 +28,7 @@ import { CONFIGURACAO_ETIQUETA_PADRAO } from '@/lib/etiquetaBalanca'
 import {
   CATEGORIAS,
   CX,
+  MARCAS,
   SC,
   ID_ARROZ,
   KG,
@@ -35,6 +37,7 @@ import {
   UNIDADES,
   categoria,
   embalagemDaApi,
+  marca,
   produtoAtivo,
   produtoSimples,
   resumo,
@@ -79,6 +82,11 @@ vi.mock('@/services/categoriaService', () => ({
   cadastrarCategoria: vi.fn(),
 }))
 
+vi.mock('@/services/marcaService', () => ({
+  listarMarcas: vi.fn(),
+  cadastrarMarca: vi.fn(),
+}))
+
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: vi.fn(),
 }))
@@ -98,6 +106,8 @@ const listarUnidadesMock = vi.mocked(listarUnidades)
 const buscarConfiguracaoEtiquetaMock = vi.mocked(buscarConfiguracaoEtiqueta)
 const listarCategoriasMock = vi.mocked(listarCategorias)
 const cadastrarCategoriaMock = vi.mocked(cadastrarCategoria)
+const listarMarcasMock = vi.mocked(listarMarcas)
+const cadastrarMarcaMock = vi.mocked(cadastrarMarca)
 const useAuthMock = vi.mocked(useAuth)
 // O jsdom nao rola: o mock registra em que elemento a pagina pediu a rolagem.
 const scrollIntoViewMock = vi.fn()
@@ -265,6 +275,18 @@ function botaoSalvar(): HTMLElement {
   return screen.getByRole('button', { name: /^salvar$/i })
 }
 
+function seletorDeMarca(): HTMLElement {
+  return screen.getByRole('button', { name: /^marca/i })
+}
+
+/** Abre o seletor de marca e escolhe a opcao pelo caminho. */
+async function escolherMarca(caminho: string) {
+  const seletor = seletorDeMarca()
+  await waitFor(() => expect(seletor).toBeEnabled())
+  fireEvent.click(seletor)
+  fireEvent.click(await screen.findByRole('option', { name: caminho }))
+}
+
 function rotulosDasOpcoes(select: HTMLElement): string[] {
   return within(select).getAllByRole('option').map((opcao) => opcao.textContent ?? '')
 }
@@ -276,7 +298,7 @@ const REQUEST_VAZIO: ProdutoRequest = {
   nomeCurto: null,
   unidadeId: 'un',
   categoriaId: null,
-  marca: null,
+  marcaId: null,
   fornecedor: null,
   descricao: null,
   precoVenda: 0,
@@ -300,6 +322,7 @@ describe('ProdutoPage', () => {
     definirPerfil('ADMIN')
     listarUnidadesMock.mockResolvedValue(UNIDADES)
     listarCategoriasMock.mockResolvedValue(CATEGORIAS)
+    listarMarcasMock.mockResolvedValue(MARCAS)
     listarSugestoesMock.mockResolvedValue([])
     listarMovimentosDeEstoqueMock.mockResolvedValue({ itens: [], pagina: 0, tamanho: 20, totalItens: 0 })
     buscarConfiguracaoEtiquetaMock.mockResolvedValue({ ...CONFIGURACAO_ETIQUETA_PADRAO, padrao: true })
@@ -1032,7 +1055,7 @@ describe('ProdutoPage', () => {
 
       expect(campoNome()).toHaveAccessibleName(/^Nome\s*\(obrigatório\)$/)
       expect(screen.getByLabelText(/unidade de venda/i)).toHaveAccessibleName(/^Unidade de venda\s*\(obrigatório\)$/)
-      expect(screen.getByLabelText(/^marca/i)).toHaveAccessibleName('Marca (opcional)')
+      expect(seletorDeMarca()).toHaveAccessibleName('Marca (opcional) Sem marca')
       expect(screen.getByLabelText(/preço de venda/i)).toHaveAccessibleName(/\(obrigatório\)$/)
     })
   })
@@ -1045,7 +1068,7 @@ describe('ProdutoPage', () => {
       await esperarFormulario()
       fireEvent.change(campoNome(), { target: { value: 'Café 500g' } })
       fireEvent.change(screen.getByLabelText(/^nome curto/i), { target: { value: 'Café' } })
-      fireEvent.change(screen.getByLabelText(/^marca/i), { target: { value: 'Pilão' } })
+      await escolherMarca('Golden')
       fireEvent.change(screen.getByLabelText(/^fornecedor principal/i), { target: { value: 'Atacadão' } })
       await waitFor(() => expect(screen.getByLabelText(/unidade de venda/i)).toHaveValue('un'))
       fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '12,50' } })
@@ -1059,7 +1082,7 @@ describe('ProdutoPage', () => {
           ...REQUEST_VAZIO,
           nome: 'Café 500g',
           nomeCurto: 'Café',
-          marca: 'Pilão',
+          marcaId: 'golden',
           fornecedor: 'Atacadão',
           precoVenda: 12.5,
           pontoReposicao: 8,
@@ -1083,7 +1106,7 @@ describe('ProdutoPage', () => {
       await waitFor(() => expect(seletor).toBeEnabled())
       fireEvent.click(seletor)
       fireEvent.click(await screen.findByRole('option', { name: 'Ração › Sachê' }))
-      fireEvent.change(screen.getByLabelText(/^marca/i), { target: { value: 'Golden' } })
+      await escolherMarca('Golden')
       fireEvent.change(screen.getByLabelText(/^fornecedor principal/i), { target: { value: 'PremieRpet' } })
       fireEvent.change(screen.getByLabelText(/^nome curto/i), { target: { value: 'Sachê' } })
       fireEvent.change(campoCodigoBarras(), { target: { value: '7891000315507' } })
@@ -1095,7 +1118,7 @@ describe('ProdutoPage', () => {
 
       await waitFor(() =>
         expect(cadastrarProdutoMock).toHaveBeenCalledWith(
-          expect.objectContaining({ nome: 'Sachê frango', unidadeId: 'kg', categoriaId: 'sache' }),
+          expect.objectContaining({ nome: 'Sachê frango', unidadeId: 'kg', categoriaId: 'sache', marcaId: 'golden' }),
         ),
       )
       expect(await screen.findByText('Produto "Sachê frango" cadastrado (Nº 15 · Cód. 542).')).toBeInTheDocument()
@@ -1108,7 +1131,7 @@ describe('ProdutoPage', () => {
       expect(screen.getByLabelText(/^nome curto/i)).toHaveValue('')
       expect(screen.getByLabelText(/unidade de venda/i)).toHaveValue('kg')
       expect(screen.getByRole('button', { name: /^categoria/i })).toHaveTextContent('Ração › Sachê')
-      expect(screen.getByLabelText(/^marca/i)).toHaveValue('Golden')
+      expect(seletorDeMarca()).toHaveTextContent('Golden')
       expect(screen.getByLabelText(/^fornecedor principal/i)).toHaveValue('PremieRpet')
       expect(screen.getByLabelText(/preço de venda/i)).toHaveValue('')
       expect(screen.getByLabelText(/^custo/i)).toHaveValue('')
@@ -1126,7 +1149,7 @@ describe('ProdutoPage', () => {
       renderNovo()
       await esperarFormulario()
       await preencherMinimo('Café 500g')
-      fireEvent.change(screen.getByLabelText(/^marca/i), { target: { value: 'Pilão' } })
+      await escolherMarca('Golden')
       fireEvent.change(screen.getByLabelText(/^sku/i), { target: { value: 'SKU-DUP' } })
 
       fireEvent.click(screen.getByRole('button', { name: /salvar e cadastrar outro/i }))
@@ -1138,7 +1161,7 @@ describe('ProdutoPage', () => {
       ).toBeInTheDocument()
       expect(screen.getByLabelText(/^sku/i)).toHaveValue('SKU-DUP')
       expect(campoNome()).toHaveValue('Café 500g')
-      expect(screen.getByLabelText(/^marca/i)).toHaveValue('Pilão')
+      expect(seletorDeMarca()).toHaveTextContent('Golden')
       expect(screen.getByLabelText(/preço de venda/i)).toHaveValue('12,50')
     })
 
@@ -1326,6 +1349,7 @@ describe('ProdutoPage', () => {
       expect(campoNome()).toHaveValue('Arroz 5kg')
       expect(screen.getByLabelText(/^nome curto/i)).toHaveValue('Arroz TJ')
       expect(screen.getByLabelText(/^fornecedor principal/i)).toHaveValue('Distribuidora Sul')
+      expect(seletorDeMarca()).toHaveTextContent('Camil › Tio João')
       expect(screen.getByLabelText(/preço de venda/i)).toHaveValue('25,90')
       // A mesma lista de codigos aparece em etiquetas na Geral.
       expect(
@@ -1785,23 +1809,89 @@ describe('ProdutoPage', () => {
   })
 
   describe('marca, fornecedor e nome curto', () => {
-    it('marca sugere os valores já usados e envia a escolhida', async () => {
-      listarSugestoesMock.mockImplementation(async (campo) => (campo === 'marca' ? ['Golden', 'Premier'] : ['Distribuidora Sul']))
+    it('o seletor de marca busca pelo caminho, aceita qualquer nível e envia o marcaId', async () => {
+      listarSugestoesMock.mockResolvedValue(['Distribuidora Sul'])
       cadastrarProdutoMock.mockResolvedValue(produtoAtivo)
 
       renderNovo()
       await esperarFormulario()
       await preencherMinimo()
-      const marca = screen.getByRole('combobox', { name: /^marca/i })
-      fireEvent.focus(marca)
-      fireEvent.mouseDown(await screen.findByRole('option', { name: 'Golden' }))
+      const seletor = seletorDeMarca()
+      await waitFor(() => expect(seletor).toBeEnabled())
+      fireEvent.click(seletor)
+      // A busca casa com o caminho (fabricante e marca), sem acento: "camil joao" acha "Camil › Tio João".
+      fireEvent.change(await screen.findByRole('combobox', { name: 'Buscar marca' }), {
+        target: { value: 'camil joao' },
+      })
+      const lista = screen.getByRole('listbox', { name: 'Marcas' })
+      expect(within(lista).getAllByRole('option').map((opcao) => opcao.textContent)).toEqual(['Camil › Tio João'])
+      fireEvent.click(within(lista).getByRole('option', { name: 'Camil › Tio João' }))
+      expect(seletor).toHaveTextContent('Camil › Tio João')
       const fornecedor = screen.getByRole('combobox', { name: /^fornecedor principal/i })
       fireEvent.change(fornecedor, { target: { value: 'Fornecedor Novo' } })
       fireEvent.click(botaoSalvar())
 
       await waitFor(() => expect(cadastrarProdutoMock).toHaveBeenCalledTimes(1))
-      expect(cadastrarProdutoMock.mock.calls[0][0]).toMatchObject({ marca: 'Golden', fornecedor: 'Fornecedor Novo' })
-      expect(listarSugestoesMock).toHaveBeenCalledWith('marca', '')
+      expect(cadastrarProdutoMock.mock.calls[0][0]).toMatchObject({ marcaId: 'tio-joao', fornecedor: 'Fornecedor Novo' })
+      expect(cadastrarProdutoMock.mock.calls[0][0]).not.toHaveProperty('marca')
+    })
+
+    it('cria a marca pelo "+ Nova marca" dentro do fabricante e já a seleciona', async () => {
+      cadastrarProdutoMock.mockResolvedValue(produtoAtivo)
+      cadastrarMarcaMock.mockResolvedValue(marca('premier', 'Premier', 'golden', 'Golden › Premier'))
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      const seletor = seletorDeMarca()
+      await waitFor(() => expect(seletor).toBeEnabled())
+      fireEvent.click(seletor)
+      fireEvent.change(await screen.findByRole('combobox', { name: 'Buscar marca' }), { target: { value: 'Premier' } })
+      fireEvent.click(screen.getByRole('button', { name: /^nova marca/i }))
+      expect(screen.getByLabelText('Nome da marca')).toHaveValue('Premier')
+      fireEvent.change(screen.getByLabelText('Dentro de (opcional)'), { target: { value: 'golden' } })
+      fireEvent.click(screen.getByRole('button', { name: /criar e selecionar/i }))
+
+      await waitFor(() => expect(cadastrarMarcaMock).toHaveBeenCalledWith({ nome: 'Premier', parentId: 'golden' }))
+      await waitFor(() => expect(seletor).toHaveTextContent('Golden › Premier'))
+      expect(cadastrarProdutoMock).not.toHaveBeenCalled()
+
+      fireEvent.click(botaoSalvar())
+      await waitFor(() =>
+        expect(cadastrarProdutoMock).toHaveBeenCalledWith(expect.objectContaining({ marcaId: 'premier' })),
+      )
+    })
+
+    it('na edição, mantém a marca atual inativa e a envia ao salvar', async () => {
+      const antiga = marca('antiga', 'Antiga', null, 'Antiga', { ativo: false, selecionavel: false })
+      listarMarcasMock.mockResolvedValue([...MARCAS, antiga])
+      const produto: Produto = { ...produtoAtivo, marca: { id: 'antiga', nome: 'Antiga', caminho: 'Antiga' } }
+      atualizarProdutoMock.mockResolvedValue(produto)
+
+      renderEdicao(produto)
+      await esperarFormulario()
+      await waitFor(() => expect(seletorDeMarca()).toHaveTextContent('Antiga (inativa)'))
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(ID_ARROZ, expect.objectContaining({ marcaId: 'antiga' })),
+      )
+    })
+
+    it('mostra o erro do backend no campo da marca (400 em marcaId) e recarrega as marcas', async () => {
+      cadastrarProdutoMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { marcaId: 'Esta marca está inativa. Escolha uma marca ativa.' }),
+      )
+
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      await escolherMarca('Golden')
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('Esta marca está inativa. Escolha uma marca ativa.')).toBeInTheDocument()
+      expect(seletorDeMarca()).toHaveAttribute('aria-invalid', 'true')
+      await waitFor(() => expect(listarMarcasMock).toHaveBeenCalledTimes(2))
     })
 
     it('nome curto mostra o contador e a prévia do cupom com a regra do backend', async () => {
@@ -2835,7 +2925,7 @@ describe('ProdutoPage', () => {
 
       expect(
         await screen.findByText(
-          'O produto, a unidade, a categoria ou uma embalagem escolhida não existe mais. Atualize a tela e tente novamente.',
+          'O produto, a unidade, a categoria, a marca ou uma embalagem escolhida não existe mais. Atualize a tela e tente novamente.',
         ),
       ).toBeInTheDocument()
     })

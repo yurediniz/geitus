@@ -33,7 +33,7 @@ export function CardsProdutos({ produtos, alterandoStatusId, aoAlterarStatus, ao
                   </h3>
                   {!produto.ativo && <SeloStatus ativo={false} />}
                 </div>
-                {produto.marca && <p className="truncate text-sm text-muted-foreground">{produto.marca}</p>}
+                {produto.marca && <p className="truncate text-sm text-muted-foreground">{produto.marca.nome}</p>}
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm">

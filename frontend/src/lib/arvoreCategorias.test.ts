@@ -38,11 +38,11 @@ describe('montarArvore', () => {
   it('monta tres niveis com raizes e filhos ordenados por nome', () => {
     const arvore = montarArvore(categorias)
 
-    expect(arvore.map((no) => no.categoria.nome)).toEqual(['Bebidas', 'Ração'])
+    expect(arvore.map((no) => no.item.nome)).toEqual(['Bebidas', 'Ração'])
     const racao = arvore[1]
-    expect(racao?.filhos.map((no) => no.categoria.nome)).toEqual(['Seca', 'Úmida'])
+    expect(racao?.filhos.map((no) => no.item.nome)).toEqual(['Seca', 'Úmida'])
     const umida = racao?.filhos[1]
-    expect(umida?.filhos.map((no) => no.categoria.nome)).toEqual(['Sachê'])
+    expect(umida?.filhos.map((no) => no.item.nome)).toEqual(['Sachê'])
     expect(umida?.filhos[0]?.filhos).toEqual([])
   })
 
@@ -51,7 +51,7 @@ describe('montarArvore', () => {
 
     const arvore = montarArvore([...categorias, orfa])
 
-    expect(arvore.map((no) => no.categoria.nome)).toEqual(['Avulsa', 'Bebidas', 'Ração'])
+    expect(arvore.map((no) => no.item.nome)).toEqual(['Avulsa', 'Bebidas', 'Ração'])
   })
 
   it('retorna lista vazia sem categorias', () => {

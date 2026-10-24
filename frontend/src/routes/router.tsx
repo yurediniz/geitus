@@ -4,6 +4,7 @@ import { RootLayout } from '@/components/layout/RootLayout'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { CategoriasPage } from '@/features/catalog/CategoriasPage'
 import { EtiquetaBalancaPage } from '@/features/catalog/EtiquetaBalancaPage'
+import { MarcasPage } from '@/features/catalog/MarcasPage'
 import { UnidadesPage } from '@/features/catalog/UnidadesPage'
 import { EmpresaPage } from '@/features/company/EmpresaPage'
 import { ClientesPage } from '@/features/customers/ClientesPage'
@@ -50,6 +51,7 @@ const privateRoutes: RouteObject[] = [
           // Catalogo: leitura a qualquer autenticado; escrita so ADMIN (pagina e backend, DEC-031).
           // Declaradas antes de `produtos/:id` por legibilidade (o ranking do React Router ja prefere o segmento fixo).
           { path: 'produtos/categorias', element: <CategoriasPage /> },
+          { path: 'produtos/marcas', element: <MarcasPage /> },
           { path: 'produtos/unidades', element: <UnidadesPage /> },
           // Etiqueta de balanca: leitura e teste a qualquer autenticado; salvar so ADMIN (pagina e backend).
           { path: 'produtos/balanca', element: <EtiquetaBalancaPage /> },

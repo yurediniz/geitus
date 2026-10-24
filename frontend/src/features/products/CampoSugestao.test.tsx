@@ -21,7 +21,7 @@ function CampoComEstado({ inicial = '', onEnviar }: { inicial?: string; onEnviar
         onEnviar?.()
       }}
     >
-      <CampoSugestao id="marca" rotulo="Marca (opcional)" campo="marca" valor={valor} onChange={setValor} maxLength={100} />
+      <CampoSugestao id="marca" rotulo="Marca (opcional)" campo="fornecedor" valor={valor} onChange={setValor} maxLength={100} />
       <span hidden data-testid="valor">{valor}</span>
     </form>
   )
@@ -54,7 +54,7 @@ describe('CampoSugestao', () => {
     fireEvent.focus(campo())
 
     const lista = await screen.findByRole('listbox', { name: 'Sugestões de marca' })
-    expect(listarSugestoesMock).toHaveBeenCalledWith('marca', '')
+    expect(listarSugestoesMock).toHaveBeenCalledWith('fornecedor', '')
     expect(campo()).toHaveAttribute('aria-expanded', 'true')
     expect(campo()).toHaveAttribute('aria-controls', lista.id)
     expect(screen.getAllByRole('option').map((opcao) => opcao.textContent)).toEqual(['Golden', 'Premier', 'GranPlus'])
@@ -68,9 +68,9 @@ describe('CampoSugestao', () => {
     fireEvent.change(campo(), { target: { value: 'go' } })
     fireEvent.change(campo(), { target: { value: 'gol' } })
 
-    await waitFor(() => expect(listarSugestoesMock).toHaveBeenCalledWith('marca', 'gol'))
+    await waitFor(() => expect(listarSugestoesMock).toHaveBeenCalledWith('fornecedor', 'gol'))
     // Os termos intermediarios nao viram requisicao.
-    expect(listarSugestoesMock).not.toHaveBeenCalledWith('marca', 'go')
+    expect(listarSugestoesMock).not.toHaveBeenCalledWith('fornecedor', 'go')
     const opcao = await screen.findByRole('option', { name: 'Golden' })
 
     fireEvent.mouseDown(opcao)
@@ -154,7 +154,7 @@ describe('CampoSugestao', () => {
 
     fireEvent.focus(campo())
     fireEvent.change(campo(), { target: { value: 'Marca Nova' } })
-    await waitFor(() => expect(listarSugestoesMock).toHaveBeenCalledWith('marca', 'Marca Nova'))
+    await waitFor(() => expect(listarSugestoesMock).toHaveBeenCalledWith('fornecedor', 'Marca Nova'))
     fireEvent.blur(campo())
 
     expect(screen.getByTestId('valor')).toHaveTextContent('Marca Nova')
@@ -166,7 +166,7 @@ describe('CampoSugestao', () => {
 
     fireEvent.focus(campo())
 
-    await waitFor(() => expect(listarSugestoesMock).toHaveBeenCalledWith('marca', 'Golden'))
+    await waitFor(() => expect(listarSugestoesMock).toHaveBeenCalledWith('fornecedor', 'Golden'))
     expect(screen.queryByRole('option', { name: 'Golden' })).not.toBeInTheDocument()
   })
 })

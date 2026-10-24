@@ -2,7 +2,7 @@
  * Dados de teste do modulo Produtos (lista e pagina do produto). So dados:
  * os mocks de servico ficam em cada arquivo de teste.
  */
-import type { Categoria, UnidadeMedida, UnidadeResumo } from '@/types/catalogo'
+import type { Categoria, Marca, UnidadeMedida, UnidadeResumo } from '@/types/catalogo'
 import { rotuloDaEmbalagem } from '@/lib/embalagem'
 import { detectarFormato } from '@/lib/codigoBarras'
 import type { Embalagem, Produto } from '@/types/produto'
@@ -92,6 +92,29 @@ export const RACAO = categoria('racao', 'Ração', null, 'Ração')
 export const SACHE = categoria('sache', 'Sachê', 'racao', 'Ração › Sachê')
 export const CATEGORIAS = [MERCEARIA, RACAO, SACHE]
 
+export function marca(id: string, nome: string, parentId: string | null, caminho: string, extras: Partial<Marca> = {}): Marca {
+  return {
+    id,
+    nome,
+    parentId,
+    caminho,
+    nivel: caminho.split(' › ').length - 1,
+    ativo: true,
+    selecionavel: true,
+    quantidadeSubmarcas: 0,
+    quantidadeProdutos: 0,
+    quantidadeFornecedores: 0,
+    criadoEm: '2026-10-24T10:00:00',
+    atualizadoEm: null,
+    ...extras,
+  }
+}
+
+export const CAMIL = marca('camil', 'Camil', null, 'Camil')
+export const TIO_JOAO = marca('tio-joao', 'Tio João', 'camil', 'Camil › Tio João')
+export const GOLDEN = marca('golden', 'Golden', null, 'Golden')
+export const MARCAS = [CAMIL, TIO_JOAO, GOLDEN]
+
 export const ID_ARROZ = '0b9d2f3a-1c4e-4a5b-8c6d-7e8f9a0b1c2d'
 export const ID_FEIJAO = '1c0e3a4b-2d5f-4b6c-9d7e-8f9a0b1c2d3e'
 export const ID_SIMPLES = '2d1f4b5c-3e6a-4c7d-8e8f-9a0b1c2d3e4f'
@@ -105,7 +128,7 @@ export const produtoAtivo: Produto = {
   nomeCurto: null,
   nomeCurtoEfetivo: 'Arroz 5kg',
   categoria: { id: 'mercearia', nome: 'Mercearia', caminho: 'Mercearia' },
-  marca: 'Tio João',
+  marca: { id: 'tio-joao', nome: 'Tio João', caminho: 'Camil › Tio João' },
   fornecedor: 'Distribuidora Sul',
   unidade: resumo(UN),
   descricao: null,

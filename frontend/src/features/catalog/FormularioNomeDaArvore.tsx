@@ -1,13 +1,15 @@
-import { useId, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useId, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Check, Loader2, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { nomeCategoriaSchema } from '@/features/catalog/catalogoSchemas'
+import { nomeDaArvoreSchema } from '@/features/catalog/catalogoSchemas'
 
-interface FormularioNomeCategoriaProps {
+interface FormularioNomeDaArvoreProps {
   /** Rotulo acessivel do campo (ex.: "Nome da subcategoria de Ração"). */
   rotulo: string
+  /** Nome do item no singular ("categoria", "marca"), para a mensagem de nome vazio. */
+  singular: string
   valorInicial?: string
   placeholder?: string
   textoSalvar: string
@@ -21,11 +23,13 @@ interface FormularioNomeCategoriaProps {
 }
 
 /**
- * Campo unico de nome usado para criar categoria principal, adicionar
- * subcategoria e renomear, sempre inline. Enter salva e Esc cancela.
+ * Campo unico de nome usado para criar o item principal, adicionar um subitem
+ * e renomear, sempre inline, nas arvores de categorias e de marcas. Enter
+ * salva e Esc cancela.
  */
-export function FormularioNomeCategoria({
+export function FormularioNomeDaArvore({
   rotulo,
+  singular,
   valorInicial = '',
   placeholder,
   textoSalvar,
@@ -34,16 +38,17 @@ export function FormularioNomeCategoria({
   onSalvar,
   onCancelar,
   onAlterar,
-}: FormularioNomeCategoriaProps) {
+}: FormularioNomeDaArvoreProps) {
   const id = useId()
   const erroId = `${id}-erro`
   const [nome, setNome] = useState(valorInicial)
   const [erroLocal, setErroLocal] = useState<string | null>(null)
   const mensagemErro = erroLocal ?? erro
+  const schema = useMemo(() => nomeDaArvoreSchema(singular), [singular])
 
   const aoSubmeter = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const resultado = nomeCategoriaSchema.safeParse(nome)
+    const resultado = schema.safeParse(nome)
     if (!resultado.success) {
       setErroLocal(resultado.error.issues[0]?.message ?? 'Nome inválido.')
       return

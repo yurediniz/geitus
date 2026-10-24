@@ -1,8 +1,9 @@
 /**
- * Tipos compartilhados do catalogo: Unidades de medida e Categorias.
+ * Tipos compartilhados do catalogo: Unidades de medida, Categorias e Marcas.
  *
- * Refletem o contrato da API do backend em /api/unidades e /api/categorias
- * (ver docs/modules/categorias-e-unidades.md). O `id` e sempre o UUID publico;
+ * Refletem o contrato da API do backend em /api/unidades, /api/categorias e
+ * /api/marcas (ver docs/modules/categorias-e-unidades.md e
+ * fornecedores-e-marcas.md). O `id` e sempre o UUID publico;
  * a empresa nunca trafega aqui: e derivada do usuario autenticado.
  */
 
@@ -29,32 +30,51 @@ export interface UnidadeMedidaRequest {
 }
 
 /**
- * Categoria conforme retornada pela API: lista plana ordenada pelo caminho.
- * O frontend monta a arvore a partir de `parentId` (ver lib/arvoreCategorias).
+ * Item de um cadastro em arvore (Categorias e Marcas, que seguem as mesmas
+ * regras): lista plana ordenada pelo caminho. O frontend monta a arvore a
+ * partir de `parentId` (ver lib/arvoreCategorias).
  */
-export interface Categoria {
+export interface ItemDaArvore {
   id: string
   nome: string
-  /** UUID da categoria pai; `null` para categoria raiz. */
+  /** UUID do item pai; `null` para item raiz. */
   parentId: string | null
   /** Caminho completo, ex.: "Ração › Úmida › Sachê". */
   caminho: string
   /** Profundidade na arvore (0 = raiz). */
   nivel: number
   ativo: boolean
-  /** Ativa e sem ancestral inativo: pode ser escolhida no produto. */
+  /** Ativo e sem ancestral inativo: pode ser escolhido no produto. */
   selecionavel: boolean
-  quantidadeSubcategorias: number
+  /** Produtos ligados diretamente ao item. */
   quantidadeProdutos: number
   criadoEm: string
   atualizadoEm: string | null
 }
 
-/** Corpo de cadastro/atualizacao (renomear + mover). `parentId: null` = raiz. */
-export interface CategoriaRequest {
+/** Categoria conforme retornada pela API. */
+export interface Categoria extends ItemDaArvore {
+  quantidadeSubcategorias: number
+}
+
+/**
+ * Fabricante ou marca (Fase B5): a mesma arvore das categorias. O primeiro
+ * nivel costuma ser o fabricante; o sistema nao diferencia os niveis.
+ */
+export interface Marca extends ItemDaArvore {
+  quantidadeSubmarcas: number
+  /** Fornecedores que vendem a marca (ligados diretamente a ela). */
+  quantidadeFornecedores: number
+}
+
+/** Corpo de cadastro/atualizacao de um item da arvore (renomear + mover). `parentId: null` = raiz. */
+export interface ItemDaArvoreRequest {
   nome: string
   parentId: string | null
 }
+
+export type CategoriaRequest = ItemDaArvoreRequest
+export type MarcaRequest = ItemDaArvoreRequest
 
 /** Resumo da unidade embutido em outros recursos (ex.: produto). */
 export interface UnidadeResumo {
@@ -64,9 +84,15 @@ export interface UnidadeResumo {
   fracionada: boolean
 }
 
-/** Resumo da categoria embutido em outros recursos (ex.: produto). */
-export interface CategoriaResumo {
+/** Resumo de um item da arvore embutido em outros recursos (ex.: produto). */
+export interface ResumoDaArvore {
   id: string
   nome: string
   caminho: string
 }
+
+/** Resumo da categoria embutido em outros recursos (ex.: produto). */
+export type CategoriaResumo = ResumoDaArvore
+
+/** Resumo da marca embutido em outros recursos (produto, fornecedor). */
+export type MarcaResumo = ResumoDaArvore

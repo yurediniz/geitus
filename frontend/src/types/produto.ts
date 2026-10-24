@@ -3,10 +3,10 @@
  *
  * Refletem o contrato da API do backend em /api/produtos. A empresa nao e
  * enviada nem recebida aqui: ela e sempre derivada do usuario autenticado.
- * Unidade e categoria vem dos cadastros do catalogo (ver types/catalogo).
+ * Unidade, categoria e marca vem dos cadastros do catalogo (ver types/catalogo).
  */
 
-import type { CategoriaResumo, UnidadeResumo } from '@/types/catalogo'
+import type { CategoriaResumo, MarcaResumo, UnidadeResumo } from '@/types/catalogo'
 import type { SituacaoEstoque } from '@/types/estoque'
 
 /**
@@ -113,7 +113,7 @@ export interface CustoOrigem {
 }
 
 /** Campos de texto livre com sugestoes dos valores ja usados na empresa. */
-export type CampoSugestaoProduto = 'marca' | 'fornecedor'
+export type CampoSugestaoProduto = 'fornecedor'
 
 /** Produto conforme retornado pela API. */
 export interface Produto {
@@ -132,7 +132,8 @@ export interface Produto {
   nomeCurtoEfetivo: string
   /** Categoria com o caminho completo (ex.: "Ração › Úmida › Sachê"); null = sem categoria. */
   categoria: CategoriaResumo | null
-  marca: string | null
+  /** Marca do cadastro de marcas, com o caminho ("Boehringer › Nexgard"); null = sem marca. */
+  marca: MarcaResumo | null
   /** Fornecedor principal em texto livre. */
   fornecedor: string | null
   /** Unidade de venda (obrigatoria). */
@@ -195,7 +196,8 @@ export interface ProdutoRequest {
   unidadeId: string
   /** UUID da categoria; null = sem categoria. */
   categoriaId: string | null
-  marca: string | null
+  /** UUID da marca (qualquer nivel da arvore); null = sem marca. */
+  marcaId: string | null
   fornecedor: string | null
   descricao: string | null
   precoVenda: number

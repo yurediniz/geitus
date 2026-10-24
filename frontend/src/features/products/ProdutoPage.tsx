@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import {
   PRODUTOS_QUERY_KEY,
   TODAS_CATEGORIAS_QUERY_KEY,
+  TODAS_MARCAS_QUERY_KEY,
   TODAS_UNIDADES_QUERY_KEY,
   ehMensagemGenerica,
 } from '@/features/catalog/catalogoQuery'
@@ -60,6 +61,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useAvisoAlteracoesNaoSalvas } from '@/hooks/useAvisoAlteracoesNaoSalvas'
 import { listarCategorias } from '@/services/categoriaService'
 import { HttpError } from '@/services/httpClient'
+import { listarMarcas } from '@/services/marcaService'
 import {
   atualizarProduto,
   buscarProduto,
@@ -69,7 +71,7 @@ import {
   reativarProduto,
 } from '@/services/produtoService'
 import { listarUnidades } from '@/services/unidadeService'
-import type { Categoria, UnidadeMedida, UnidadeResumo } from '@/types/catalogo'
+import type { Categoria, Marca, UnidadeMedida, UnidadeResumo } from '@/types/catalogo'
 import type { Produto } from '@/types/produto'
 
 /** Chave do produto aberto; sob o prefixo de produtos (invalidado junto com as listas). */
@@ -105,7 +107,7 @@ function mensagemErroSalvar(erro: unknown): string {
       return 'Somente administradores podem cadastrar ou alterar produtos.'
     }
     if (erro.status === 404) {
-      return 'O produto, a unidade, a categoria ou uma embalagem escolhida não existe mais. Atualize a tela e tente novamente.'
+      return 'O produto, a unidade, a categoria, a marca ou uma embalagem escolhida não existe mais. Atualize a tela e tente novamente.'
     }
   }
   return 'Não foi possível salvar o produto. Tente novamente.'
@@ -474,6 +476,10 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     queryKey: TODAS_CATEGORIAS_QUERY_KEY,
     queryFn: () => listarCategorias(),
   })
+  const marcasQuery = useQuery<Marca[]>({
+    queryKey: TODAS_MARCAS_QUERY_KEY,
+    queryFn: () => listarMarcas(),
+  })
 
   // Unidades com o `fracionada` (lista + unidade do produto e das embalagens): as regras de fracao
   // (atacado, estoque inicial e embalagens) e as siglas das mensagens das embalagens.
@@ -725,12 +731,13 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
       } else {
         setErroSalvar({ mensagem: mensagemErroSalvar(erro), campos: [] })
       }
-      // 400/404: a unidade ou a categoria escolhida pode ter sido inativada ou
-      // removida; recarrega as listas para o select e o seletor sairem dela.
+      // 400/404: a unidade, a categoria ou a marca escolhida pode ter sido inativada ou
+      // removida; recarrega as listas para o select e os seletores sairem dela.
       if (erro instanceof HttpError && (erro.status === 400 || erro.status === 404)) {
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: TODAS_UNIDADES_QUERY_KEY }),
           queryClient.invalidateQueries({ queryKey: TODAS_CATEGORIAS_QUERY_KEY }),
+          queryClient.invalidateQueries({ queryKey: TODAS_MARCAS_QUERY_KEY }),
         ])
       }
     },
@@ -1034,6 +1041,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
               produto={produto}
               unidadesQuery={unidadesQuery}
               categoriasQuery={categoriasQuery}
+              marcasQuery={marcasQuery}
               siglaPorId={siglaPorId}
               desabilitado={desabilitado}
               somenteLeitura={somenteLeitura}

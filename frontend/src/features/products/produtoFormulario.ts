@@ -363,7 +363,7 @@ const camposDoProduto = {
   nomeCurto: textoOpcional(30, 'Nome curto deve ter no máximo 30 caracteres.'),
   unidadeId: z.string().min(1, 'Selecione a unidade de venda.'),
   categoriaId: z.string().nullable(),
-  marca: textoOpcional(100, 'Marca deve ter no máximo 100 caracteres.'),
+  marcaId: z.string().nullable(),
   fornecedor: textoOpcional(100, 'Fornecedor deve ter no máximo 100 caracteres.'),
   descricao: textoOpcional(1000, 'Descrição deve ter no máximo 1000 caracteres.'),
   precoVenda: numeroObrigatorio,
@@ -457,7 +457,7 @@ export const ROTULO_SECAO: Readonly<Record<SecaoProduto, string>> = {
  * leitura: nenhum campo.
  */
 export const CAMPOS_POR_SECAO: Readonly<Record<SecaoProduto, readonly (keyof ProdutoFormValues)[]>> = {
-  geral: ['nome', 'nomeCurto', 'unidadeId', 'precoVenda', 'categoriaId', 'marca', 'fornecedor', 'descricao'],
+  geral: ['nome', 'nomeCurto', 'unidadeId', 'precoVenda', 'categoriaId', 'marcaId', 'fornecedor', 'descricao'],
   codigos: ['codigoPendente', 'codigosBarras', 'codigo', 'vendidoBalanca', 'sku'],
   precos: [
     'custo',
@@ -554,7 +554,7 @@ export function valoresIniciais(unidadePadraoId = ''): ProdutoFormValues {
     nomeCurto: '',
     unidadeId: unidadePadraoId,
     categoriaId: null,
-    marca: '',
+    marcaId: null,
     fornecedor: '',
     descricao: '',
     precoVenda: '',
@@ -588,7 +588,7 @@ export function valoresParaCadastrarOutro(
   return {
     ...valoresIniciais(anteriores.unidadeId),
     categoriaId: anteriores.categoriaId,
-    marca: anteriores.marca,
+    marcaId: anteriores.marcaId,
     fornecedor: anteriores.fornecedor,
   }
 }
@@ -605,7 +605,7 @@ export function valoresDoProduto(produto: Produto): ProdutoFormValues {
     nomeCurto: produto.nomeCurto ?? '',
     unidadeId: produto.unidade.id,
     categoriaId: produto.categoria?.id ?? null,
-    marca: produto.marca ?? '',
+    marcaId: produto.marca?.id ?? null,
     fornecedor: produto.fornecedor ?? '',
     descricao: produto.descricao ?? '',
     precoVenda: String(produto.precoVenda),
@@ -670,7 +670,7 @@ export function montarRequest(valores: ProdutoFormValues, { novo = false }: { no
     nomeCurto: textoOuNulo(valores.nomeCurto),
     unidadeId: valores.unidadeId,
     categoriaId: valores.categoriaId,
-    marca: textoOuNulo(valores.marca),
+    marcaId: valores.marcaId,
     fornecedor: textoOuNulo(valores.fornecedor),
     descricao: textoOuNulo(valores.descricao),
     precoVenda: Number(valores.precoVenda),

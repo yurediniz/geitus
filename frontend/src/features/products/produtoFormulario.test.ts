@@ -63,7 +63,7 @@ describe('produtoFormulario', () => {
       'unidadeId',
       'precoVenda',
       'categoriaId',
-      'marca',
+      'marcaId',
       'fornecedor',
       'descricao',
     ])
@@ -159,7 +159,7 @@ describe('produtoFormulario', () => {
       nomeCurto: 'Arroz TJ',
       unidadeId: 'un',
       categoriaId: 'mercearia',
-      marca: 'Tio João',
+      marcaId: 'tio-joao',
       fornecedor: 'Distribuidora Sul',
       descricao: null,
       precoVenda: 25.9,
@@ -264,7 +264,7 @@ describe('produtoFormulario', () => {
       fornecedor: ' Atacadão ',
       precoVenda: '12.5',
     })
-    expect(request).toMatchObject({ nome: 'Café', nomeCurto: null, fornecedor: 'Atacadão', marca: null, custo: null })
+    expect(request).toMatchObject({ nome: 'Café', nomeCurto: null, fornecedor: 'Atacadão', marcaId: null, custo: null })
   })
 
   it('"cadastrar outro" mantem unidade, categoria, marca e fornecedor e limpa o resto', () => {
@@ -275,7 +275,7 @@ describe('produtoFormulario', () => {
     expect(valoresParaCadastrarOutro(anteriores)).toEqual({
       ...valoresIniciais('un'),
       categoriaId: 'mercearia',
-      marca: 'Tio João',
+      marcaId: 'tio-joao',
       fornecedor: 'Distribuidora Sul',
     })
   })
