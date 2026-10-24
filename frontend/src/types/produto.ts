@@ -104,6 +104,8 @@ export interface CustoOrigem {
   tipo: OrigemDoCusto
   /** Quando a origem foi registrada (yyyy-mm-ddThh:mm:ss, horario do servidor). */
   em: string
+  /** Fornecedor informado na ultima entrada por compra (Fase B5); null em `EDICAO` ou sem fornecedor. */
+  fornecedorNome?: string | null
   /** Quantidade da ultima entrada por compra, em unidades de venda; null em `EDICAO`. */
   quantidade: number | null
   /** Rotulo da embalagem da ultima compra ("CX c/ 18 UN"); null em `EDICAO` ou com a compra em unidades. */
@@ -112,8 +114,21 @@ export interface CustoOrigem {
   quantidadeDeEmbalagens: number | null
 }
 
-/** Campos de texto livre com sugestoes dos valores ja usados na empresa. */
-export type CampoSugestaoProduto = 'fornecedor'
+/** Fornecedor na lista do produto (Fase B5), ordenada por nome. */
+export interface FornecedorDoProduto {
+  id: string
+  numero: number
+  nome: string
+  /** Inativo continua na lista em que ja estava (marcado "(inativo)"), mas nao e oferecido de novo. */
+  ativo: boolean
+}
+
+/** O "Fornecedor da última compra" do produto: um da lista. */
+export interface FornecedorDaUltimaCompra {
+  id: string
+  numero: number
+  nome: string
+}
 
 /** Produto conforme retornado pela API. */
 export interface Produto {
@@ -134,8 +149,10 @@ export interface Produto {
   categoria: CategoriaResumo | null
   /** Marca do cadastro de marcas, com o caminho ("Boehringer › Nexgard"); null = sem marca. */
   marca: MarcaResumo | null
-  /** Fornecedor principal em texto livre. */
-  fornecedor: string | null
+  /** Fornecedores que vendem o produto (a mesma lista vista na tela do fornecedor). */
+  fornecedores: FornecedorDoProduto[]
+  /** Um dos `fornecedores`; null sem compra registrada (ou se ele saiu da lista). */
+  fornecedorUltimaCompra: FornecedorDaUltimaCompra | null
   /** Unidade de venda (obrigatoria). */
   unidade: UnidadeResumo
   descricao: string | null
@@ -198,7 +215,10 @@ export interface ProdutoRequest {
   categoriaId: string | null
   /** UUID da marca (qualquer nivel da arvore); null = sem marca. */
   marcaId: string | null
-  fornecedor: string | null
+  /** Lista completa dos fornecedores do produto (UUIDs, ate 20); o PATCH a substitui. */
+  fornecedorIds: string[]
+  /** Um dos `fornecedorIds`; null = nenhum. */
+  fornecedorUltimaCompraId: string | null
   descricao: string | null
   precoVenda: number
   custo: number | null

@@ -47,7 +47,7 @@ export function SecaoMovimentosEstoque({ produtoId, sigla, controlaEstoque }: Se
 
 /** Um movimento: tipo e motivo em destaque; quando, quem e a observacao como apoio; quantidade e saldos a direita. */
 function LinhaMovimento({ movimento, sigla }: { movimento: MovimentoEstoque; sigla: string }) {
-  const { titulo, quantidade, saldos, saldosFalados, custo } = textoMovimento(movimento, sigla)
+  const { titulo, quantidade, saldos, saldosFalados, custo, fornecedor } = textoMovimento(movimento, sigla)
   return (
     <li className="flex flex-wrap items-start justify-between gap-x-6 gap-y-1 py-3 first:pt-0 last:pb-0">
       <div className="min-w-0 space-y-0.5">
@@ -57,6 +57,14 @@ function LinhaMovimento({ movimento, sigla }: { movimento: MovimentoEstoque; sig
           <span aria-hidden="true"> · </span>
           <span className="sr-only">, por </span>
           <span>{movimento.usuarioNome}</span>
+          {/* Na entrada por compra com fornecedor (spec B5 §6): "· Fornecedor: Distribuidora Sul". */}
+          {fornecedor && (
+            <>
+              <span aria-hidden="true"> · </span>
+              <span className="sr-only">, </span>
+              <span>{fornecedor}</span>
+            </>
+          )}
         </p>
         {movimento.observacao && <p className="text-sm text-muted-foreground break-words">{movimento.observacao}</p>}
       </div>

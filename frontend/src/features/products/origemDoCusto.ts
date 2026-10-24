@@ -20,8 +20,9 @@ function embalagensDaCompra(compra: {
 /**
  * Nota abaixo do campo Custo (spec B4 §4): "Último custo de entrada: R$ 10,00
  * por UN, em 24/10/2026 (compra de 2 CX c/ 18 UN)." (a compra so quando foi em
- * embalagem) ou "Custo editado manualmente em 24/10/2026.". Null sem origem
- * (produto anterior a Fase B4) ou sem custo.
+ * embalagem) ou "Custo editado manualmente em 24/10/2026.". Com o fornecedor da
+ * compra (spec B5 §6), ele vem no fim: "..., de Distribuidora Sul.". Null sem
+ * origem (produto anterior a Fase B4) ou sem custo.
  */
 export function notaDaOrigemDoCusto(
   custo: number | null,
@@ -37,7 +38,8 @@ export function notaDaOrigemDoCusto(
   }
   const embalagens = embalagensDaCompra(origem)
   const compra = embalagens ? ` (compra de ${embalagens})` : ''
-  return `Último custo de entrada: ${formatarMoeda(custo)} por ${sigla}, em ${data}${compra}.`
+  const fornecedor = origem.fornecedorNome ? `, de ${origem.fornecedorNome}` : ''
+  return `Último custo de entrada: ${formatarMoeda(custo)} por ${sigla}, em ${data}${compra}${fornecedor}.`
 }
 
 /**

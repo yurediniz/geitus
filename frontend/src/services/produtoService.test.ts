@@ -8,7 +8,6 @@ import {
   inativarProduto,
   listarHistoricoDePrecos,
   listarProdutos,
-  listarSugestoes,
   reativarProduto,
   sugerirSku,
 } from '@/services/produtoService'
@@ -37,7 +36,8 @@ const produtoRequest: ProdutoRequest = {
   unidadeId: '6f1c2b8e-0000-4000-8000-000000000001',
   categoriaId: null,
   marcaId: null,
-  fornecedor: null,
+  fornecedorIds: [],
+  fornecedorUltimaCompraId: null,
   descricao: null,
   precoVenda: 25.9,
   custo: null,
@@ -173,23 +173,6 @@ describe('produtoService', () => {
 
     await expect(sugerirSku()).resolves.toBe('P000031')
     expect(apiGetMock).toHaveBeenCalledWith('/produtos/sku/sugestao', { autenticada: true })
-  })
-
-  it('lista sugestoes de fornecedor com o termo aparado', async () => {
-    apiGetMock.mockResolvedValue(['Distribuidora Sul'])
-
-    await expect(listarSugestoes('fornecedor', ' dist ')).resolves.toEqual(['Distribuidora Sul'])
-    expect(apiGetMock).toHaveBeenCalledWith('/produtos/sugestoes?campo=fornecedor&termo=dist', {
-      autenticada: true,
-    })
-  })
-
-  it('lista sugestoes de fornecedor sem termo (mais usados)', async () => {
-    apiGetMock.mockResolvedValue([])
-
-    await listarSugestoes('fornecedor', '  ')
-
-    expect(apiGetMock).toHaveBeenCalledWith('/produtos/sugestoes?campo=fornecedor', { autenticada: true })
   })
 
   it('lista o historico de precos paginado do produto (pagina e tamanho na URL)', async () => {

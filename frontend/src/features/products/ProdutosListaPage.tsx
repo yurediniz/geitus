@@ -17,6 +17,7 @@ import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { mensagemDeSucesso } from '@/features/products/estoque/ajusteEstoque'
 import { ModalAjusteEstoque } from '@/features/products/estoque/ModalAjusteEstoque'
 import { CardsProdutos } from '@/features/products/listagem/CardsProdutos'
+import { fornecedorParaACompra } from '@/features/products/fornecedoresGravados'
 import { FiltrosProdutos } from '@/features/products/listagem/FiltrosProdutos'
 import { TabelaProdutos } from '@/features/products/listagem/TabelaProdutos'
 import { FILTROS_PADRAO, useFiltrosDaListaDeProdutos } from '@/features/products/listagem/useFiltrosDaListaDeProdutos'
@@ -384,6 +385,7 @@ export function ProdutosListaPage() {
           sigla={ajuste.produto.unidade.sigla}
           fracionada={ajuste.produto.unidade.fracionada}
           custo={ajuste.produto.custo}
+          fornecedorDaCompra={fornecedorParaACompra(ajuste.produto)}
           aoFechar={() => setAjuste(null)}
           focoAoFechar={() => (ajuste.origem.isConnected ? ajuste.origem : null)}
           aoConcluir={(movimento) => {

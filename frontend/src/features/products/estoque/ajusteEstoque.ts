@@ -217,7 +217,7 @@ export interface ContextoAjuste {
   embalagens?: readonly EmbalagemDoAjuste[]
 }
 
-export type CampoAjuste = 'tipo' | 'quantidade' | 'embalagemId' | 'custo' | 'motivo' | 'observacao'
+export type CampoAjuste = 'tipo' | 'quantidade' | 'embalagemId' | 'custo' | 'fornecedorId' | 'motivo' | 'observacao'
 
 /**
  * Embalagem que o seletor "Em" traz ao trocar o tipo ou o motivo (spec B3 §6):
@@ -464,6 +464,8 @@ export interface TextoMovimento {
   saldosFalados: string
   /** Custo da entrada por compra: "R$ 180,00 por CX (R$ 10,00 por UN)"; null nos demais movimentos. */
   custo: string | null
+  /** "Fornecedor: Distribuidora Sul" da entrada por compra com fornecedor (spec B5 §6); null sem. */
+  fornecedor: string | null
 }
 
 /** " (2 CX c/ 18 UN)" do movimento informado em embalagens; '' sem o retrato. */
@@ -480,5 +482,6 @@ export function textoMovimento(movimento: MovimentoEstoque, sigla: string): Text
     saldos: `${numero(movimento.saldoAnterior)} → ${numero(movimento.saldoNovo)}`,
     saldosFalados: `saldo de ${numero(movimento.saldoAnterior)} para ${numero(movimento.saldoNovo)}`,
     custo: textoDoCustoDoMovimento(movimento, sigla),
+    fornecedor: movimento.fornecedor ? `Fornecedor: ${movimento.fornecedor.nome}` : null,
   }
 }

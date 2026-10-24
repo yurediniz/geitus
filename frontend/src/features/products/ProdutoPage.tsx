@@ -7,6 +7,7 @@ import { ArrowLeft, Loader2, RotateCcw, Trash2, XCircle } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
+  FORNECEDORES_QUERY_KEY,
   PRODUTOS_QUERY_KEY,
   TODAS_CATEGORIAS_QUERY_KEY,
   TODAS_MARCAS_QUERY_KEY,
@@ -17,6 +18,7 @@ import { ConfirmarExclusaoDialog } from '@/features/catalog/ConfirmarExclusaoDia
 import { AvisoSomenteLeitura, ErroInline, FeedbackCatalogo } from '@/features/catalog/FeedbackCatalogo'
 import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { formatarQuantidade } from '@/features/products/formatacaoProduto'
+import { useFornecedoresGravados } from '@/features/products/fornecedoresGravados'
 import { destinoDaLista, type EstadoParaLista } from '@/features/products/navegacaoProdutos'
 import {
   CAMPOS_DA_EMBALAGEM,
@@ -107,7 +109,7 @@ function mensagemErroSalvar(erro: unknown): string {
       return 'Somente administradores podem cadastrar ou alterar produtos.'
     }
     if (erro.status === 404) {
-      return 'O produto, a unidade, a categoria, a marca ou uma embalagem escolhida não existe mais. Atualize a tela e tente novamente.'
+      return 'O produto, a unidade, a categoria, a marca, um fornecedor ou uma embalagem escolhida não existe mais. Atualize a tela e tente novamente.'
     }
   }
   return 'Não foi possível salvar o produto. Tente novamente.'
@@ -521,6 +523,9 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     'Você alterou este produto e ainda não salvou. Se sair agora, as alterações serão perdidas.',
   )
 
+  // Uma entrada por compra com fornecedor (modal de estoque) muda os fornecedores gravados com a pagina aberta.
+  useFornecedoresGravados(produto, form)
+
   useEffect(() => {
     if (saida) {
       // replace: o "Voltar" do navegador nao reabre o produto recem-salvo ou ja excluido.
@@ -738,6 +743,8 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
           queryClient.invalidateQueries({ queryKey: TODAS_UNIDADES_QUERY_KEY }),
           queryClient.invalidateQueries({ queryKey: TODAS_CATEGORIAS_QUERY_KEY }),
           queryClient.invalidateQueries({ queryKey: TODAS_MARCAS_QUERY_KEY }),
+          // Um fornecedor escolhido pode ter sido inativado ou excluido.
+          queryClient.invalidateQueries({ queryKey: FORNECEDORES_QUERY_KEY }),
         ])
       }
     },

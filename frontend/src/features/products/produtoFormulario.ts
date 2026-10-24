@@ -356,6 +356,11 @@ function erroDoPrecoDaEmbalagem(embalagem: EmbalagemFormValues, precoMinimo: str
   return `O preço da embalagem dá ${formatarMoeda(Number(porUnidade))} por ${siglaDeVenda}, abaixo do preço mínimo (${formatarMoeda(Number(precoMinimo))}).`
 }
 
+/** Fornecedores por produto (spec B5 §5). */
+export const MAXIMO_FORNECEDORES = 20
+export const MENSAGEM_ULTIMA_COMPRA_FORA_DA_LISTA =
+  'O fornecedor da última compra precisa estar na lista de fornecedores.'
+
 const camposDoProduto = {
   nome: z.string().trim()
     .min(1, 'Informe o nome do produto.')
@@ -364,7 +369,12 @@ const camposDoProduto = {
   unidadeId: z.string().min(1, 'Selecione a unidade de venda.'),
   categoriaId: z.string().nullable(),
   marcaId: z.string().nullable(),
-  fornecedor: textoOpcional(100, 'Fornecedor deve ter no máximo 100 caracteres.'),
+  /** Fornecedores do produto (Fase B5), com o nome para a tela; o request leva so os ids. */
+  fornecedores: z
+    .array(z.object({ id: z.string(), numero: z.number(), nome: z.string(), ativo: z.boolean() }))
+    .max(MAXIMO_FORNECEDORES, `Informe no máximo ${MAXIMO_FORNECEDORES} fornecedores.`),
+  /** Um dos `fornecedores`; null = nenhum. */
+  fornecedorUltimaCompraId: z.string().nullable(),
   descricao: textoOpcional(1000, 'Descrição deve ter no máximo 1000 caracteres.'),
   precoVenda: numeroObrigatorio,
   custo: numeroOpcional('Custo não pode ser negativo.'),
@@ -414,6 +424,10 @@ export function produtoSchemaCom(unidades: readonly UnidadeComFracao[]) {
     validarEstoque(valores, ctx)
     validarCodigoProduto(valores, ctx)
     validarEmbalagens(valores, unidades, ctx)
+    const ultimaCompra = valores.fornecedorUltimaCompraId
+    if (ultimaCompra !== null && !valores.fornecedores.some((fornecedor) => fornecedor.id === ultimaCompra)) {
+      ctx.addIssue({ path: ['fornecedorUltimaCompraId'], code: 'custom', message: MENSAGEM_ULTIMA_COMPRA_FORA_DA_LISTA })
+    }
     const preenchido = (valor: string) => valor.trim() !== ''
     if (
       preenchido(valores.precoMinimo) &&
@@ -457,7 +471,17 @@ export const ROTULO_SECAO: Readonly<Record<SecaoProduto, string>> = {
  * leitura: nenhum campo.
  */
 export const CAMPOS_POR_SECAO: Readonly<Record<SecaoProduto, readonly (keyof ProdutoFormValues)[]>> = {
-  geral: ['nome', 'nomeCurto', 'unidadeId', 'precoVenda', 'categoriaId', 'marcaId', 'fornecedor', 'descricao'],
+  geral: [
+    'nome',
+    'nomeCurto',
+    'unidadeId',
+    'precoVenda',
+    'categoriaId',
+    'marcaId',
+    'fornecedores',
+    'fornecedorUltimaCompraId',
+    'descricao',
+  ],
   codigos: ['codigoPendente', 'codigosBarras', 'codigo', 'vendidoBalanca', 'sku'],
   precos: [
     'custo',
@@ -555,7 +579,8 @@ export function valoresIniciais(unidadePadraoId = ''): ProdutoFormValues {
     unidadeId: unidadePadraoId,
     categoriaId: null,
     marcaId: null,
-    fornecedor: '',
+    fornecedores: [],
+    fornecedorUltimaCompraId: null,
     descricao: '',
     precoVenda: '',
     custo: '',
@@ -589,8 +614,14 @@ export function valoresParaCadastrarOutro(
     ...valoresIniciais(anteriores.unidadeId),
     categoriaId: anteriores.categoriaId,
     marcaId: anteriores.marcaId,
-    fornecedor: anteriores.fornecedor,
+    // A lista vale para o proximo (mesmo fornecedor); a ultima compra e um fato de cada produto.
+    fornecedores: anteriores.fornecedores,
   }
+}
+
+/** A lista de fornecedores do produto como o formulario a guarda (o `ativo` marca "(inativo)"). */
+export function fornecedoresDoProduto(produto: Produto): ProdutoFormValues['fornecedores'] {
+  return produto.fornecedores.map(({ id, numero, nome, ativo }) => ({ id, numero, nome, ativo }))
 }
 
 /** Numero da API no formato do campo do formulario ("9.5"; null -> ''). */
@@ -606,7 +637,8 @@ export function valoresDoProduto(produto: Produto): ProdutoFormValues {
     unidadeId: produto.unidade.id,
     categoriaId: produto.categoria?.id ?? null,
     marcaId: produto.marca?.id ?? null,
-    fornecedor: produto.fornecedor ?? '',
+    fornecedores: fornecedoresDoProduto(produto),
+    fornecedorUltimaCompraId: produto.fornecedorUltimaCompra?.id ?? null,
     descricao: produto.descricao ?? '',
     precoVenda: String(produto.precoVenda),
     custo: numeroParaTexto(produto.custo),
@@ -671,7 +703,8 @@ export function montarRequest(valores: ProdutoFormValues, { novo = false }: { no
     unidadeId: valores.unidadeId,
     categoriaId: valores.categoriaId,
     marcaId: valores.marcaId,
-    fornecedor: textoOuNulo(valores.fornecedor),
+    fornecedorIds: valores.fornecedores.map((fornecedor) => fornecedor.id),
+    fornecedorUltimaCompraId: valores.fornecedorUltimaCompraId,
     descricao: textoOuNulo(valores.descricao),
     precoVenda: Number(valores.precoVenda),
     custo: numeroOuNulo(valores.custo),
@@ -992,6 +1025,7 @@ const CAMPO_DO_FORMULARIO_POR_CHAVE: ReadonlyMap<string, keyof ProdutoFormValues
   ['atacado', 'precoAtacado'],
   ['atacado.preco', 'precoAtacado'],
   ['atacado.quantidadeMinima', 'quantidadeMinimaAtacado'],
+  ['fornecedorIds', 'fornecedores'],
 ])
 
 /** Chave indexada de um campo de embalagem: `embalagens[1].quantidade` (e `...codigosBarras[2]`). */
@@ -1014,7 +1048,9 @@ export function campoDaChaveDoServidor(chave: string): string {
     const [, indice, campo] = daEmbalagem
     return (CAMPOS_DA_EMBALAGEM as readonly string[]).includes(campo) ? `embalagens.${indice}.${campo}` : 'embalagens'
   }
-  return chave.split(/[[.]/)[0]
+  const raiz = chave.split(/[[.]/)[0]
+  // `fornecedorIds[2]` (fornecedor inexistente ou inativo): o campo da lista.
+  return raiz === 'fornecedorIds' ? 'fornecedores' : raiz
 }
 
 /** Interruptor do bloco a que o campo pertence (para ligar o bloco ao receber um erro nele). */

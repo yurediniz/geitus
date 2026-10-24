@@ -7,7 +7,7 @@ import { CampoMoeda } from '@/components/ui/campo-moeda'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
-import { PRODUTOS_QUERY_KEY, ehMensagemGenerica } from '@/features/catalog/catalogoQuery'
+import { FORNECEDORES_QUERY_KEY, PRODUTOS_QUERY_KEY, ehMensagemGenerica } from '@/features/catalog/catalogoQuery'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
 import { ErroDoCampo, MarcaObrigatorio } from '@/features/products/CamposFormulario'
 import {
@@ -36,12 +36,14 @@ import {
   type PreviaSaldo,
 } from '@/features/products/estoque/ajusteEstoque'
 import { formatarQuantidade } from '@/features/products/formatacaoProduto'
+import { BuscaDeFornecedor } from '@/features/suppliers/BuscaDeFornecedor'
 import { interpretarQuantidade } from '@/lib/quantidade'
 import { gerarUuid } from '@/lib/uuid'
 import { cn } from '@/lib/utils'
 import { ajustarEstoque } from '@/services/estoqueService'
 import { HttpError } from '@/services/httpClient'
 import type { AjusteEstoqueRequest, MotivoMovimento, MovimentoEstoque, TipoMovimento } from '@/types/estoque'
+import type { FornecedorDoProduto } from '@/types/produto'
 
 export interface ModalAjusteEstoqueProps {
   aberto: boolean
@@ -62,6 +64,11 @@ export interface ModalAjusteEstoqueProps {
    * e a previa da entrada por compra (spec B4 §7.1). Null/ausente = sem custo.
    */
   custo?: number | null
+  /**
+   * Fornecedor que a entrada por compra traz preenchido (spec B5 §6): o da
+   * ultima compra, se ativo. Null/ausente = o campo comeca vazio.
+   */
+  fornecedorDaCompra?: FornecedorDoProduto | null
   aoFechar: () => void
   /** Quem recebe o foco ao fechar (ex.: o botao que abriu; no Safari o clique nao foca o botao). */
   focoAoFechar?: () => HTMLElement | null
@@ -99,6 +106,7 @@ const ID_CAMPO: Readonly<Record<CampoAjuste, string>> = {
   custo: 'ajuste-custo',
   motivo: 'ajuste-motivo',
   observacao: 'ajuste-observacao',
+  fornecedorId: 'ajuste-fornecedor',
 }
 const ID_ERRO_GERAL = 'ajuste-erro-geral'
 const ID_PREVIA = 'ajuste-previa'
@@ -108,7 +116,15 @@ const ID_DICA_CUSTO = 'ajuste-custo-dica'
 const ID_CUSTO_POR_UNIDADE = 'ajuste-custo-por-unidade'
 
 /** Ordem de foco quando ha erro (a ordem da tela). */
-const ORDEM_CAMPOS: readonly CampoAjuste[] = ['tipo', 'quantidade', 'embalagemId', 'custo', 'motivo', 'observacao']
+const ORDEM_CAMPOS: readonly CampoAjuste[] = [
+  'tipo',
+  'quantidade',
+  'embalagemId',
+  'custo',
+  'fornecedorId',
+  'motivo',
+  'observacao',
+]
 
 function ehCampoAjuste(chave: string): chave is CampoAjuste {
   return (ORDEM_CAMPOS as readonly string[]).includes(chave)
@@ -128,6 +144,7 @@ function primeiroCampoComErro(erros: Partial<Record<CampoAjuste, string>>): Camp
 const MENSAGEM_FALHA = 'Não foi possível registrar o ajuste. Confira a conexão e tente de novo.'
 const MENSAGEM_EMBALAGEM_REMOVIDA =
   'A embalagem escolhida foi removida. Confira a quantidade e o custo e tente de novo.'
+const MENSAGEM_FORNECEDOR_REMOVIDO = 'O fornecedor escolhido não existe mais. Escolha outro ou deixe sem fornecedor.'
 const MENSAGEM_CONFLITO =
   'Um ajuste deste produto já foi registrado agora há pouco. Confira o saldo atual antes de confirmar de novo.'
 
@@ -155,6 +172,7 @@ function ConteudoAjuste({
   fracionada,
   embalagens = SEM_EMBALAGENS,
   custo: custoAtual = null,
+  fornecedorDaCompra = null,
   aoFechar,
   focoAoFechar,
   aoConcluir,
@@ -171,6 +189,8 @@ function ConteudoAjuste({
     // Comeca vazio (spec B4 §7.1): o ultimo custo aparece so como dica.
     custo: '',
   }))
+  // Fornecedor da compra (spec B5 §6): so vai no envio da Entrada com Compra.
+  const [fornecedor, setFornecedor] = useState<FornecedorDoProduto | null>(fornecedorDaCompra)
   // Escolhida no seletor: trocar o tipo ou o motivo deixa de trocar a embalagem pelo padrao.
   const [embalagemEscolhida, setEmbalagemEscolhida] = useState(false)
   const [errosEnvio, setErrosEnvio] = useState<Partial<Record<CampoAjuste, string>>>({})
@@ -185,8 +205,12 @@ function ConteudoAjuste({
 
   const mutation = useMutation<MovimentoEstoque, unknown, AjusteEstoqueRequest>({
     mutationFn: (ajuste) => ajustarEstoque(produtoId, ajuste),
-    onSuccess: (movimento) => {
+    onSuccess: (movimento, ajuste) => {
       atualizarProdutos()
+      if (ajuste.fornecedorId) {
+        // O fornecedor pode ter entrado na lista do produto (a contagem de produtos dele mudou).
+        void queryClient.invalidateQueries({ queryKey: FORNECEDORES_QUERY_KEY })
+      }
       aoConcluir(movimento)
     },
     onError: (erro, ajuste) => {
@@ -222,8 +246,14 @@ function ConteudoAjuste({
       } else if (erro instanceof HttpError && erro.status === 403) {
         setErroGeral('Somente administradores podem ajustar o estoque.')
       } else if (erro instanceof HttpError && erro.status === 404) {
-        // Com embalagem, o 404 e dela (removida com o modal aberto); sem, do produto.
-        setErroGeral(ajuste.embalagemId ? MENSAGEM_EMBALAGEM_REMOVIDA : 'Este produto não existe mais. Atualize a tela.')
+        // Com embalagem, o 404 e dela (removida com o modal aberto); com fornecedor, dele; sem os dois, do produto.
+        setErroGeral(
+          ajuste.embalagemId
+            ? MENSAGEM_EMBALAGEM_REMOVIDA
+            : ajuste.fornecedorId
+              ? MENSAGEM_FORNECEDOR_REMOVIDO
+              : 'Este produto não existe mais. Atualize a tela.',
+        )
       } else {
         setErroGeral(MENSAGEM_FALHA)
       }
@@ -338,6 +368,8 @@ function ConteudoAjuste({
       ...(embalagem ? { embalagemId: embalagem.id } : {}),
       // Com embalagem, o custo de 1 embalagem, como digitado: o backend divide.
       ...(comCusto ? { custo: Number(dados.custo) } : {}),
+      // O fornecedor so vai na entrada por compra (fora dela, o backend recusa).
+      ...(comCusto && fornecedor ? { fornecedorId: fornecedor.id } : {}),
     })
   }
 
@@ -523,6 +555,37 @@ function ConteudoAjuste({
               </p>
             )}
             <ErroDoCampo id={`${ID_CAMPO.custo}-erro`} mensagem={erroCusto} />
+          </div>
+        )}
+
+        {/* Fornecedor da compra (spec B5 §6): opcional, abaixo do custo, so dos ativos. */}
+        {comCusto && (
+          <div className="space-y-1.5">
+            <span id={`${ID_CAMPO.fornecedorId}-rotulo`} className="block text-sm font-medium">
+              Fornecedor (opcional)
+            </span>
+            <BuscaDeFornecedor
+              id={ID_CAMPO.fornecedorId}
+              idRotulo={`${ID_CAMPO.fornecedorId}-rotulo`}
+              valor={fornecedor}
+              onChange={(escolhido) => {
+                setFornecedor(escolhido)
+                setErrosEnvio(({ fornecedorId: _fornecedor, ...demais }) => demais)
+              }}
+              textoSemValor="Nenhum"
+              permitirLimpar
+              desabilitado={enviando}
+              invalido={Boolean(errosEnvio.fornecedorId)}
+              idsDescricao={
+                errosEnvio.fornecedorId ? `${ID_CAMPO.fornecedorId}-erro` : `${ID_CAMPO.fornecedorId}-ajuda`
+              }
+            />
+            {!errosEnvio.fornecedorId && (
+              <p id={`${ID_CAMPO.fornecedorId}-ajuda`} className="text-xs text-muted-foreground">
+                Com fornecedor, ele entra na lista do produto como o da última compra.
+              </p>
+            )}
+            <ErroDoCampo id={`${ID_CAMPO.fornecedorId}-erro`} mensagem={errosEnvio.fornecedorId} />
           </div>
         )}
 

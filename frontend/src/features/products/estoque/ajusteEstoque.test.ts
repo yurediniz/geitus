@@ -212,6 +212,7 @@ describe('ajusteEstoque', () => {
         saldos: '12 → 10',
         saldosFalados: 'saldo de 12 para 10',
         custo: null,
+        fornecedor: null,
       })
     })
 
@@ -235,6 +236,7 @@ describe('ajusteEstoque', () => {
         saldos: '0 → 2,5',
         saldosFalados: 'saldo de 0 para 2,5',
         custo: null,
+        fornecedor: null,
       })
       expect(textoMovimento({ ...MOVIMENTO, tipo: 'AJUSTE', motivo: 'CONTAGEM' }, 'UN').titulo).toBe(
         'Ajuste · Contagem/inventário',
@@ -483,6 +485,17 @@ describe('ajusteEstoque', () => {
       const terco: MovimentoEstoque = { ...compraEmCaixa, custoInformado: 100, custoUnitario: 33.3333 }
       expect(semNbsp(textoMovimento(terco, 'UN').custo)).toBe('R$ 100,00 por CX (R$ 33,33 por UN)')
       expect(textoMovimento(MOVIMENTO, 'UN').custo).toBeNull()
+    })
+
+    it('o movimento de compra com fornecedor mostra "Fornecedor: {nome}" (spec B5 §6)', () => {
+      const compra: MovimentoEstoque = {
+        ...MOVIMENTO,
+        tipo: 'ENTRADA',
+        motivo: 'COMPRA',
+        fornecedor: { id: 'dist-sul', nome: 'Distribuidora Sul' },
+      }
+      expect(textoMovimento(compra, 'UN').fornecedor).toBe('Fornecedor: Distribuidora Sul')
+      expect(textoMovimento({ ...compra, fornecedor: null }, 'UN').fornecedor).toBeNull()
     })
   })
 })

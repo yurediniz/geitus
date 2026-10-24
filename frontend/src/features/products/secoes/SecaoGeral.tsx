@@ -9,7 +9,6 @@ import {
   CampoTexto,
   ErroDoCampo,
 } from '@/features/products/CamposFormulario'
-import { CampoSugestao } from '@/features/products/CampoSugestao'
 import {
   TAMANHO_MAXIMO_NOME_CURTO,
   nomeCurtoEfetivo,
@@ -17,6 +16,7 @@ import {
   type ProdutoFormValues,
 } from '@/features/products/produtoFormulario'
 import { SeletorCategoria, SeletorMarca } from '@/features/products/SeletorCategoria'
+import { CamposFornecedoresDoProduto } from '@/features/products/secoes/CamposFornecedoresDoProduto'
 import type { Categoria, Marca, UnidadeMedida } from '@/types/catalogo'
 import type { Produto } from '@/types/produto'
 
@@ -210,26 +210,7 @@ export function SecaoGeral({
             onTentarNovamente={() => marcasQuery.refetch()}
           />
         </div>
-        <Controller
-          control={control}
-          name="fornecedor"
-          render={({ field }) => (
-            <CampoSugestao
-              id="fornecedor"
-              rotulo="Fornecedor principal (opcional)"
-              campo="fornecedor"
-              valor={field.value}
-              onChange={(fornecedor) => {
-                field.onChange(fornecedor)
-                aoAlterarCampo()
-              }}
-              onBlur={field.onBlur}
-              desabilitado={desabilitado}
-              maxLength={100}
-              erro={errors.fornecedor?.message}
-            />
-          )}
-        />
+        <CamposFornecedoresDoProduto desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
       </div>
 
       <div className="space-y-1.5">

@@ -9,6 +9,7 @@ import { ModalAjusteEstoque } from '@/features/products/estoque/ModalAjusteEstoq
 import { SeloSituacaoEstoque } from '@/features/products/estoque/SeloSituacaoEstoque'
 import { mensagemDeSucesso } from '@/features/products/estoque/ajusteEstoque'
 import { formatarQuantidade } from '@/features/products/formatacaoProduto'
+import { fornecedorParaACompra } from '@/features/products/fornecedoresGravados'
 import type { ProdutoFormValues } from '@/features/products/produtoFormulario'
 import { conversaoEmEmbalagens, embalagemPrincipal } from '@/lib/embalagem'
 import { interpretarQuantidade } from '@/lib/quantidade'
@@ -262,6 +263,7 @@ export function SecaoEstoque({
           fracionada={produto.unidade.fracionada}
           embalagens={embalagensDoAjuste}
           custo={produto.custo}
+          fornecedorDaCompra={fornecedorParaACompra(produto)}
           aoFechar={() => setAjustando(false)}
           focoAoFechar={() => botaoAjustarRef.current}
           aoConcluir={(movimento) => {

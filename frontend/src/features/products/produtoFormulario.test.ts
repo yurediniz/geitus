@@ -64,7 +64,8 @@ describe('produtoFormulario', () => {
       'precoVenda',
       'categoriaId',
       'marcaId',
-      'fornecedor',
+      'fornecedores',
+      'fornecedorUltimaCompraId',
       'descricao',
     ])
     expect(CAMPOS_POR_SECAO.precos).not.toContain('precoVenda')
@@ -160,7 +161,8 @@ describe('produtoFormulario', () => {
       unidadeId: 'un',
       categoriaId: 'mercearia',
       marcaId: 'tio-joao',
-      fornecedor: 'Distribuidora Sul',
+      fornecedorIds: ['dist-sul'],
+      fornecedorUltimaCompraId: 'dist-sul',
       descricao: null,
       precoVenda: 25.9,
       custo: 18,
@@ -261,13 +263,43 @@ describe('produtoFormulario', () => {
       ...valoresIniciais('un'),
       nome: '  Café  ',
       nomeCurto: '   ',
-      fornecedor: ' Atacadão ',
       precoVenda: '12.5',
     })
-    expect(request).toMatchObject({ nome: 'Café', nomeCurto: null, fornecedor: 'Atacadão', marcaId: null, custo: null })
+    expect(request).toMatchObject({
+      nome: 'Café',
+      nomeCurto: null,
+      marcaId: null,
+      fornecedorIds: [],
+      fornecedorUltimaCompraId: null,
+      custo: null,
+    })
+    expect(request).not.toHaveProperty('fornecedor')
   })
 
-  it('"cadastrar outro" mantem unidade, categoria, marca e fornecedor e limpa o resto', () => {
+  it('o request leva os ids dos fornecedores e o da ultima compra', () => {
+    const request = montarRequest(valoresDoProduto(produtoAtivo))
+    expect(request).toMatchObject({ fornecedorIds: ['dist-sul'], fornecedorUltimaCompraId: 'dist-sul' })
+  })
+
+  it('o da ultima compra precisa estar na lista; a lista vai ate 20', () => {
+    const base = { ...valoresIniciais('un'), nome: 'Arroz', precoVenda: '10' }
+    const foraDaLista = produtoSchema.safeParse({ ...base, fornecedorUltimaCompraId: 'sul' })
+    expect(foraDaLista.error?.issues.map((issue) => [issue.path.join('.'), issue.message])).toEqual([
+      ['fornecedorUltimaCompraId', 'O fornecedor da última compra precisa estar na lista de fornecedores.'],
+    ])
+    const vinteEUm = Array.from({ length: 21 }, (_, i) => ({ id: `f${i}`, numero: i, nome: `F${i}`, ativo: true }))
+    expect(produtoSchema.safeParse({ ...base, fornecedores: vinteEUm }).error?.issues[0]?.message).toBe(
+      'Informe no máximo 20 fornecedores.',
+    )
+  })
+
+  it('leva o erro de fornecedorIds do backend ao campo da lista', () => {
+    expect(campoDaChaveDoServidor('fornecedorIds')).toBe('fornecedores')
+    expect(campoDaChaveDoServidor('fornecedorIds[1]')).toBe('fornecedores')
+    expect(campoDaChaveDoServidor('fornecedorUltimaCompraId')).toBe('fornecedorUltimaCompraId')
+  })
+
+  it('"cadastrar outro" mantem unidade, categoria, marca e a lista de fornecedores e limpa o resto', () => {
     const anteriores: ProdutoFormValues = {
       ...valoresDoProduto(produtoAtivo),
       embalagens: [{ ...novaEmbalagem(), unidadeId: 'cx', quantidade: '12' }],
@@ -276,7 +308,9 @@ describe('produtoFormulario', () => {
       ...valoresIniciais('un'),
       categoriaId: 'mercearia',
       marcaId: 'tio-joao',
-      fornecedor: 'Distribuidora Sul',
+      fornecedores: [{ id: 'dist-sul', numero: 1, nome: 'Distribuidora Sul', ativo: true }],
+      // A ultima compra e um fato de cada produto.
+      fornecedorUltimaCompraId: null,
     })
   })
 

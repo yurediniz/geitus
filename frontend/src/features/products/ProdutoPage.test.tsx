@@ -15,12 +15,12 @@ import {
   excluirProduto,
   inativarProduto,
   listarHistoricoDePrecos,
-  listarSugestoes,
   reativarProduto,
   sugerirSku,
 } from '@/services/produtoService'
 import { cadastrarCategoria, listarCategorias } from '@/services/categoriaService'
 import { cadastrarMarca, listarMarcas } from '@/services/marcaService'
+import { listarFornecedores } from '@/services/fornecedorService'
 import { ajustarEstoque, listarMovimentosDeEstoque } from '@/services/estoqueService'
 import { buscarConfiguracaoEtiqueta } from '@/services/etiquetaBalancaService'
 import { listarUnidades } from '@/services/unidadeService'
@@ -50,6 +50,7 @@ import {
 } from '@/test/intersectionObserver'
 import type { Categoria } from '@/types/catalogo'
 import type { MovimentoEstoque } from '@/types/estoque'
+import type { FornecedorItemLista } from '@/types/fornecedor'
 import type { HistoricoPreco, PaginaResponse, Produto, ProdutoRequest } from '@/types/produto'
 
 vi.mock('@/services/produtoService', () => ({
@@ -60,7 +61,6 @@ vi.mock('@/services/produtoService', () => ({
   reativarProduto: vi.fn(),
   excluirProduto: vi.fn(),
   sugerirSku: vi.fn(),
-  listarSugestoes: vi.fn(),
   listarHistoricoDePrecos: vi.fn(),
 }))
 
@@ -82,6 +82,10 @@ vi.mock('@/services/categoriaService', () => ({
   cadastrarCategoria: vi.fn(),
 }))
 
+vi.mock('@/services/fornecedorService', () => ({
+  listarFornecedores: vi.fn(),
+}))
+
 vi.mock('@/services/marcaService', () => ({
   listarMarcas: vi.fn(),
   cadastrarMarca: vi.fn(),
@@ -98,7 +102,7 @@ const inativarProdutoMock = vi.mocked(inativarProduto)
 const reativarProdutoMock = vi.mocked(reativarProduto)
 const excluirProdutoMock = vi.mocked(excluirProduto)
 const sugerirSkuMock = vi.mocked(sugerirSku)
-const listarSugestoesMock = vi.mocked(listarSugestoes)
+const listarFornecedoresMock = vi.mocked(listarFornecedores)
 const listarHistoricoDePrecosMock = vi.mocked(listarHistoricoDePrecos)
 const ajustarEstoqueMock = vi.mocked(ajustarEstoque)
 const listarMovimentosDeEstoqueMock = vi.mocked(listarMovimentosDeEstoque)
@@ -285,6 +289,47 @@ async function escolherMarca(caminho: string) {
   await waitFor(() => expect(seletor).toBeEnabled())
   fireEvent.click(seletor)
   fireEvent.click(await screen.findByRole('option', { name: caminho }))
+  // O painel fecha e devolve o foco ao gatilho: so depois disso outro painel pode abrir sem ser fechado.
+  await waitFor(() => expect(seletor).toHaveFocus())
+}
+
+/** Fornecedor como a busca da API o devolve. */
+function fornecedorDaBusca(id: string, numero: number, razaoSocial: string): FornecedorItemLista {
+  return {
+    id,
+    numero,
+    razaoSocial,
+    nomeFantasia: null,
+    tipoPessoa: 'PJ',
+    documento: null,
+    telefone: null,
+    representantePrincipal: null,
+    quantidadeProdutos: 0,
+    ativo: true,
+  }
+}
+
+const FORNECEDORES_DA_BUSCA = [
+  fornecedorDaBusca('norte', 2, 'Atacadão Norte'),
+  fornecedorDaBusca('dist-sul', 1, 'Distribuidora Sul'),
+]
+
+function botaoAdicionarFornecedor(): HTMLElement {
+  return screen.getByRole('button', { name: /^fornecedores \(opcional\)/i })
+}
+
+/** Abre a busca de fornecedores do produto e escolhe pelo nome. */
+async function adicionarFornecedor(nome: string) {
+  fireEvent.click(botaoAdicionarFornecedor())
+  fireEvent.click(await screen.findByRole('option', { name: new RegExp(nome) }))
+}
+
+function listaDeFornecedores(): HTMLElement {
+  return screen.getByRole('list', { name: /^fornecedores \(opcional\)/i })
+}
+
+function campoUltimaCompra(): HTMLElement {
+  return screen.getByLabelText('Fornecedor da última compra (opcional)')
 }
 
 function rotulosDasOpcoes(select: HTMLElement): string[] {
@@ -299,7 +344,8 @@ const REQUEST_VAZIO: ProdutoRequest = {
   unidadeId: 'un',
   categoriaId: null,
   marcaId: null,
-  fornecedor: null,
+  fornecedorIds: [],
+  fornecedorUltimaCompraId: null,
   descricao: null,
   precoVenda: 0,
   custo: null,
@@ -323,7 +369,12 @@ describe('ProdutoPage', () => {
     listarUnidadesMock.mockResolvedValue(UNIDADES)
     listarCategoriasMock.mockResolvedValue(CATEGORIAS)
     listarMarcasMock.mockResolvedValue(MARCAS)
-    listarSugestoesMock.mockResolvedValue([])
+    listarFornecedoresMock.mockResolvedValue({
+      itens: FORNECEDORES_DA_BUSCA,
+      pagina: 0,
+      tamanho: 10,
+      totalItens: FORNECEDORES_DA_BUSCA.length,
+    })
     listarMovimentosDeEstoqueMock.mockResolvedValue({ itens: [], pagina: 0, tamanho: 20, totalItens: 0 })
     buscarConfiguracaoEtiquetaMock.mockResolvedValue({ ...CONFIGURACAO_ETIQUETA_PADRAO, padrao: true })
     instalarIntersectionObserverFalso()
@@ -486,7 +537,8 @@ describe('ProdutoPage', () => {
       const geral = secao(/^geral$/i)
       expect(within(geral).getByLabelText(/^nome curto/i)).toBeInTheDocument()
       expect(within(geral).getByLabelText(/^marca/i)).toBeInTheDocument()
-      expect(within(geral).getByLabelText(/^fornecedor principal/i)).toBeInTheDocument()
+      expect(within(geral).getByRole('button', { name: /^fornecedores \(opcional\)/i })).toBeInTheDocument()
+      expect(within(geral).getByLabelText('Fornecedor da última compra (opcional)')).toBeInTheDocument()
       expect(within(geral).getByLabelText(/preço de venda/i)).toBeInTheDocument()
       expect(within(geral).queryByLabelText(/código de barras/i)).not.toBeInTheDocument()
       expect(within(geral).queryByRole('heading', { name: 'Unidade e embalagem' })).not.toBeInTheDocument()
@@ -1069,7 +1121,7 @@ describe('ProdutoPage', () => {
       fireEvent.change(campoNome(), { target: { value: 'Café 500g' } })
       fireEvent.change(screen.getByLabelText(/^nome curto/i), { target: { value: 'Café' } })
       await escolherMarca('Golden')
-      fireEvent.change(screen.getByLabelText(/^fornecedor principal/i), { target: { value: 'Atacadão' } })
+      await adicionarFornecedor('Atacadão Norte')
       await waitFor(() => expect(screen.getByLabelText(/unidade de venda/i)).toHaveValue('un'))
       fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '12,50' } })
       fireEvent.change(screen.getByLabelText(/ponto de reposição/i), { target: { value: '8' } })
@@ -1083,7 +1135,7 @@ describe('ProdutoPage', () => {
           nome: 'Café 500g',
           nomeCurto: 'Café',
           marcaId: 'golden',
-          fornecedor: 'Atacadão',
+          fornecedorIds: ['norte'],
           precoVenda: 12.5,
           pontoReposicao: 8,
           sku: 'SKU-CAFE',
@@ -1107,7 +1159,7 @@ describe('ProdutoPage', () => {
       fireEvent.click(seletor)
       fireEvent.click(await screen.findByRole('option', { name: 'Ração › Sachê' }))
       await escolherMarca('Golden')
-      fireEvent.change(screen.getByLabelText(/^fornecedor principal/i), { target: { value: 'PremieRpet' } })
+      await adicionarFornecedor('Atacadão Norte')
       fireEvent.change(screen.getByLabelText(/^nome curto/i), { target: { value: 'Sachê' } })
       fireEvent.change(campoCodigoBarras(), { target: { value: '7891000315507' } })
       fireEvent.keyDown(campoCodigoBarras(), { key: 'Enter' })
@@ -1132,7 +1184,7 @@ describe('ProdutoPage', () => {
       expect(screen.getByLabelText(/unidade de venda/i)).toHaveValue('kg')
       expect(screen.getByRole('button', { name: /^categoria/i })).toHaveTextContent('Ração › Sachê')
       expect(seletorDeMarca()).toHaveTextContent('Golden')
-      expect(screen.getByLabelText(/^fornecedor principal/i)).toHaveValue('PremieRpet')
+      expect(listaDeFornecedores()).toHaveTextContent('Atacadão Norte')
       expect(screen.getByLabelText(/preço de venda/i)).toHaveValue('')
       expect(screen.getByLabelText(/^custo/i)).toHaveValue('')
       expect(router.state.location.pathname).toBe('/produtos/novo')
@@ -1348,7 +1400,8 @@ describe('ProdutoPage', () => {
       expect(screen.getAllByText('Ativo').length).toBeGreaterThan(0)
       expect(campoNome()).toHaveValue('Arroz 5kg')
       expect(screen.getByLabelText(/^nome curto/i)).toHaveValue('Arroz TJ')
-      expect(screen.getByLabelText(/^fornecedor principal/i)).toHaveValue('Distribuidora Sul')
+      expect(listaDeFornecedores()).toHaveTextContent('Distribuidora Sul')
+      expect(campoUltimaCompra()).toHaveValue('dist-sul')
       expect(seletorDeMarca()).toHaveTextContent('Camil › Tio João')
       expect(screen.getByLabelText(/preço de venda/i)).toHaveValue('25,90')
       // A mesma lista de codigos aparece em etiquetas na Geral.
@@ -1810,7 +1863,6 @@ describe('ProdutoPage', () => {
 
   describe('marca, fornecedor e nome curto', () => {
     it('o seletor de marca busca pelo caminho, aceita qualquer nível e envia o marcaId', async () => {
-      listarSugestoesMock.mockResolvedValue(['Distribuidora Sul'])
       cadastrarProdutoMock.mockResolvedValue(produtoAtivo)
 
       renderNovo()
@@ -1827,12 +1879,10 @@ describe('ProdutoPage', () => {
       expect(within(lista).getAllByRole('option').map((opcao) => opcao.textContent)).toEqual(['Camil › Tio João'])
       fireEvent.click(within(lista).getByRole('option', { name: 'Camil › Tio João' }))
       expect(seletor).toHaveTextContent('Camil › Tio João')
-      const fornecedor = screen.getByRole('combobox', { name: /^fornecedor principal/i })
-      fireEvent.change(fornecedor, { target: { value: 'Fornecedor Novo' } })
       fireEvent.click(botaoSalvar())
 
       await waitFor(() => expect(cadastrarProdutoMock).toHaveBeenCalledTimes(1))
-      expect(cadastrarProdutoMock.mock.calls[0][0]).toMatchObject({ marcaId: 'tio-joao', fornecedor: 'Fornecedor Novo' })
+      expect(cadastrarProdutoMock.mock.calls[0][0]).toMatchObject({ marcaId: 'tio-joao' })
       expect(cadastrarProdutoMock.mock.calls[0][0]).not.toHaveProperty('marca')
     })
 
@@ -1907,6 +1957,188 @@ describe('ProdutoPage', () => {
       fireEvent.change(nomeCurto, { target: { value: 'Golden Frango 15kg' } })
       expect(nomeCurto).toHaveAccessibleDescription(/No cupom: Golden Frango 15kg\s*18 de 30 caracteres/)
       expect(screen.getByText('18/30')).toBeInTheDocument()
+    })
+  })
+
+  describe('fornecedores do produto (Fase B5)', () => {
+    it('adiciona pela busca, escolhe o da última compra e envia os ids', async () => {
+      cadastrarProdutoMock.mockResolvedValue(produtoAtivo)
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+
+      expect(campoUltimaCompra()).toBeDisabled()
+      await adicionarFornecedor('Distribuidora Sul')
+      await adicionarFornecedor('Atacadão Norte')
+      expect(within(listaDeFornecedores()).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+        'Distribuidora Sul',
+        'Atacadão Norte',
+      ])
+      // A busca e so dos ativos e nao repete os ja escolhidos.
+      expect(listarFornecedoresMock).toHaveBeenCalledWith(
+        { busca: '', status: 'ativos', pagina: 1, tamanho: 10 },
+        expect.anything(),
+      )
+      fireEvent.click(botaoAdicionarFornecedor())
+      expect(await screen.findByText('Nenhum fornecedor ativo para escolher.')).toBeInTheDocument()
+      fireEvent.keyDown(screen.getByRole('combobox', { name: 'Buscar fornecedor' }), { key: 'Escape' })
+
+      expect(rotulosDasOpcoes(campoUltimaCompra())).toEqual(['Nenhum', 'Distribuidora Sul', 'Atacadão Norte'])
+      fireEvent.change(campoUltimaCompra(), { target: { value: 'norte' } })
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(cadastrarProdutoMock).toHaveBeenCalledTimes(1))
+      expect(cadastrarProdutoMock.mock.calls[0][0]).toMatchObject({
+        fornecedorIds: ['dist-sul', 'norte'],
+        fornecedorUltimaCompraId: 'norte',
+      })
+    })
+
+    it('tirar da lista o fornecedor da última compra limpa o campo (Review Focus 1)', async () => {
+      atualizarProdutoMock.mockResolvedValue(produtoAtivo)
+      renderEdicao()
+      await esperarFormulario()
+      expect(campoUltimaCompra()).toHaveValue('dist-sul')
+
+      fireEvent.click(within(listaDeFornecedores()).getByRole('button', { name: 'Remover Distribuidora Sul' }))
+
+      expect(screen.queryByRole('list', { name: /^fornecedores \(opcional\)/i })).not.toBeInTheDocument()
+      expect(campoUltimaCompra()).toHaveValue('')
+      expect(campoUltimaCompra()).toBeDisabled()
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(
+          ID_ARROZ,
+          expect.objectContaining({ fornecedorIds: [], fornecedorUltimaCompraId: null }),
+        ),
+      )
+    })
+
+    it('mantém o fornecedor inativo já ligado, marcado "(inativo)"', async () => {
+      const produto: Produto = {
+        ...produtoAtivo,
+        fornecedores: [{ id: 'velho', numero: 9, nome: 'Fornecedor Antigo', ativo: false }],
+        fornecedorUltimaCompra: null,
+      }
+      atualizarProdutoMock.mockResolvedValue(produto)
+      renderEdicao(produto)
+      await esperarFormulario()
+
+      expect(listaDeFornecedores()).toHaveTextContent('Fornecedor Antigo (inativo)')
+      fireEvent.click(botaoSalvar())
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(ID_ARROZ, expect.objectContaining({ fornecedorIds: ['velho'] })),
+      )
+    })
+
+    it('a entrada por compra pelo modal vem com o da última compra e atualiza a lista na tela', async () => {
+      const compra: MovimentoEstoque = {
+        id: 'mov-compra',
+        tipo: 'ENTRADA',
+        motivo: 'COMPRA',
+        origem: 'AJUSTE_MANUAL',
+        quantidade: 5,
+        saldoAnterior: 12,
+        saldoNovo: 17,
+        observacao: null,
+        usuarioNome: 'Ana Souza',
+        criadoEm: '2026-10-24T10:15:00',
+        embalagem: null,
+        custoInformado: 18,
+        custoUnitario: 18,
+        fornecedor: { id: 'norte', nome: 'Atacadão Norte' },
+      }
+      const depois: Produto = {
+        ...produtoAtivo,
+        estoqueAtual: 17,
+        fornecedores: [
+          { id: 'norte', numero: 2, nome: 'Atacadão Norte', ativo: true },
+          { id: 'dist-sul', numero: 1, nome: 'Distribuidora Sul', ativo: true },
+        ],
+        fornecedorUltimaCompra: { id: 'norte', numero: 2, nome: 'Atacadão Norte' },
+      }
+      ajustarEstoqueMock.mockResolvedValue(compra)
+      atualizarProdutoMock.mockResolvedValue(depois)
+      renderEdicao()
+      await esperarFormulario()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Ajustar estoque' }))
+      const modal = screen.getByRole('dialog', { name: 'Ajustar estoque' })
+      const campoFornecedor = within(modal).getByRole('button', { name: /^Fornecedor \(opcional\)/ })
+      expect(campoFornecedor).toHaveTextContent('Distribuidora Sul')
+      fireEvent.click(campoFornecedor)
+      fireEvent.click(await screen.findByRole('option', { name: /Atacadão Norte/ }))
+      fireEvent.change(within(modal).getByRole('textbox', { name: /^quantidade/i }), { target: { value: '5' } })
+      fireEvent.change(within(modal).getByRole('textbox', { name: /^custo por UN/i }), { target: { value: '18,00' } })
+      buscarProdutoMock.mockResolvedValue(depois)
+      fireEvent.click(modal.querySelector('button[type="submit"]') as HTMLElement)
+
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
+      expect(ajustarEstoqueMock.mock.calls[0][1]).toMatchObject({ fornecedorId: 'norte', custo: 18 })
+      // O produto recarregado traz o fornecedor novo; a tela o mostra, e salvar nao desfaz a compra.
+      await waitFor(() => expect(campoUltimaCompra()).toHaveValue('norte'))
+      expect(listaDeFornecedores()).toHaveTextContent('Atacadão Norte')
+      fireEvent.click(botaoSalvar())
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(
+          ID_ARROZ,
+          expect.objectContaining({ fornecedorIds: ['norte', 'dist-sul'], fornecedorUltimaCompraId: 'norte' }),
+        ),
+      )
+    })
+
+    it('a nota do custo cita o fornecedor da compra', async () => {
+      renderEdicao({
+        ...produtoAtivo,
+        custo: 10,
+        custoOrigem: {
+          tipo: 'ENTRADA_COMPRA',
+          em: '2026-10-24T10:15:00',
+          quantidade: 36,
+          embalagemRotulo: 'CX c/ 18 UN',
+          quantidadeDeEmbalagens: 2,
+          fornecedorNome: 'Distribuidora Sul',
+        },
+      })
+      await esperarFormulario()
+
+      expect(screen.getByLabelText(/^custo/i)).toHaveAccessibleDescription(
+        /^Último custo de entrada: R\$\s10,00 por UN, em 24\/10\/2026 \(compra de 2 CX c\/ 18 UN\), de Distribuidora Sul\.$/,
+      )
+    })
+
+    it('o histórico mostra o fornecedor da entrada por compra', async () => {
+      listarHistoricoDePrecosMock.mockResolvedValue({ itens: [], pagina: 0, tamanho: 20, totalItens: 0 })
+      listarMovimentosDeEstoqueMock.mockResolvedValue({
+        itens: [
+          {
+            id: 'mov-compra',
+            tipo: 'ENTRADA',
+            motivo: 'COMPRA',
+            origem: 'AJUSTE_MANUAL',
+            quantidade: 5,
+            saldoAnterior: 12,
+            saldoNovo: 17,
+            observacao: null,
+            usuarioNome: 'Ana Souza',
+            criadoEm: '2026-10-24T10:15:00',
+            embalagem: null,
+            custoInformado: 10,
+            custoUnitario: 10,
+            fornecedor: { id: 'dist-sul', nome: 'Distribuidora Sul' },
+          },
+        ],
+        pagina: 0,
+        tamanho: 20,
+        totalItens: 1,
+      })
+      renderEdicao()
+      await esperarFormulario()
+      mostrarHistorico()
+
+      const lista = await screen.findByRole('list', { name: 'Movimentações de estoque' })
+      expect(within(lista).getByText('Fornecedor: Distribuidora Sul')).toBeInTheDocument()
     })
   })
 
@@ -2925,7 +3157,7 @@ describe('ProdutoPage', () => {
 
       expect(
         await screen.findByText(
-          'O produto, a unidade, a categoria, a marca ou uma embalagem escolhida não existe mais. Atualize a tela e tente novamente.',
+          'O produto, a unidade, a categoria, a marca, um fornecedor ou uma embalagem escolhida não existe mais. Atualize a tela e tente novamente.',
         ),
       ).toBeInTheDocument()
     })

@@ -58,6 +58,8 @@ export interface MovimentoEstoque {
   custoInformado: number | null
   /** Custo por unidade de venda, com 4 casas (informado / unidades da embalagem); null junto com `custoInformado`. */
   custoUnitario: number | null
+  /** Fornecedor da entrada por compra (Fase B5); null nos demais movimentos ou sem fornecedor. */
+  fornecedor?: { id: string; nome: string } | null
 }
 
 /** Embalagem como estava no ajuste (o movimento e imutavel e sobrevive a remocao dela). */
@@ -91,4 +93,9 @@ export interface AjusteEstoqueRequest {
    * (o backend divide pela quantidade dela).
    */
   custo?: number
+  /**
+   * Fornecedor da compra (Fase B5): opcional, so na ENTRADA com motivo COMPRA.
+   * Com ele, o fornecedor entra na lista do produto e vira o da ultima compra.
+   */
+  fornecedorId?: string
 }

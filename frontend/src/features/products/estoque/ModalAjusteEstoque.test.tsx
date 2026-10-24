@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { PRODUTOS_QUERY_KEY } from '@/features/catalog/catalogoQuery'
 import { ModalAjusteEstoque, type ModalAjusteEstoqueProps } from '@/features/products/estoque/ModalAjusteEstoque'
 import { ajustarEstoque } from '@/services/estoqueService'
+import { listarFornecedores } from '@/services/fornecedorService'
 import { HttpError } from '@/services/httpClient'
 import { ID_ARROZ } from '@/test/fixturesProduto'
 import type { AjusteEstoqueRequest, MovimentoEstoque } from '@/types/estoque'
@@ -13,7 +14,12 @@ vi.mock('@/services/estoqueService', () => ({
   ajustarEstoque: vi.fn(),
 }))
 
+vi.mock('@/services/fornecedorService', () => ({
+  listarFornecedores: vi.fn(),
+}))
+
 const ajustarEstoqueMock = vi.mocked(ajustarEstoque)
+const listarFornecedoresMock = vi.mocked(listarFornecedores)
 
 const MOVIMENTO: MovimentoEstoque = {
   id: 'mov-1',
@@ -934,6 +940,114 @@ describe('ModalAjusteEstoque', () => {
 
       expect(await screen.findByText('O custo deve ser maior que zero.')).toBeInTheDocument()
       await waitFor(() => expect(campoCusto()).toHaveFocus())
+    })
+  })
+
+  describe('fornecedor na entrada por compra (Fase B5)', () => {
+    const SUL = { id: 'dist-sul', numero: 1, nome: 'Distribuidora Sul', ativo: true }
+
+    function campoFornecedor(): HTMLElement {
+      return within(dialogo()).getByRole('button', { name: /^Fornecedor \(opcional\)/ })
+    }
+
+    function campoFornecedorAusente(): boolean {
+      return within(dialogo()).queryByRole('button', { name: /^Fornecedor \(opcional\)/ }) === null
+    }
+
+    function preencherCompra() {
+      fireEvent.change(campoQuantidade(), { target: { value: '10' } })
+      preencherCusto('9,50')
+    }
+
+    it('aparece só na Entrada com Compra, abaixo do custo', () => {
+      renderModal()
+
+      expect(campoFornecedor()).toHaveTextContent('Nenhum')
+      expect(campoCusto().compareDocumentPosition(campoFornecedor()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      fireEvent.change(campoMotivo(), { target: { value: 'DEVOLUCAO_CLIENTE' } })
+      expect(campoFornecedorAusente()).toBe(true)
+      escolherTipo('Saída')
+      expect(campoFornecedorAusente()).toBe(true)
+      escolherTipo('Contagem')
+      expect(campoFornecedorAusente()).toBe(true)
+    })
+
+    it('vem preenchido com o da última compra e vai no envio', async () => {
+      ajustarEstoqueMock.mockResolvedValue({ ...MOVIMENTO, tipo: 'ENTRADA', motivo: 'COMPRA', quantidade: 10, saldoNovo: 22 })
+      renderModal({ fornecedorDaCompra: SUL })
+
+      expect(campoFornecedor()).toHaveTextContent('Distribuidora Sul')
+      preencherCompra()
+      confirmar()
+
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
+      expect(ultimoAjuste()).toMatchObject({ tipo: 'ENTRADA', motivo: 'COMPRA', custo: 9.5, fornecedorId: 'dist-sul' })
+    })
+
+    it('busca outro fornecedor ativo, ou nenhum', async () => {
+      listarFornecedoresMock.mockResolvedValue({
+        itens: [
+          {
+            id: 'norte',
+            numero: 2,
+            razaoSocial: 'Atacadão Norte',
+            nomeFantasia: 'Norte',
+            tipoPessoa: 'PJ',
+            documento: null,
+            telefone: null,
+            representantePrincipal: null,
+            quantidadeProdutos: 0,
+            ativo: true,
+          },
+        ],
+        pagina: 0,
+        tamanho: 10,
+        totalItens: 1,
+      })
+      ajustarEstoqueMock.mockResolvedValue({ ...MOVIMENTO, tipo: 'ENTRADA', motivo: 'COMPRA', quantidade: 10, saldoNovo: 22 })
+      renderModal({ fornecedorDaCompra: SUL })
+
+      fireEvent.click(campoFornecedor())
+      fireEvent.click(await screen.findByRole('option', { name: /Atacadão Norte/ }))
+      expect(campoFornecedor()).toHaveTextContent('Atacadão Norte')
+      expect(listarFornecedoresMock).toHaveBeenCalledWith(
+        { busca: '', status: 'ativos', pagina: 1, tamanho: 10 },
+        expect.anything(),
+      )
+
+      fireEvent.click(campoFornecedor())
+      fireEvent.click(await screen.findByRole('option', { name: 'Nenhum' }))
+      expect(campoFornecedor()).toHaveTextContent('Nenhum')
+      preencherCompra()
+      confirmar()
+
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
+      expect(ultimoAjuste()).not.toHaveProperty('fornecedorId')
+    })
+
+    it('fora da compra o fornecedor não vai no envio', async () => {
+      ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
+      renderModal({ fornecedorDaCompra: SUL })
+
+      preencherSaida()
+      confirmar()
+
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
+      expect(ultimoAjuste()).not.toHaveProperty('fornecedorId')
+    })
+
+    it('mostra no campo o fornecedor recusado pelo backend (inativo)', async () => {
+      ajustarEstoqueMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { fornecedorId: 'Este fornecedor está inativo.' }),
+      )
+      renderModal({ fornecedorDaCompra: SUL })
+
+      preencherCompra()
+      confirmar()
+
+      expect(await within(dialogo()).findByText('Este fornecedor está inativo.')).toBeInTheDocument()
+      expect(campoFornecedor()).toHaveAttribute('aria-invalid', 'true')
+      await waitFor(() => expect(campoFornecedor()).toHaveFocus())
     })
   })
 })

@@ -1,6 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/services/httpClient'
 import type {
-  CampoSugestaoProduto,
   FiltrosDaListaDeProdutos,
   HistoricoPreco,
   PaginaResponse,
@@ -87,16 +86,6 @@ export function excluirProduto(id: string): Promise<void> {
 export async function sugerirSku(): Promise<string> {
   const resposta = await apiGet<{ sku: string }>('/produtos/sku/sugestao', { autenticada: true })
   return resposta.sku
-}
-
-/** Ate 10 valores ja usados na empresa para marca ou fornecedor, mais usados primeiro. */
-export function listarSugestoes(campo: CampoSugestaoProduto, termo: string): Promise<string[]> {
-  const searchParams = new URLSearchParams({ campo })
-  const termoAparado = termo.trim()
-  if (termoAparado) {
-    searchParams.set('termo', termoAparado)
-  }
-  return apiGet<string[]>(`/produtos/sugestoes?${searchParams.toString()}`, { autenticada: true })
 }
 
 /** Tamanho padrao da pagina do historico de precos (o backend aceita ate 100). */

@@ -35,6 +35,17 @@ describe('origemDoCusto', () => {
       )
     })
 
+    it('entrada por compra com fornecedor: "de {fornecedor}" no fim (spec B5 §6)', () => {
+      const comFornecedor: CustoOrigem = { ...COMPRA_EM_CAIXAS, fornecedorNome: 'Distribuidora Sul' }
+      expect(semNbsp(notaDaOrigemDoCusto(10, comFornecedor, 'UN'))).toBe(
+        'Último custo de entrada: R$ 10,00 por UN, em 24/10/2026 (compra de 2 CX c/ 18 UN), de Distribuidora Sul.',
+      )
+      const semEmbalagem: CustoOrigem = { ...comFornecedor, embalagemRotulo: null, quantidadeDeEmbalagens: null }
+      expect(semNbsp(notaDaOrigemDoCusto(10, semEmbalagem, 'UN'))).toBe(
+        'Último custo de entrada: R$ 10,00 por UN, em 24/10/2026, de Distribuidora Sul.',
+      )
+    })
+
     it('entrada por compra em unidades: sem a embalagem', () => {
       const emUnidades: CustoOrigem = {
         ...COMPRA_EM_CAIXAS,
