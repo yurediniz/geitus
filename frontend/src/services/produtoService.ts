@@ -1,7 +1,8 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from '@/services/httpClient'
+import { apiDelete, apiGet, apiPatch, apiPost, apiPutMultipart } from '@/services/httpClient'
 import type {
   FiltrosDaListaDeProdutos,
   HistoricoPreco,
+  ImagemDoProduto,
   PaginaResponse,
   Produto,
   ProdutoRequest,
@@ -80,6 +81,27 @@ export function reativarProduto(id: string): Promise<Produto> {
 /** Exclui fisicamente um produto sem movimentacao (o backend responde 409 se bloqueado). */
 export function excluirProduto(id: string): Promise<void> {
   return apiDelete(caminhoDoProduto(id), { autenticada: true })
+}
+
+/** Extensao do arquivo da parte, pelo tipo do blob (o servidor confere o tipo real pelos bytes). */
+function nomeDaParte(parte: 'grande' | 'miniatura', blob: Blob): string {
+  return `${parte}.${blob.type === 'image/jpeg' ? 'jpg' : 'webp'}`
+}
+
+/**
+ * Envia (ou substitui) a imagem do produto: a grande e a miniatura ja
+ * comprimidas no navegador, nas partes `grande` e `miniatura`.
+ */
+export function enviarImagemDoProduto(id: string, grande: Blob, miniatura: Blob): Promise<ImagemDoProduto> {
+  const formulario = new FormData()
+  formulario.append('grande', grande, nomeDaParte('grande', grande))
+  formulario.append('miniatura', miniatura, nomeDaParte('miniatura', miniatura))
+  return apiPutMultipart<ImagemDoProduto>(`${caminhoDoProduto(id)}/imagem`, formulario)
+}
+
+/** Remove a imagem do produto (404 se ele nao tem imagem). */
+export function removerImagemDoProduto(id: string): Promise<void> {
+  return apiDelete(`${caminhoDoProduto(id)}/imagem`, { autenticada: true })
 }
 
 /** Proximo SKU sugerido no padrao `P000001` da empresa (nao reserva o SKU). */

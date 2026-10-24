@@ -130,6 +130,20 @@ export interface FornecedorDaUltimaCompra {
   nome: string
 }
 
+/**
+ * Imagem do produto (Fase F). As URLs sao relativas (`/api/imagens/...`), ja
+ * assinadas e com validade de 24 a 48 h; trocam a cada envio.
+ */
+export interface ImagemDoProduto {
+  miniaturaUrl: string
+  grandeUrl: string
+  /** Dimensoes da versao grande, em px. */
+  largura: number
+  altura: number
+  /** Momento do envio (yyyy-mm-ddThh:mm:ss, horario do servidor). */
+  atualizadaEm: string
+}
+
 /** Produto conforme retornado pela API. */
 export interface Produto {
   /** UUID publico do produto (o id numerico interno nao sai na API). */
@@ -184,6 +198,8 @@ export interface Produto {
   /** Embalagens de venda (ate 10), na ordem gravada. */
   embalagens: Embalagem[]
   sku: string | null
+  /** Imagem do produto; null sem imagem. */
+  imagem: ImagemDoProduto | null
   ativo: boolean
   /** Se o produto pode ser excluido fisicamente (nunca teve venda nem movimentacao). */
   podeExcluir: boolean

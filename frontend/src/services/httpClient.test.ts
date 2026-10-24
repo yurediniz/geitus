@@ -6,6 +6,7 @@ import {
   apiPost,
   apiPostComStatus,
   apiPut,
+  apiPutMultipart,
   HttpError,
   setUnauthorizedHandler,
 } from '@/services/httpClient'
@@ -395,6 +396,45 @@ describe('httpClient', () => {
       const erro = await apiDelete('/unidades/abc').catch((e: unknown) => e)
       expect(erro).toBeInstanceOf(HttpError)
       expect((erro as HttpError).status).toBe(0)
+    })
+  })
+
+  describe('apiPutMultipart', () => {
+    it('envia PUT autenticado com o FormData, sem Content-Type manual (o navegador poe o boundary)', async () => {
+      getStoredTokenMock.mockReturnValue('token-abc')
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(200, { ok: true }))
+      const formulario = new FormData()
+      formulario.append('grande', new Blob(['g']), 'grande.webp')
+
+      const dados = await apiPutMultipart('/produtos/abc/imagem', formulario)
+
+      const chamada = vi.mocked(globalThis.fetch).mock.calls[0]
+      const init = chamada?.[1] as RequestInit
+      expect(String(chamada?.[0])).toMatch(/\/produtos\/abc\/imagem$/)
+      expect(init.method).toBe('PUT')
+      expect(init.body).toBe(formulario)
+      expect(headersDaChamada().Authorization).toBe('Bearer token-abc')
+      expect(headersDaChamada()['Content-Type']).toBeUndefined()
+      expect(dados).toEqual({ ok: true })
+    })
+
+    it('mantem a mensagem do 400, o handler de 401 e o status 0 em falha de rede', async () => {
+      const handler = vi.fn()
+      setUnauthorizedHandler(handler)
+      vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+        respostaFake(400, { mensagem: 'Formato de imagem não aceito. Use WebP ou JPEG.' }),
+      )
+      await expect(apiPutMultipart('/x', new FormData())).rejects.toMatchObject({
+        status: 400,
+        message: 'Formato de imagem não aceito. Use WebP ou JPEG.',
+      })
+
+      vi.mocked(globalThis.fetch).mockResolvedValueOnce(respostaFake(401))
+      await expect(apiPutMultipart('/x', new FormData())).rejects.toMatchObject({ status: 401 })
+      expect(handler).toHaveBeenCalledTimes(1)
+
+      vi.mocked(globalThis.fetch).mockRejectedValueOnce(new TypeError('network error'))
+      await expect(apiPutMultipart('/x', new FormData())).rejects.toMatchObject({ status: 0 })
     })
   })
 })

@@ -9,9 +9,11 @@ import {
   listarHistoricoDePrecos,
   listarProdutos,
   reativarProduto,
+  enviarImagemDoProduto,
+  removerImagemDoProduto,
   sugerirSku,
 } from '@/services/produtoService'
-import { apiDelete, apiGet, apiPatch, apiPost } from '@/services/httpClient'
+import { apiDelete, apiGet, apiPatch, apiPost, apiPutMultipart } from '@/services/httpClient'
 import type { ProdutoRequest } from '@/types/produto'
 
 vi.mock('@/services/httpClient', () => ({
@@ -19,12 +21,14 @@ vi.mock('@/services/httpClient', () => ({
   apiPatch: vi.fn(),
   apiPost: vi.fn(),
   apiDelete: vi.fn(),
+  apiPutMultipart: vi.fn(),
 }))
 
 const apiGetMock = vi.mocked(apiGet)
 const apiPostMock = vi.mocked(apiPost)
 const apiPatchMock = vi.mocked(apiPatch)
 const apiDeleteMock = vi.mocked(apiDelete)
+const apiPutMultipartMock = vi.mocked(apiPutMultipart)
 
 const ID = '3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e5f'
 
@@ -183,6 +187,44 @@ describe('produtoService', () => {
 
     expect(apiGetMock).toHaveBeenCalledWith(`/produtos/${ID}/historico-precos?pagina=1&tamanho=20`, {
       autenticada: true,
+    })
+  })
+
+  describe('imagem do produto', () => {
+    it('envia a grande e a miniatura em duas partes do multipart, com extensao do tipo', async () => {
+      const imagem = { miniaturaUrl: '/api/m', grandeUrl: '/api/g', largura: 1200, altura: 900, atualizadaEm: 'x' }
+      apiPutMultipartMock.mockResolvedValue(imagem)
+      const grande = new Blob(['g'], { type: 'image/webp' })
+      const miniatura = new Blob(['m'], { type: 'image/webp' })
+
+      await expect(enviarImagemDoProduto(ID, grande, miniatura)).resolves.toBe(imagem)
+
+      const [caminho, formulario] = apiPutMultipartMock.mock.calls[0]
+      expect(caminho).toBe(`/produtos/${ID}/imagem`)
+      const parteGrande = formulario.get('grande')
+      const parteMiniatura = formulario.get('miniatura')
+      expect(parteGrande).toBeInstanceOf(File)
+      expect((parteGrande as File).name).toBe('grande.webp')
+      expect((parteMiniatura as File).name).toBe('miniatura.webp')
+      expect((parteGrande as File).size).toBe(1)
+    })
+
+    it('em JPEG, as partes levam a extensao .jpg', async () => {
+      apiPutMultipartMock.mockResolvedValue({})
+
+      await enviarImagemDoProduto(ID, new Blob(['g'], { type: 'image/jpeg' }), new Blob(['m'], { type: 'image/jpeg' }))
+
+      const [, formulario] = apiPutMultipartMock.mock.calls[0]
+      expect((formulario.get('grande') as File).name).toBe('grande.jpg')
+      expect((formulario.get('miniatura') as File).name).toBe('miniatura.jpg')
+    })
+
+    it('remove a imagem com DELETE autenticado', async () => {
+      apiDeleteMock.mockResolvedValue(undefined)
+
+      await removerImagemDoProduto(ID)
+
+      expect(apiDeleteMock).toHaveBeenCalledWith(`/produtos/${ID}/imagem`, { autenticada: true })
     })
   })
 })

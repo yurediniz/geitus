@@ -291,6 +291,37 @@ export function apiPut<T>(path: string, corpo: unknown, opcoes: { autenticada?: 
 }
 
 /**
+ * Executa um PUT autenticado com corpo `multipart/form-data` (ex.: a imagem do
+ * produto) e retorna o corpo em JSON. Sem `Content-Type` manual: o navegador o
+ * monta com o boundary das partes. Mesmo tratamento de erro e de 204 do PUT.
+ *
+ * @param path caminho relativo a URL base (ex.: "/produtos/{id}/imagem")
+ * @param formulario partes enviadas no corpo
+ */
+export async function apiPutMultipart<T>(path: string, formulario: FormData): Promise<T> {
+  let resposta: Response
+  try {
+    resposta = await fetch(`${baseUrl}${path}`, {
+      method: 'PUT',
+      headers: montarHeaders(true, false),
+      body: formulario,
+    })
+  } catch {
+    throw new HttpError(0, 'Nao foi possivel conectar ao servidor.')
+  }
+
+  if (!resposta.ok) {
+    await tratarErro(resposta, true)
+  }
+
+  if (resposta.status === 204) {
+    return undefined as T
+  }
+
+  return (await resposta.json()) as T
+}
+
+/**
  * Executa um DELETE no caminho informado. Exclusoes bem-sucedidas costumam
  * responder 204 sem corpo; nesse caso retorna undefined.
  *
