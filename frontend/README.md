@@ -32,6 +32,7 @@ Frontend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Co
 - **Produtos** (`/produtos`): listagem paginada (25 por página) com busca enquanto se digita, filtros (status, categoria, estoque, promoção) e ordenação, tudo guardado na URL; tabela a partir de 1.024 px e cards no celular e no tablet. Cadastro e edição em **página própria** (`/produtos/novo`, `/produtos/:id`), em **tela única** com atalhos fixos (Geral · Códigos · Preços · Embalagens · Estoque · Histórico) que rolam até a seção, destacam a seção visível e mostram a quantidade de erros:
   - Geral com o **Nº do produto** (gerado ao salvar), nome, unidade, preço e dados complementares;
   - Códigos: vários códigos de barras (validação EAN/UPC), código do produto (até 6 dígitos, zeros à esquerda ignorados) com "Vendido na balança" e "Usar o número do produto", e SKU gerado automaticamente;
+  - imagem do produto no topo da seção Geral (adicionar por arquivo, câmera ou arrastar; trocar, girar e remover; compressão no navegador em `lib/imagemDoProduto.ts`), gravada com o Salvar, e miniatura na lista;
   - marca escolhida na árvore "Fabricantes e marcas" (seletor com busca e "+ Nova") e fornecedores cadastrados com o "Fornecedor da última compra";
   - nome curto com prévia do cupom;
   - "Salvar e cadastrar outro" (Ctrl+Shift+Enter);
