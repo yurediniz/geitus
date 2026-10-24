@@ -29,7 +29,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import com.geitus.app.catalog.LigacaoDoProduto;
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoDoFornecedorResponse;
 import com.geitus.app.config.RestAccessDeniedHandler;
 import com.geitus.app.config.RestAuthenticationEntryPoint;
@@ -38,6 +37,7 @@ import com.geitus.app.iam.JwtAuthenticationFilter;
 import com.geitus.app.iam.JwtService;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.shared.error.GlobalExceptionHandler;
+import com.geitus.app.shared.paginacao.PaginaResponse;
 import com.geitus.app.supplier.dto.FornecedorItemResponse;
 import com.geitus.app.supplier.dto.FornecedorRequest;
 import com.geitus.app.supplier.dto.FornecedorResponse;

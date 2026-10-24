@@ -26,7 +26,6 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.geitus.app.catalog.RegraDeNegocioException;
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.marca.MarcaService;
 import com.geitus.app.catalog.marca.dto.MarcaRequest;
 import com.geitus.app.catalog.marca.dto.MarcaResponse;
@@ -39,6 +38,7 @@ import com.geitus.app.company.TipoPessoa;
 import com.geitus.app.iam.JwtService;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
+import com.geitus.app.shared.paginacao.PaginaResponse;
 import com.geitus.app.supplier.dto.FornecedorItemResponse;
 import com.geitus.app.supplier.dto.FornecedorResponse;
 import com.geitus.app.supplier.dto.RepresentanteRequest;

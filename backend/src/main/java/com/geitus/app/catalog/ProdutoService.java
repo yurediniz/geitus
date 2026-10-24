@@ -39,12 +39,11 @@ import com.geitus.app.catalog.categoria.CategoriaArvore;
 import com.geitus.app.catalog.categoria.CategoriaService;
 import com.geitus.app.catalog.dto.AtacadoRequest;
 import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
+import com.geitus.app.catalog.dto.PromocaoRequest;
 import com.geitus.app.catalog.dto.ReferenciasDoProduto;
 import com.geitus.app.catalog.imagem.ImagensDoProduto;
-import com.geitus.app.catalog.dto.PromocaoRequest;
 import com.geitus.app.catalog.listagem.ConsultaDeProdutos;
 import com.geitus.app.catalog.listagem.FiltroDeProdutos;
 import com.geitus.app.catalog.listagem.PaginaDeIds;
@@ -61,6 +60,8 @@ import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.shared.busca.TextoDeBusca;
 import com.geitus.app.shared.numeracao.Numerador;
 import com.geitus.app.shared.numeracao.TipoNumeracao;
+import com.geitus.app.shared.paginacao.PaginaResponse;
+import com.geitus.app.shared.paginacao.Paginacao;
 
 /**
  * Regras de negocio do modulo Produtos.

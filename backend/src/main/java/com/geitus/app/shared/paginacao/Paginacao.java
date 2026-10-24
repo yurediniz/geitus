@@ -1,8 +1,10 @@
-package com.geitus.app.catalog;
+package com.geitus.app.shared.paginacao;
+
+import com.geitus.app.catalog.RegraDeNegocioException;
 
 /**
- * Limites das consultas paginadas do produto (historico de precos e
- * movimentos de estoque): pagina a partir de 0, tamanho de 1 a
+ * Limites das consultas paginadas (historico de precos, movimentos de
+ * estoque, listagens e historico do caixa): pagina a partir de 0, tamanho de 1 a
  * {@value #TAMANHO_MAXIMO} e deslocamento ({@code pagina * tamanho}) que caiba
  * num {@code int}. Fora disso, 400 com mensagem fixa.
  */

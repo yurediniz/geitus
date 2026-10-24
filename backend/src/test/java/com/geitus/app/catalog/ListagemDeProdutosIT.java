@@ -39,7 +39,6 @@ import com.geitus.app.catalog.categoria.CategoriaService;
 import com.geitus.app.catalog.categoria.dto.CategoriaRequest;
 import com.geitus.app.catalog.dto.CodigoBarrasResponse;
 import com.geitus.app.catalog.dto.EmbalagemRequest;
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.imagem.ImagemDoProduto;
 import com.geitus.app.catalog.imagem.ImagensDeTeste;
@@ -56,6 +55,7 @@ import com.geitus.app.company.TipoPessoa;
 import com.geitus.app.iam.JwtService;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
+import com.geitus.app.shared.paginacao.PaginaResponse;
 
 import jakarta.persistence.EntityManagerFactory;
 

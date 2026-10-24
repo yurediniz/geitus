@@ -46,7 +46,6 @@ import com.geitus.app.catalog.categoria.dto.CategoriaRequest;
 import com.geitus.app.catalog.categoria.dto.CategoriaResponse;
 import com.geitus.app.catalog.dto.CodigoBarrasResponse;
 import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.listagem.ParametrosDaListagem;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
@@ -59,6 +58,7 @@ import com.geitus.app.company.RepresentanteLegal;
 import com.geitus.app.company.TipoPessoa;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
+import com.geitus.app.shared.paginacao.PaginaResponse;
 
 /**
  * Teste de integracao dos services do catalogo (unidades, categorias e

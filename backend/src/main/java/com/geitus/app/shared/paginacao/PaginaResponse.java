@@ -1,4 +1,4 @@
-package com.geitus.app.catalog.dto;
+package com.geitus.app.shared.paginacao;
 
 import java.util.List;
 

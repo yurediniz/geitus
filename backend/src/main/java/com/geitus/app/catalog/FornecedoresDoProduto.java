@@ -14,8 +14,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoDoFornecedorResponse;
+import com.geitus.app.shared.paginacao.PaginaResponse;
+import com.geitus.app.shared.paginacao.Paginacao;
 
 /**
  * Regras da lista de fornecedores do produto (docs/modules/fornecedores-e-marcas.md,

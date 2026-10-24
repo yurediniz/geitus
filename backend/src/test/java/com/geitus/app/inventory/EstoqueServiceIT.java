@@ -39,11 +39,11 @@ import com.geitus.app.catalog.CatalogoNaoEncontradoException;
 import com.geitus.app.catalog.ProdutoConflitoException;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
 import com.geitus.app.catalog.RegraDeNegocioException;
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.inventory.EstoqueService.ResultadoAjuste;
 import com.geitus.app.inventory.dto.AjusteEstoqueRequest;
 import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
+import com.geitus.app.shared.paginacao.PaginaResponse;
 
 /**
  * Integracao do servico de estoque com o contexto Spring completo e um

@@ -21,7 +21,6 @@ import com.geitus.app.catalog.CustoDeEntrada;
 import com.geitus.app.catalog.FornecedorResumido;
 import com.geitus.app.catalog.FornecedoresDoProduto;
 import com.geitus.app.catalog.NomesDeFornecedores;
-import com.geitus.app.catalog.Paginacao;
 import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ProdutoConflitoException;
 import com.geitus.app.catalog.ProdutoEmbalagem;
@@ -29,13 +28,14 @@ import com.geitus.app.catalog.ProdutoNaoEncontradoException;
 import com.geitus.app.catalog.ProdutoRepository;
 import com.geitus.app.catalog.QuantidadeDeEstoque;
 import com.geitus.app.catalog.RegraDeNegocioException;
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.inventory.dto.AjusteEstoqueRequest;
-import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
 import com.geitus.app.inventory.dto.MovimentoEstoqueResponse.FornecedorDoMovimento;
+import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
+import com.geitus.app.shared.paginacao.PaginaResponse;
+import com.geitus.app.shared.paginacao.Paginacao;
 
 /**
  * Regras do estoque do produto (docs/modules/produtos-estoque.md, 4.1 a 4.5;

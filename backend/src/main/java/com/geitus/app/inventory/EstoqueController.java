@@ -13,11 +13,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.inventory.EstoqueService.ResultadoAjuste;
 import com.geitus.app.inventory.dto.AjusteEstoqueRequest;
 import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
 import com.geitus.app.shared.error.ApiError;
+import com.geitus.app.shared.paginacao.PaginaResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;

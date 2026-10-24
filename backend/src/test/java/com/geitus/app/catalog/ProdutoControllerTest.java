@@ -36,11 +36,10 @@ import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.arvore.Arvore;
+import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
 import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.dto.ReferenciasDoProduto;
@@ -49,14 +48,15 @@ import com.geitus.app.catalog.listagem.OrdemDeProdutos;
 import com.geitus.app.catalog.listagem.ParametrosDaListagem;
 import com.geitus.app.catalog.listagem.StatusFiltro;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
-import com.geitus.app.iam.JwtAuthenticationFilter;
-import com.geitus.app.iam.JwtService;
 import com.geitus.app.company.Empresa;
 import com.geitus.app.config.RestAccessDeniedHandler;
 import com.geitus.app.config.RestAuthenticationEntryPoint;
 import com.geitus.app.config.SecurityConfig;
-import com.geitus.app.shared.error.GlobalExceptionHandler;
+import com.geitus.app.iam.JwtAuthenticationFilter;
+import com.geitus.app.iam.JwtService;
 import com.geitus.app.iam.Usuario;
+import com.geitus.app.shared.error.GlobalExceptionHandler;
+import com.geitus.app.shared.paginacao.PaginaResponse;
 
 import io.swagger.v3.oas.annotations.Parameter;
 

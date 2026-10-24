@@ -16,8 +16,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.geitus.app.catalog.LigacaoDoProduto;
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoDoFornecedorResponse;
+import com.geitus.app.shared.paginacao.PaginaResponse;
 import com.geitus.app.supplier.dto.FornecedorItemResponse;
 import com.geitus.app.supplier.dto.FornecedorRequest;
 import com.geitus.app.supplier.dto.FornecedorResponse;

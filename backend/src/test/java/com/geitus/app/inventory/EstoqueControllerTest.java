@@ -28,7 +28,6 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import com.geitus.app.catalog.ProdutoConflitoException;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
 import com.geitus.app.catalog.RegraDeNegocioException;
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.config.RestAccessDeniedHandler;
 import com.geitus.app.config.RestAuthenticationEntryPoint;
 import com.geitus.app.config.SecurityConfig;
@@ -39,6 +38,7 @@ import com.geitus.app.inventory.EstoqueService.ResultadoAjuste;
 import com.geitus.app.inventory.dto.AjusteEstoqueRequest;
 import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
 import com.geitus.app.shared.error.GlobalExceptionHandler;
+import com.geitus.app.shared.paginacao.PaginaResponse;
 
 /**
  * Contrato HTTP dos endpoints de estoque do produto (spec 5): ajuste so para

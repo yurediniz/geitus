@@ -4,8 +4,8 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
 
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoDoFornecedorResponse;
+import com.geitus.app.shared.paginacao.PaginaResponse;
 
 /**
  * Os produtos que um fornecedor vende, vistos pelo fornecedor

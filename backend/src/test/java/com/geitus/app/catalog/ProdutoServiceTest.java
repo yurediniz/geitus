@@ -62,12 +62,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
 import com.geitus.app.catalog.categoria.CategoriaService;
-import com.geitus.app.catalog.marca.Marca;
-import com.geitus.app.catalog.marca.MarcaService;
 import com.geitus.app.catalog.dto.CodigoBarrasResponse;
 import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
 import com.geitus.app.catalog.dto.ImagensDosProdutos;
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.imagem.ImagensDoProduto;
@@ -78,6 +75,8 @@ import com.geitus.app.catalog.listagem.OrdemDeProdutos;
 import com.geitus.app.catalog.listagem.PaginaDeIds;
 import com.geitus.app.catalog.listagem.ParametrosDaListagem;
 import com.geitus.app.catalog.listagem.StatusFiltro;
+import com.geitus.app.catalog.marca.Marca;
+import com.geitus.app.catalog.marca.MarcaService;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.company.Empresa;
@@ -87,6 +86,7 @@ import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 import com.geitus.app.shared.numeracao.Numerador;
 import com.geitus.app.shared.numeracao.TipoNumeracao;
+import com.geitus.app.shared.paginacao.PaginaResponse;
 
 /**
  * Testa as regras do {@link ProdutoService}: validacoes de cadastro/atualizacao

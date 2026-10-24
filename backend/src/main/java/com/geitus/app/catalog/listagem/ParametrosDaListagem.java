@@ -3,8 +3,8 @@ package com.geitus.app.catalog.listagem;
 import java.util.Objects;
 import java.util.UUID;
 
-import com.geitus.app.catalog.Paginacao;
 import com.geitus.app.catalog.RegraDeNegocioException;
+import com.geitus.app.shared.paginacao.Paginacao;
 
 /**
  * Parametros de {@code GET /api/produtos} ja validados (spec 4.2 a 4.4): status,

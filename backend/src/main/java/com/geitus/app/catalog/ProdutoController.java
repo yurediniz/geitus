@@ -16,11 +16,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.dto.SkuSugestaoResponse;
 import com.geitus.app.catalog.listagem.ParametrosDaListagem;
+import com.geitus.app.shared.paginacao.PaginaResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;

@@ -18,7 +18,6 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.listagem.ParametrosDaListagem;
 import com.geitus.app.catalog.marca.Marca;
@@ -35,6 +34,7 @@ import com.geitus.app.company.RepresentanteLegal;
 import com.geitus.app.company.TipoPessoa;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
+import com.geitus.app.shared.paginacao.PaginaResponse;
 
 /**
  * Fabricantes e marcas (Fase B5) com o contexto Spring completo e um
