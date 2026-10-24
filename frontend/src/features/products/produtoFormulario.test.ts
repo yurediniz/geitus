@@ -752,7 +752,7 @@ describe('produtoFormulario', () => {
 
     it('unidade obrigatoria e diferente da unidade de venda', () => {
       expect(erros({ ...base, embalagens: [{ ...caixa, unidadeId: '' }] })).toEqual({
-        'embalagens.0.unidadeId': 'Selecione a unidade da embalagem.',
+        'embalagens.0.unidadeId': 'Informe a unidade da embalagem.',
       })
       expect(erros({ ...base, embalagens: [{ ...caixa, unidadeId: 'un' }] })).toEqual({
         'embalagens.0.unidadeId': 'A embalagem precisa de uma unidade diferente da unidade de venda (UN).',
@@ -781,9 +781,9 @@ describe('produtoFormulario', () => {
       expect(erros(valores)).toEqual({})
     })
 
-    it('embalagem repetida (mesma unidade e quantidade) na segunda ocorrencia', () => {
+    it('embalagem repetida (mesma unidade e quantidade) na segunda ocorrencia, na unidade (como a API)', () => {
       expect(erros({ ...base, embalagens: [caixa, { ...caixa, quantidade: '3,000' }] })).toEqual({
-        'embalagens.1.quantidade': 'Já existe a embalagem CX c/ 3 UN neste produto.',
+        'embalagens.1.unidadeId': 'Já existe a embalagem CX c/ 3 UN neste produto.',
       })
     })
 

@@ -293,7 +293,7 @@ function validarEmbalagens(valores: ValoresEmbalagens, unidades: readonly Unidad
     const erro = (campo: CampoDaEmbalagem, message: string) =>
       ctx.addIssue({ path: ['embalagens', indice, campo], code: 'custom', message })
     if (embalagem.unidadeId === '') {
-      erro('unidadeId', 'Selecione a unidade da embalagem.')
+      erro('unidadeId', 'Informe a unidade da embalagem.')
     } else if (embalagem.unidadeId === valores.unidadeId) {
       erro('unidadeId', `A embalagem precisa de uma unidade diferente da unidade de venda (${siglaDeVenda}).`)
     } else {
@@ -304,7 +304,7 @@ function validarEmbalagens(valores: ValoresEmbalagens, unidades: readonly Unidad
       } else if (vistas.has(chave)) {
         const sigla = unidades.find((unidade) => unidade.id === embalagem.unidadeId)?.sigla ?? ''
         const rotulo = rotuloDaEmbalagem(sigla, embalagem.quantidade, siglaDeVenda)
-        erro('quantidade', `Já existe a embalagem ${rotulo} neste produto.`)
+        erro('unidadeId', `Já existe a embalagem ${rotulo} neste produto.`)
       }
       vistas.add(chave)
     }
