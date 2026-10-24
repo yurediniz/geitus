@@ -3096,6 +3096,7 @@ describe('ProdutoPage', () => {
       valorNovo: 11.5,
       usuarioNome: 'Ana Souza',
       alteradoEm: '2026-10-21T14:03:12',
+      embalagemRotulo: null,
     }
     const cadastroCusto: HistoricoPreco = {
       campo: 'CUSTO',
@@ -3103,6 +3104,7 @@ describe('ProdutoPage', () => {
       valorNovo: 8,
       usuarioNome: 'Bruno Lima',
       alteradoEm: '2026-10-20T09:05:00',
+      embalagemRotulo: null,
     }
 
     function pagina(itens: HistoricoPreco[], numero: number, totalItens: number): PaginaResponse<HistoricoPreco> {
@@ -3230,6 +3232,52 @@ describe('ProdutoPage', () => {
       mostrarHistorico()
 
       expect(await screen.findByText(/^R\$\s5,00 → sem custo$/)).toBeInTheDocument()
+    })
+
+    describe('linhas das embalagens (Fase B3)', () => {
+      const precoDaCaixa: HistoricoPreco = {
+        campo: 'PRECO_EMBALAGEM',
+        valorAnterior: 209.9,
+        valorNovo: 199.9,
+        embalagemRotulo: 'CX c/ 3 UN',
+        usuarioNome: 'Ana Souza',
+        alteradoEm: '2026-10-24T10:00:00',
+      }
+
+      it('mostra o preço da embalagem com o rótulo e os valores', async () => {
+        listarHistoricoDePrecosMock.mockResolvedValue(pagina([precoDaCaixa], 0, 1))
+        renderEdicao()
+        await esperarFormulario()
+        mostrarHistorico()
+
+        await screen.findByText('Ana Souza')
+        const [linha] = linhas()
+        expect(within(linha).getByText('Preço da embalagem CX c/ 3 UN')).toBeInTheDocument()
+        expect(within(linha).getByText(/^R\$\s209,90 → R\$\s199,90$/)).toHaveAttribute('aria-hidden', 'true')
+        expect(within(linha).getByText('-4,76%')).toBeInTheDocument()
+      })
+
+      it('preço apagado (ou embalagem removida) aparece como "sem preço próprio"; o criado, a partir dele', async () => {
+        listarHistoricoDePrecosMock.mockResolvedValue(
+          pagina(
+            [
+              { ...precoDaCaixa, valorAnterior: 209.9, valorNovo: null },
+              { ...precoDaCaixa, valorAnterior: null, valorNovo: 209.9 },
+            ],
+            0,
+            2,
+          ),
+        )
+        renderEdicao()
+        await esperarFormulario()
+        mostrarHistorico()
+
+        await screen.findAllByText('Ana Souza')
+        const [apagado, criado] = linhas()
+        expect(within(apagado).getByText(/^R\$\s209,90 → sem preço próprio$/)).toBeInTheDocument()
+        expect(within(apagado).getByText(/^de R\$\s209,90 para sem preço próprio$/)).toHaveClass('sr-only')
+        expect(within(criado).getByText(/^sem preço próprio → R\$\s209,90$/)).toBeInTheDocument()
+      })
     })
   })
 
@@ -3399,6 +3447,7 @@ describe('ProdutoPage', () => {
         valorNovo: 11.5,
         usuarioNome: 'Ana Souza',
         alteradoEm: '2026-10-21T14:03:12',
+        embalagemRotulo: null,
       }
       listarHistoricoDePrecosMock
         .mockResolvedValueOnce({ itens: [linha], pagina: 0, tamanho: 20, totalItens: 2 })
@@ -3753,6 +3802,17 @@ describe('ProdutoPage', () => {
       return modal
     }
 
+
+    it('o modal oferece as embalagens gravadas do produto (Fase B3)', async () => {
+      const caixa = embalagemDaApi({ id: 'emb-cx18', unidade: resumo(CX), quantidade: 18, preco: null, deCompra: true })
+      renderEdicao({ ...produtoAtivo, embalagens: [caixa] })
+      await esperarFormulario()
+
+      fireEvent.click(screen.getByRole('button', { name: /ajustar estoque/i }))
+
+      const dialogo = await screen.findByRole('dialog', { name: 'Ajustar estoque' })
+      expect(within(dialogo).getByRole('combobox', { name: /^em$/i })).toHaveValue('emb-cx18')
+    })
     it('ADMIN vê "Ajustar estoque" no produto salvo com controle ligado', async () => {
       await abrirEstoqueDaEdicao()
 
@@ -3950,6 +4010,27 @@ describe('ProdutoPage', () => {
 
     beforeEach(() => {
       listarHistoricoDePrecosMock.mockResolvedValue({ itens: [], pagina: 0, tamanho: 20, totalItens: 0 })
+    })
+
+    it('o movimento informado em embalagens mostra o retrato junto da quantidade (Fase B3)', async () => {
+      const compraEmCaixas: MovimentoEstoque = {
+        ...SAIDA,
+        id: 'mov-3',
+        tipo: 'ENTRADA',
+        motivo: 'COMPRA',
+        quantidade: 36,
+        saldoAnterior: 10,
+        saldoNovo: 46,
+        observacao: null,
+        embalagem: { rotulo: 'CX c/ 18 UN', quantidadePorEmbalagem: 18, quantidadeDeEmbalagens: 2 },
+      }
+      listarMovimentosDeEstoqueMock.mockResolvedValue(paginaDeMovimentos([compraEmCaixas], 0, 1))
+      renderEdicao()
+      await esperarFormulario()
+      mostrarHistorico()
+
+      const [linha] = await waitFor(() => linhasDeEstoque())
+      expect(within(linha).getByText('+36 UN (2 CX c/ 18 UN)')).toBeInTheDocument()
     })
 
     it('tem as listas de estoque (primeiro) e de preços, cada uma com a sua consulta', async () => {

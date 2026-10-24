@@ -100,10 +100,30 @@ export function calcularPrevia(tipo: TipoMovimento, quantidade: number, saldo: n
   return { saldoNovo: novo / 1000, variacao: (novo - atual) / 1000, erro: null, confere: null }
 }
 
-/** "Saldo: 12 UN → 10 UN"; na contagem, com a diferenca: "Saldo: 12 UN → 10 UN (−2 UN)". Null sem movimento. */
-export function textoDaPrevia(tipo: TipoMovimento, saldo: number, previa: PreviaSaldo, sigla: string): string | null {
+/** Quantas embalagens e qual, para a previa do ajuste informado em embalagens. */
+export interface QuantidadeEmEmbalagem {
+  quantidade: number
+  rotulo: string
+}
+
+/**
+ * "Saldo: 12 UN → 10 UN"; na contagem, com a diferenca: "Saldo: 12 UN → 10 UN
+ * (−2 UN)"; em embalagens (spec B3 §6): "2 CX c/ 18 UN = +36 UN · saldo 10 → 46".
+ * Null sem movimento.
+ */
+export function textoDaPrevia(
+  tipo: TipoMovimento,
+  saldo: number,
+  previa: PreviaSaldo,
+  sigla: string,
+  emEmbalagem?: QuantidadeEmEmbalagem,
+): string | null {
   if (previa.saldoNovo === null || previa.variacao === null) {
     return null
+  }
+  if (emEmbalagem) {
+    const variacao = formatarVariacaoQuantidade(previa.variacao, sigla)
+    return `${numero(emEmbalagem.quantidade)} ${emEmbalagem.rotulo} = ${variacao} · saldo ${numero(saldo)} → ${numero(previa.saldoNovo)}`
   }
   const texto = `Saldo: ${formatarQuantidade(saldo, sigla)} → ${formatarQuantidade(previa.saldoNovo, sigla)}`
   return tipo === 'AJUSTE' ? `${texto} (${formatarVariacaoQuantidade(previa.variacao, sigla)})` : texto
@@ -134,7 +154,7 @@ export function rotuloConfirmar(tipo: TipoMovimento, previa: PreviaSaldo | null,
 export function mensagemDeSucesso(movimento: MovimentoEstoque, sigla: string): string {
   const saldoNovo = formatarQuantidade(movimento.saldoNovo, sigla)
   const variacao = formatarVariacaoQuantidade(movimento.quantidade, sigla)
-  const quantidade = formatarQuantidade(Math.abs(movimento.quantidade), sigla)
+  const quantidade = `${formatarQuantidade(Math.abs(movimento.quantidade), sigla)}${textoDoRetrato(movimento)}`
   if (movimento.tipo === 'ENTRADA') {
     return `Entrada de ${quantidade} registrada. Saldo: ${saldoNovo}.`
   }
@@ -150,6 +170,18 @@ export interface DadosAjuste {
   quantidade: string
   motivo: MotivoMovimento | ''
   observacao: string
+  /** UUID da embalagem em que a quantidade foi informada; ''/ausente = na unidade de venda. */
+  embalagemId?: string
+}
+
+/** Embalagem gravada do produto, como o modal a oferece. */
+export interface EmbalagemDoAjuste {
+  id: string
+  /** "CX c/ 18 UN" */
+  rotulo: string
+  /** Unidades de venda por embalagem. */
+  quantidade: number
+  deCompra: boolean
 }
 
 /** O que o modal sabe do produto. */
@@ -158,9 +190,42 @@ export interface ContextoAjuste {
   sigla: string
   /** Se a unidade de venda aceita fracao. */
   fracionada: boolean
+  /** Embalagens gravadas do produto (vazio = sem o seletor "Em"). */
+  embalagens?: readonly EmbalagemDoAjuste[]
 }
 
-export type CampoAjuste = 'tipo' | 'quantidade' | 'motivo' | 'observacao'
+export type CampoAjuste = 'tipo' | 'quantidade' | 'embalagemId' | 'motivo' | 'observacao'
+
+/**
+ * Embalagem que o seletor "Em" traz ao trocar o tipo ou o motivo (spec B3 §6):
+ * a de compra na Entrada com motivo Compra; senao, a unidade de venda ('').
+ */
+export function embalagemPadrao(
+  tipo: TipoMovimento,
+  motivo: MotivoMovimento | '',
+  embalagens: readonly EmbalagemDoAjuste[],
+): string {
+  return tipo === 'ENTRADA' && motivo === 'COMPRA' ? (embalagens.find((embalagem) => embalagem.deCompra)?.id ?? '') : ''
+}
+
+/** A embalagem do ajuste: so na entrada e na saida (a contagem e sempre na unidade de venda). */
+export function embalagemDoAjuste(dados: DadosAjuste, contexto: ContextoAjuste): EmbalagemDoAjuste | undefined {
+  if (dados.tipo === 'AJUSTE' || !dados.embalagemId) {
+    return undefined
+  }
+  return contexto.embalagens?.find((embalagem) => embalagem.id === dados.embalagemId)
+}
+
+/** Total em unidades de venda da quantidade digitada (x a embalagem, se houver); null se o texto nao e numero. */
+export function quantidadeEmUnidades(dados: DadosAjuste, contexto: ContextoAjuste): number | null {
+  const resultado = validarQuantidade(dados.quantidade)
+  if (!('valor' in resultado)) {
+    return null
+  }
+  const embalagem = embalagemDoAjuste(dados, contexto)
+  // Em milesimos, como o NUMERIC(12,3) do backend.
+  return embalagem ? Math.round(resultado.valor * embalagem.quantidade * 1000) / 1000 : resultado.valor
+}
 
 export interface ResultadoValidacaoAjuste {
   /** Quantidade lida (com virgula ou ponto); null se o campo tem erro de formato. */
@@ -182,21 +247,30 @@ function erroDaQuantidade(
       return { valor: null, erro: contagem ? 'Informe o saldo contado.' : 'Informe a quantidade.', confere: false }
     }
     if (resultado.erro === 'negativo') {
-      const erro = contagem ? 'O saldo contado não pode ser negativo.' : 'Informe uma quantidade maior que zero.'
+      const naEmbalagem = embalagemDoAjuste(dados, contexto) ? MENSAGEM_EMBALAGENS_INTEIRAS : null
+      const erro = contagem ? 'O saldo contado não pode ser negativo.' : (naEmbalagem ?? 'Informe uma quantidade maior que zero.')
       return { valor: null, erro, confere: false }
     }
     return { valor: null, erro: MENSAGEM_QUANTIDADE[resultado.erro], confere: false }
   }
   const valor = resultado.valor
+  const embalagem = embalagemDoAjuste(dados, contexto)
+  if (embalagem && (valor <= 0 || !Number.isInteger(valor))) {
+    return { valor, erro: MENSAGEM_EMBALAGENS_INTEIRAS, confere: false }
+  }
   if (!contagem && valor === 0) {
     return { valor, erro: 'Informe uma quantidade maior que zero.', confere: false }
   }
-  if (!contexto.fracionada && !Number.isInteger(valor)) {
+  const total = quantidadeEmUnidades(dados, contexto) ?? valor
+  if (!contexto.fracionada && !Number.isInteger(total)) {
     return { valor, erro: `A unidade ${contexto.sigla} não aceita quantidade fracionada.`, confere: false }
   }
-  const previa = calcularPrevia(dados.tipo, valor, contexto.saldo, contexto.sigla)
+  const previa = calcularPrevia(dados.tipo, total, contexto.saldo, contexto.sigla)
   return { valor, erro: previa.erro, confere: previa.confere !== null }
 }
+
+/** Quantidade em embalagens com fracao, zero ou negativa (a mensagem da API, spec B3 §6). */
+export const MENSAGEM_EMBALAGENS_INTEIRAS = 'Informe um número inteiro de embalagens.'
 
 /**
  * Validacao do modal antes do envio: quantidade (formato, > 0 na entrada e na
@@ -234,11 +308,17 @@ export interface TextoMovimento {
   saldosFalados: string
 }
 
+/** " (2 CX c/ 18 UN)" do movimento informado em embalagens; '' sem o retrato. */
+function textoDoRetrato(movimento: MovimentoEstoque): string {
+  const { embalagem } = movimento
+  return embalagem ? ` (${numero(embalagem.quantidadeDeEmbalagens)} ${embalagem.rotulo})` : ''
+}
+
 /** Textos de uma linha de movimento no historico. */
 export function textoMovimento(movimento: MovimentoEstoque, sigla: string): TextoMovimento {
   return {
     titulo: `${ROTULO_TIPO_HISTORICO[movimento.tipo]} · ${ROTULO_MOTIVO[movimento.motivo]}`,
-    quantidade: formatarVariacaoQuantidade(movimento.quantidade, sigla),
+    quantidade: `${formatarVariacaoQuantidade(movimento.quantidade, sigla)}${textoDoRetrato(movimento)}`,
     saldos: `${numero(movimento.saldoAnterior)} → ${numero(movimento.saldoNovo)}`,
     saldosFalados: `saldo de ${numero(movimento.saldoAnterior)} para ${numero(movimento.saldoNovo)}`,
   }

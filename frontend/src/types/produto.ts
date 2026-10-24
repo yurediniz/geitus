@@ -246,16 +246,18 @@ export interface FiltrosDaListaDeProdutos {
   pagina: number
 }
 
-/** Campo cujo valor gerou a linha do historico de precos. */
-export type CampoHistoricoPreco = 'CUSTO' | 'PRECO_VENDA'
+/** Campo cujo valor gerou a linha do historico de precos (`PRECO_EMBALAGEM`: o preco proprio de uma embalagem). */
+export type CampoHistoricoPreco = 'CUSTO' | 'PRECO_VENDA' | 'PRECO_EMBALAGEM'
 
-/** Uma alteracao de custo ou de preco de venda (gravada pelo backend ao salvar o produto). */
+/** Uma alteracao de custo, de preco de venda ou do preco de uma embalagem (gravada pelo backend ao salvar o produto). */
 export interface HistoricoPreco {
   campo: CampoHistoricoPreco
-  /** null no cadastro ou quando o custo estava vazio. */
+  /** null no cadastro, quando o custo estava vazio ou quando a embalagem estava sem preco proprio. */
   valorAnterior: number | null
-  /** null quando o custo foi removido. */
+  /** null quando o custo foi removido ou a embalagem ficou sem preco proprio (ou saiu do produto). */
   valorNovo: number | null
+  /** Rotulo da embalagem no momento da alteracao ("CX c/ 3 UN"); so em `PRECO_EMBALAGEM`. */
+  embalagemRotulo: string | null
   usuarioNome: string
   /** Momento da gravacao (yyyy-mm-ddThh:mm:ss, horario do servidor). */
   alteradoEm: string

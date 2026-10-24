@@ -511,4 +511,126 @@ describe('ModalAjusteEstoque', () => {
       expect(within(dialogo()).queryByRole('button', { name: 'Fechar' })).not.toBeInTheDocument()
     })
   })
+
+  describe('ajuste em embalagens (Fase B3)', () => {
+    const FARDO = { id: 'emb-fd6', rotulo: 'FD c/ 6 UN', quantidade: 6, deCompra: false }
+    const CAIXA = { id: 'emb-cx18', rotulo: 'CX c/ 18 UN', quantidade: 18, deCompra: true }
+    const EMBALAGENS = [FARDO, CAIXA]
+
+    function seletorEm(): HTMLElement {
+      return within(dialogo()).getByRole('combobox', { name: /^em$/i })
+    }
+
+    it('o seletor "Em" aparece na Entrada e na Saída, com a sigla de venda e os rótulos; não na Contagem', () => {
+      renderModal({ saldo: 10, embalagens: EMBALAGENS })
+
+      expect(rotulosDe(seletorEm())).toEqual(['UN', 'FD c/ 6 UN', 'CX c/ 18 UN'])
+      escolherTipo('Saída')
+      expect(seletorEm()).toBeInTheDocument()
+      escolherTipo('Contagem')
+      expect(within(dialogo()).queryByRole('combobox', { name: /^em$/i })).not.toBeInTheDocument()
+      expect(campoQuantidade()).toHaveAccessibleName('Saldo contado (UN)')
+    })
+
+    it('sem embalagens, não há seletor', () => {
+      renderModal()
+      expect(within(dialogo()).queryByRole('combobox', { name: /^em$/i })).not.toBeInTheDocument()
+    })
+
+    it('na Entrada com Compra, o padrão é a embalagem de compra; com outro motivo ou na Saída, a unidade de venda', () => {
+      renderModal({ saldo: 10, embalagens: EMBALAGENS })
+
+      expect(seletorEm()).toHaveValue('emb-cx18')
+      fireEvent.change(campoMotivo(), { target: { value: 'DEVOLUCAO_CLIENTE' } })
+      expect(seletorEm()).toHaveValue('')
+      fireEvent.change(campoMotivo(), { target: { value: 'COMPRA' } })
+      expect(seletorEm()).toHaveValue('emb-cx18')
+      escolherTipo('Saída')
+      expect(seletorEm()).toHaveValue('')
+    })
+
+    it('a escolha do usuário fica ao trocar o motivo', () => {
+      renderModal({ saldo: 10, embalagens: EMBALAGENS })
+
+      fireEvent.change(seletorEm(), { target: { value: 'emb-fd6' } })
+      fireEvent.change(campoMotivo(), { target: { value: 'DEVOLUCAO_CLIENTE' } })
+
+      expect(seletorEm()).toHaveValue('emb-fd6')
+    })
+
+    it('mostra a prévia em embalagens', () => {
+      renderModal({ saldo: 10, embalagens: EMBALAGENS })
+
+      fireEvent.change(campoQuantidade(), { target: { value: '2' } })
+
+      expect(regiaoDaPrevia()).toHaveTextContent('2 CX c/ 18 UN = +36 UN · saldo 10 → 46')
+    })
+
+    it('a saída em embalagens respeita o saldo em unidades', () => {
+      renderModal({ saldo: 46, embalagens: EMBALAGENS })
+      escolherTipo('Saída')
+      fireEvent.change(seletorEm(), { target: { value: 'emb-cx18' } })
+
+      fireEvent.change(campoQuantidade(), { target: { value: '3' } })
+
+      expect(regiaoDaPrevia()).toHaveTextContent('Saldo insuficiente: há 46 UN.')
+    })
+
+    it('1,5 embalagem é barrado com a mensagem da API, sem enviar', async () => {
+      renderModal({ saldo: 10, embalagens: EMBALAGENS })
+      fireEvent.change(campoQuantidade(), { target: { value: '1,5' } })
+
+      confirmar()
+
+      await waitFor(() => expect(campoQuantidade()).toHaveFocus())
+      expect(campoQuantidade()).toHaveAccessibleDescription('Informe um número inteiro de embalagens.')
+      expect(ajustarEstoqueMock).not.toHaveBeenCalled()
+    })
+
+    it('envia o embalagemId e a quantidade em embalagens', async () => {
+      ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
+      renderModal({ saldo: 10, embalagens: EMBALAGENS })
+      fireEvent.change(campoQuantidade(), { target: { value: '2' } })
+
+      confirmar()
+
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
+      expect(ajustarEstoqueMock).toHaveBeenCalledWith(ID_ARROZ, {
+        tipo: 'ENTRADA',
+        quantidade: 2,
+        motivo: 'COMPRA',
+        observacao: null,
+        chave: expect.any(String),
+        embalagemId: 'emb-cx18',
+      })
+    })
+
+    it('na unidade de venda, o request não leva embalagemId', async () => {
+      ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
+      renderModal({ saldo: 10, embalagens: EMBALAGENS })
+      fireEvent.change(seletorEm(), { target: { value: '' } })
+      fireEvent.change(campoQuantidade(), { target: { value: '2' } })
+
+      confirmar()
+
+      await waitFor(() => expect(ajustarEstoqueMock).toHaveBeenCalledTimes(1))
+      expect(ajustarEstoqueMock.mock.calls[0][1]).not.toHaveProperty('embalagemId')
+    })
+
+    it('404 com embalagem: a embalagem saiu do produto (texto fixo)', async () => {
+      ajustarEstoqueMock.mockRejectedValue(new HttpError(404, 'Embalagem não encontrada.'))
+      renderModal({ saldo: 10, embalagens: EMBALAGENS })
+      fireEvent.change(campoQuantidade(), { target: { value: '2' } })
+
+      confirmar()
+
+      expect(
+        await within(dialogo()).findByText('A embalagem escolhida não existe mais. Atualize a tela e tente de novo.'),
+      ).toBeInTheDocument()
+    })
+  })
 })
+
+function rotulosDe(select: HTMLElement): string[] {
+  return within(select).getAllByRole('option').map((opcao) => opcao.textContent ?? '')
+}

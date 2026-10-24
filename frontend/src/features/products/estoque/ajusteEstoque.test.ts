@@ -4,9 +4,12 @@ import {
   ROTULO_MOTIVO,
   ROTULO_TIPO,
   calcularPrevia,
+  embalagemDoAjuste,
+  embalagemPadrao,
   mensagemDeSucesso,
   motivoPadrao,
   motivosDoTipo,
+  quantidadeEmUnidades,
   rotuloConfirmar,
   textoDaPrevia,
   textoMovimento,
@@ -219,6 +222,86 @@ describe('ajusteEstoque', () => {
       expect(textoMovimento({ ...MOVIMENTO, tipo: 'AJUSTE', motivo: 'CONTAGEM' }, 'UN').titulo).toBe(
         'Ajuste · Contagem/inventário',
       )
+    })
+
+    it('movimento informado em embalagens mostra o retrato junto da quantidade', () => {
+      const entrada: MovimentoEstoque = {
+        ...MOVIMENTO,
+        tipo: 'ENTRADA',
+        motivo: 'COMPRA',
+        quantidade: 36,
+        saldoAnterior: 10,
+        saldoNovo: 46,
+        embalagem: { rotulo: 'CX c/ 18 UN', quantidadePorEmbalagem: 18, quantidadeDeEmbalagens: 2 },
+      }
+      expect(textoMovimento(entrada, 'UN').quantidade).toBe('+36 UN (2 CX c/ 18 UN)')
+    })
+  })
+
+  describe('embalagens no ajuste (Fase B3)', () => {
+    const FARDO = { id: 'fd6', rotulo: 'FD c/ 6 UN', quantidade: 6, deCompra: false }
+    const CAIXA = { id: 'cx18', rotulo: 'CX c/ 18 UN', quantidade: 18, deCompra: true }
+    const contexto = { saldo: 10, sigla: 'UN', fracionada: false, embalagens: [FARDO, CAIXA] }
+    const entrada: DadosAjuste = { tipo: 'ENTRADA', quantidade: '2', motivo: 'COMPRA', observacao: '', embalagemId: 'cx18' }
+
+    it('padrão: a embalagem de compra na Entrada com Compra; senão a unidade de venda', () => {
+      expect(embalagemPadrao('ENTRADA', 'COMPRA', [FARDO, CAIXA])).toBe('cx18')
+      expect(embalagemPadrao('ENTRADA', 'DEVOLUCAO_CLIENTE', [FARDO, CAIXA])).toBe('')
+      expect(embalagemPadrao('SAIDA', '', [FARDO, CAIXA])).toBe('')
+      expect(embalagemPadrao('ENTRADA', 'COMPRA', [FARDO])).toBe('')
+    })
+
+    it('com embalagem, a quantidade é o número de embalagens e o total vai em unidades', () => {
+      expect(validarAjuste(entrada, contexto)).toEqual({ quantidade: 2, erros: {}, confere: false })
+      expect(quantidadeEmUnidades(entrada, contexto)).toBe(36)
+      expect(quantidadeEmUnidades({ ...entrada, embalagemId: '' }, contexto)).toBe(2)
+    })
+
+    it('com embalagem, a quantidade é inteira e > 0', () => {
+      for (const quantidade of ['1,5', '0', '-1']) {
+        expect(validarAjuste({ ...entrada, quantidade }, contexto).erros).toEqual({
+          quantidade: 'Informe um número inteiro de embalagens.',
+        })
+      }
+      expect(validarAjuste({ ...entrada, quantidade: '' }, contexto).erros).toEqual({ quantidade: 'Informe a quantidade.' })
+    })
+
+    it('o saldo é conferido sobre o total em unidades', () => {
+      const saida: DadosAjuste = { ...entrada, tipo: 'SAIDA', motivo: 'PERDA_AVARIA', quantidade: '3' }
+      expect(validarAjuste(saida, { ...contexto, saldo: 46 }).erros).toEqual({
+        quantidade: 'Saldo insuficiente: há 46 UN.',
+      })
+      expect(validarAjuste(saida, { ...contexto, saldo: 54 }).erros).toEqual({})
+    })
+
+    it('na contagem, a embalagem é ignorada (a contagem é na unidade de venda)', () => {
+      const contagem: DadosAjuste = { ...entrada, tipo: 'AJUSTE', motivo: 'CONTAGEM', quantidade: '5' }
+      expect(embalagemDoAjuste(contagem, contexto)).toBeUndefined()
+      expect(quantidadeEmUnidades(contagem, contexto)).toBe(5)
+    })
+
+    it('prévia em embalagens: "2 CX c/ 18 UN = +36 UN · saldo 10 → 46"', () => {
+      const previa = calcularPrevia('ENTRADA', 36, 10, 'UN')
+      expect(textoDaPrevia('ENTRADA', 10, previa, 'UN', { quantidade: 2, rotulo: 'CX c/ 18 UN' })).toBe(
+        '2 CX c/ 18 UN = +36 UN · saldo 10 → 46',
+      )
+      const saida = calcularPrevia('SAIDA', 54, 54, 'UN')
+      expect(textoDaPrevia('SAIDA', 54, saida, 'UN', { quantidade: 3, rotulo: 'CX c/ 18 UN' })).toBe(
+        '3 CX c/ 18 UN = −54 UN · saldo 54 → 0',
+      )
+    })
+
+    it('a mensagem de sucesso diz as embalagens', () => {
+      const movimento: MovimentoEstoque = {
+        ...MOVIMENTO,
+        tipo: 'ENTRADA',
+        motivo: 'COMPRA',
+        quantidade: 36,
+        saldoAnterior: 10,
+        saldoNovo: 46,
+        embalagem: { rotulo: 'CX c/ 18 UN', quantidadePorEmbalagem: 18, quantidadeDeEmbalagens: 2 },
+      }
+      expect(mensagemDeSucesso(movimento, 'UN')).toBe('Entrada de 36 UN (2 CX c/ 18 UN) registrada. Saldo: 46 UN.')
     })
   })
 })

@@ -14,17 +14,22 @@ import {
   ROTULO_TIPO,
   TIPOS_MOVIMENTO,
   calcularPrevia,
+  embalagemDoAjuste,
+  embalagemPadrao,
   motivoPadrao,
   motivosDoTipo,
+  quantidadeEmUnidades,
   rotuloConfirmar,
   textoDaPrevia,
   validarAjuste,
   type CampoAjuste,
+  type ContextoAjuste,
   type DadosAjuste,
+  type EmbalagemDoAjuste,
   type PreviaSaldo,
 } from '@/features/products/estoque/ajusteEstoque'
 import { formatarQuantidade } from '@/features/products/formatacaoProduto'
-import { validarQuantidade } from '@/lib/quantidade'
+import { interpretarQuantidade } from '@/lib/quantidade'
 import { gerarUuid } from '@/lib/uuid'
 import { cn } from '@/lib/utils'
 import { ajustarEstoque } from '@/services/estoqueService'
@@ -40,6 +45,11 @@ export interface ModalAjusteEstoqueProps {
   sigla: string
   /** Se a unidade de venda aceita quantidade fracionada. */
   fracionada: boolean
+  /**
+   * Embalagens gravadas do produto (spec B3 §6): com elas, Entrada e Saida
+   * ganham o seletor "Em" e a quantidade pode ser informada em embalagens.
+   */
+  embalagens?: readonly EmbalagemDoAjuste[]
   aoFechar: () => void
   /** Quem recebe o foco ao fechar (ex.: o botao que abriu; no Safari o clique nao foca o botao). */
   focoAoFechar?: () => HTMLElement | null
@@ -72,6 +82,7 @@ export function ModalAjusteEstoque({ aberto, aoFechar, ...props }: ModalAjusteEs
 const ID_CAMPO: Readonly<Record<CampoAjuste, string>> = {
   tipo: 'ajuste-tipo',
   quantidade: 'ajuste-quantidade',
+  embalagemId: 'ajuste-embalagem',
   motivo: 'ajuste-motivo',
   observacao: 'ajuste-observacao',
 }
@@ -80,7 +91,7 @@ const ID_PREVIA = 'ajuste-previa'
 const ID_AJUDA_CONTAGEM = 'ajuste-quantidade-ajuda'
 
 /** Ordem de foco quando ha erro (a ordem da tela). */
-const ORDEM_CAMPOS: readonly CampoAjuste[] = ['tipo', 'quantidade', 'motivo', 'observacao']
+const ORDEM_CAMPOS: readonly CampoAjuste[] = ['tipo', 'quantidade', 'embalagemId', 'motivo', 'observacao']
 
 function ehCampoAjuste(chave: string): chave is CampoAjuste {
   return (ORDEM_CAMPOS as readonly string[]).includes(chave)
@@ -98,14 +109,18 @@ function primeiroCampoComErro(erros: Partial<Record<CampoAjuste, string>>): Camp
 }
 
 const MENSAGEM_FALHA = 'Não foi possível registrar o ajuste. Confira a conexão e tente de novo.'
+const MENSAGEM_EMBALAGEM_REMOVIDA = 'A embalagem escolhida não existe mais. Atualize a tela e tente de novo.'
 const MENSAGEM_CONFLITO =
   'Um ajuste deste produto já foi registrado agora há pouco. Confira o saldo atual antes de confirmar de novo.'
 
-/** Previa da quantidade digitada; null enquanto ela nao e um numero aceito. */
-function previaDe(dados: DadosAjuste, saldo: number, sigla: string): PreviaSaldo | null {
-  const resultado = validarQuantidade(dados.quantidade)
-  return 'valor' in resultado ? calcularPrevia(dados.tipo, resultado.valor, saldo, sigla) : null
+/** Previa da quantidade digitada (em unidades de venda); null enquanto ela nao e um numero aceito. */
+function previaDe(dados: DadosAjuste, contexto: ContextoAjuste): PreviaSaldo | null {
+  const total = quantidadeEmUnidades(dados, contexto)
+  return total === null ? null : calcularPrevia(dados.tipo, total, contexto.saldo, contexto.sigla)
 }
+
+/** Sem embalagens por padrao: referencia estavel (o contexto e montado a cada render). */
+const SEM_EMBALAGENS: readonly EmbalagemDoAjuste[] = []
 
 type ConteudoAjusteProps = Omit<ModalAjusteEstoqueProps, 'aberto'>
 
@@ -114,6 +129,7 @@ function ConteudoAjuste({
   saldo,
   sigla,
   fracionada,
+  embalagens = SEM_EMBALAGENS,
   aoFechar,
   focoAoFechar,
   aoConcluir,
@@ -121,18 +137,21 @@ function ConteudoAjuste({
   const queryClient = useQueryClient()
   // Gerada ao abrir; so muda depois de um 409 (a operacao desta chave ja foi registrada).
   const [chave, setChave] = useState(gerarUuid)
-  const [dados, setDados] = useState<DadosAjuste>({
+  const [dados, setDados] = useState<DadosAjuste>(() => ({
     tipo: 'ENTRADA',
     quantidade: '',
     motivo: motivoPadrao('ENTRADA'),
     observacao: '',
-  })
+    embalagemId: embalagemPadrao('ENTRADA', motivoPadrao('ENTRADA'), embalagens),
+  }))
+  // Escolhida no seletor: trocar o tipo ou o motivo deixa de trocar a embalagem pelo padrao.
+  const [embalagemEscolhida, setEmbalagemEscolhida] = useState(false)
   const [errosEnvio, setErrosEnvio] = useState<Partial<Record<CampoAjuste, string>>>({})
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [focoPendente, setFocoPendente] = useState<AlvoDoFoco | null>(null)
   /** Guarda sincrona contra envio duplo (duplo clique ou Enter repetido antes do novo render). */
   const enviandoRef = useRef(false)
-  const contexto = { saldo, sigla, fracionada }
+  const contexto: ContextoAjuste = { saldo, sigla, fracionada, embalagens }
 
   // Saldo, listagem e historico ficam desatualizados: o prefixo de produtos cobre todos.
   const atualizarProdutos = () => void queryClient.invalidateQueries({ queryKey: PRODUTOS_QUERY_KEY })
@@ -176,7 +195,8 @@ function ConteudoAjuste({
       } else if (erro instanceof HttpError && erro.status === 403) {
         setErroGeral('Somente administradores podem ajustar o estoque.')
       } else if (erro instanceof HttpError && erro.status === 404) {
-        setErroGeral('Este produto não existe mais. Atualize a tela.')
+        // Com embalagem, o 404 e dela (removida com o modal aberto); sem, do produto.
+        setErroGeral(mutation.variables?.embalagemId ? MENSAGEM_EMBALAGEM_REMOVIDA : 'Este produto não existe mais. Atualize a tela.')
       } else {
         setErroGeral(MENSAGEM_FALHA)
       }
@@ -199,17 +219,31 @@ function ConteudoAjuste({
     setFocoPendente(null)
   }, [focoPendente, enviando, dados.tipo])
 
-  const alterar = (campo: Exclude<CampoAjuste, 'tipo'>, valor: string) => {
-    setDados((atuais) => ({ ...atuais, [campo]: valor }))
+  const alterar = (campo: Exclude<CampoAjuste, 'tipo' | 'embalagemId'>, valor: string) => {
+    setDados((atuais) => {
+      const novos = { ...atuais, [campo]: valor }
+      // O motivo muda o padrao do seletor (Compra traz a embalagem de compra), ate o usuario escolher.
+      return campo === 'motivo' && !embalagemEscolhida
+        ? { ...novos, embalagemId: embalagemPadrao(novos.tipo, novos.motivo, embalagens) }
+        : novos
+    })
     setErrosEnvio(({ [campo]: _removido, ...demais }) => demais)
   }
 
+  const escolherEmbalagem = (embalagemId: string) => {
+    setDados((atuais) => ({ ...atuais, embalagemId }))
+    setEmbalagemEscolhida(true)
+    // A quantidade muda de sentido (unidades ou embalagens).
+    setErrosEnvio(({ quantidade: _quantidade, embalagemId: _embalagem, ...demais }) => demais)
+  }
+
   const trocarTipo = (tipo: TipoMovimento) => {
-    setDados((atuais) => ({
-      ...atuais,
-      tipo,
-      motivo: atuais.motivo !== '' && motivosDoTipo(tipo).includes(atuais.motivo) ? atuais.motivo : motivoPadrao(tipo),
-    }))
+    setDados((atuais) => {
+      const motivo =
+        atuais.motivo !== '' && motivosDoTipo(tipo).includes(atuais.motivo) ? atuais.motivo : motivoPadrao(tipo)
+      const embalagemId = embalagemEscolhida ? atuais.embalagemId : embalagemPadrao(tipo, motivo, embalagens)
+      return { ...atuais, tipo, motivo, embalagemId }
+    })
     // A quantidade muda de sentido com o tipo (na contagem e o saldo contado).
     setErrosEnvio({})
   }
@@ -220,7 +254,8 @@ function ConteudoAjuste({
     setErrosEnvio({})
   }
 
-  const previa = previaDe(dados, saldo, sigla)
+  const previa = previaDe(dados, contexto)
+  const embalagem = embalagemDoAjuste(dados, contexto)
 
   const confirmar = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -247,20 +282,26 @@ function ConteudoAjuste({
     setErroGeral(null)
     mutation.mutate({
       tipo: dados.tipo,
+      // Com embalagem, o numero de embalagens: o backend multiplica.
       quantidade,
       motivo: dados.motivo as MotivoMovimento,
       observacao: dados.observacao.trim() || null,
       chave,
+      ...(embalagem ? { embalagemId: embalagem.id } : {}),
     })
   }
 
   const contagem = dados.tipo === 'AJUSTE'
+  const comSeletor = !contagem && embalagens.length > 0
   const motivos = motivosDoTipo(dados.tipo)
   const observacaoObrigatoria = dados.motivo === 'OUTRO'
   const saldoAtual = formatarQuantidade(saldo, sigla)
   // A previa so aparece com a quantidade aceita (ex.: fracao em UN nao mostra saldo).
   const quantidadeAceita = !validarAjuste(dados, contexto).erros.quantidade
-  const textoPrevia = previa && quantidadeAceita ? textoDaPrevia(dados.tipo, saldo, previa, sigla) : null
+  const quantidadeDigitada = interpretarQuantidade(dados.quantidade)
+  const emEmbalagem =
+    embalagem && quantidadeDigitada !== null ? { quantidade: quantidadeDigitada, rotulo: embalagem.rotulo } : undefined
+  const textoPrevia = previa && quantidadeAceita ? textoDaPrevia(dados.tipo, saldo, previa, sigla, emEmbalagem) : null
   const erroDaPrevia = errosEnvio.quantidade ? null : (previa?.erro ?? null)
   const erroQuantidade = errosEnvio.quantidade
   const quantidadeInvalida = Boolean(erroQuantidade || erroDaPrevia)
@@ -342,27 +383,52 @@ function ConteudoAjuste({
           <ErroDoCampo id={`${ID_CAMPO.tipo}-erro`} mensagem={errosEnvio.tipo} />
         </fieldset>
 
-        <div className="space-y-1.5">
-          <label htmlFor={ID_CAMPO.quantidade} className="text-sm font-medium">
-            {`${contagem ? 'Saldo contado' : 'Quantidade'} (${sigla})`}
-          </label>
-          <Input
-            id={ID_CAMPO.quantidade}
-            inputMode="decimal"
-            autoComplete="off"
-            value={dados.quantidade}
-            onChange={(event) => alterar('quantidade', event.target.value)}
-            disabled={enviando}
-            aria-invalid={quantidadeInvalida ? true : undefined}
-            aria-describedby={descricaoQuantidade}
-            className="tabular-nums"
-          />
-          {contagem && (
-            <p id={ID_AJUDA_CONTAGEM} className="text-xs text-muted-foreground">
-              Quanto você contou. O sistema calcula a diferença.
-            </p>
+        <div className={cn('gap-3', comSeletor && 'grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)]')}>
+          <div className="space-y-1.5">
+            <label htmlFor={ID_CAMPO.quantidade} className="text-sm font-medium">
+              {contagem ? `Saldo contado (${sigla})` : comSeletor ? 'Quantidade' : `Quantidade (${sigla})`}
+            </label>
+            <Input
+              id={ID_CAMPO.quantidade}
+              inputMode="decimal"
+              autoComplete="off"
+              value={dados.quantidade}
+              onChange={(event) => alterar('quantidade', event.target.value)}
+              disabled={enviando}
+              aria-invalid={quantidadeInvalida ? true : undefined}
+              aria-describedby={descricaoQuantidade}
+              className="tabular-nums"
+            />
+            {contagem && (
+              <p id={ID_AJUDA_CONTAGEM} className="text-xs text-muted-foreground">
+                Quanto você contou. O sistema calcula a diferença.
+              </p>
+            )}
+            <ErroDoCampo id={`${ID_CAMPO.quantidade}-erro`} mensagem={erroQuantidade} />
+          </div>
+          {comSeletor && (
+            <div className="space-y-1.5">
+              <label htmlFor={ID_CAMPO.embalagemId} className="text-sm font-medium">
+                Em
+              </label>
+              <NativeSelect
+                id={ID_CAMPO.embalagemId}
+                value={dados.embalagemId ?? ''}
+                onChange={(event) => escolherEmbalagem(event.target.value)}
+                disabled={enviando}
+                aria-invalid={errosEnvio.embalagemId ? true : undefined}
+                aria-describedby={errosEnvio.embalagemId ? `${ID_CAMPO.embalagemId}-erro` : undefined}
+              >
+                <option value="">{sigla}</option>
+                {embalagens.map((opcao) => (
+                  <option key={opcao.id} value={opcao.id}>
+                    {opcao.rotulo}
+                  </option>
+                ))}
+              </NativeSelect>
+              <ErroDoCampo id={`${ID_CAMPO.embalagemId}-erro`} mensagem={errosEnvio.embalagemId} />
+            </div>
           )}
-          <ErroDoCampo id={`${ID_CAMPO.quantidade}-erro`} mensagem={erroQuantidade} />
         </div>
 
         <div className="space-y-1.5">

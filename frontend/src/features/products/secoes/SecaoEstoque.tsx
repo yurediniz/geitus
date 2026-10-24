@@ -85,6 +85,13 @@ export function SecaoEstoque({
           produto.unidade.fracionada,
         )
       : null
+  // As embalagens gravadas (o ajuste vai para o servidor, que so conhece as salvas).
+  const embalagensDoAjuste = (produto?.embalagens ?? []).map(({ id, rotulo, quantidade, deCompra }) => ({
+    id,
+    rotulo,
+    quantidade,
+    deCompra,
+  }))
   const avisarSaldoGuardado = produto !== null && produto.controlaEstoque && !controla && produto.estoqueAtual > 0
 
   return (
@@ -220,6 +227,7 @@ export function SecaoEstoque({
           saldo={produto.estoqueAtual}
           sigla={produto.unidade.sigla}
           fracionada={produto.unidade.fracionada}
+          embalagens={embalagensDoAjuste}
           aoFechar={() => setAjustando(false)}
           focoAoFechar={() => botaoAjustarRef.current}
           aoConcluir={(movimento) => {
