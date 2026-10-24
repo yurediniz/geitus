@@ -192,17 +192,22 @@ function mostrarHistorico() {
  * Posicoes de mentira para o scroll-spy (o jsdom nao tem layout): o topo de
  * cada secao, a base da barra fixa e se a pagina chegou ao fim.
  */
-function posicionar(topos: Partial<Record<string, number>>, { fimDaPagina = false } = {}) {
+function posicionar(
+  topos: Partial<Record<string, number>>,
+  { fimDaPagina = false, fundoDaBarra = 50, margemDeRolagem = 0 } = {},
+) {
   const retangulo = (topo: number) => ({ top: topo, bottom: topo + 300 }) as DOMRect
   for (const [nome, topo] of Object.entries(topos)) {
     const elemento = document.getElementById(`secao-${nome}`)
     if (elemento && topo !== undefined) {
       vi.spyOn(elemento, 'getBoundingClientRect').mockReturnValue(retangulo(topo))
+      // O scroll-margin do Tailwind nao existe no jsdom: o teste diz qual e.
+      elemento.style.scrollMarginTop = `${margemDeRolagem}px`
     }
   }
   const barra = document.getElementById('produto-barra-fixa')
   if (barra) {
-    vi.spyOn(barra, 'getBoundingClientRect').mockReturnValue({ top: 0, bottom: 50 } as DOMRect)
+    vi.spyOn(barra, 'getBoundingClientRect').mockReturnValue({ top: 0, bottom: fundoDaBarra } as DOMRect)
   }
   Object.defineProperty(document.documentElement, 'scrollHeight', {
     configurable: true,
@@ -377,6 +382,52 @@ describe('ProdutoPage', () => {
       simularInterseccao(secao(/^estoque$/i), true)
       expect(atalho(/estoque/i)).toHaveAttribute('aria-current', 'true')
       expect(atalho(/preços/i)).not.toHaveAttribute('aria-current')
+    })
+
+    it('a seção rolada pelo atalho fica ativa ao terminar, parada na margem de rolagem (geometria do navegador)', async () => {
+      renderEdicao()
+      await esperarFormulario()
+
+      fireEvent.click(atalho(/estoque/i))
+      // Como no Chrome: barra termina em 52, Estoque parou no scroll-margin (128) e Precos ainda aparece acima.
+      posicionar(
+        { geral: -2200, codigos: -1400, precos: -300, estoque: 128, historico: 900 },
+        { fundoDaBarra: 52, margemDeRolagem: 128 },
+      )
+      fireEvent(window, new Event('scrollend'))
+      simularInterseccao(secao(/^estoque$/i), true)
+
+      expect(atalho(/estoque/i)).toHaveAttribute('aria-current', 'true')
+      expect(atalho(/preços/i)).not.toHaveAttribute('aria-current')
+    })
+
+    it('no topo da página, Geral fica ativa', async () => {
+      renderEdicao()
+      await esperarFormulario()
+      fireEvent.click(atalho(/estoque/i))
+      fireEvent(window, new Event('scrollend'))
+
+      posicionar(
+        { geral: 220, codigos: 1100, precos: 1900, estoque: 2700, historico: 3400 },
+        { fundoDaBarra: 52, margemDeRolagem: 128 },
+      )
+      simularInterseccao(secao(/^geral$/i), true)
+
+      expect(atalho(/geral/i)).toHaveAttribute('aria-current', 'true')
+    })
+
+    it('na rolagem manual, a seção passa a ativa quando o topo chega à linha abaixo da barra', async () => {
+      renderEdicao()
+      await esperarFormulario()
+      const linha = 128 + 16
+
+      posicionar({ geral: -900, codigos: -100, precos: linha + 1, estoque: 900, historico: 1700 }, { fundoDaBarra: 52, margemDeRolagem: 128 })
+      simularInterseccao(secao(/^preços$/i), true)
+      expect(atalho(/códigos/i)).toHaveAttribute('aria-current', 'true')
+
+      posicionar({ geral: -901, codigos: -101, precos: linha, estoque: 899, historico: 1699 }, { fundoDaBarra: 52, margemDeRolagem: 128 })
+      simularInterseccao(secao(/^preços$/i), true)
+      expect(atalho(/preços/i)).toHaveAttribute('aria-current', 'true')
     })
 
     it('no fim da página, a última seção visível fica ativa (mesmo sem passar da linha)', async () => {

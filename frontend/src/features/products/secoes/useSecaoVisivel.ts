@@ -7,16 +7,31 @@ function temIntersectionObserver(): boolean {
   return typeof IntersectionObserver !== 'undefined'
 }
 
-/** Folga abaixo da barra fixa: o titulo que acabou de passar por baixo dela ja conta. */
-const FOLGA_DA_LINHA = 8
+/** Folga abaixo da linha: a secao que acabou de chegar nela (ex.: rolada pelo atalho) ja conta. */
+const FOLGA_DA_LINHA = 16
 
 /** Tempo maximo da trava do spy depois de uma rolagem programatica, se o `scrollend` nao vier. */
 const TEMPO_MAXIMO_DA_TRAVA = 1200
 
-/** Altura que a barra fixa (atalhos e avisos) cobre no topo da tela. */
-function linhaAbaixoDaBarra(): number {
+/** Onde termina a barra fixa (atalhos e avisos) no topo da tela. */
+function fundoDaBarra(): number {
   const barra = document.getElementById(ID_BARRA_FIXA)
-  return (barra ? barra.getBoundingClientRect().bottom : 0) + FOLGA_DA_LINHA
+  return barra ? barra.getBoundingClientRect().bottom : 0
+}
+
+/** O `scroll-margin-top` real da secao (onde o atalho a deixa ao rolar); 0 se nao houver. */
+function margemDeRolagem(elemento: HTMLElement): number {
+  const margem = Number.parseFloat(window.getComputedStyle(elemento).scrollMarginTop)
+  return Number.isFinite(margem) ? margem : 0
+}
+
+/**
+ * Linha de ativacao da secao: abaixo da barra fixa e, no minimo, na margem de
+ * rolagem da secao. Assim a secao rolada pelo atalho (que para na margem, e nao
+ * colada na barra) fica ativa quando a rolagem termina.
+ */
+function linhaDeAtivacao(elemento: HTMLElement, barra: number): number {
+  return Math.max(barra, margemDeRolagem(elemento)) + FOLGA_DA_LINHA
 }
 
 /** Se a pagina chegou ao fim (as ultimas secoes podem nunca passar pela linha). */
@@ -25,15 +40,15 @@ function noFimDaPagina(): boolean {
 }
 
 /**
- * A secao ativa pela posicao na tela: a ultima cujo topo ja passou da linha
- * abaixo da barra fixa; no fim da pagina, a ultima secao visivel. Antes da
- * primeira passar da linha, a primeira.
+ * A secao ativa pela posicao na tela: a ultima cujo topo ja chegou a linha de
+ * ativacao (abaixo da barra fixa e na margem de rolagem); no fim da pagina, a
+ * ultima secao visivel. Antes da primeira chegar a linha, a primeira.
  */
 function calcularSecaoAtiva(ordem: readonly SecaoProduto[]): SecaoProduto | null {
   const topos = ordem
     .map((secao) => ({ secao, elemento: document.getElementById(idDaSecao(secao)) }))
     .filter((item): item is { secao: SecaoProduto; elemento: HTMLElement } => item.elemento !== null)
-    .map(({ secao, elemento }) => ({ secao, topo: elemento.getBoundingClientRect().top }))
+    .map(({ secao, elemento }) => ({ secao, elemento, topo: elemento.getBoundingClientRect().top }))
   if (topos.length === 0) {
     return null
   }
@@ -41,8 +56,8 @@ function calcularSecaoAtiva(ordem: readonly SecaoProduto[]): SecaoProduto | null
     const visiveis = topos.filter(({ topo }) => topo < window.innerHeight)
     return visiveis[visiveis.length - 1]?.secao ?? topos[topos.length - 1].secao
   }
-  const linha = linhaAbaixoDaBarra()
-  const acima = topos.filter(({ topo }) => topo <= linha)
+  const barra = fundoDaBarra()
+  const acima = topos.filter(({ elemento, topo }) => topo <= linhaDeAtivacao(elemento, barra))
   return acima[acima.length - 1]?.secao ?? topos[0].secao
 }
 
