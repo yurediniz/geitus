@@ -950,3 +950,4 @@ Decisões do usuário em conversa: árvore livre, só o nome obrigatório e "For
 **Observações futuras:**
 - **Compras:** importação de NF-e (cria ou atualiza o fornecedor pelo CNPJ), preço e código por fornecedor, e contas a pagar.
 - **Listagem de produtos:** filtro por marca e por fornecedor.
+- **Dados pessoais:** o OPERADOR vê documento (inclusive CPF de fornecedor pessoa física) e contatos, como em Clientes. Mascarar para o OPERADOR fica para quando houver perfis mais granulares (apontado pelo security-reviewer na B5).

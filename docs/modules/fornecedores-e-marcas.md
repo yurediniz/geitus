@@ -290,3 +290,25 @@ Aditiva sobre a V13, que não é editada.
     - o campo Fornecedor só em Entrada + Compra;
     - vem preenchido com o da última compra;
     - o envio.
+
+## 11. Ajustes na implementação
+- **Contrato do endereço:** campos planos (`cep`, `logradouro`, `numeroEndereco`, `complemento`, `bairro`, `municipio`, `uf`). `numeroEndereco` evita colidir com o Nº do fornecedor (`numero`).
+- **Ligar produto ao fornecedor:** `POST /api/fornecedores/{id}/produtos` responde com o item da lista no corpo (201 quando cria, 200 quando já estava ligado). Na tela, o 200 mostra "{produto} já estava ligado a este fornecedor.".
+- **Limite de 20 fornecedores por produto** (decisão do CTO na revisão): ligar pela tela do fornecedor ou pela entrada por compra um fornecedor novo num produto que já tem 20 dá 400 "Este produto já tem 20 fornecedores. Tire um da lista do produto para ligar outro.". A compra pode ser registrada sem fornecedor.
+- **Regras e mensagens além da spec:**
+  - "Informe no máximo 20 fornecedores." (`fornecedorIds`);
+  - "Informe a lista de fornecedores." quando vem o último sem a lista;
+  - "Representante repetido na lista." e "Representante não encontrado." (404);
+  - "Esta marca está inativa. Escolha uma marca ativa." (marca nova inativa no produto e no fornecedor);
+  - um fornecedor inativo não ganha produto novo pela tela dele ("Este fornecedor está inativo.");
+  - desligar um produto que não está ligado dá 404;
+  - na edição sem `tipoPessoa`, o tipo atual é mantido.
+- **Busca de fornecedores:** até 200 caracteres; o documento só é comparado com 4 dígitos ou mais no termo, e o Nº é exato.
+- **Banco:** colunas `busca_normalizada` e `nome_normalizado` em `fornecedores`; a FK do "último fornecedor" é imediata, e a aplicação limpa o campo antes de desligar.
+- **Tela:**
+  - salvar um fornecedor novo abre a edição dele (para ligar os produtos);
+  - trocar PJ/PF limpa a IE e o documento;
+  - com produtos ligados, "Excluir" abre já bloqueado e oferece inativar;
+  - na árvore de marcas, os textos falam em "fabricante" ("Novo fabricante", "Mover para o primeiro nível (fabricante)");
+  - a IE colada com pontuação é limpa automaticamente.
+- **Visibilidade:** o OPERADOR vê documento e contatos do fornecedor e dos representantes, como em Clientes (decisão registrada na DEC-039; revisar quando houver perfis mais granulares).
