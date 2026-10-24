@@ -4,9 +4,11 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.hibernate.annotations.SQLRestriction;
@@ -288,40 +290,63 @@ public class Produto {
      * continua nulo ate a primeira alteracao depois do cadastro.
      */
     public void substituirCodigos(List<CodigoBarrasValidado> informados) {
-        List<String> codigosAnteriores = textosDosCodigos();
-        List<ProdutoCodigoBarras> reconciliados = new ArrayList<>(informados.size());
-        for (int ordem = 0; ordem < informados.size(); ordem++) {
-            reconciliados.add(codigoReposicionadoOuNovo(informados.get(ordem), ordem));
-        }
-        codigosBarras.clear();
-        codigosBarras.addAll(reconciliados);
-        if (jaGravado() && !codigosAnteriores.equals(textosDosCodigos())) {
-            this.atualizadoEm = LocalDateTime.now();
-        }
+        List<String> codigosAnteriores = ListaDeCodigosDeBarras.textos(codigosBarras);
+        ListaDeCodigosDeBarras.substituir(codigosBarras, informados,
+                (codigo, ordem) -> new ProdutoCodigoBarras(this, codigo.codigo(), codigo.formato(), ordem));
+        carimbarSeMudou(codigosAnteriores);
     }
 
-    private List<String> textosDosCodigos() {
-        return codigosBarras.stream().map(ProdutoCodigoBarras::getCodigo).toList();
+    /**
+     * Fase 1 de um salvamento em que um codigo pode mudar de lista (Fase B3,
+     * Review Focus 1): tira os codigos da unidade fora de {@code mantidos}, para
+     * que sejam apagados no flush antes de outra lista inclui-los.
+     */
+    void removerCodigosForaDe(Set<String> mantidos) {
+        List<String> codigosAnteriores = ListaDeCodigosDeBarras.textos(codigosBarras);
+        ListaDeCodigosDeBarras.removerForaDe(codigosBarras, mantidos);
+        carimbarSeMudou(codigosAnteriores);
+    }
+
+    private void carimbarSeMudou(List<String> codigosAnteriores) {
+        if (jaGravado() && !codigosAnteriores.equals(ListaDeCodigosDeBarras.textos(codigosBarras))) {
+            this.atualizadoEm = LocalDateTime.now();
+        }
     }
 
     private boolean jaGravado() {
         return id != null;
     }
 
-    private ProdutoCodigoBarras codigoReposicionadoOuNovo(CodigoBarrasValidado informado, int ordem) {
-        Optional<ProdutoCodigoBarras> gravado = codigoGravado(informado.codigo());
-        if (gravado.isEmpty()) {
-            return new ProdutoCodigoBarras(this, informado.codigo(), informado.formato(), ordem);
-        }
-        gravado.get().posicionarEm(ordem);
-        return gravado.get();
+    /** Codigo de barras da unidade de venda com exatamente este texto, se houver. */
+    public Optional<ProdutoCodigoBarras> codigoGravado(String codigo) {
+        return ListaDeCodigosDeBarras.comTexto(codigosBarras, codigo);
     }
 
-    /** Codigo de barras que este produto ja tem com exatamente este texto, se houver. */
-    public Optional<ProdutoCodigoBarras> codigoGravado(String codigo) {
-        return codigosBarras.stream()
-                .filter(codigoDoProduto -> codigoDoProduto.getCodigo().equals(codigo))
-                .findFirst();
+    // ---------- Embalagens (Fase B3) ----------
+
+    /**
+     * Fase 1 do salvamento das embalagens: tira da lista as removidas (apagadas
+     * com os codigos no flush, por {@code orphanRemoval}), antes de qualquer
+     * inclusao que reuse um codigo delas.
+     */
+    void removerEmbalagens(Collection<ProdutoEmbalagem> removidas) {
+        if (embalagens.removeAll(removidas) && jaGravado()) {
+            this.atualizadoEm = LocalDateTime.now();
+        }
+    }
+
+    /**
+     * Fase 2: a lista final na ordem enviada (mantidas e novas). Uma embalagem
+     * fora da lista e apagada ({@code orphanRemoval}); as novas sao gravadas
+     * em cascata com os seus codigos.
+     */
+    void substituirEmbalagens(List<ProdutoEmbalagem> finais) {
+        boolean mudou = !embalagens.equals(finais);
+        embalagens.clear();
+        embalagens.addAll(finais);
+        if (mudou && jaGravado()) {
+            this.atualizadoEm = LocalDateTime.now();
+        }
     }
 
     /**

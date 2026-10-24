@@ -34,6 +34,15 @@ public class HistoricoDePrecos {
         }
     }
 
+    /** Preco proprio de uma embalagem (Fase B3, 3.4), com o rotulo do momento; so se mudou. */
+    public void registrarPrecoDaEmbalagemSeMudou(Produto produto, Long usuarioId, String embalagemRotulo,
+            BigDecimal anterior, BigDecimal novo) {
+        if (!mesmoValor(anterior, novo)) {
+            historicoPrecoRepository.save(HistoricoPreco.daEmbalagem(produto, embalagemRotulo, anterior, novo,
+                    usuarioId));
+        }
+    }
+
     private static boolean mesmoValor(BigDecimal anterior, BigDecimal novo) {
         if (anterior == null || novo == null) {
             return anterior == novo;

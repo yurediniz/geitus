@@ -90,6 +90,46 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
             @Param("ignorarProdutoId") Long ignorarProdutoId);
 
     /**
+     * Fase B3: os donos destes codigos de barras na empresa (produto e, se for
+     * o caso, a embalagem), ignorando {@code ignorarProdutoId}. Monta a
+     * mensagem do 409 com o rotulo da embalagem. Restrito a empresa (DEC-016).
+     */
+    @Query("""
+            SELECT new com.geitus.app.catalog.CodigoDeBarrasEmUso(c.codigo, p.nome, eu.sigla, e.quantidade, pu.sigla)
+              FROM ProdutoCodigoBarras c
+              JOIN c.produto p
+              JOIN p.unidade pu
+              LEFT JOIN c.embalagem e
+              LEFT JOIN e.unidade eu
+             WHERE c.empresa.id = :empresaId
+               AND c.codigo IN :codigos
+               AND (:ignorarProdutoId IS NULL OR p.id <> :ignorarProdutoId)
+            """)
+    List<CodigoDeBarrasEmUso> codigosEmUso(@Param("empresaId") Long empresaId,
+            @Param("codigos") Collection<String> codigos, @Param("ignorarProdutoId") Long ignorarProdutoId);
+
+    /**
+     * A mesma consulta de {@link #codigosEmUso}, numa transacao NOVA: usada so
+     * depois de o banco recusar um codigo por {@code uq_codigo_barras_empresa}
+     * (salvamento simultaneo com o mesmo codigo), quando a transacao do
+     * salvamento ja foi abortada pelo PostgreSQL.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
+    @Query("""
+            SELECT new com.geitus.app.catalog.CodigoDeBarrasEmUso(c.codigo, p.nome, eu.sigla, e.quantidade, pu.sigla)
+              FROM ProdutoCodigoBarras c
+              JOIN c.produto p
+              JOIN p.unidade pu
+              LEFT JOIN c.embalagem e
+              LEFT JOIN e.unidade eu
+             WHERE c.empresa.id = :empresaId
+               AND c.codigo IN :codigos
+               AND (:ignorarProdutoId IS NULL OR p.id <> :ignorarProdutoId)
+            """)
+    List<CodigoDeBarrasEmUso> codigosEmUsoEmNovaTransacao(@Param("empresaId") Long empresaId,
+            @Param("codigos") Collection<String> codigos, @Param("ignorarProdutoId") Long ignorarProdutoId);
+
+    /**
      * Fase B2: nome do produto da empresa que ja tem este codigo do produto,
      * ignorando {@code ignorarProdutoId} (o proprio produto na edicao;
      * {@code null} no cadastro). Restrito a empresa (DEC-016).
@@ -218,4 +258,30 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
               AND p.id IN :ids
             """)
     List<Produto> buscarComRelacoesPorIds(@Param("empresaId") Long empresaId, @Param("ids") Collection<Long> ids);
+
+    // Nota (Fase B3): as embalagens e os codigos delas nao entram no SELECT de
+    // buscarComRelacoesPorIds: duas colecoes (bags) no mesmo JOIN FETCH dariam
+    // MultipleBagFetchException e um produto cartesiano. As duas consultas
+    // abaixo inicializam essas colecoes nos produtos ja carregados na mesma
+    // sessao, entao o numero de comandos da listagem continua constante.
+
+    /** Inicializa {@code embalagens} (com a unidade de cada uma) dos produtos ja carregados com estes ids. */
+    @Query("""
+            SELECT DISTINCT p FROM Produto p
+              LEFT JOIN FETCH p.embalagens e
+              LEFT JOIN FETCH e.unidade
+            WHERE p.empresa.id = :empresaId
+              AND p.id IN :ids
+            """)
+    List<Produto> carregarEmbalagens(@Param("empresaId") Long empresaId, @Param("ids") Collection<Long> ids);
+
+    /** Inicializa os codigos de barras das embalagens dos produtos com estes ids. */
+    @Query("""
+            SELECT DISTINCT e FROM ProdutoEmbalagem e
+              LEFT JOIN FETCH e.codigosBarras
+            WHERE e.empresa.id = :empresaId
+              AND e.produto.id IN :ids
+            """)
+    List<ProdutoEmbalagem> carregarCodigosDasEmbalagens(@Param("empresaId") Long empresaId,
+            @Param("ids") Collection<Long> ids);
 }

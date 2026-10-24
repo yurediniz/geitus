@@ -52,6 +52,11 @@ final class ProdutoTesteBuilder {
     private Integer codigoDoProduto;
     private boolean vendidoBalanca;
     private final List<CodigoBarrasValidado> codigos = new ArrayList<>();
+    private final List<EmbalagemDeTeste> embalagens = new ArrayList<>();
+
+    private record EmbalagemDeTeste(UnidadeMedida unidade, BigDecimal quantidade, BigDecimal preco, boolean deCompra,
+            List<String> codigos) {
+    }
 
     private ProdutoTesteBuilder(Empresa empresa, UnidadeMedida unidade) {
         this.empresa = empresa;
@@ -182,12 +187,31 @@ final class ProdutoTesteBuilder {
         return this;
     }
 
+    /** Embalagem (Fase B3) com os codigos de barras no formato detectado; o uuid e gerado. */
+    ProdutoTesteBuilder embalagem(UnidadeMedida unidadeDaEmbalagem, String quantidade, String preco,
+            boolean deCompra, String... codigosDaEmbalagem) {
+        this.embalagens.add(new EmbalagemDeTeste(unidadeDaEmbalagem, new BigDecimal(quantidade),
+                preco == null ? null : new BigDecimal(preco), deCompra, List.of(codigosDaEmbalagem)));
+        return this;
+    }
+
     Produto build() {
         Produto produto = new Produto(empresa, numero, new DadosProduto(nome, nomeCurto, marca, fornecedor, descricao,
                 unidade, categoria, precoVenda, custo, precoMinimo, estoqueMinimo,
                 estoqueMaximo, pontoReposicao, sku, precoPromocional, promocaoInicio, promocaoFim, precoAtacado,
                 quantidadeMinimaAtacado, controlaEstoque, codigoDoProduto, vendidoBalanca));
         produto.substituirCodigos(codigos);
+        List<ProdutoEmbalagem> embalagensDoProduto = new ArrayList<>();
+        for (int ordem = 0; ordem < embalagens.size(); ordem++) {
+            EmbalagemDeTeste embalagem = embalagens.get(ordem);
+            ProdutoEmbalagem criada = new ProdutoEmbalagem(produto, new DadosEmbalagem(embalagem.unidade(),
+                    embalagem.quantidade(), embalagem.preco(), embalagem.deCompra(), ordem));
+            criada.substituirCodigos(embalagem.codigos().stream()
+                    .map(codigo -> new CodigoBarrasValidado(codigo, CodigoBarras.detectarFormato(codigo)))
+                    .toList());
+            embalagensDoProduto.add(criada);
+        }
+        produto.substituirEmbalagens(embalagensDoProduto);
         if (!ativo) {
             produto.inativar();
         }

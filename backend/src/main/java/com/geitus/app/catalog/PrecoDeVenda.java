@@ -33,6 +33,19 @@ public final class PrecoDeVenda {
         return aplicado;
     }
 
+    /**
+     * Preco vigente da unidade sem o atacado: o promocional, se a promocao
+     * estiver vigente na data; senao o de venda. Base do preco calculado das
+     * embalagens (docs/modules/produtos-embalagens.md, 3.1).
+     */
+    public static PrecoAplicado vigenteSemAtacado(Produto produto, LocalDate data) {
+        PrecoAplicado normal = new PrecoAplicado(produto.getPrecoVenda(), OrigemPreco.NORMAL);
+        if (!promocaoVigente(produto, data)) {
+            return normal;
+        }
+        return menor(normal, new PrecoAplicado(produto.getPrecoPromocional(), OrigemPreco.PROMOCIONAL));
+    }
+
     private static boolean promocaoVigente(Produto produto, LocalDate data) {
         return produto.getPrecoPromocional() != null
                 && SituacaoPromocao.de(produto.getPromocaoInicio(), produto.getPromocaoFim(), data)

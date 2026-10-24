@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.geitus.app.catalog.dto.AtacadoRequest;
+import com.geitus.app.catalog.dto.EmbalagemRequest;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.PromocaoRequest;
 
@@ -32,6 +33,7 @@ final class ProdutoRequestBuilder {
     private BigDecimal pontoReposicao;
     private BigDecimal precoMinimo;
     private List<String> codigosBarras = new ArrayList<>();
+    private List<EmbalagemRequest> embalagens;
     private String sku;
     private Integer codigo;
     private Boolean vendidoBalanca;
@@ -123,6 +125,17 @@ final class ProdutoRequestBuilder {
         return this;
     }
 
+    /** Lista completa de embalagens (Fase B3); {@code null} simula o campo ausente no PATCH. */
+    ProdutoRequestBuilder embalagens(List<EmbalagemRequest> valores) {
+        this.embalagens = valores;
+        return this;
+    }
+
+    ProdutoRequestBuilder embalagens(EmbalagemRequest... valores) {
+        this.embalagens = Arrays.asList(valores);
+        return this;
+    }
+
     ProdutoRequestBuilder sku(String valor) {
         this.sku = valor;
         return this;
@@ -171,7 +184,7 @@ final class ProdutoRequestBuilder {
     ProdutoRequest build() {
         return new ProdutoRequest(nome, nomeCurto, marca, fornecedor, descricao, unidadeId, categoriaId,
                 precoVenda, custo, estoqueMinimo, estoqueMaximo, pontoReposicao,
-                precoMinimo, codigosBarras, sku, codigo, vendidoBalanca, promocao, atacado, controlaEstoque,
+                precoMinimo, codigosBarras, embalagens, sku, codigo, vendidoBalanca, promocao, atacado, controlaEstoque,
                 estoqueInicial);
     }
 }

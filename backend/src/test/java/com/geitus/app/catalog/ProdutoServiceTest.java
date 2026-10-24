@@ -154,6 +154,7 @@ class ProdutoServiceTest {
         produtoService = new ProdutoService(produtoRepository, empresaRepository, usuarioRepository,
                 unidadeService, categoriaService, historicoPrecoRepository,
                 new HistoricoDePrecos(historicoPrecoRepository), new ValidadorDeCodigosDeBarras(produtoRepository),
+                new EmbalagensDoProduto(unidadeService, new ValidadorDeCodigosDeBarras(produtoRepository)),
                 usoNoEstoque, registroDeEstoqueInicial,
                 consultaDeProdutos, numerador, tamanhoDoCodigoNaEtiqueta, RELOGIO);
         empresa = empresaComId(EMPRESA_ID);
@@ -1795,7 +1796,7 @@ class ProdutoServiceTest {
         usuarioAtivoDaEmpresa(9L);
         produtoExistente();
         HistoricoPrecoResponse item = new HistoricoPrecoResponse(CampoHistoricoPreco.PRECO_VENDA,
-                new BigDecimal("10.00"), new BigDecimal("11.50"), "Ana Souza",
+                new BigDecimal("10.00"), new BigDecimal("11.50"), null, "Ana Souza",
                 LocalDateTime.of(2026, 10, 21, 14, 3, 12));
         when(historicoPrecoRepository.historicoDoProduto(EMPRESA_ID, PRODUTO_ID,
                 PageRequest.of(1, 2)))
@@ -2416,6 +2417,45 @@ class ProdutoServiceTest {
 
         assertThatThrownBy(() -> cadastrar(requestComUN().codigoDoProduto(542).build())).isSameAs(violacao);
         verify(produtoRepository, never()).nomeDoProdutoComCodigoEmNovaTransacao(any(), any(), any());
+    }
+
+    /**
+     * Fase B3: cadastro simultaneo com o mesmo codigo de barras numa embalagem.
+     * O banco recusa por {@code uq_codigo_barras_empresa} e a resposta e o 409
+     * com o dono (lido numa transacao nova) no campo da lista da embalagem.
+     */
+    @Test
+    void codigoDeBarrasGravadoAoMesmoTempoNaEmbalagem_409ComODono() {
+        UnidadeMedida cx = unidade(12L, empresa, "CX");
+        unidadeDaEmpresa(un);
+        unidadeDaEmpresa(cx);
+        when(empresaRepository.findById(EMPRESA_ID)).thenReturn(Optional.of(empresa));
+        when(produtoRepository.save(any(Produto.class))).thenThrow(violacaoDe("uq_codigo_barras_empresa"));
+        when(produtoRepository.codigosEmUsoEmNovaTransacao(eq(EMPRESA_ID), any(), any()))
+                .thenReturn(List.of(new CodigoDeBarrasEmUso(EAN8_VALIDO, "Bravecto", "CX", new BigDecimal("3.000"),
+                        "UN")));
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().codigosBarras(EAN13_VALIDO)
+                .embalagens(new com.geitus.app.catalog.dto.EmbalagemRequest(null, cx.getUuid(), new BigDecimal("3"),
+                        null, false, List.of(EAN8_VALIDO)))
+                .build()))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("Este código já está em uso na embalagem CX c/ 3 UN do produto Bravecto.")
+                .satisfies(noCampo("embalagens[0].codigosBarras"));
+    }
+
+    /** Na corrida pelo codigo da unidade, sem dono na releitura (o outro mudou no meio tempo): 409 sem nome. */
+    @Test
+    void codigoDeBarrasEmCorridaSemDonoNaReleitura_409SemNome() {
+        unidadeDaEmpresa(un);
+        when(empresaRepository.findById(EMPRESA_ID)).thenReturn(Optional.of(empresa));
+        when(produtoRepository.save(any(Produto.class)))
+                .thenThrow(violacaoComMensagemEmPortugues("uq_codigo_barras_empresa"));
+
+        assertThatThrownBy(() -> cadastrar(requestComUN().codigosBarras(EAN13_VALIDO).build()))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("Este código de barras já está em uso em outro produto.")
+                .satisfies(noCampo("codigosBarras"));
     }
 
     /** Como chega do driver com {@code lc_messages} em portugues: o Hibernate nao acha o nome no texto. */

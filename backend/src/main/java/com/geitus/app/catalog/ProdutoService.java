@@ -6,6 +6,8 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -167,6 +169,11 @@ public class ProdutoService {
     static final int MAIOR_CODIGO_DO_PRODUTO = 999_999;
     /** Indice unico parcial do codigo do produto por empresa (V11). */
     static final String CONSTRAINT_CODIGO_DO_PRODUTO = "uq_produto_empresa_codigo";
+    /** Unicidade do codigo de barras na empresa, entre unidade e embalagens (V7 e V12). */
+    static final String CONSTRAINT_CODIGO_DE_BARRAS = "uq_codigo_barras_empresa";
+    /** So na corrida em que o outro dono mudou antes da releitura. */
+    static final String MENSAGEM_CODIGO_DE_BARRAS_EM_USO_SEM_NOME =
+            "Este código de barras já está em uso em outro produto.";
 
     /** SKU no padrao da sugestao automatica: {@code P} + 6 ou mais digitos (spec 4.2). */
     private static final Pattern SKU_NO_PADRAO = Pattern.compile("P([0-9]{6,})");
@@ -183,6 +190,7 @@ public class ProdutoService {
     private final HistoricoPrecoRepository historicoPrecoRepository;
     private final HistoricoDePrecos historicoDePrecos;
     private final ValidadorDeCodigosDeBarras validadorDeCodigos;
+    private final EmbalagensDoProduto embalagensDoProduto;
     private final UsoDoProdutoNoEstoque usoNoEstoque;
     private final RegistroDeEstoqueInicial registroDeEstoqueInicial;
     private final ConsultaDeProdutos consultaDeProdutos;
@@ -194,7 +202,8 @@ public class ProdutoService {
             UsuarioRepository usuarioRepository, UnidadeMedidaService unidadeService,
             CategoriaService categoriaService, HistoricoPrecoRepository historicoPrecoRepository,
             HistoricoDePrecos historicoDePrecos, ValidadorDeCodigosDeBarras validadorDeCodigos,
-            UsoDoProdutoNoEstoque usoNoEstoque, RegistroDeEstoqueInicial registroDeEstoqueInicial,
+            EmbalagensDoProduto embalagensDoProduto, UsoDoProdutoNoEstoque usoNoEstoque,
+            RegistroDeEstoqueInicial registroDeEstoqueInicial,
             ConsultaDeProdutos consultaDeProdutos, Numerador numerador,
             TamanhoDoCodigoNaEtiqueta tamanhoDoCodigoNaEtiqueta, Clock relogio) {
         this.produtoRepository = produtoRepository;
@@ -205,6 +214,7 @@ public class ProdutoService {
         this.historicoPrecoRepository = historicoPrecoRepository;
         this.historicoDePrecos = historicoDePrecos;
         this.validadorDeCodigos = validadorDeCodigos;
+        this.embalagensDoProduto = embalagensDoProduto;
         this.usoNoEstoque = usoNoEstoque;
         this.registroDeEstoqueInicial = registroDeEstoqueInicial;
         this.consultaDeProdutos = consultaDeProdutos;
@@ -219,7 +229,9 @@ public class ProdutoService {
      * {@code estoqueInicial}, registra tambem a primeira entrada de estoque, na
      * mesma transacao: se o cadastro falhar, nada fica gravado. O numero de
      * registro (Fase B2) e reservado so depois das validacoes, na mesma
-     * transacao: um cadastro que falha nao consome numero.
+     * transacao: um cadastro que falha nao consome numero. As embalagens (Fase
+     * B3) sao validadas antes e gravadas junto, com o preco proprio de cada uma
+     * no historico.
      */
     Produto cadastrar(Long idUsuario, Long empresaId, ProdutoRequest request) {
         validarCampos(request);
@@ -230,15 +242,16 @@ public class ProdutoService {
         Vinculos vinculos = resolverVinculos(empresaId, request, null);
         validarPromocaoEAtacado(request, vinculos.unidade());
         validarEstoqueInicial(request, vinculos.unidade());
+        PlanoDeEmbalagens embalagens = embalagensDoProduto.planejar(empresaId, null, vinculos.unidade(),
+                request.precoMinimo(), request.embalagens(), textos(codigos));
 
         Empresa empresa = empresaRepository.findById(empresaId)
                 .orElseThrow(() -> new RegraDeNegocioException("Empresa informada não encontrada."));
 
         long numero = numerador.proximo(empresaId, TipoNumeracao.PRODUTO);
         Produto produto = new Produto(empresa, numero, dadosDoProduto(request, vinculos, sku));
-        produto.substituirCodigos(codigos);
-        Produto gravado = gravar(produto);
-        historicoDePrecos.registrarCustoEPrecoDeVenda(gravado, idUsuario, null, null);
+        Produto gravado = gravar(produto, () -> aplicarCodigosEEmbalagens(produto, codigos, embalagens));
+        registrarHistorico(gravado, idUsuario, null, null, embalagens);
         if (request.estoqueInicial() != null) {
             registroDeEstoqueInicial.registrar(gravado, request.estoqueInicial(), idUsuario);
         }
@@ -249,7 +262,10 @@ public class ProdutoService {
      * Atualiza o cadastro. {@code codigosBarras} {@code null} (campo ausente no
      * PATCH) mantem os codigos atuais, sem validar nem tocar na lista; uma
      * lista — inclusive {@code []}, que remove todos — substitui a lista inteira.
-     * Mudancas de custo e preco de venda vao para o historico com {@code idUsuario}.
+     * {@code embalagens} segue a mesma regra (Fase B3); ausente, as atuais sao
+     * conferidas de novo contra a unidade de venda e o preco minimo do request.
+     * Mudancas de custo, preco de venda e preco das embalagens vao para o
+     * historico com {@code idUsuario}.
      */
     Produto atualizarDadosBasicos(Long idUsuario, Long empresaId, UUID produtoId, ProdutoRequest request) {
         // Trava a linha antes de ler custo e preco anteriores: edicoes concorrentes
@@ -269,14 +285,56 @@ public class ProdutoService {
         Vinculos vinculos = resolverVinculos(empresaId, request, produto);
         exigirUnidadeMantidaSeMovimentado(produto, vinculos.unidade());
         validarPromocaoEAtacado(request, vinculos.unidade());
+        List<String> codigosFinaisDaUnidade = codigos.map(ProdutoService::textos)
+                .orElseGet(() -> ListaDeCodigosDeBarras.textos(produto.getCodigosBarras()));
+        PlanoDeEmbalagens embalagens = embalagensDoProduto.planejar(empresaId, produto, vinculos.unidade(),
+                request.precoMinimo(), request.embalagens(), codigosFinaisDaUnidade);
 
         BigDecimal custoAnterior = produto.getCusto();
         BigDecimal precoAnterior = produto.getPrecoVenda();
         produto.atualizarDadosBasicos(dadosDoProduto(request, vinculos, sku));
-        codigos.ifPresent(produto::substituirCodigos);
-        Produto gravado = gravar(produto);
-        historicoDePrecos.registrarCustoEPrecoDeVenda(gravado, idUsuario, custoAnterior, precoAnterior);
+        Produto gravado = gravar(produto, () -> aplicarCodigosEEmbalagens(produto, codigos.orElse(null),
+                embalagens));
+        registrarHistorico(gravado, idUsuario, custoAnterior, precoAnterior, embalagens);
         return gravado;
+    }
+
+    /**
+     * Aplica os codigos da unidade ({@code null} = manter) e as embalagens em
+     * duas fases (Fase B3, Review Focus 1 e 2): primeiro saem os codigos e as
+     * embalagens removidos e a marca "de compra" que muda de embalagem, com
+     * {@code flush}; depois entram os novos. Assim um codigo que muda de lista
+     * no mesmo salvamento nunca viola {@code uq_codigo_barras_empresa} (o
+     * Hibernate insere antes de apagar). No cadastro o produto ainda nao existe
+     * no banco e nao ha o que apagar: o {@code flush} intermediario nao roda.
+     */
+    private void aplicarCodigosEEmbalagens(Produto produto, List<CodigoBarrasValidado> codigosDaUnidade,
+            PlanoDeEmbalagens embalagens) {
+        if (codigosDaUnidade != null) {
+            produto.removerCodigosForaDe(new HashSet<>(textos(codigosDaUnidade)));
+        }
+        embalagensDoProduto.aplicarRemocoes(produto, embalagens);
+        if (produto.getId() != null) {
+            produtoRepository.flush();
+        }
+        if (codigosDaUnidade != null) {
+            produto.substituirCodigos(codigosDaUnidade);
+        }
+        embalagensDoProduto.aplicarInclusoes(produto, embalagens);
+    }
+
+    /** Custo e preco de venda (anteriores nulos no cadastro) e o preco proprio de cada embalagem. */
+    private void registrarHistorico(Produto produto, Long idUsuario, BigDecimal custoAnterior,
+            BigDecimal precoAnterior, PlanoDeEmbalagens embalagens) {
+        historicoDePrecos.registrarCustoEPrecoDeVenda(produto, idUsuario, custoAnterior, precoAnterior);
+        for (PlanoDeEmbalagens.AlteracaoDePreco alteracao : embalagens.alteracoesDePreco()) {
+            historicoDePrecos.registrarPrecoDaEmbalagemSeMudou(produto, idUsuario, alteracao.rotulo(),
+                    alteracao.anterior(), alteracao.novo());
+        }
+    }
+
+    private static List<String> textos(List<CodigoBarrasValidado> codigos) {
+        return codigos.stream().map(CodigoBarrasValidado::codigo).toList();
     }
 
     /**
@@ -491,6 +549,10 @@ public class ProdutoService {
         }
         Map<Long, Produto> porId = produtoRepository.buscarComRelacoesPorIds(empresaId, ids).stream()
                 .collect(Collectors.toMap(Produto::getId, Function.identity()));
+        // Fase B3: inicializam as embalagens e os codigos delas nos produtos ja
+        // carregados (duas consultas, qualquer que seja o tamanho da pagina).
+        produtoRepository.carregarEmbalagens(empresaId, ids);
+        produtoRepository.carregarCodigosDasEmbalagens(empresaId, ids);
         Map<Long, ResumoDeEstoque> estoques = usoNoEstoque.resumos(empresaId, ids);
         return ids.stream()
                 .map(porId::get)
@@ -535,15 +597,10 @@ public class ProdutoService {
      * {@code produtoAtual} e {@code null} no cadastro.
      */
     private List<CodigoBarrasValidado> validarCodigos(Long empresaId, List<String> informados, Produto produtoAtual) {
-        Map<String, FormatoCodigoBarras> gravados = produtoAtual == null ? Map.of() : formatosGravados(produtoAtual);
+        Map<String, FormatoCodigoBarras> gravados = EmbalagensDoProduto.formatosGravados(produtoAtual);
         return validadorDeCodigos.validar(empresaId, informados, MAXIMO_CODIGOS_POR_PRODUTO,
                 MENSAGEM_LIMITE_DE_CODIGOS, CAMPO_CODIGOS_BARRAS, gravados,
                 produtoAtual == null ? null : produtoAtual.getId());
-    }
-
-    private static Map<String, FormatoCodigoBarras> formatosGravados(Produto produto) {
-        return produto.getCodigosBarras().stream()
-                .collect(Collectors.toMap(ProdutoCodigoBarras::getCodigo, ProdutoCodigoBarras::getFormato));
     }
 
     // ---------- Codigo do produto e balanca (docs/modules/produtos-codigo-e-balanca.md, 2) ----------
@@ -588,28 +645,70 @@ public class ProdutoService {
     }
 
     /**
-     * Grava o produto e aplica no banco ja aqui ({@code flush}), para que a
-     * recusa de {@code uq_produto_empresa_codigo} (outro produto gravou o mesmo
-     * codigo depois da checagem) vire o mesmo 409 da checagem, com o nome do
-     * outro produto. A transacao atual foi abortada pelo PostgreSQL, entao o
-     * nome e lido numa transacao nova. Qualquer outra violacao segue como esta
-     * (409 generico do {@code GlobalExceptionHandler}).
+     * Aplica {@code alteracoes} (codigos e embalagens, que podem dar
+     * {@code flush}), grava o produto e aplica no banco ja aqui ({@code flush}),
+     * para que uma corrida vire o mesmo 409 da checagem, com o nome do outro
+     * produto: a recusa de {@code uq_produto_empresa_codigo} (outro produto
+     * gravou o mesmo codigo do produto depois da checagem) ou de
+     * {@code uq_codigo_barras_empresa} (o mesmo para um codigo de barras, da
+     * unidade ou de uma embalagem, Fase B3). A transacao atual foi abortada
+     * pelo PostgreSQL, entao o dono e lido numa transacao nova. Qualquer outra
+     * violacao segue como esta (409 generico do {@code GlobalExceptionHandler}).
      */
-    private Produto gravar(Produto produto) {
+    private Produto gravar(Produto produto, Runnable alteracoes) {
         try {
+            alteracoes.run();
             Produto gravado = produtoRepository.save(produto);
             produtoRepository.flush();
             return gravado;
         } catch (DataIntegrityViolationException violacao) {
-            if (!violou(violacao, CONSTRAINT_CODIGO_DO_PRODUTO)) {
-                throw violacao;
+            if (violou(violacao, CONSTRAINT_CODIGO_DO_PRODUTO)) {
+                throw codigoDoProdutoEmUsoNaCorrida(produto);
             }
-            throw produtoRepository.nomeDoProdutoComCodigoEmNovaTransacao(produto.getEmpresaId(),
-                            produto.getCodigo(), produto.getId())
-                    .map(ProdutoService::codigoEmUso)
-                    .orElseGet(() -> new ProdutoConflitoException(MENSAGEM_CODIGO_DO_PRODUTO_EM_USO_SEM_NOME,
-                            CAMPO_CODIGO_DO_PRODUTO));
+            if (violou(violacao, CONSTRAINT_CODIGO_DE_BARRAS)) {
+                throw codigoDeBarrasEmUsoNaCorrida(produto);
+            }
+            throw violacao;
         }
+    }
+
+    private ProdutoConflitoException codigoDoProdutoEmUsoNaCorrida(Produto produto) {
+        return produtoRepository.nomeDoProdutoComCodigoEmNovaTransacao(produto.getEmpresaId(),
+                        produto.getCodigo(), produto.getId())
+                .map(ProdutoService::codigoEmUso)
+                .orElseGet(() -> new ProdutoConflitoException(MENSAGEM_CODIGO_DO_PRODUTO_EM_USO_SEM_NOME,
+                        CAMPO_CODIGO_DO_PRODUTO));
+    }
+
+    /**
+     * O primeiro codigo de barras do produto (os da unidade, depois os de cada
+     * embalagem, na ordem) que outro produto gravou primeiro, com o campo da
+     * lista dele; sem dono encontrado (o outro mudou no meio tempo), 409 sem
+     * nome.
+     */
+    private ProdutoConflitoException codigoDeBarrasEmUsoNaCorrida(Produto produto) {
+        Map<String, String> campoPorCodigo = new LinkedHashMap<>();
+        produto.getCodigosBarras().forEach(codigo -> campoPorCodigo.put(codigo.getCodigo(), CAMPO_CODIGOS_BARRAS));
+        List<ProdutoEmbalagem> embalagens = produto.getEmbalagens();
+        for (int indice = 0; indice < embalagens.size(); indice++) {
+            String campo = EmbalagensDoProduto.campo(indice, CAMPO_CODIGOS_BARRAS);
+            embalagens.get(indice).getCodigosBarras()
+                    .forEach(codigo -> campoPorCodigo.put(codigo.getCodigo(), campo));
+        }
+        if (campoPorCodigo.isEmpty()) {
+            return new ProdutoConflitoException(MENSAGEM_CODIGO_DE_BARRAS_EM_USO_SEM_NOME);
+        }
+        Map<String, CodigoDeBarrasEmUso> emUso = produtoRepository
+                .codigosEmUsoEmNovaTransacao(produto.getEmpresaId(), campoPorCodigo.keySet(), produto.getId())
+                .stream()
+                .collect(Collectors.toMap(CodigoDeBarrasEmUso::codigo, Function.identity(),
+                        (primeiro, outro) -> primeiro));
+        return campoPorCodigo.entrySet().stream()
+                .filter(codigo -> emUso.containsKey(codigo.getKey()))
+                .findFirst()
+                .map(codigo -> new ProdutoConflitoException(emUso.get(codigo.getKey()).mensagem(), codigo.getValue()))
+                .orElseGet(() -> new ProdutoConflitoException(MENSAGEM_CODIGO_DE_BARRAS_EM_USO_SEM_NOME,
+                        CAMPO_CODIGOS_BARRAS));
     }
 
     /**

@@ -19,7 +19,7 @@ public interface HistoricoPrecoRepository extends JpaRepository<HistoricoPreco, 
      */
     @Query(value = """
             SELECT new com.geitus.app.catalog.dto.HistoricoPrecoResponse(
-                       h.campo, h.valorAnterior, h.valorNovo, u.nome, h.alteradoEm)
+                       h.campo, h.valorAnterior, h.valorNovo, h.embalagemRotulo, u.nome, h.alteradoEm)
               FROM HistoricoPreco h
               JOIN Usuario u ON u.id = h.usuarioId AND u.empresa.id = h.empresaId
              WHERE h.empresaId = :empresaId

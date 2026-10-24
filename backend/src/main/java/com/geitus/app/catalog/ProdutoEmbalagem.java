@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import com.geitus.app.catalog.unidade.UnidadeMedida;
@@ -116,6 +117,26 @@ public class ProdutoEmbalagem {
         this.preco = dados.preco();
         this.deCompra = dados.deCompra();
         this.ordem = (short) dados.ordem();
+    }
+
+    /**
+     * Fase 1 de um salvamento que libera a marca "de compra" para outra
+     * embalagem: o indice unico parcial {@code uq_embalagem_de_compra} nao e
+     * adiavel, entao a desmarcacao vai ao banco antes da nova marcacao.
+     */
+    void desmarcarDeCompra() {
+        this.deCompra = false;
+    }
+
+    /** Substitui os codigos da embalagem, preservando a linha dos mantidos ({@link ListaDeCodigosDeBarras}). */
+    void substituirCodigos(List<CodigoBarrasValidado> informados) {
+        ListaDeCodigosDeBarras.substituir(codigosBarras, informados,
+                (codigo, ordem) -> new ProdutoCodigoBarras(this, codigo.codigo(), codigo.formato(), ordem));
+    }
+
+    /** Fase 1: tira os codigos fora de {@code mantidos}, apagados no flush antes de outra lista inclui-los. */
+    void removerCodigosForaDe(Set<String> mantidos) {
+        ListaDeCodigosDeBarras.removerForaDe(codigosBarras, mantidos);
     }
 
     /** Rotulo derivado, ex.: "CX c/ 3 UN" ({@link RotuloDaEmbalagem}). */

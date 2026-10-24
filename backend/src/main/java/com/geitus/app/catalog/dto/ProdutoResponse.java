@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.UUID;
 
 import com.geitus.app.catalog.MargemEMarkup;
+import com.geitus.app.catalog.PrecoAplicado;
+import com.geitus.app.catalog.PrecoDeVenda;
 import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ResumoDeEstoque;
 import com.geitus.app.catalog.SituacaoEstoque;
@@ -42,6 +44,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * <p>Fase D (docs/modules/produtos-estoque.md, 5): {@code estoqueAtual} e o
  * saldo guardado, mesmo com o controle desligado; {@code situacaoEstoque} e
  * calculada e vem {@code null} sem controle.
+ *
+ * <p>Fase B3 (docs/modules/produtos-embalagens.md, 7): {@code embalagens} na
+ * ordem, com o preco efetivo na data de {@code hoje}; {@code codigosBarras}
+ * continua so com os codigos da unidade de venda.
  *
  * <p>Fase B2 (docs/modules/produtos-codigo-e-balanca.md, 8): {@code numero}
  * (numero de registro na empresa), {@code codigo} (sem zeros a esquerda, ou
@@ -88,6 +94,8 @@ public record ProdutoResponse(
         SituacaoEstoque situacaoEstoque,
         @Schema(description = "Codigos de barras na ordem (o primeiro e o principal)")
         List<CodigoBarrasResponse> codigosBarras,
+        @Schema(description = "Embalagens na ordem, com o preco efetivo de hoje")
+        List<EmbalagemResponse> embalagens,
         String sku,
         @Schema(description = "Codigo do produto (1 a 999999); null se nao houver", example = "542")
         Integer codigo,
@@ -142,6 +150,7 @@ public record ProdutoResponse(
                 SituacaoEstoque.de(produto.isControlaEstoque(), estoque.saldo(), produto.getPontoReposicao(),
                         produto.getEstoqueMinimo()),
                 produto.getCodigosBarras().stream().map(CodigoBarrasResponse::de).toList(),
+                embalagens(produto, hoje),
                 produto.getSku(),
                 produto.getCodigo(),
                 produto.isVendidoBalanca(),
@@ -151,5 +160,16 @@ public record ProdutoResponse(
                 MargemEMarkup.markup(preco, custo),
                 produto.getCriadoEm(),
                 produto.getAtualizadoEm());
+    }
+
+    /** Embalagens com o preco efetivo; o preco vigente da unidade e calculado uma vez por produto. */
+    private static List<EmbalagemResponse> embalagens(Produto produto, LocalDate hoje) {
+        if (produto.getEmbalagens().isEmpty()) {
+            return List.of();
+        }
+        PrecoAplicado vigente = PrecoDeVenda.vigenteSemAtacado(produto, hoje);
+        return produto.getEmbalagens().stream()
+                .map(embalagem -> EmbalagemResponse.de(embalagem, produto.getCusto(), vigente))
+                .toList();
     }
 }

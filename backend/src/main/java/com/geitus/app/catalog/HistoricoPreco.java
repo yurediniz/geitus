@@ -51,6 +51,10 @@ public class HistoricoPreco {
     @Column(name = "valor_novo", precision = 12, scale = 2, updatable = false)
     private BigDecimal valorNovo;
 
+    /** So nas linhas de {@code PRECO_EMBALAGEM} (V12): o rotulo da embalagem no momento da alteracao. */
+    @Column(name = "embalagem_rotulo", length = 60, updatable = false)
+    private String embalagemRotulo;
+
     @Column(name = "usuario_id", nullable = false, updatable = false)
     private Long usuarioId;
 
@@ -73,6 +77,18 @@ public class HistoricoPreco {
         this.valorAnterior = valorAnterior;
         this.valorNovo = valorNovo;
         this.usuarioId = usuarioId;
+    }
+
+    /**
+     * Mudanca do preco proprio de uma embalagem (Fase B3, 3.4). Sem FK para a
+     * embalagem: a linha sobrevive a remocao dela, com o rotulo do momento.
+     */
+    public static HistoricoPreco daEmbalagem(Produto produto, String embalagemRotulo, BigDecimal valorAnterior,
+            BigDecimal valorNovo, Long usuarioId) {
+        HistoricoPreco linha = new HistoricoPreco(produto, CampoHistoricoPreco.PRECO_EMBALAGEM, valorAnterior,
+                valorNovo, usuarioId);
+        linha.embalagemRotulo = embalagemRotulo;
+        return linha;
     }
 
     @PrePersist
@@ -104,6 +120,11 @@ public class HistoricoPreco {
     /** Valor depois da alteracao; {@code null} quando o custo foi removido. */
     public BigDecimal getValorNovo() {
         return valorNovo;
+    }
+
+    /** Rotulo da embalagem nas linhas de {@code PRECO_EMBALAGEM}; {@code null} nas demais. */
+    public String getEmbalagemRotulo() {
+        return embalagemRotulo;
     }
 
     public Long getUsuarioId() {

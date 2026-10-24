@@ -53,6 +53,11 @@ import jakarta.validation.constraints.Size;
  * PATCH, 400): vira a primeira entrada de estoque. O saldo nunca e editado por
  * aqui; muda so por movimentos ({@code /api/produtos/{id}/estoque/ajustes}).
  *
+ * <p>Fase B3 (docs/modules/produtos-embalagens.md, 7): {@code embalagens} e a
+ * lista completa, com o mesmo comportamento de {@code codigosBarras} (no PATCH,
+ * ausente mantem as atuais). A antiga unidade de compra + fator virou a
+ * embalagem "de compra".
+ *
  * <p>Fase B2 (docs/modules/produtos-codigo-e-balanca.md, 2 e 8): {@code codigo}
  * e o codigo do produto (inteiro de 1 a 999999, opcional; no JSON, numero — o
  * frontend remove os zeros a esquerda) e {@code vendidoBalanca} ({@code null} =
@@ -128,6 +133,13 @@ public record ProdutoRequest(
                 example = "[\"7891000315507\"]")
         @Size(max = 20, message = "Informe no máximo 20 códigos de barras.")
         List<@Size(max = 50, message = "Código de barras deve ter no máximo 50 caracteres.") String> codigosBarras,
+
+        @Schema(description = "Embalagens na ordem (ate 10). Lista informada substitui a lista inteira ([] remove "
+                + "todas; embalagem sem id e nova, embalagem ausente e removida com os codigos); no PATCH, ausente "
+                + "ou null mantem as atuais; no cadastro, ausente ou null = sem embalagens")
+        @Valid
+        @Size(max = 10, message = "Informe no máximo 10 embalagens.")
+        List<EmbalagemRequest> embalagens,
 
         @Schema(example = "SKU-001")
         @Size(max = 50, message = "SKU deve ter no máximo 50 caracteres.")

@@ -15,12 +15,15 @@ import io.swagger.v3.oas.annotations.media.Schema;
  */
 @Schema(description = "Alteracao de custo ou de preco de venda do produto")
 public record HistoricoPrecoResponse(
-        @Schema(description = "CUSTO ou PRECO_VENDA")
+        @Schema(description = "CUSTO, PRECO_VENDA ou PRECO_EMBALAGEM")
         CampoHistoricoPreco campo,
         @Schema(description = "Valor antes da alteracao; null no cadastro ou quando o custo estava vazio")
         BigDecimal valorAnterior,
         @Schema(description = "Valor depois da alteracao; null quando o custo foi removido")
         BigDecimal valorNovo,
+        @Schema(description = "Rotulo da embalagem no momento da alteracao (so em PRECO_EMBALAGEM)",
+                example = "CX c/ 3 UN")
+        String embalagemRotulo,
         @Schema(description = "Nome do usuario que fez a alteracao")
         String usuarioNome,
         LocalDateTime alteradoEm) {

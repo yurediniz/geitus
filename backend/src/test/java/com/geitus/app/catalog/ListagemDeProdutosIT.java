@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
@@ -36,6 +37,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import com.geitus.app.catalog.categoria.CategoriaService;
 import com.geitus.app.catalog.categoria.dto.CategoriaRequest;
 import com.geitus.app.catalog.dto.CodigoBarrasResponse;
+import com.geitus.app.catalog.dto.EmbalagemRequest;
 import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.listagem.ConsultaDeProdutos;
@@ -199,17 +201,24 @@ class ListagemDeProdutosIT {
      * categorias, produtos com as relacoes e os resumos de estoque) pelas
      * estatisticas e confere que a etapa 1 (contagem e ids, via JDBC) e chamada
      * uma unica vez: a pagina com 3 itens e a com 25 executam o mesmo numero
-     * de comandos.
+     * de comandos. Fase B3: cada produto tem duas embalagens com codigos, que
+     * tambem nao podem gerar uma consulta por produto.
      */
     @Test
     void numeroDeConsultasConstante() {
         Loja loja = novaLoja();
         UUID racao = categoria(loja, "Ração", null);
         UUID umida = categoria(loja, "Úmida", racao);
+        UUID cx = unidade(loja, "CX");
+        UUID fd = unidade(loja, "FD");
         for (int i = 1; i <= 30; i++) {
             cadastrar(loja, comUnidade(loja).nome(String.format("Produto %02d", i))
                     .codigosBarras("COD-" + i, "ALT-" + i).categoriaId(i % 2 == 0 ? racao : umida)
-                    .pontoReposicao("100").estoqueInicial(String.valueOf(i)));
+                    .pontoReposicao("100").estoqueInicial(String.valueOf(i))
+                    .embalagens(new EmbalagemRequest(null, cx, new BigDecimal("12"), null, false,
+                                    List.of("CX-" + i)),
+                            new EmbalagemRequest(null, fd, new BigDecimal("24"), new BigDecimal("200.00"), true,
+                                    List.of("FD-" + i, "FD2-" + i))));
         }
         ParametrosDaListagem semFiltro = parametros(null, null, 0, 25);
         ParametrosDaListagem comFiltros = ParametrosDaListagem.daRequisicao("produto", null, racao, "baixo", null,
@@ -366,12 +375,15 @@ class ListagemDeProdutosIT {
     }
 
     private static ProdutoRequestBuilder comUnidade(Loja loja) {
-        UUID un = loja.unidades().stream()
-                .filter(unidade -> unidade.sigla().equals("UN"))
+        return ProdutoRequestBuilder.comUnidade(unidade(loja, "UN"));
+    }
+
+    private static UUID unidade(Loja loja, String sigla) {
+        return loja.unidades().stream()
+                .filter(unidade -> unidade.sigla().equals(sigla))
                 .map(UnidadeMedidaResponse::id)
                 .findFirst()
                 .orElseThrow();
-        return ProdutoRequestBuilder.comUnidade(un);
     }
 
     private UUID categoria(Loja loja, String nome, UUID pai) {

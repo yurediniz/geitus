@@ -27,8 +27,6 @@ public class ValidadorDeCodigosDeBarras {
     static final String MENSAGEM_CODIGO_LONGO = "Código de barras deve ter no máximo 50 caracteres.";
     static final String MENSAGEM_DIGITO_INVALIDO = "Código de barras %s com dígito verificador inválido. "
             + "Confira a leitura.";
-    static final String MENSAGEM_CODIGO_EM_OUTRO_PRODUTO = "O código de barras %s já está cadastrado no produto \"%s\".";
-
     static final int TAMANHO_MAXIMO_CODIGO = 50;
 
     private final ProdutoRepository produtoRepository;
@@ -112,9 +110,21 @@ public class ValidadorDeCodigosDeBarras {
             throw new RegraDeNegocioException(MENSAGEM_DIGITO_INVALIDO.formatted(codigo), campo);
         }
         produtoRepository.produtoComCodigo(empresaId, codigo, produtoAtualId).ifPresent(nomeDoProduto -> {
-            throw new ProdutoConflitoException(MENSAGEM_CODIGO_EM_OUTRO_PRODUTO.formatted(codigo, nomeDoProduto),
+            throw new ProdutoConflitoException(mensagemDoConflito(empresaId, codigo, nomeDoProduto, produtoAtualId),
                     campo);
         });
         return new CodigoBarrasValidado(codigo, CodigoBarras.detectarFormato(codigo));
+    }
+
+    /**
+     * Com o codigo numa embalagem de outro produto, a mensagem traz o rotulo da
+     * embalagem (Fase B3, 2.3); na unidade, a mensagem de antes. So consulta o
+     * dono no caminho do conflito.
+     */
+    private String mensagemDoConflito(Long empresaId, String codigo, String nomeDoProduto, Long produtoAtualId) {
+        return produtoRepository.codigosEmUso(empresaId, List.of(codigo), produtoAtualId).stream()
+                .findFirst()
+                .map(CodigoDeBarrasEmUso::mensagem)
+                .orElseGet(() -> CodigoDeBarrasEmUso.mensagemNoProduto(codigo, nomeDoProduto));
     }
 }

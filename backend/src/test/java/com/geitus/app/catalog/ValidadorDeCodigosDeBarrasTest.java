@@ -127,6 +127,22 @@ class ValidadorDeCodigosDeBarrasTest {
                 .satisfies(erro -> assertThat(((ProdutoConflitoException) erro).campo()).contains(CAMPO_DA_EMBALAGEM));
     }
 
+    /** Fase B3 (2.3): com o codigo numa embalagem de outro produto, a mensagem traz o rotulo. */
+    @Test
+    void codigoNaEmbalagemDeOutroProdutoDa409ComORotulo() {
+        when(produtoRepository.produtoComCodigo(EMPRESA_ID, EAN13_VALIDO, PRODUTO_ID))
+                .thenReturn(Optional.of("Nexgard Combo"));
+        when(produtoRepository.codigosEmUso(EMPRESA_ID, List.of(EAN13_VALIDO), PRODUTO_ID))
+                .thenReturn(List.of(new CodigoDeBarrasEmUso(EAN13_VALIDO, "Nexgard Combo", "CX",
+                        new java.math.BigDecimal("3.000"), "UN")));
+
+        assertThatThrownBy(() -> validador.validar(EMPRESA_ID, List.of(EAN13_VALIDO), 5, LIMITE_DA_EMBALAGEM,
+                CAMPO_DA_EMBALAGEM, Map.of(), PRODUTO_ID))
+                .isInstanceOf(ProdutoConflitoException.class)
+                .hasMessage("Este código já está em uso na embalagem CX c/ 3 UN do produto Nexgard Combo.")
+                .satisfies(erro -> assertThat(((ProdutoConflitoException) erro).campo()).contains(CAMPO_DA_EMBALAGEM));
+    }
+
     @Test
     void listaNulaOuComVaziosViraListaNormalizada() {
         assertThat(validador.validar(EMPRESA_ID, null, 5, LIMITE_DA_EMBALAGEM, CAMPO_DA_EMBALAGEM, Map.of(), null))
