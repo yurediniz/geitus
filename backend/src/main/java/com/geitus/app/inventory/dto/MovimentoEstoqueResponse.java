@@ -7,6 +7,7 @@ import java.util.UUID;
 import com.geitus.app.inventory.MotivoMovimento;
 import com.geitus.app.inventory.MovimentoEstoque;
 import com.geitus.app.inventory.OrigemMovimento;
+import com.geitus.app.inventory.RetratoDaEmbalagem;
 import com.geitus.app.inventory.TipoMovimento;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -15,6 +16,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * Um movimento de estoque, na resposta do ajuste e na aba Historico
  * (docs/modules/produtos-estoque.md, 5). O {@code id} e o UUID publico do
  * movimento; do usuario so sai o nome, nunca o id interno ou o e-mail.
+ *
+ * <p>Fase B3 (docs/modules/produtos-embalagens.md, 6): {@code embalagem} traz o
+ * retrato da embalagem quando o ajuste foi informado em embalagens; senao
+ * {@code null}. A {@code quantidade} continua em unidades de venda.
  */
 @Schema(description = "Movimento de estoque do produto")
 public record MovimentoEstoqueResponse(
@@ -34,11 +39,46 @@ public record MovimentoEstoqueResponse(
         String observacao,
         @Schema(description = "Nome do usuario que registrou o movimento")
         String usuarioNome,
-        LocalDateTime criadoEm) {
+        LocalDateTime criadoEm,
+        @Schema(description = "Retrato da embalagem do ajuste informado em embalagens; null se em unidades")
+        EmbalagemDoMovimento embalagem) {
+
+    /** Retrato da embalagem no movimento ("+36 UN (2 CX c/ 18 UN)"). */
+    @Schema(description = "Embalagem em que o ajuste foi informado")
+    public record EmbalagemDoMovimento(
+            @Schema(example = "CX c/ 18 UN")
+            String rotulo,
+            @Schema(description = "Unidades de venda por embalagem", example = "18.000")
+            BigDecimal quantidadePorEmbalagem,
+            @Schema(description = "Numero de embalagens informado", example = "2")
+            int quantidadeDeEmbalagens) {
+
+        static EmbalagemDoMovimento deOuNulo(RetratoDaEmbalagem retrato) {
+            return retrato == null
+                    ? null
+                    : new EmbalagemDoMovimento(retrato.rotulo(), retrato.quantidadePorEmbalagem(),
+                            retrato.quantidadeDeEmbalagens());
+        }
+    }
+
+    /**
+     * Construtor da consulta paginada ({@code MovimentoEstoqueRepository}): as
+     * colunas do retrato chegam soltas (nulas no movimento em unidades).
+     */
+    public MovimentoEstoqueResponse(UUID id, TipoMovimento tipo, MotivoMovimento motivo, OrigemMovimento origem,
+            BigDecimal quantidade, BigDecimal saldoAnterior, BigDecimal saldoNovo, String observacao,
+            String usuarioNome, LocalDateTime criadoEm, String embalagemRotulo, BigDecimal embalagemQuantidade,
+            Integer quantidadeEmbalagens) {
+        this(id, tipo, motivo, origem, quantidade, saldoAnterior, saldoNovo, observacao, usuarioNome, criadoEm,
+                embalagemRotulo == null
+                        ? null
+                        : new EmbalagemDoMovimento(embalagemRotulo, embalagemQuantidade, quantidadeEmbalagens));
+    }
 
     public static MovimentoEstoqueResponse de(MovimentoEstoque movimento, String usuarioNome) {
         return new MovimentoEstoqueResponse(movimento.getUuid(), movimento.getTipo(), movimento.getMotivo(),
                 movimento.getOrigem(), movimento.getQuantidade(), movimento.getSaldoAnterior(),
-                movimento.getSaldoNovo(), movimento.getObservacao(), usuarioNome, movimento.getCriadoEm());
+                movimento.getSaldoNovo(), movimento.getObservacao(), usuarioNome, movimento.getCriadoEm(),
+                EmbalagemDoMovimento.deOuNulo(movimento.getRetratoDaEmbalagem().orElse(null)));
     }
 }

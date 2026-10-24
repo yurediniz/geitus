@@ -3,6 +3,7 @@ package com.geitus.app.inventory;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.geitus.app.catalog.Produto;
@@ -79,6 +80,16 @@ public class MovimentoEstoque {
     @Column(name = "chave_idempotencia", updatable = false)
     private UUID chaveIdempotencia;
 
+    /** Fase B3 (V12): retrato da embalagem do ajuste em embalagens; os tres nulos ou os tres preenchidos. */
+    @Column(name = "embalagem_rotulo", length = 60, updatable = false)
+    private String embalagemRotulo;
+
+    @Column(name = "embalagem_quantidade", precision = 12, scale = 3, updatable = false)
+    private BigDecimal embalagemQuantidade;
+
+    @Column(name = "quantidade_embalagens", updatable = false)
+    private Integer quantidadeEmbalagens;
+
     @Column(name = "criado_em", nullable = false, updatable = false)
     private LocalDateTime criadoEm;
 
@@ -95,6 +106,18 @@ public class MovimentoEstoque {
     public MovimentoEstoque(Produto produto, TipoMovimento tipo, MotivoMovimento motivo, OrigemMovimento origem,
             BigDecimal quantidade, BigDecimal saldoAnterior, BigDecimal saldoNovo, String observacao,
             Long usuarioId, UUID chaveIdempotencia) {
+        this(produto, tipo, motivo, origem, quantidade, saldoAnterior, saldoNovo, observacao, usuarioId,
+                chaveIdempotencia, null);
+    }
+
+    /**
+     * Como o construtor sem embalagem, com o retrato da embalagem do ajuste
+     * informado em embalagens ({@code null} = em unidades). A V12 confere que
+     * {@code |quantidade| = embalagens x unidades por embalagem}.
+     */
+    public MovimentoEstoque(Produto produto, TipoMovimento tipo, MotivoMovimento motivo, OrigemMovimento origem,
+            BigDecimal quantidade, BigDecimal saldoAnterior, BigDecimal saldoNovo, String observacao,
+            Long usuarioId, UUID chaveIdempotencia, RetratoDaEmbalagem embalagem) {
         this.produto = produto;
         this.empresaId = produto.getEmpresaId();
         this.tipo = tipo;
@@ -106,6 +129,11 @@ public class MovimentoEstoque {
         this.observacao = observacao;
         this.usuarioId = usuarioId;
         this.chaveIdempotencia = chaveIdempotencia;
+        if (embalagem != null) {
+            this.embalagemRotulo = embalagem.rotulo();
+            this.embalagemQuantidade = embalagem.quantidadePorEmbalagem();
+            this.quantidadeEmbalagens = embalagem.quantidadeDeEmbalagens();
+        }
     }
 
     @PrePersist
@@ -183,6 +211,14 @@ public class MovimentoEstoque {
     /** Chave de idempotencia enviada pela tela, ou {@code null} (estoque inicial). */
     public UUID getChaveIdempotencia() {
         return chaveIdempotencia;
+    }
+
+    /** Retrato da embalagem, se o ajuste foi informado em embalagens. */
+    public Optional<RetratoDaEmbalagem> getRetratoDaEmbalagem() {
+        if (embalagemRotulo == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new RetratoDaEmbalagem(embalagemRotulo, embalagemQuantidade, quantidadeEmbalagens));
     }
 
     public LocalDateTime getCriadoEm() {

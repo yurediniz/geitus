@@ -14,9 +14,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
+import com.geitus.app.catalog.CatalogoNaoEncontradoException;
 import com.geitus.app.catalog.Paginacao;
 import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ProdutoConflitoException;
+import com.geitus.app.catalog.ProdutoEmbalagem;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
 import com.geitus.app.catalog.ProdutoRepository;
 import com.geitus.app.catalog.QuantidadeDeEstoque;
@@ -42,6 +44,10 @@ import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
  * <p>Como nos outros services, a API publica recebe o {@code idUsuario} do JWT
  * e resolve a empresa (DEC-016); produto de outra empresa responde 404. O
  * usuario do movimento e sempre o autenticado.
+ *
+ * <p>Fase B3 (docs/modules/produtos-embalagens.md, 6): a entrada e a saida
+ * podem ser informadas em embalagens do produto ({@code embalagemId}); o
+ * movimento continua em unidades de venda e guarda o retrato da embalagem.
  */
 @Service
 public class EstoqueService {
@@ -49,6 +55,7 @@ public class EstoqueService {
     static final String CAMPO_QUANTIDADE = "quantidade";
     static final String CAMPO_MOTIVO = "motivo";
     static final String CAMPO_OBSERVACAO = "observacao";
+    static final String CAMPO_EMBALAGEM = "embalagemId";
 
     static final String MENSAGEM_SEM_CONTROLE = "Este produto não controla estoque.";
     static final String MENSAGEM_MOTIVO_DO_SISTEMA = "Este motivo é registrado só pelo sistema.";
@@ -58,6 +65,9 @@ public class EstoqueService {
     static final String MENSAGEM_SALDO_IGUAL = "O saldo já é %s.";
     static final String MENSAGEM_SALDO_ACIMA_DO_LIMITE = "O saldo não pode passar de 999.999.999,999.";
     static final String MENSAGEM_CHAVE_COM_OUTROS_DADOS = "Esta operação já foi registrada com outros dados.";
+    static final String MENSAGEM_CONTAGEM_EM_EMBALAGEM = "A contagem é feita na unidade de venda.";
+    static final String MENSAGEM_EMBALAGEM_NAO_ENCONTRADA = "Embalagem não encontrada.";
+    static final String MENSAGEM_EMBALAGENS_INTEIRAS = "Informe um número inteiro de embalagens.";
 
     /** Maior valor de {@code NUMERIC(12,3)}: acima disso o banco recusaria com erro generico. */
     static final BigDecimal SALDO_MAXIMO = QuantidadeDeEstoque.MAXIMO;
@@ -139,6 +149,17 @@ public class EstoqueService {
      */
     MovimentoEstoque registrarMovimento(Produto produto, TipoMovimento tipo, MotivoMovimento motivo,
             OrigemMovimento origem, BigDecimal quantidadeInformada, String observacao, Long usuarioId, UUID chave) {
+        return registrarMovimento(produto, tipo, motivo, origem,
+                new QuantidadeDoAjuste(quantidadeInformada, null), observacao, usuarioId, chave);
+    }
+
+    /** Quantidade do ajuste em unidades de venda e, se informada em embalagens, o retrato da embalagem. */
+    record QuantidadeDoAjuste(BigDecimal emUnidades, RetratoDaEmbalagem embalagem) {
+    }
+
+    private MovimentoEstoque registrarMovimento(Produto produto, TipoMovimento tipo, MotivoMovimento motivo,
+            OrigemMovimento origem, QuantidadeDoAjuste quantidade, String observacao, Long usuarioId, UUID chave) {
+        BigDecimal quantidadeInformada = quantidade.emUnidades();
         EstoqueSaldo saldo = travarSaldo(produto);
         BigDecimal anterior = saldo.getSaldo();
         BigDecimal variacao = variacao(tipo, emEscalaDeQuantidade(quantidadeInformada), anterior,
@@ -149,12 +170,16 @@ public class EstoqueService {
         }
         saldo.aplicar(variacao);
         return movimentoRepository.save(new MovimentoEstoque(produto, tipo, motivo, origem, variacao, anterior, novo,
-                observacao, usuarioId, chave));
+                observacao, usuarioId, chave, quantidade.embalagem()));
     }
 
     // ---------- Ajuste manual ----------
 
-    /** Ordem da spec: chave -> produto (trava, 404) -> chave de novo -> regras -> movimento. */
+    /**
+     * Ordem da spec: chave -> produto (trava, 404) -> chave de novo -> regras ->
+     * movimento. A chave repetida devolve o movimento gravado antes de procurar
+     * a embalagem, que pode ter saido do produto depois (Review Focus 5 da B3).
+     */
     private ResultadoAjuste ajustar(Long idUsuario, UUID produtoId, AjusteEstoqueRequest request) {
         Usuario usuario = resolverUsuario(idUsuario);
         Long empresaId = usuario.getEmpresaId();
@@ -170,14 +195,14 @@ public class EstoqueService {
         if (repetido.isPresent()) {
             return repetido.get();
         }
-        validarAjusteManual(produto, request);
+        QuantidadeDoAjuste quantidade = validarAjusteManual(produto, request);
         MovimentoEstoque movimento = registrarMovimento(produto, request.tipo(), request.motivo(),
-                OrigemMovimento.AJUSTE_MANUAL, request.quantidade(), normalizarOuNulo(request.observacao()),
+                OrigemMovimento.AJUSTE_MANUAL, quantidade, normalizarOuNulo(request.observacao()),
                 usuario.getId(), request.chave());
         return new ResultadoAjuste(MovimentoEstoqueResponse.de(movimento, usuario.getNome()), true);
     }
 
-    private static void validarAjusteManual(Produto produto, AjusteEstoqueRequest request) {
+    private static QuantidadeDoAjuste validarAjusteManual(Produto produto, AjusteEstoqueRequest request) {
         if (!produto.isControlaEstoque()) {
             throw new RegraDeNegocioException(MENSAGEM_SEM_CONTROLE);
         }
@@ -185,11 +210,38 @@ public class EstoqueService {
         if (request.motivo() == MotivoMovimento.OUTRO && !StringUtils.hasText(request.observacao())) {
             throw new RegraDeNegocioException(MENSAGEM_DESCREVA_O_MOTIVO, CAMPO_OBSERVACAO);
         }
+        if (request.embalagemId() != null) {
+            return emEmbalagens(produto, request);
+        }
         if (request.tipo() == TipoMovimento.AJUSTE) {
             QuantidadeDeEstoque.validarNaoNegativa(request.quantidade(), produto.getUnidade(), CAMPO_QUANTIDADE);
         } else {
             QuantidadeDeEstoque.validarPositiva(request.quantidade(), produto.getUnidade(), CAMPO_QUANTIDADE);
         }
+        return new QuantidadeDoAjuste(request.quantidade(), null);
+    }
+
+    /**
+     * Ajuste informado em embalagens, nesta ordem: so entrada e saida (400 no
+     * {@code embalagemId}), embalagem deste produto (404, DEC-016), numero de
+     * embalagens inteiro e maior que zero (400); o total em unidades (embalagens
+     * x unidades por embalagem) segue as regras da Fase D (limite e fracao; o
+     * saldo e conferido ao registrar).
+     */
+    private static QuantidadeDoAjuste emEmbalagens(Produto produto, AjusteEstoqueRequest request) {
+        if (request.tipo() == TipoMovimento.AJUSTE) {
+            throw new RegraDeNegocioException(MENSAGEM_CONTAGEM_EM_EMBALAGEM, CAMPO_EMBALAGEM);
+        }
+        ProdutoEmbalagem embalagem = produto.embalagem(request.embalagemId())
+                .orElseThrow(() -> new CatalogoNaoEncontradoException(MENSAGEM_EMBALAGEM_NAO_ENCONTRADA));
+        BigDecimal embalagens = request.quantidade();
+        if (embalagens.signum() <= 0 || embalagens.stripTrailingZeros().scale() > 0) {
+            throw new RegraDeNegocioException(MENSAGEM_EMBALAGENS_INTEIRAS, CAMPO_QUANTIDADE);
+        }
+        BigDecimal total = embalagens.multiply(embalagem.getQuantidade());
+        QuantidadeDeEstoque.validarPositiva(total, produto.getUnidade(), CAMPO_QUANTIDADE);
+        return new QuantidadeDoAjuste(total, new RetratoDaEmbalagem(embalagem.rotulo(), embalagem.getQuantidade(),
+                embalagens.intValueExact()));
     }
 
     private static void validarMotivo(TipoMovimento tipo, MotivoMovimento motivo) {
@@ -220,8 +272,22 @@ public class EstoqueService {
         return gravado.getProduto().getUuid().equals(produtoId)
                 && gravado.getTipo() == request.tipo()
                 && gravado.getMotivo() == request.motivo()
-                && gravado.quantidadeInformada().compareTo(request.quantidade()) == 0
+                && mesmaQuantidade(gravado, request)
                 && Objects.equals(gravado.getObservacao(), normalizarOuNulo(request.observacao()));
+    }
+
+    /**
+     * Em unidades, a quantidade informada; em embalagens, o numero de
+     * embalagens do retrato. O movimento nao guarda o id da embalagem (ela pode
+     * ter saido do produto): a repeticao e reconhecida sem procura-la.
+     */
+    private static boolean mesmaQuantidade(MovimentoEstoque gravado, AjusteEstoqueRequest request) {
+        Optional<RetratoDaEmbalagem> retrato = gravado.getRetratoDaEmbalagem();
+        if (request.embalagemId() == null) {
+            return retrato.isEmpty() && gravado.quantidadeInformada().compareTo(request.quantidade()) == 0;
+        }
+        return retrato.isPresent()
+                && BigDecimal.valueOf(retrato.get().quantidadeDeEmbalagens()).compareTo(request.quantidade()) == 0;
     }
 
     /** Se a violacao de integridade foi a da chave de idempotencia (e nao outra constraint). */

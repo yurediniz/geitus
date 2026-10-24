@@ -32,7 +32,8 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
     @Query(value = """
             SELECT new com.geitus.app.inventory.dto.MovimentoEstoqueResponse(
                        m.uuid, m.tipo, m.motivo, m.origem, m.quantidade, m.saldoAnterior, m.saldoNovo,
-                       m.observacao, u.nome, m.criadoEm)
+                       m.observacao, u.nome, m.criadoEm, m.embalagemRotulo, m.embalagemQuantidade,
+                       m.quantidadeEmbalagens)
               FROM MovimentoEstoque m
               JOIN Usuario u ON u.id = m.usuarioId AND u.empresa.id = m.empresaId
              WHERE m.empresaId = :empresaId

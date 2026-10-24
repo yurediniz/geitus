@@ -9,7 +9,9 @@ import org.springframework.boot.test.context.TestComponent;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.geitus.app.catalog.ProdutoService;
+import com.geitus.app.catalog.dto.EmbalagemRequest;
 import com.geitus.app.catalog.dto.ProdutoRequest;
+import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.catalog.unidade.dto.UnidadeMedidaResponse;
 import com.geitus.app.company.Empresa;
@@ -17,6 +19,7 @@ import com.geitus.app.company.EmpresaRepository;
 import com.geitus.app.company.Endereco;
 import com.geitus.app.company.RepresentanteLegal;
 import com.geitus.app.company.TipoPessoa;
+import com.geitus.app.iam.JwtService;
 import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 
@@ -37,14 +40,22 @@ class CenarioDeEstoque {
     private final UnidadeMedidaService unidadeService;
     private final ProdutoService produtoService;
     private final JdbcTemplate jdbcTemplate;
+    private final JwtService jwtService;
 
     CenarioDeEstoque(EmpresaRepository empresaRepository, UsuarioRepository usuarioRepository,
-            UnidadeMedidaService unidadeService, ProdutoService produtoService, JdbcTemplate jdbcTemplate) {
+            UnidadeMedidaService unidadeService, ProdutoService produtoService, JdbcTemplate jdbcTemplate,
+            JwtService jwtService) {
         this.empresaRepository = empresaRepository;
         this.usuarioRepository = usuarioRepository;
         this.unidadeService = unidadeService;
         this.produtoService = produtoService;
         this.jdbcTemplate = jdbcTemplate;
+        this.jwtService = jwtService;
+    }
+
+    /** Cabecalho {@code Authorization} com o JWT do usuario. */
+    String token(Long idUsuario) {
+        return "Bearer " + jwtService.gerarToken(usuarioRepository.findById(idUsuario).orElseThrow());
     }
 
     /** Empresa com unidades padrao e o id do seu ADMIN. */
@@ -94,10 +105,33 @@ class CenarioDeEstoque {
 
     /** Request minimo com o controle de estoque e o estoque inicial informados ({@code null} = sem). */
     static ProdutoRequest produto(UUID unidadeId, String nome, boolean controlaEstoque, String estoqueInicial) {
+        return produto(unidadeId, nome, controlaEstoque, estoqueInicial, null);
+    }
+
+    /** Como o request minimo, com a lista de embalagens ({@code null} = campo ausente). */
+    static ProdutoRequest produto(UUID unidadeId, String nome, boolean controlaEstoque, String estoqueInicial,
+            List<EmbalagemRequest> embalagens) {
         return new ProdutoRequest(nome, null, null, null, null, unidadeId, null,
-                new BigDecimal("10.00"), null, null, null, null, null, List.of(), null, null, null, null, null, null,
-                controlaEstoque,
+                new BigDecimal("10.00"), null, null, null, null, null, List.of(), embalagens, null, null, null, null,
+                null, controlaEstoque,
                 estoqueInicial == null ? null : new BigDecimal(estoqueInicial));
+    }
+
+    /**
+     * Fase B3: produto em UN com a embalagem de compra "CX c/ {quantidade} UN";
+     * devolve a resposta (com o id da embalagem).
+     */
+    ProdutoResponse novoProdutoComCaixa(EmpresaDeTeste empresa, String nome, String quantidadePorCaixa) {
+        EmbalagemRequest caixa = new EmbalagemRequest(null, unidade(empresa, "CX"), new BigDecimal(quantidadePorCaixa),
+                null, true, List.of());
+        return produtoService.cadastrarParaUsuario(empresa.admin(),
+                produto(unidade(empresa, "UN"), nome, true, null, List.of(caixa)));
+    }
+
+    /** Tira todas as embalagens do produto pelo PATCH do cadastro. */
+    void removerEmbalagens(EmpresaDeTeste empresa, UUID produto, String nome) {
+        produtoService.atualizarDadosBasicosParaUsuario(empresa.admin(), produto,
+                produto(unidade(empresa, "UN"), nome, true, null, List.of()));
     }
 
     /** Saldo gravado do produto; 0 sem linha de saldo. */

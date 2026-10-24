@@ -20,7 +20,7 @@ import jakarta.validation.constraints.Size;
  * saida, ou o saldo contado no ajuste. Precisao e limite espelham o
  * {@code NUMERIC(12,3)} da V9. A {@code chave} (UUID gerado ao abrir o modal)
  * torna o pedido idempotente. As regras que dependem do produto (fracao,
- * saldo, motivo do tipo, observacao em "Outro") ficam no service.
+ * saldo, motivo do tipo, observacao em "Outro", embalagem) ficam no service.
  */
 @Schema(description = "Ajuste manual de estoque do produto")
 public record AjusteEstoqueRequest(
@@ -50,5 +50,10 @@ public record AjusteEstoqueRequest(
         @Schema(description = "Chave de idempotencia (UUID gerado ao abrir o modal); repetir a chave devolve o "
                 + "movimento ja gravado")
         @NotNull(message = "Informe a chave da operação.")
-        UUID chave) {
+        UUID chave,
+
+        @Schema(description = "Fase B3: UUID da embalagem do produto em que a quantidade foi informada (so em "
+                + "ENTRADA e SAIDA); com ela, a quantidade e o numero de embalagens (inteiro) e o movimento e "
+                + "gravado em unidades de venda. Ausente = quantidade na unidade de venda")
+        UUID embalagemId) {
 }

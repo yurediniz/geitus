@@ -28,6 +28,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import com.geitus.app.catalog.CatalogoNaoEncontradoException;
 import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ProdutoConflitoException;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
@@ -109,7 +110,7 @@ class EstoqueServiceTest {
 
     private static AjusteEstoqueRequest ajuste(TipoMovimento tipo, String quantidade, MotivoMovimento motivo,
             String observacao, UUID chave) {
-        return new AjusteEstoqueRequest(tipo, new BigDecimal(quantidade), motivo, observacao, chave);
+        return new AjusteEstoqueRequest(tipo, new BigDecimal(quantidade), motivo, observacao, chave, null);
     }
 
     private ResultadoAjuste ajustar(Produto produto, AjusteEstoqueRequest request) {
@@ -382,6 +383,78 @@ class EstoqueServiceTest {
                 ajuste(TipoMovimento.ENTRADA, "1", MotivoMovimento.COMPRA)))
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
         verify(movimentoRepository, never()).save(any());
+    }
+
+    // ---------- Em embalagens (Fase B3, docs/modules/produtos-embalagens.md, 6) ----------
+
+    private static AjusteEstoqueRequest emEmbalagens(TipoMovimento tipo, String quantidade, MotivoMovimento motivo,
+            UUID embalagemId) {
+        return new AjusteEstoqueRequest(tipo, new BigDecimal(quantidade), motivo, null, UUID.randomUUID(),
+                embalagemId);
+    }
+
+    /** A contagem e sempre na unidade de venda: o tipo e conferido antes de procurar a embalagem. */
+    @Test
+    void contagemEmEmbalagem_400() {
+        Produto produto = produtoComSaldo(un, "10");
+
+        assertRegra(() -> ajustar(produto, emEmbalagens(TipoMovimento.AJUSTE, "2", MotivoMovimento.CONTAGEM,
+                UUID.randomUUID())), "A contagem é feita na unidade de venda.", "embalagemId");
+    }
+
+    @Test
+    void embalagemQueNaoEDoProduto_404() {
+        Produto produto = produtoComSaldo(un, "10");
+
+        assertThatThrownBy(() -> ajustar(produto, emEmbalagens(TipoMovimento.ENTRADA, "2", MotivoMovimento.COMPRA,
+                UUID.randomUUID())))
+                .isInstanceOf(CatalogoNaoEncontradoException.class)
+                .hasMessage("Embalagem não encontrada.");
+        verify(movimentoRepository, never()).save(any());
+    }
+
+    /**
+     * Review Focus 5: a chave repetida devolve o movimento gravado ANTES de
+     * procurar a embalagem, mesmo que ela ja nao exista no produto.
+     */
+    @Test
+    void chaveRepetidaEmEmbalagemDevolveOGravadoSemProcurarAEmbalagem() {
+        Produto produto = produtoComSaldo(un, "46");
+        UUID chave = UUID.randomUUID();
+        MovimentoEstoque gravado = new MovimentoEstoque(produto, TipoMovimento.ENTRADA, MotivoMovimento.COMPRA,
+                OrigemMovimento.AJUSTE_MANUAL, new BigDecimal("36.000"), new BigDecimal("10.000"),
+                new BigDecimal("46.000"), null, ID_USUARIO, chave,
+                new RetratoDaEmbalagem("CX c/ 18 UN", new BigDecimal("18.000"), 2));
+        when(movimentoRepository.findByEmpresaIdAndChaveIdempotencia(EMPRESA_ID, chave))
+                .thenReturn(Optional.of(gravado));
+
+        ResultadoAjuste resultado = ajustar(produto, new AjusteEstoqueRequest(TipoMovimento.ENTRADA,
+                new BigDecimal("2"), MotivoMovimento.COMPRA, null, chave, UUID.randomUUID()));
+
+        assertThat(resultado.criado()).isFalse();
+        assertThat(resultado.movimento().embalagem().rotulo()).isEqualTo("CX c/ 18 UN");
+        assertThat(resultado.movimento().embalagem().quantidadeDeEmbalagens()).isEqualTo(2);
+        verify(movimentoRepository, never()).save(any());
+    }
+
+    /** A mesma chave com outra quantidade de embalagens, ou sem a embalagem, e outro pedido: 409. */
+    @Test
+    void chaveRepetidaComOutroPedidoDeEmbalagem_409() {
+        Produto produto = produtoComSaldo(un, "46");
+        UUID chave = UUID.randomUUID();
+        MovimentoEstoque gravado = new MovimentoEstoque(produto, TipoMovimento.ENTRADA, MotivoMovimento.COMPRA,
+                OrigemMovimento.AJUSTE_MANUAL, new BigDecimal("36.000"), new BigDecimal("10.000"),
+                new BigDecimal("46.000"), null, ID_USUARIO, chave,
+                new RetratoDaEmbalagem("CX c/ 18 UN", new BigDecimal("18.000"), 2));
+        when(movimentoRepository.findByEmpresaIdAndChaveIdempotencia(EMPRESA_ID, chave))
+                .thenReturn(Optional.of(gravado));
+
+        assertThatThrownBy(() -> ajustar(produto, new AjusteEstoqueRequest(TipoMovimento.ENTRADA,
+                new BigDecimal("3"), MotivoMovimento.COMPRA, null, chave, UUID.randomUUID())))
+                .isInstanceOf(ProdutoConflitoException.class);
+        assertThatThrownBy(() -> ajustar(produto, new AjusteEstoqueRequest(TipoMovimento.ENTRADA,
+                new BigDecimal("36"), MotivoMovimento.COMPRA, null, chave, null)))
+                .isInstanceOf(ProdutoConflitoException.class);
     }
 
     // ---------- Idempotencia (spec 4.5) ----------

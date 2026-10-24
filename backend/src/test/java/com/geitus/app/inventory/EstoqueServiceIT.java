@@ -32,10 +32,12 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import com.geitus.app.catalog.CatalogoNaoEncontradoException;
 import com.geitus.app.catalog.ProdutoConflitoException;
 import com.geitus.app.catalog.ProdutoNaoEncontradoException;
 import com.geitus.app.catalog.RegraDeNegocioException;
 import com.geitus.app.catalog.dto.PaginaResponse;
+import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.inventory.EstoqueService.ResultadoAjuste;
 import com.geitus.app.inventory.dto.AjusteEstoqueRequest;
 import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
@@ -94,7 +96,7 @@ class EstoqueServiceIT {
 
     private static AjusteEstoqueRequest entrada(String quantidade, UUID chave) {
         return new AjusteEstoqueRequest(TipoMovimento.ENTRADA, new BigDecimal(quantidade), MotivoMovimento.COMPRA,
-                null, chave);
+                null, chave, null);
     }
 
     // ---------- Concorrencia (Review Focus 1) ----------
@@ -183,7 +185,8 @@ class EstoqueServiceIT {
             largada.await(ESPERA_MAXIMA_SEGUNDOS, TimeUnit.SECONDS);
             try {
                 estoqueService.ajustarParaUsuario(idUsuario, produto, new AjusteEstoqueRequest(TipoMovimento.SAIDA,
-                        new BigDecimal("3"), MotivoMovimento.PERDA_AVARIA, null, UUID.randomUUID()));
+                        new BigDecimal("3"), MotivoMovimento.PERDA_AVARIA, null, UUID.randomUUID(),
+                        null));
                 return "criado";
             } catch (RegraDeNegocioException regra) {
                 return regra.getMessage();
@@ -291,9 +294,10 @@ class EstoqueServiceIT {
         UUID produto = cenario.novoProduto(empresa, "KG", "Ração a granel");
         estoqueService.ajustarParaUsuario(empresa.admin(), produto, entrada("10"));
         estoqueService.ajustarParaUsuario(empresa.admin(), produto, new AjusteEstoqueRequest(TipoMovimento.SAIDA,
-                new BigDecimal("2.5"), MotivoMovimento.PERDA_AVARIA, "Saco rasgado", UUID.randomUUID()));
+                new BigDecimal("2.5"), MotivoMovimento.PERDA_AVARIA, "Saco rasgado", UUID.randomUUID(),
+                null));
         estoqueService.ajustarParaUsuario(empresa.admin(), produto, new AjusteEstoqueRequest(TipoMovimento.AJUSTE,
-                new BigDecimal("7"), MotivoMovimento.CONTAGEM, null, UUID.randomUUID()));
+                new BigDecimal("7"), MotivoMovimento.CONTAGEM, null, UUID.randomUUID(), null));
 
         PaginaResponse<MovimentoEstoqueResponse> primeira = estoqueService.movimentosParaUsuario(empresa.admin(),
                 produto, 0, 2);
@@ -361,6 +365,117 @@ class EstoqueServiceIT {
         assertThat(cenario.contarMovimentos(produtoDaB)).isEqualTo(1);
     }
 
+    // ---------- Em embalagens (Fase B3, docs/modules/produtos-embalagens.md, 6) ----------
+
+    private static AjusteEstoqueRequest emCaixas(TipoMovimento tipo, String caixas, MotivoMovimento motivo,
+            UUID embalagemId, UUID chave) {
+        return new AjusteEstoqueRequest(tipo, new BigDecimal(caixas), motivo, null, chave, embalagemId);
+    }
+
+    private static UUID caixa(ProdutoResponse produto) {
+        return produto.embalagens().get(0).id();
+    }
+
+    @Test
+    void entradaDeDuasCaixasGravaTrintaESeisComORetrato() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ProdutoResponse sache = cenario.novoProdutoComCaixa(empresa, "Sachê", "18");
+        estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(), entrada("10"));
+
+        MovimentoEstoqueResponse movimento = estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(),
+                emCaixas(TipoMovimento.ENTRADA, "2", MotivoMovimento.COMPRA, caixa(sache), UUID.randomUUID()))
+                .movimento();
+
+        assertThat(movimento.quantidade()).isEqualByComparingTo("36");
+        assertThat(movimento.saldoAnterior()).isEqualByComparingTo("10");
+        assertThat(movimento.saldoNovo()).isEqualByComparingTo("46");
+        assertThat(movimento.embalagem().rotulo()).isEqualTo("CX c/ 18 UN");
+        assertThat(movimento.embalagem().quantidadePorEmbalagem()).isEqualByComparingTo("18");
+        assertThat(movimento.embalagem().quantidadeDeEmbalagens()).isEqualTo(2);
+        assertThat(cenario.saldo(sache.id())).isEqualByComparingTo("46");
+
+        List<MovimentoEstoqueResponse> historico = estoqueService.movimentosParaUsuario(empresa.admin(), sache.id(),
+                0, 20).itens();
+        assertThat(historico.get(0).embalagem().rotulo()).isEqualTo("CX c/ 18 UN");
+        assertThat(historico.get(0).embalagem().quantidadeDeEmbalagens()).isEqualTo(2);
+        assertThat(historico.get(1).embalagem()).isNull();
+    }
+
+    @Test
+    void saidaEmCaixasRespeitaOSaldoEmUnidades() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ProdutoResponse sache = cenario.novoProdutoComCaixa(empresa, "Sachê", "18");
+        estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(), entrada("46"));
+
+        assertThatThrownBy(() -> estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(),
+                emCaixas(TipoMovimento.SAIDA, "3", MotivoMovimento.PERDA_AVARIA, caixa(sache), UUID.randomUUID())))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessage("Saldo insuficiente: há 46 UN.");
+
+        estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(), entrada("8"));
+        MovimentoEstoqueResponse saida = estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(),
+                emCaixas(TipoMovimento.SAIDA, "3", MotivoMovimento.PERDA_AVARIA, caixa(sache), UUID.randomUUID()))
+                .movimento();
+        assertThat(saida.quantidade()).isEqualByComparingTo("-54");
+        assertThat(cenario.saldo(sache.id())).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void embalagemDeOutroProduto404EFracaoDeCaixa400() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ProdutoResponse sache = cenario.novoProdutoComCaixa(empresa, "Sachê", "18");
+        ProdutoResponse racao = cenario.novoProdutoComCaixa(empresa, "Ração", "6");
+
+        assertThatThrownBy(() -> estoqueService.ajustarParaUsuario(empresa.admin(), racao.id(),
+                emCaixas(TipoMovimento.ENTRADA, "2", MotivoMovimento.COMPRA, caixa(sache), UUID.randomUUID())))
+                .isInstanceOf(CatalogoNaoEncontradoException.class)
+                .hasMessage("Embalagem não encontrada.");
+        assertThatThrownBy(() -> estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(),
+                emCaixas(TipoMovimento.ENTRADA, "1.5", MotivoMovimento.COMPRA, caixa(sache), UUID.randomUUID())))
+                .isInstanceOfSatisfying(RegraDeNegocioException.class,
+                        erro -> assertThat(erro.campo()).contains("quantidade"))
+                .hasMessage("Informe um número inteiro de embalagens.");
+        assertThat(cenario.contarMovimentos(sache.id())).isZero();
+        assertThat(cenario.contarMovimentos(racao.id())).isZero();
+    }
+
+    /** Review Focus 5: a chave repetida devolve o movimento gravado mesmo depois de a embalagem sair. */
+    @Test
+    void chaveRepetidaDepoisDeRemoverAEmbalagemDevolveOMovimentoOriginal() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ProdutoResponse sache = cenario.novoProdutoComCaixa(empresa, "Sachê", "18");
+        UUID chave = UUID.randomUUID();
+        AjusteEstoqueRequest duasCaixas = emCaixas(TipoMovimento.ENTRADA, "2", MotivoMovimento.COMPRA, caixa(sache),
+                chave);
+        ResultadoAjuste primeiro = estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(), duasCaixas);
+        cenario.removerEmbalagens(empresa, sache.id(), "Sachê");
+
+        ResultadoAjuste repetido = estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(), duasCaixas);
+
+        assertThat(repetido.criado()).isFalse();
+        assertThat(repetido.movimento()).isEqualTo(primeiro.movimento());
+        assertThat(cenario.contarMovimentos(sache.id())).isEqualTo(1);
+        assertThatThrownBy(() -> estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(),
+                emCaixas(TipoMovimento.ENTRADA, "2", MotivoMovimento.COMPRA, caixa(sache), UUID.randomUUID())))
+                .isInstanceOf(CatalogoNaoEncontradoException.class);
+    }
+
+    @Test
+    void movimentosPelaApiTrazemORetratoDaEmbalagem() throws Exception {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ProdutoResponse sache = cenario.novoProdutoComCaixa(empresa, "Sachê", "18");
+        estoqueService.ajustarParaUsuario(empresa.admin(), sache.id(),
+                emCaixas(TipoMovimento.ENTRADA, "2", MotivoMovimento.COMPRA, caixa(sache), UUID.randomUUID()));
+
+        mockMvc.perform(get("/api/produtos/" + sache.id() + "/estoque/movimentos")
+                        .header("Authorization", cenario.token(empresa.admin())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.itens[0].quantidade").value(36.0))
+                .andExpect(jsonPath("$.itens[0].embalagem.rotulo").value("CX c/ 18 UN"))
+                .andExpect(jsonPath("$.itens[0].embalagem.quantidadePorEmbalagem").value(18.0))
+                .andExpect(jsonPath("$.itens[0].embalagem.quantidadeDeEmbalagens").value(2));
+    }
+
     // ---------- Documentacao da API (Task 4) ----------
 
     /** O OpenAPI gerado traz os endpoints de estoque, os codigos de resposta e os campos novos do produto. */
@@ -374,6 +489,10 @@ class EstoqueServiceIT {
                 .andExpect(jsonPath(ajustes + ".responses['201'].content").exists())
                 .andExpect(jsonPath(movimentos + ".summary").exists())
                 .andExpect(jsonPath("$.components.schemas.AjusteEstoqueRequest.properties.chave").exists())
+                .andExpect(jsonPath("$.components.schemas.AjusteEstoqueRequest.properties.embalagemId").exists())
+                .andExpect(jsonPath("$.components.schemas.MovimentoEstoqueResponse.properties.embalagem").exists())
+                .andExpect(jsonPath("$.components.schemas.ProdutoRequest.properties.embalagens").exists())
+                .andExpect(jsonPath("$.components.schemas.ProdutoResponse.properties.embalagens").exists())
                 .andExpect(jsonPath("$.components.schemas.MovimentoEstoqueResponse.properties.usuarioNome").exists())
                 .andExpect(jsonPath("$.components.schemas.ProdutoRequest.properties.estoqueInicial").exists())
                 .andExpect(jsonPath("$.components.schemas.ProdutoResponse.properties.situacaoEstoque").exists());
