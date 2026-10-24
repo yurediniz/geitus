@@ -111,6 +111,7 @@ public class ResolucaoDeItens {
 
     private ItemResolvidoResponse daEtiqueta(Long empresaId, Etiqueta etiqueta) {
         Produto produto = produtoRepository.findByEmpresa_IdAndCodigo(empresaId, etiqueta.leitura().codigoProduto())
+                .filter(Produto::isVendidoBalanca)
                 .orElseThrow(ResolucaoDeItens::naoEncontrado);
         exigirAtivo(produto);
         LinhaParaCalculo linha = new LinhaParaCalculo(1, produto, null, etiqueta.leitura(), etiqueta.codigoLido(),

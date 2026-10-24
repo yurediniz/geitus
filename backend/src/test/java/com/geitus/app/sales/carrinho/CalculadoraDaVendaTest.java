@@ -285,6 +285,54 @@ class CalculadoraDaVendaTest {
         assertThat(calculo.total()).isEqualByComparingTo("10.00");
     }
 
+    /** BACK-I1: o percentual arredonda para baixo (a favor da loja), entao 10% nunca passa de 10%. */
+    @Test
+    void percentualArredondaParaBaixoEOOperadorFicaNoLimite() {
+        Produto item = produto("Item", un, Precos.de("2.45"));
+
+        CalculoDaVenda calculo = CalculadoraDaVenda.calcular(List.of(daUnidade(1, item, "1")),
+                new DescontoInformado(TipoDesconto.PERCENTUAL, new BigDecimal("10")), List.of(), false,
+                LIMITE_PADRAO, HOJE);
+        CalculoDaVenda doItem = CalculadoraDaVenda.calcular(
+                List.of(comDesconto(daUnidade(1, item, "1"), TipoDesconto.PERCENTUAL, "10")), null, List.of(), false,
+                LIMITE_PADRAO, HOJE);
+
+        assertThat(calculo.erros()).isEmpty();
+        assertThat(calculo.descontoTotal()).isEqualByComparingTo("0.24");
+        assertThat(calculo.total()).isEqualByComparingTo("2.21");
+        assertThat(doItem.erros()).isEmpty();
+        assertThat(doItem.descontoItens()).isEqualByComparingTo("0.24");
+    }
+
+    /** SEG-1: um valor gigante e recusado antes de qualquer conta (sem travar a thread). */
+    @Test
+    void descontoGiganteRecusadoSemCusto() {
+        Produto item = produto("Item", un, Precos.de("10.00"));
+        BigDecimal gigante = new BigDecimal("1E+400000000");
+
+        CalculoDaVenda calculo = org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(
+                java.time.Duration.ofSeconds(2), () -> CalculadoraDaVenda.calcular(
+                        List.of(new LinhaParaCalculo(1, item, null, null, null, BigDecimal.ONE,
+                                new DescontoInformado(TipoDesconto.VALOR, gigante))),
+                        new DescontoInformado(TipoDesconto.PERCENTUAL, gigante), List.of(), true, LIMITE_PADRAO,
+                        HOJE));
+
+        assertThat(calculo.erros()).containsExactly(
+                new ErroDoCalculo("itens[0].desconto", "O desconto passa do valor do item."),
+                new ErroDoCalculo("desconto", "O desconto passa do subtotal."));
+        assertThat(calculo.total()).isEqualByComparingTo("10.00");
+    }
+
+    @Test
+    void etiquetaDeValorAbaixoDoMinimoMesmoSemDesconto() {
+        Produto bolo = produto("Bolo", un, Precos.de("3.00").comMinimo("2.80"));
+
+        CalculoDaVenda calculo = calcular(List.of(etiqueta(bolo, TipoInformacaoEtiqueta.VALOR, "2.500")));
+
+        assertThat(calculo.erros()).containsExactly(new ErroDoCalculo("itens[0]",
+                "O valor da etiqueta deixa Bolo abaixo do preço mínimo (R$ 2,80 por UN)."));
+    }
+
     // ---------- Pagamento (3.4) ----------
 
     @Test

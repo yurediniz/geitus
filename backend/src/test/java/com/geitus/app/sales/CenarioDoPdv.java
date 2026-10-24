@@ -89,56 +89,62 @@ public class CenarioDoPdv {
      */
     public record NovoProduto(String nome, String sigla, String preco, String custo, String precoMinimo,
             Integer codigo, List<String> codigosBarras, List<NovaEmbalagem> embalagens, boolean controlaEstoque,
-            String estoqueInicial, String precoPromocional, AtacadoRequest atacado) {
+            String estoqueInicial, String precoPromocional, AtacadoRequest atacado, boolean vendidoBalanca) {
 
         public static NovoProduto de(String nome, String sigla, String preco) {
-            return new NovoProduto(nome, sigla, preco, null, null, null, List.of(), List.of(), true, null, null, null);
+            return new NovoProduto(nome, sigla, preco, null, null, null, List.of(), List.of(), true, null, null, null, false);
         }
 
         public NovoProduto comCusto(String valor) {
             return new NovoProduto(nome, sigla, preco, valor, precoMinimo, codigo, codigosBarras, embalagens,
-                    controlaEstoque, estoqueInicial, precoPromocional, atacado);
+                    controlaEstoque, estoqueInicial, precoPromocional, atacado, vendidoBalanca);
         }
 
         public NovoProduto comPrecoMinimo(String valor) {
             return new NovoProduto(nome, sigla, preco, custo, valor, codigo, codigosBarras, embalagens,
-                    controlaEstoque, estoqueInicial, precoPromocional, atacado);
+                    controlaEstoque, estoqueInicial, precoPromocional, atacado, vendidoBalanca);
         }
 
         public NovoProduto comCodigo(int valor) {
             return new NovoProduto(nome, sigla, preco, custo, precoMinimo, valor, codigosBarras, embalagens,
-                    controlaEstoque, estoqueInicial, precoPromocional, atacado);
+                    controlaEstoque, estoqueInicial, precoPromocional, atacado, vendidoBalanca);
         }
 
         public NovoProduto comCodigosBarras(String... codigos) {
             return new NovoProduto(nome, sigla, preco, custo, precoMinimo, codigo, List.of(codigos), embalagens,
-                    controlaEstoque, estoqueInicial, precoPromocional, atacado);
+                    controlaEstoque, estoqueInicial, precoPromocional, atacado, vendidoBalanca);
         }
 
         public NovoProduto comEmbalagens(NovaEmbalagem... novas) {
             return new NovoProduto(nome, sigla, preco, custo, precoMinimo, codigo, codigosBarras, List.of(novas),
-                    controlaEstoque, estoqueInicial, precoPromocional, atacado);
+                    controlaEstoque, estoqueInicial, precoPromocional, atacado, vendidoBalanca);
         }
 
         public NovoProduto semControleDeEstoque() {
             return new NovoProduto(nome, sigla, preco, custo, precoMinimo, codigo, codigosBarras, embalagens, false,
-                    null, precoPromocional, atacado);
+                    null, precoPromocional, atacado, vendidoBalanca);
         }
 
         public NovoProduto comEstoque(String quantidade) {
             return new NovoProduto(nome, sigla, preco, custo, precoMinimo, codigo, codigosBarras, embalagens,
-                    controlaEstoque, quantidade, precoPromocional, atacado);
+                    controlaEstoque, quantidade, precoPromocional, atacado, vendidoBalanca);
         }
 
         public NovoProduto emPromocao(String valor) {
             return new NovoProduto(nome, sigla, preco, custo, precoMinimo, codigo, codigosBarras, embalagens,
-                    controlaEstoque, estoqueInicial, valor, atacado);
+                    controlaEstoque, estoqueInicial, valor, atacado, vendidoBalanca);
+        }
+
+        /** Vendido na balanca (exige o codigo do produto): so ele aceita etiqueta no PDV. */
+        public NovoProduto naBalanca(int codigoDoProduto) {
+            return new NovoProduto(nome, sigla, preco, custo, precoMinimo, codigoDoProduto, codigosBarras, embalagens,
+                    controlaEstoque, estoqueInicial, precoPromocional, atacado, true);
         }
 
         public NovoProduto comAtacado(String valor, String quantidadeMinima) {
             return new NovoProduto(nome, sigla, preco, custo, precoMinimo, codigo, codigosBarras, embalagens,
                     controlaEstoque, estoqueInicial, precoPromocional,
-                    new AtacadoRequest(new BigDecimal(valor), new BigDecimal(quantidadeMinima)));
+                    new AtacadoRequest(new BigDecimal(valor), new BigDecimal(quantidadeMinima)), vendidoBalanca);
         }
     }
 
@@ -185,7 +191,7 @@ public class CenarioDoPdv {
         ProdutoRequest request = new ProdutoRequest(novo.nome(), null, null, unidade(empresa, novo.sigla()), null,
                 null, null, null, new BigDecimal(novo.preco()), valorOuNulo(novo.custo()), null, null, null,
                 valorOuNulo(novo.precoMinimo()), novo.codigosBarras(), embalagens, null, novo.codigo(),
-                false, promocao, novo.atacado(), novo.controlaEstoque(),
+                novo.vendidoBalanca(), promocao, novo.atacado(), novo.controlaEstoque(),
                 valorOuNulo(novo.estoqueInicial()));
         return request;
     }

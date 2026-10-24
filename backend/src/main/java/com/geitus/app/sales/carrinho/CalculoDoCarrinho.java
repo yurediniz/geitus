@@ -45,17 +45,33 @@ public class CalculoDoCarrinho {
     public CalculoResponse calcularParaUsuario(Long idUsuario, CarrinhoRequest carrinho) {
         UsuarioAutenticado usuario = resolvedor.resolver(idUsuario);
         CarrinhoMontado montado = montagem.montar(usuario, carrinho);
-        RegrasDoPdv regras = configuracaoService.daEmpresa(usuario.empresaId());
         Map<Long, BigDecimal> saldos = produtosDoPdv.saldos(usuario.empresaId(), montado.produtoIds());
-        return CalculoResponse.de(calcular(usuario, carrinho, montado, regras, saldos));
+        CalculoConferido conferido = calcular(usuario, carrinho, montado, saldos);
+        return CalculoResponse.de(conferido.calculo().comEstoque(conferido.estoque()));
     }
 
-    /** O calculo com a conferencia do estoque, igual no {@code /calculo} e na finalizacao. */
-    public CalculoDaVenda calcular(UsuarioAutenticado usuario, CarrinhoRequest carrinho, CarrinhoMontado montado,
-            RegrasDoPdv regras, Map<Long, BigDecimal> saldos) {
+    /**
+     * O calculo das regras do carrinho e, separada, a conferencia do estoque:
+     * o {@code /calculo} junta as duas na resposta; a finalizacao responde 400
+     * para as regras e 409 para o estoque.
+     */
+    public record CalculoConferido(CalculoDaVenda calculo, ConferenciaDoEstoque.Resultado estoque) {
+    }
+
+    /**
+     * O calculo com a conferencia do estoque, o mesmo no {@code /calculo} e na
+     * finalizacao (perfil do banco, regras do PDV da empresa e "hoje" do
+     * relogio).
+     *
+     * @param saldos o saldo atual de cada produto (na finalizacao, ja travado)
+     */
+    public CalculoConferido calcular(UsuarioAutenticado usuario, CarrinhoRequest carrinho, CarrinhoMontado montado,
+            Map<Long, BigDecimal> saldos) {
+        RegrasDoPdv regras = configuracaoService.daEmpresa(usuario.empresaId());
         CalculoDaVenda calculo = CalculadoraDaVenda.calcular(montado.linhas(), carrinho.descontoDoTotal(),
                 carrinho.pagamentosParaCalculo(), usuario.ehAdmin(), regras.descontoMaximoOperador(),
                 SituacaoPromocao.hoje(relogio));
-        return calculo.comEstoque(ConferenciaDoEstoque.conferir(calculo.linhas(), saldos, regras.venderSemEstoque()));
+        return new CalculoConferido(calculo,
+                ConferenciaDoEstoque.conferir(calculo.linhas(), saldos, regras.venderSemEstoque()));
     }
 }

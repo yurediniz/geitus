@@ -33,7 +33,7 @@ class CalculoIT extends IntegracaoDoPdv {
 
     @Test
     void servidorReleAEtiquetaEIgnoraAQuantidadeEnviada() throws Exception {
-        UUID queijo = pdv.produto(empresa, NovoProduto.de("Queijo", "KG", "25.00").comCodigo(542)).id();
+        UUID queijo = pdv.produto(empresa, NovoProduto.de("Queijo", "KG", "25.00").naBalanca(542)).id();
 
         calcular(empresa.operadora(), "{\"itens\":[{\"produtoId\":\"" + queijo + "\",\"quantidade\":99,"
                 + "\"codigoLido\":\"2000542010000\",\"etiqueta\":true}]}")
@@ -47,8 +47,8 @@ class CalculoIT extends IntegracaoDoPdv {
 
     @Test
     void etiquetaDeOutroProduto404() throws Exception {
-        pdv.produto(empresa, NovoProduto.de("Queijo", "KG", "25.00").comCodigo(542));
-        UUID presunto = pdv.produto(empresa, NovoProduto.de("Presunto", "KG", "30.00").comCodigo(543)).id();
+        pdv.produto(empresa, NovoProduto.de("Queijo", "KG", "25.00").naBalanca(542));
+        UUID presunto = pdv.produto(empresa, NovoProduto.de("Presunto", "KG", "30.00").naBalanca(543)).id();
 
         calcular(empresa.operadora(), "{\"itens\":[{\"produtoId\":\"" + presunto + "\",\"codigoLido\":"
                 + "\"2000542010000\",\"etiqueta\":true}]}")
@@ -174,6 +174,64 @@ class CalculoIT extends IntegracaoDoPdv {
                 .andExpect(jsonPath("$.erros", hasSize(0)))
                 .andReturn().getResponse().getContentAsString();
         assertThat(corpo).doesNotContain("custo").doesNotContain("12.34");
+    }
+
+    @Test
+    void etiquetaDeProdutoForaDaBalanca404ComCampo() throws Exception {
+        UUID queijo = pdv.produto(empresa, NovoProduto.de("Queijo", "KG", "25.00").comCodigo(542)).id();
+
+        calcular(empresa.operadora(), "{\"itens\":[{\"produtoId\":\"" + queijo + "\",\"codigoLido\":"
+                + "\"2000542010000\",\"etiqueta\":true}]}")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensagem").value("Código não encontrado."))
+                .andExpect(jsonPath("$.campos[0].campo").value("itens[0]"));
+    }
+
+    /** Etiqueta de valor forjada abaixo do minimo: o erro sai mesmo sem desconto. */
+    @Test
+    void etiquetaDeValorAbaixoDoPrecoMinimo() throws Exception {
+        UUID bolo = pdv.produto(empresa, NovoProduto.de("Bolo", "UN", "3.00").comPrecoMinimo("2.80").naBalanca(542))
+                .id();
+
+        calcular(empresa.operadora(), "{\"itens\":[{\"produtoId\":\"" + bolo + "\",\"codigoLido\":"
+                + "\"2000542002500\",\"etiqueta\":true}]}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.erros[0].campo").value("itens[0]"))
+                .andExpect(jsonPath("$.erros[0].mensagem").value(
+                        "O valor da etiqueta deixa Bolo abaixo do preço mínimo (R$ 2,80 por UN)."));
+        resolver(empresa.operadora(), "2000542002500")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("codigo"));
+    }
+
+    /** SEG-1: valor gigante no desconto do item e do total responde rapido, sem travar o servidor. */
+    @Test
+    void descontoGiganteRecusadoRapido() throws Exception {
+        UUID racao = pdv.produto(empresa, NovoProduto.de("Ração", "UN", "10.00")).id();
+        long inicio = System.nanoTime();
+
+        calcular(empresa.operadora(), "{\"itens\":[{\"produtoId\":\"" + racao + "\",\"quantidade\":1,\"desconto\":"
+                + "{\"tipo\":\"VALOR\",\"valor\":1E+100000000}}]}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("itens[0].desconto.valor"));
+        calcular(empresa.operadora(), "{\"itens\":[" + item(racao, "1") + "],\"desconto\":{\"tipo\":\"PERCENTUAL\","
+                + "\"valor\":1E+100000000}}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("desconto.valor"));
+        calcular(empresa.operadora(), "{\"itens\":[{\"produtoId\":\"" + racao + "\",\"quantidade\":1E+100000000}]}")
+                .andExpect(status().isBadRequest());
+
+        assertThat(java.time.Duration.ofNanos(System.nanoTime() - inicio)).isLessThan(java.time.Duration.ofSeconds(5));
+    }
+
+    @Test
+    void codigoLidoLongo400() throws Exception {
+        UUID racao = pdv.produto(empresa, NovoProduto.de("Ração", "UN", "10.00")).id();
+
+        calcular(empresa.operadora(), "{\"itens\":[{\"produtoId\":\"" + racao + "\",\"quantidade\":1,"
+                + "\"codigoLido\":\"" + "7".repeat(61) + "\"}]}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("itens[0].codigoLido"));
     }
 
     @Test

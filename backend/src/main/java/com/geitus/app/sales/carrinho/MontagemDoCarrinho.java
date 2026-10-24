@@ -129,12 +129,16 @@ public class MontagemDoCarrinho {
         return new LinhaParaCalculo(indice + 1, produto, embalagem, null, codigoLido, quantidade, desconto(item));
     }
 
-    /** A etiqueta lida de novo pelo servidor; o codigo dela precisa ser o do produto da linha. */
+    /**
+     * A etiqueta lida de novo pelo servidor: so de produto vendido na balanca,
+     * e o codigo dela precisa ser o do produto da linha (etiqueta montada para
+     * outro produto e recusada como codigo nao encontrado).
+     */
     private static LeituraEtiqueta releituraDaEtiqueta(Produto produto, String codigoLido,
             ConfiguracaoEtiqueta configuracao, String campo) {
         LeituraEtiqueta leitura = LeitorEtiquetaBalanca.ler(codigoLido, configuracao)
                 .orElseThrow(() -> new DadosDaVendaInvalidosException(MENSAGEM_ETIQUETA_INVALIDA, campo));
-        if (!Objects.equals(produto.getCodigo(), leitura.codigoProduto())) {
+        if (!produto.isVendidoBalanca() || !Objects.equals(produto.getCodigo(), leitura.codigoProduto())) {
             throw new VendaNaoEncontradaException(MENSAGEM_CODIGO_NAO_ENCONTRADO, campo);
         }
         return leitura;

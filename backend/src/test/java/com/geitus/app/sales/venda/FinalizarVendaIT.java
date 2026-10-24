@@ -319,6 +319,96 @@ class FinalizarVendaIT extends IntegracaoDoPdv {
         assertThat(contarVendas()).isZero();
     }
 
+    /** SEG-I1: o limite de linhas vem antes das travas (sem caixa aberto, o 400 sai antes do 409 do caixa). */
+    @Test
+    void maisDeTrezentasLinhas400AntesDasTravas() throws Exception {
+        UUID racao = pdv.produto(empresa, NovoProduto.de("Ração", "UN", "1.00")).id();
+        String trezentasEUma = String.join(",", java.util.Collections.nCopies(301, item(racao, "1")));
+        String trezentasEDuas = String.join(",", java.util.Collections.nCopies(302, item(racao, "1")));
+
+        finalizar(empresa.operadora(), vendaJson(trezentasEUma, pagamento("DINHEIRO", "301"), "301.00",
+                UUID.randomUUID()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("A venda atingiu o limite de 300 itens."))
+                .andExpect(jsonPath("$.campos[0].campo").value("itens"));
+        finalizar(empresa.operadora(), vendaJson(trezentasEDuas, pagamento("DINHEIRO", "302"), "302.00",
+                UUID.randomUUID()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("itens"));
+    }
+
+    /** SEG-1: valores gigantes no desconto e no total esperado respondem 400 rapido. */
+    @Test
+    void valoresGigantes400() throws Exception {
+        abrirCaixa(empresa.operadora(), empresa.ponto(), "100.00");
+        UUID racao = pdv.produto(empresa, NovoProduto.de("Ração", "UN", "10.00")).id();
+        long inicio = System.nanoTime();
+
+        finalizar(empresa.operadora(), vendaJson("{\"produtoId\":\"" + racao + "\",\"quantidade\":1,\"desconto\":"
+                + "{\"tipo\":\"VALOR\",\"valor\":1E+100000000}}", pagamento("DINHEIRO", "10"), "10.00",
+                UUID.randomUUID()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("itens[0].desconto.valor"));
+        finalizar(empresa.operadora(), "{\"itens\":[" + item(racao, "1") + "],\"desconto\":{\"tipo\":\"VALOR\","
+                + "\"valor\":1E+100000000},\"pagamentos\":[" + pagamento("DINHEIRO", "10") + "],\"chave\":\""
+                + UUID.randomUUID() + "\",\"totalEsperado\":10}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("desconto.valor"));
+        finalizar(empresa.operadora(), vendaJson(item(racao, "1"), pagamento("DINHEIRO", "1E+100000000"),
+                "1E+100000000", UUID.randomUUID()))
+                .andExpect(status().isBadRequest());
+
+        assertThat(java.time.Duration.ofNanos(System.nanoTime() - inicio)).isLessThan(java.time.Duration.ofSeconds(5));
+        assertThat(contarVendas()).isZero();
+    }
+
+    @Test
+    void chaveRepetidaPorOutroUsuarioDaEmpresa409() throws Exception {
+        abrirCaixa(empresa.operadora(), empresa.ponto(), "0.00");
+        Long bruno = cenario.novoUsuario(empresa.caixa(), "Bruno Lima", "OPERADOR");
+        abrirCaixa(bruno, cenario.novoPonto(empresa.caixa(), "Caixa 2"), "0.00");
+        UUID racao = pdv.produto(empresa, NovoProduto.de("Ração", "UN", "10.00")).id();
+        UUID chave = UUID.randomUUID();
+        String pedido = vendaJson(item(racao, "1"), pagamento("DINHEIRO", "10"), "10.00", chave);
+        finalizar(empresa.operadora(), pedido).andExpect(status().isCreated());
+
+        finalizar(bruno, pedido)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value("Esta operação já foi registrada com outros dados."));
+        assertThat(contarVendas()).isEqualTo(1);
+    }
+
+    @Test
+    void clienteDeOutraEmpresa404() throws Exception {
+        abrirCaixa(empresa.operadora(), empresa.ponto(), "0.00");
+        UUID racao = pdv.produto(empresa, NovoProduto.de("Ração", "UN", "10.00")).id();
+        UUID daOutra = pdv.cliente(pdv.novaEmpresa(), "Cliente de outra", true);
+
+        finalizar(empresa.operadora(), "{\"itens\":[" + item(racao, "1") + "],\"clienteId\":\"" + daOutra
+                + "\",\"pagamentos\":[" + pagamento("DINHEIRO", "10") + "],\"chave\":\"" + UUID.randomUUID()
+                + "\",\"totalEsperado\":10}")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensagem").value("Cliente não encontrado."))
+                .andExpect(jsonPath("$.campos[0].campo").value("clienteId"));
+        assertThat(contarVendas()).isZero();
+    }
+
+    @Test
+    void pagamentosGravadosNormalizados() throws Exception {
+        abrirCaixa(empresa.operadora(), empresa.ponto(), "0.00");
+        UUID racao = pdv.produto(empresa, NovoProduto.de("Ração", "UN", "10.00")).id();
+
+        finalizar(empresa.operadora(), vendaJson(item(racao, "1"), pagamento("PIX", "4.5") + ","
+                + pagamento("DINHEIRO", "5.5"), "10", UUID.randomUUID()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.pagamentos[0].forma").value("DINHEIRO"))
+                .andExpect(jsonPath("$.pagamentos[1].forma").value("PIX"));
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT p.valor::text FROM pagamentos_venda p JOIN vendas v ON v.id = p.venda_id
+                 WHERE v.empresa_id = ? ORDER BY p.forma
+                """, String.class, empresa.id())).containsExactly("5.50", "4.50");
+    }
+
     // ---------- Apoio ----------
 
     private long contarVendas() {

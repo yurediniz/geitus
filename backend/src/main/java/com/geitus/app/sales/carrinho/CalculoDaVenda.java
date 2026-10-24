@@ -11,21 +11,21 @@ import com.geitus.app.cashier.FormaDePagamento;
 
 /**
  * Resultado da {@link CalculadoraDaVenda} (docs/modules/pdv.md, 5.2): as
- * linhas calculadas, os totais, o pagamento, o recebido por forma (o que vai
- * para o caixa: no dinheiro, ja sem o troco) e as regras violadas em
+ * linhas calculadas, os totais, o pagamento, os pagamentos validos por forma
+ * (na escala do dinheiro: o que a venda grava), o recebido por forma (o que
+ * vai para o caixa: no dinheiro, ja sem o troco) e as regras violadas em
  * {@code erros} (o calculo nao lanca excecao por regra). {@code avisos} nao
  * impedem a venda (estoque insuficiente com "Vender sem estoque" ligada).
  */
 public record CalculoDaVenda(List<LinhaCalculada> linhas, BigDecimal subtotal, BigDecimal descontoItens,
         BigDecimal descontoTotal, BigDecimal total, BigDecimal pago, BigDecimal troco, BigDecimal faltaPagar,
-        Map<FormaDePagamento, BigDecimal> recebidosPorForma, List<ErroDoCalculo> erros,
-        List<ErroDoCalculo> avisos) {
+        Map<FormaDePagamento, BigDecimal> pagamentosPorForma, Map<FormaDePagamento, BigDecimal> recebidosPorForma,
+        List<ErroDoCalculo> erros, List<ErroDoCalculo> avisos) {
 
     public CalculoDaVenda {
         linhas = List.copyOf(linhas);
-        Map<FormaDePagamento, BigDecimal> naOrdemDasFormas = new EnumMap<>(FormaDePagamento.class);
-        naOrdemDasFormas.putAll(recebidosPorForma);
-        recebidosPorForma = Collections.unmodifiableMap(naOrdemDasFormas);
+        pagamentosPorForma = naOrdemDasFormas(pagamentosPorForma);
+        recebidosPorForma = naOrdemDasFormas(recebidosPorForma);
         erros = List.copyOf(erros);
         avisos = List.copyOf(avisos);
     }
@@ -37,6 +37,12 @@ public record CalculoDaVenda(List<LinhaCalculada> linhas, BigDecimal subtotal, B
         List<ErroDoCalculo> todosOsAvisos = new ArrayList<>(avisos);
         todosOsAvisos.addAll(estoque.avisos());
         return new CalculoDaVenda(linhas, subtotal, descontoItens, descontoTotal, total, pago, troco, faltaPagar,
-                recebidosPorForma, todosOsErros, todosOsAvisos);
+                pagamentosPorForma, recebidosPorForma, todosOsErros, todosOsAvisos);
+    }
+
+    private static Map<FormaDePagamento, BigDecimal> naOrdemDasFormas(Map<FormaDePagamento, BigDecimal> valores) {
+        Map<FormaDePagamento, BigDecimal> naOrdem = new EnumMap<>(FormaDePagamento.class);
+        naOrdem.putAll(valores);
+        return Collections.unmodifiableMap(naOrdem);
     }
 }

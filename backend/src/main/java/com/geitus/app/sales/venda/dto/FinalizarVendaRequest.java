@@ -7,25 +7,28 @@ import java.util.UUID;
 import com.geitus.app.sales.dto.CarrinhoRequest;
 import com.geitus.app.sales.dto.DescontoRequest;
 import com.geitus.app.sales.dto.ItemDoCarrinhoRequest;
+import com.geitus.app.sales.dto.LimitesDoCarrinho;
 import com.geitus.app.sales.dto.PagamentoRequest;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /**
  * Finalizacao da venda ({@code POST /api/pdv/vendas}; docs/modules/pdv.md,
- * 3.6 e 5.3): o carrinho mais a {@code chave} (UUID gerado ao abrir o
- * pagamento; repetir o mesmo pedido devolve a venda gravada) e o
- * {@code totalEsperado} (o total que a tela mostrou; se o recalculo der outro,
- * 409 "O total da venda mudou.").
+ * 3.6 e 5.3): o carrinho, com o mesmo formato e os mesmos limites do
+ * {@link CarrinhoRequest} ({@link LimitesDoCarrinho}), mais a {@code chave}
+ * (UUID gerado ao abrir o pagamento; repetir o mesmo pedido devolve a venda
+ * gravada) e o {@code totalEsperado} (o total que a tela mostrou; se o
+ * recalculo der outro, 409 "O total da venda mudou.").
  */
 @Schema(description = "Finalizacao da venda")
 public record FinalizarVendaRequest(
-        @NotNull(message = "Informe os itens.")
-        @Size(max = 1000, message = "A venda tem itens demais.")
-        List<@NotNull(message = "Informe o item.") @Valid ItemDoCarrinhoRequest> itens,
+        @NotNull(message = LimitesDoCarrinho.MENSAGEM_INFORME_OS_ITENS)
+        @Size(max = LimitesDoCarrinho.MAXIMO_DE_LINHAS_NO_CORPO, message = LimitesDoCarrinho.MENSAGEM_ITENS_DEMAIS)
+        List<@NotNull(message = LimitesDoCarrinho.MENSAGEM_INFORME_O_ITEM) @Valid ItemDoCarrinhoRequest> itens,
 
         @Schema(nullable = true)
         @Valid
@@ -34,8 +37,8 @@ public record FinalizarVendaRequest(
         @Schema(nullable = true)
         UUID clienteId,
 
-        @Size(max = 4, message = "Use uma linha por forma de pagamento.")
-        List<@NotNull(message = "Informe o pagamento.") @Valid PagamentoRequest> pagamentos,
+        @Size(max = LimitesDoCarrinho.MAXIMO_DE_PAGAMENTOS, message = LimitesDoCarrinho.MENSAGEM_UMA_LINHA_POR_FORMA)
+        List<@NotNull(message = LimitesDoCarrinho.MENSAGEM_INFORME_O_PAGAMENTO) @Valid PagamentoRequest> pagamentos,
 
         @Schema(description = "Chave de idempotencia (UUID gerado pela tela)")
         @NotNull(message = "A chave da operação é obrigatória.")
@@ -43,6 +46,7 @@ public record FinalizarVendaRequest(
 
         @Schema(description = "O total que a tela mostrou", example = "71.50")
         @NotNull(message = "Informe o total esperado.")
+        @Digits(integer = 10, fraction = 2, message = LimitesDoCarrinho.MENSAGEM_VALOR)
         BigDecimal totalEsperado) {
 
     public CarrinhoRequest carrinho() {

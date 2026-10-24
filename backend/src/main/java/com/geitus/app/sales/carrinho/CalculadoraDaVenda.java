@@ -41,7 +41,7 @@ public final class CalculadoraDaVenda {
     static final String CAMPO_PAGAMENTOS = "pagamentos";
     static final String CAMPO_TOTAL = "total";
 
-    static final String MENSAGEM_LIMITE_DE_LINHAS = "A venda atingiu o limite de 300 itens.";
+    public static final String MENSAGEM_LIMITE_DE_LINHAS = "A venda atingiu o limite de 300 itens.";
     static final String MENSAGEM_PESO_SEM_FRACAO = "Etiqueta de peso para produto que não é vendido por peso.";
     static final String MENSAGEM_VALOR_DO_ITEM_ACIMA = "O valor do item passa do limite.";
     static final String MENSAGEM_TOTAL_ACIMA = "O total da venda passa do limite.";
@@ -52,6 +52,8 @@ public final class CalculadoraDaVenda {
     static final String MENSAGEM_TOTAL_NAO_POSITIVO = "O total da venda precisa ser maior que zero.";
     static final String MENSAGEM_LIMITE_DO_OPERADOR = "O desconto passa do limite do operador (%s%%).";
     static final String MENSAGEM_PRECO_MINIMO = "O desconto deixa %s abaixo do preço mínimo (%s por %s).";
+    static final String MENSAGEM_ETIQUETA_ABAIXO_DO_MINIMO =
+            "O valor da etiqueta deixa %s abaixo do preço mínimo (%s por %s).";
     static final String MENSAGEM_FORMA_REPETIDA = "Use uma linha por forma de pagamento.";
     static final String MENSAGEM_ESCOLHA_A_FORMA = "Escolha a forma de pagamento.";
     static final String MENSAGEM_PAGAMENTO_NAO_POSITIVO = "O valor deve ser maior que zero.";
@@ -99,7 +101,8 @@ public final class CalculadoraDaVenda {
         conferirPrecoMinimo(calculadas, erros);
         Pagamento pagamento = Pagamento.de(pagamentos, total, erros);
         return new CalculoDaVenda(calculadas, subtotal, descontoItens, descontoTotal, total, pagamento.pago(),
-                pagamento.troco(), pagamento.faltaPagar(), pagamento.recebidos(), erros, List.of());
+                pagamento.troco(), pagamento.faltaPagar(), pagamento.porForma(), pagamento.recebidos(), erros,
+                List.of());
     }
 
     // ---------- Preco e desconto do item (3.1, 3.2 e 3.3) ----------
@@ -222,45 +225,51 @@ public final class CalculadoraDaVenda {
 
     /** Desconto do item em R$ ou % do valor bruto, sem passar dele; invalido entra como zero. */
     private static BigDecimal descontoDoItem(LinhaParaCalculo linha, BigDecimal bruto, List<ErroDoCalculo> erros) {
-        String campo = linha.campo() + ".desconto";
-        BigDecimal desconto = valorDoDesconto(linha.desconto(), bruto, campo, erros);
-        if (desconto.compareTo(bruto) > 0) {
-            erros.add(new ErroDoCalculo(campo, MENSAGEM_DESCONTO_ACIMA_DO_ITEM));
-            return ZERO;
-        }
-        return desconto;
+        return valorDoDesconto(linha.desconto(), bruto, new CampoDoDesconto(linha.campo() + ".desconto",
+                MENSAGEM_DESCONTO_ACIMA_DO_ITEM), erros);
     }
 
     // ---------- Desconto do total e reparticao (3.3) ----------
 
     private static BigDecimal descontoDoTotal(DescontoInformado informado, BigDecimal base,
             List<ErroDoCalculo> erros) {
-        BigDecimal desconto = valorDoDesconto(informado, base, CAMPO_DESCONTO, erros);
-        if (desconto.compareTo(base) > 0) {
-            erros.add(new ErroDoCalculo(CAMPO_DESCONTO, MENSAGEM_DESCONTO_ACIMA_DO_SUBTOTAL));
-            return ZERO;
-        }
-        return desconto;
+        return valorDoDesconto(informado, base, new CampoDoDesconto(CAMPO_DESCONTO,
+                MENSAGEM_DESCONTO_ACIMA_DO_SUBTOTAL), erros);
     }
 
-    /** O desconto em reais sobre a base ({@code %} arredondado a centavos); invalido: erro e zero. */
-    private static BigDecimal valorDoDesconto(DescontoInformado informado, BigDecimal base, String campo,
+    /** O campo do desconto e a mensagem de quando ele passa da base (o item ou o subtotal). */
+    private record CampoDoDesconto(String campo, String mensagemAcima) {
+    }
+
+    /**
+     * O desconto em reais sobre a base; invalido: erro no campo e zero. O
+     * teto (a base em R$, ou 100 no percentual) e conferido antes de qualquer
+     * conta ou mudanca de escala, entao um valor como {@code 1E+400000000} e
+     * recusado sem custo. O percentual arredonda para baixo, a favor da loja:
+     * X% nunca vira mais que X% do valor.
+     */
+    private static BigDecimal valorDoDesconto(DescontoInformado informado, BigDecimal base, CampoDoDesconto campo,
             List<ErroDoCalculo> erros) {
         if (informado == null || informado.valor() == null || informado.tipo() == null) {
             return ZERO;
         }
         BigDecimal valor = informado.valor();
         if (valor.signum() < 0) {
-            erros.add(new ErroDoCalculo(campo, MENSAGEM_DESCONTO_NEGATIVO));
+            erros.add(new ErroDoCalculo(campo.campo(), MENSAGEM_DESCONTO_NEGATIVO));
+            return ZERO;
+        }
+        BigDecimal teto = informado.tipo() == TipoDesconto.PERCENTUAL ? CEM : base;
+        if (valor.compareTo(teto) > 0) {
+            erros.add(new ErroDoCalculo(campo.campo(), campo.mensagemAcima()));
             return ZERO;
         }
         if (valor.stripTrailingZeros().scale() > CASAS_DO_REAL) {
-            erros.add(new ErroDoCalculo(campo, MENSAGEM_DESCONTO_CASAS));
+            erros.add(new ErroDoCalculo(campo.campo(), MENSAGEM_DESCONTO_CASAS));
             return ZERO;
         }
         return switch (informado.tipo()) {
             case VALOR -> emReais(valor);
-            case PERCENTUAL -> emReais(base.multiply(valor).divide(CEM));
+            case PERCENTUAL -> base.multiply(valor).divide(CEM).setScale(CASAS_DO_REAL, RoundingMode.DOWN);
         };
     }
 
@@ -329,16 +338,27 @@ public final class CalculadoraDaVenda {
         }
     }
 
-    /** Com desconto, o liquido por unidade de estoque nao fica abaixo do preco minimo (para todos). */
+    /**
+     * O liquido por unidade de estoque nao fica abaixo do preco minimo, para
+     * todos: com desconto, em qualquer linha; na etiqueta, sempre (o valor dela
+     * tambem nao pode ficar abaixo do minimo).
+     */
     private static void conferirPrecoMinimo(List<LinhaCalculada> linhas, List<ErroDoCalculo> erros) {
         for (LinhaCalculada linha : linhas) {
             BigDecimal minimo = linha.produto().getPrecoMinimo();
-            boolean temDesconto = linha.descontoItem().add(linha.descontoRateado()).signum() > 0;
-            if (minimo == null || !temDesconto) {
+            if (minimo == null) {
                 continue;
             }
-            if (linha.valorLiquido().compareTo(emReais(minimo.multiply(linha.quantidadeEstoque()))) < 0) {
-                erros.add(new ErroDoCalculo(linha.campo(), MENSAGEM_PRECO_MINIMO.formatted(linha.produto().getNome(),
+            BigDecimal piso = emReais(minimo.multiply(linha.quantidadeEstoque()));
+            boolean temDesconto = linha.descontoItem().add(linha.descontoRateado()).signum() > 0;
+            String mensagem = null;
+            if (linha.etiqueta() && linha.valorBruto().compareTo(piso) < 0) {
+                mensagem = MENSAGEM_ETIQUETA_ABAIXO_DO_MINIMO;
+            } else if (temDesconto && linha.valorLiquido().compareTo(piso) < 0) {
+                mensagem = MENSAGEM_PRECO_MINIMO;
+            }
+            if (mensagem != null) {
+                erros.add(new ErroDoCalculo(linha.campo(), mensagem.formatted(linha.produto().getNome(),
                         FormatoBrasileiro.reais(minimo), linha.produto().getUnidade().getSigla())));
             }
         }
@@ -346,9 +366,9 @@ public final class CalculadoraDaVenda {
 
     // ---------- Pagamento (3.4) ----------
 
-    /** Pago, troco, falta e o recebido por forma (no dinheiro, sem o troco). */
+    /** Pago, troco, falta, os pagamentos validos (normalizados) e o recebido por forma (no dinheiro, sem o troco). */
     private record Pagamento(BigDecimal pago, BigDecimal troco, BigDecimal faltaPagar,
-            Map<FormaDePagamento, BigDecimal> recebidos) {
+            Map<FormaDePagamento, BigDecimal> porForma, Map<FormaDePagamento, BigDecimal> recebidos) {
 
         static Pagamento de(List<PagamentoInformado> pagamentos, BigDecimal total, List<ErroDoCalculo> erros) {
             Map<FormaDePagamento, BigDecimal> porForma = validos(pagamentos, erros);
@@ -370,7 +390,7 @@ public final class CalculadoraDaVenda {
                     recebidos.put(forma, recebido);
                 }
             });
-            return new Pagamento(pago, troco, faltaPagar, recebidos);
+            return new Pagamento(pago, troco, faltaPagar, porForma, recebidos);
         }
 
         /** Uma linha por forma, valor > 0 com ate 2 casas; as invalidas ficam de fora (com erro). */

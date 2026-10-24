@@ -28,7 +28,6 @@ import com.geitus.app.cashier.SessoesParaVendas.SessaoParaVenda;
 import com.geitus.app.cashier.ViolacaoDeConstraint;
 import com.geitus.app.cashier.configuracao.ConfiguracaoDoCaixaService;
 import com.geitus.app.cashier.sessao.StatusDaSessao;
-import com.geitus.app.catalog.SituacaoPromocao;
 import com.geitus.app.customer.ClienteRepository;
 import com.geitus.app.iam.ResolvedorDoUsuarioAutenticado;
 import com.geitus.app.iam.UsuarioAutenticado;
@@ -39,12 +38,11 @@ import com.geitus.app.sales.VendaConflitoException;
 import com.geitus.app.sales.VendaNaoEncontradaException;
 import com.geitus.app.sales.carrinho.CalculadoraDaVenda;
 import com.geitus.app.sales.carrinho.CalculoDaVenda;
-import com.geitus.app.sales.carrinho.ConferenciaDoEstoque;
+import com.geitus.app.sales.carrinho.CalculoDoCarrinho;
+import com.geitus.app.sales.carrinho.CalculoDoCarrinho.CalculoConferido;
 import com.geitus.app.sales.carrinho.LinhaCalculada;
 import com.geitus.app.sales.carrinho.MontagemDoCarrinho;
 import com.geitus.app.sales.carrinho.MontagemDoCarrinho.CarrinhoMontado;
-import com.geitus.app.sales.configuracao.ConfiguracaoDoPdvService;
-import com.geitus.app.sales.configuracao.RegrasDoPdv;
 import com.geitus.app.sales.dto.CarrinhoRequest;
 import com.geitus.app.sales.dto.ItemDoCarrinhoRequest;
 import com.geitus.app.sales.dto.PagamentoRequest;
@@ -109,7 +107,7 @@ public class VendasService {
     private final ConfiguracaoDoCaixaService configuracaoDoCaixa;
     private final EstoqueDaVenda estoqueDaVenda;
     private final MontagemDoCarrinho montagem;
-    private final ConfiguracaoDoPdvService configuracaoDoPdv;
+    private final CalculoDoCarrinho calculoDoCarrinho;
     private final Numerador numerador;
     private final VendaRepository vendaRepository;
     private final ItemDaVendaRepository itemRepository;
@@ -123,7 +121,7 @@ public class VendasService {
     @SuppressWarnings("java:S107") // As colaboracoes da venda atomica: caixa, estoque, carrinho, numeracao e gravacao.
     public VendasService(ResolvedorDoUsuarioAutenticado resolvedor, RecebimentosDoCaixa recebimentos,
             SessoesParaVendas sessoes, ConfiguracaoDoCaixaService configuracaoDoCaixa, EstoqueDaVenda estoqueDaVenda,
-            MontagemDoCarrinho montagem, ConfiguracaoDoPdvService configuracaoDoPdv, Numerador numerador,
+            MontagemDoCarrinho montagem, CalculoDoCarrinho calculoDoCarrinho, Numerador numerador,
             ClienteRepository clienteRepository, Clock relogio, VendaRepository vendaRepository,
             ItemDaVendaRepository itemRepository, PagamentoDaVendaRepository pagamentoRepository,
             ConsultaDeVendas consultaDeVendas, RespostasDaVenda respostas,
@@ -134,7 +132,7 @@ public class VendasService {
         this.configuracaoDoCaixa = configuracaoDoCaixa;
         this.estoqueDaVenda = estoqueDaVenda;
         this.montagem = montagem;
-        this.configuracaoDoPdv = configuracaoDoPdv;
+        this.calculoDoCarrinho = calculoDoCarrinho;
         this.numerador = numerador;
         this.clienteRepository = clienteRepository;
         this.relogio = relogio;
@@ -154,6 +152,10 @@ public class VendasService {
 
     public ResultadoDaVenda finalizarParaUsuario(Long idUsuario, FinalizarVendaRequest request) {
         UsuarioAutenticado usuario = resolvedor.resolver(idUsuario);
+        if (request.itens().size() > CalculadoraDaVenda.LIMITE_DE_LINHAS) {
+            // Antes de qualquer trava: um carrinho grande demais nao segura a sessao nem os produtos.
+            throw new DadosDaVendaInvalidosException(CalculadoraDaVenda.MENSAGEM_LIMITE_DE_LINHAS, CAMPO_ITENS);
+        }
         try {
             return transacao.execute(status -> finalizar(usuario, request));
         } catch (DataIntegrityViolationException violacao) {
@@ -184,8 +186,8 @@ public class VendasService {
             ItemDaVenda item = itemRepository.saveAndFlush(new ItemDaVenda(venda, linha));
             baixas.add(new BaixaDeItem(item.getProdutoId(), item.getId(), item.getQuantidadeEstoque()));
         }
-        carrinho.pagamentos().forEach(pagamento -> pagamentoRepository.saveAndFlush(
-                new PagamentoDaVenda(venda, pagamento.forma(), pagamento.valor())));
+        calculo.pagamentosPorForma().forEach((forma, valor) -> pagamentoRepository.saveAndFlush(
+                new PagamentoDaVenda(venda, forma, valor)));
         estoqueDaVenda.baixar(empresaId, usuario.usuarioId(), baixas);
         recebimentos.registrarRecebimentos(empresaId, sessao.sessaoId(), venda.getId(), usuario.usuarioId(),
                 calculo.recebidosPorForma());
@@ -200,10 +202,8 @@ public class VendasService {
      */
     private CalculoDaVenda calculoConferido(UsuarioAutenticado usuario, CarrinhoRequest carrinho,
             CarrinhoMontado montado, Map<Long, BigDecimal> saldos, BigDecimal totalEsperado) {
-        RegrasDoPdv regras = configuracaoDoPdv.daEmpresa(usuario.empresaId());
-        CalculoDaVenda calculo = CalculadoraDaVenda.calcular(montado.linhas(), carrinho.descontoDoTotal(),
-                carrinho.pagamentosParaCalculo(), usuario.ehAdmin(), regras.descontoMaximoOperador(),
-                SituacaoPromocao.hoje(relogio));
+        CalculoConferido conferido = calculoDoCarrinho.calcular(usuario, carrinho, montado, saldos);
+        CalculoDaVenda calculo = conferido.calculo();
         if (calculo.total().compareTo(totalEsperado) != 0) {
             throw new VendaConflitoException(MENSAGEM_TOTAL_MUDOU, CAMPO_TOTAL_ESPERADO);
         }
@@ -217,10 +217,8 @@ public class VendasService {
             throw new DadosDaVendaInvalidosException(
                     MENSAGEM_FALTA_PAGAR.formatted(FormatoBrasileiro.reais(calculo.total())), CAMPO_PAGAMENTOS);
         }
-        ConferenciaDoEstoque.Resultado estoque = ConferenciaDoEstoque.conferir(calculo.linhas(), saldos,
-                regras.venderSemEstoque());
-        if (!estoque.erros().isEmpty()) {
-            throw new VendaConflitoException(estoque.erros());
+        if (!conferido.estoque().erros().isEmpty()) {
+            throw new VendaConflitoException(conferido.estoque().erros());
         }
         return calculo;
     }

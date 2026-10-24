@@ -15,14 +15,14 @@ import jakarta.validation.constraints.Size;
  * O carrinho do navegador, corpo do {@code POST /api/pdv/calculo}
  * (docs/modules/pdv.md, 5.3). Regras de quantidade, desconto e pagamento sao
  * conferidas no calculo, que responde 200 com os erros por campo; aqui so o
- * formato. O limite de 300 linhas tambem e do calculo; acima de 1.000 o corpo
- * e recusado.
+ * formato ({@link LimitesDoCarrinho}): o limite de 300 linhas e do calculo, e
+ * o corpo aceita uma a mais para a mensagem sair de la; acima disso, 400.
  */
 @Schema(description = "Carrinho do PDV")
 public record CarrinhoRequest(
-        @NotNull(message = "Informe os itens.")
-        @Size(max = CarrinhoRequest.MAXIMO_DE_LINHAS_NO_CORPO, message = "A venda tem itens demais.")
-        List<@NotNull(message = "Informe o item.") @Valid ItemDoCarrinhoRequest> itens,
+        @NotNull(message = LimitesDoCarrinho.MENSAGEM_INFORME_OS_ITENS)
+        @Size(max = LimitesDoCarrinho.MAXIMO_DE_LINHAS_NO_CORPO, message = LimitesDoCarrinho.MENSAGEM_ITENS_DEMAIS)
+        List<@NotNull(message = LimitesDoCarrinho.MENSAGEM_INFORME_O_ITEM) @Valid ItemDoCarrinhoRequest> itens,
 
         @Schema(description = "Desconto do total", nullable = true)
         @Valid
@@ -31,11 +31,8 @@ public record CarrinhoRequest(
         @Schema(description = "UUID do cliente (opcional)", nullable = true)
         UUID clienteId,
 
-        @Size(max = CarrinhoRequest.MAXIMO_DE_PAGAMENTOS, message = "Use uma linha por forma de pagamento.")
-        List<@NotNull(message = "Informe o pagamento.") @Valid PagamentoRequest> pagamentos) {
-
-    static final int MAXIMO_DE_LINHAS_NO_CORPO = 1000;
-    static final int MAXIMO_DE_PAGAMENTOS = 4;
+        @Size(max = LimitesDoCarrinho.MAXIMO_DE_PAGAMENTOS, message = LimitesDoCarrinho.MENSAGEM_UMA_LINHA_POR_FORMA)
+        List<@NotNull(message = LimitesDoCarrinho.MENSAGEM_INFORME_O_PAGAMENTO) @Valid PagamentoRequest> pagamentos) {
 
     public DescontoInformado descontoDoTotal() {
         return desconto == null ? null : desconto.paraCalculo();

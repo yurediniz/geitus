@@ -6,6 +6,7 @@ import com.geitus.app.cashier.FormaDePagamento;
 import com.geitus.app.sales.carrinho.PagamentoInformado;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 
 /** Um pagamento: uma linha por forma; no dinheiro, o valor entregue (com o troco). */
@@ -17,6 +18,7 @@ public record PagamentoRequest(
 
         @Schema(example = "50.00")
         @NotNull(message = "Informe o valor.")
+        @Digits(integer = 10, fraction = 2, message = LimitesDoCarrinho.MENSAGEM_VALOR)
         BigDecimal valor) {
 
     public PagamentoInformado paraCalculo() {

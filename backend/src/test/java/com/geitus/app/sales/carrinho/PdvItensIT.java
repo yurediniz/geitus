@@ -83,7 +83,7 @@ class PdvItensIT extends IntegracaoDoPdv {
 
     @Test
     void etiquetaDeBalanca() throws Exception {
-        pdv.produto(empresa, NovoProduto.de("Queijo", "KG", "25.00").comCodigo(542));
+        pdv.produto(empresa, NovoProduto.de("Queijo", "KG", "25.00").naBalanca(542));
 
         resolver(empresa.operadora(), "2000542010000")
                 .andExpect(status().isOk())
@@ -164,5 +164,40 @@ class PdvItensIT extends IntegracaoDoPdv {
                 .andReturn().getResponse().getContentAsString();
         assertThat(corpo).doesNotContain("custo");
         buscar(empresa.operadora(), "   ").andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    /** Etiqueta so de produto vendido na balanca: a de outro produto com o mesmo codigo nao e lida. */
+    @Test
+    void etiquetaDeProdutoForaDaBalanca404() throws Exception {
+        pdv.produto(empresa, NovoProduto.de("Queijo", "KG", "25.00").comCodigo(542));
+
+        resolver(empresa.operadora(), "2000542010000")
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.mensagem").value("Código não encontrado."));
+    }
+
+    @Test
+    void codigoEBuscaJuntosOuNenhum400() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/pdv/itens")
+                        .param("codigo", "542").param("busca", "ração")
+                        .header("Authorization", cenario.token(empresa.operadora())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Informe o código ou o texto da busca."));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/pdv/itens")
+                        .header("Authorization", cenario.token(empresa.operadora())))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Informe o código ou o texto da busca."));
+    }
+
+    @Test
+    void codigoLongo400SemRecortar() throws Exception {
+        pdv.produto(empresa, NovoProduto.de("Ração", "UN", "10.00").comCodigosBarras("1".repeat(50)));
+
+        resolver(empresa.operadora(), "1".repeat(50)).andExpect(status().isOk());
+        resolver(empresa.operadora(), "1".repeat(61))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("O código lido deve ter até 60 caracteres."))
+                .andExpect(jsonPath("$.campos[0].campo").value("codigo"));
+        buscar(empresa.operadora(), "r".repeat(101)).andExpect(status().isBadRequest());
     }
 }
