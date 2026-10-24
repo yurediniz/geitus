@@ -138,7 +138,7 @@ cd geitus
 Copy-Item .env.example .env
 
 # 2. PostgreSQL local (primeira vez; use a mesma senha do .env)
-docker run --name geitus-postgres -e POSTGRES_DB=geitus_db -e POSTGRES_USER=geitus -e POSTGRES_PASSWORD=<senha-do-.env> -p 127.0.0.1:5432:5432 -d postgres:16
+docker run --name geitus-postgres -e POSTGRES_DB=geitus_db -e POSTGRES_USER=geitus -e POSTGRES_PASSWORD=<senha-do-banco> -p 127.0.0.1:5432:5432 -d postgres:16
 # nas próximas vezes: docker start geitus-postgres
 
 # 3. Backend (carrega o .env e roda spring-boot:run)

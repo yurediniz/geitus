@@ -144,7 +144,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Modulo:** Seguranca/Backend
 - **Origem:** Etapa 5 (auditoria de seguranca)
 - **Prioridade:** media (pre-producao)
-- **Status:** aberto
+- **Status:** finalizado — o `DevAdminBootstrap` exige o perfil `dev` (`@Profile("dev")`) e a property juntos, e recusa senha com menos de 8 caracteres ou igual ao marcador do `.env.example` (testes em `DevAdminBootstrapTest`).
 - **Descricao:** O `DevAdminBootstrap` e habilitado apenas pela property `geitus.bootstrap.dev-admin` (env `GEITUS_BOOTSTRAP_DEV_ADMIN`). Se a variavel vazar para producao, um admin e criado.
 - **Impacto:** Baixo em desenvolvimento; relevante em producao.
 - **Quando revisar:** Antes de producao.
@@ -559,6 +559,9 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
     - quota de armazenamento de imagens por empresa;
     - limite de requisicoes na rota publica com URL valida;
     - logs de acesso do proxy com as URLs assinadas nao devem ser publicos.
+    - trava contra producao ativar o perfil `dev` por engano: `server.address: 127.0.0.1` no `application-dev.yml` e aviso no log da subida (antes do primeiro deploy);
+    - teste de que `/v3/api-docs` com token valido da 404 fora do dev, e exigir tambem o perfil `dev` (alem da propriedade) para liberar o Swagger;
+    - varredura automatica de segredos (secret scanning/push protection no GitHub ou gitleaks no CI), com confirmacao do usuario por mexer no CI.
   - **Backend:**
     - a troca carrega a linha antiga com os bytes (sem bytecode enhancement); avaliar upsert nativo se o volume crescer;
     - 304 com `If-None-Match`;

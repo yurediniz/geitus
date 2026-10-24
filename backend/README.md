@@ -190,13 +190,13 @@ A autenticação usa JWT (HS256) com senha em hash BCrypt. Requer PostgreSQL rod
 Em desenvolvimento, use o bootstrap do admin: com o perfil `dev` (`SPRING_PROFILES_ACTIVE=dev`), defina `GEITUS_BOOTSTRAP_DEV_ADMIN=true` e as variáveis `GEITUS_DEV_ADMIN_*` no `.env` e suba com `.\scripts\dev-backend.ps1`. Fora do perfil `dev` o bootstrap não roda; senha com menos de 8 caracteres ou igual ao marcador do `.env.example` impede a subida. Equivalente manual (Git Bash):
 
 ```bash
-export POSTGRES_PASSWORD="<senha-do-.env>"
+export POSTGRES_PASSWORD="<senha-do-banco>"
 export JWT_SECRET="$(openssl rand -base64 48)"
 export GEITUS_IMAGEM_SEGREDO="$(openssl rand -base64 48)"
 export SPRING_PROFILES_ACTIVE=dev
 export GEITUS_BOOTSTRAP_DEV_ADMIN=true
 export GEITUS_DEV_ADMIN_EMAIL="admin@geitus.dev"
-export GEITUS_DEV_ADMIN_PASSWORD="<senha-do-.env>"
+export GEITUS_DEV_ADMIN_PASSWORD="<senha>"   # troque: o bootstrap recusa senha com menos de 8 caracteres
 ./mvnw spring-boot:run
 ```
 
@@ -207,7 +207,7 @@ Ao subir, a aplicação cria a empresa e o usuário admin (se ainda não existir
 ```bash
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@geitus.dev","senha":"<senha-do-.env>"}'
+  -d '{"email":"admin@geitus.dev","senha":"<senha>"}'
 ```
 
 Resposta (200):
@@ -250,7 +250,7 @@ Exemplo rápido para subir um PostgreSQL local com Docker (opcional):
 docker run --name geitus-postgres \
   -e POSTGRES_DB=geitus_db \
   -e POSTGRES_USER=geitus \
-  -e POSTGRES_PASSWORD=<senha-do-.env> \
+  -e POSTGRES_PASSWORD=<senha-do-banco> \
   -p 127.0.0.1:5432:5432 -d postgres:16
 ```
 

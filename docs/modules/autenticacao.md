@@ -129,12 +129,12 @@ Não há usuário padrão com senha fixa no código. Em desenvolvimento, o **boo
 
 ```bash
 export JWT_SECRET="$(openssl rand -base64 48)"   # valores de exemplo são recusados na subida
-export POSTGRES_PASSWORD="<senha-do-.env>"
+export POSTGRES_PASSWORD="<senha-do-banco>"
 export GEITUS_IMAGEM_SEGREDO="$(openssl rand -base64 48)"
 export SPRING_PROFILES_ACTIVE=dev
 export GEITUS_BOOTSTRAP_DEV_ADMIN=true
 export GEITUS_DEV_ADMIN_EMAIL="admin@geitus.dev"
-export GEITUS_DEV_ADMIN_PASSWORD="<senha-do-.env>"
+export GEITUS_DEV_ADMIN_PASSWORD="<senha>"   # troque: o bootstrap recusa senha com menos de 8 caracteres
 ./mvnw spring-boot:run
 ```
 
