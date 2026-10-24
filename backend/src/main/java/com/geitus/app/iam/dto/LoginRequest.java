@@ -18,7 +18,7 @@ public record LoginRequest(
         @Email(message = "Informe um e-mail valido.")
         String email,
 
-        @Schema(example = "troque-esta-senha")
+        @Schema(example = "sua-senha")
         @NotBlank(message = "A senha e obrigatoria.")
         String senha) {
 }

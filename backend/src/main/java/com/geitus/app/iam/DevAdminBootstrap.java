@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,9 +23,12 @@ import com.geitus.app.iam.UsuarioRepository;
 /**
  * Bootstrap idempotente de um usuario administrador de DESENVOLVIMENTO.
  *
- * <p>Habilitado apenas quando {@code GEITUS_BOOTSTRAP_DEV_ADMIN=true}. Nenhuma
- * senha fica fixa em codigo: a senha vem da variavel
- * {@code GEITUS_DEV_ADMIN_PASSWORD} e e armazenada apenas como hash BCrypt.
+ * <p>Habilitado apenas no perfil {@code dev} E com {@code GEITUS_BOOTSTRAP_DEV_ADMIN=true}:
+ * a variavel sozinha, esquecida num ambiente de producao, nao cria nenhum admin.
+ * Nenhuma senha fica fixa em codigo: a senha vem da variavel
+ * {@code GEITUS_DEV_ADMIN_PASSWORD} e e armazenada apenas como hash BCrypt. Senha
+ * com menos de {@value #MINIMO_CARACTERES_DA_SENHA} caracteres ou igual ao marcador
+ * do {@code .env.example} (publico) impede a subida; a mensagem nunca mostra o valor.
  *
  * <p>Idempotente: cria a empresa apenas se nao existir pelo nome (ja com as
  * unidades de medida padrao) e o usuario apenas se o e-mail ainda nao existir.
@@ -34,12 +38,17 @@ import com.geitus.app.iam.UsuarioRepository;
  * sem inserir credenciais manualmente no banco.
  */
 @Component
+@Profile("dev")
 @ConditionalOnProperty(prefix = "geitus.bootstrap", name = "dev-admin", havingValue = "true")
 public class DevAdminBootstrap implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DevAdminBootstrap.class);
 
     private static final String PERFIL_ADMIN = "ADMIN";
+
+    static final int MINIMO_CARACTERES_DA_SENHA = 8;
+    /** O marcador de {@code GEITUS_DEV_ADMIN_PASSWORD} no {@code .env.example}: publico, nunca serve como senha. */
+    static final String SENHA_DO_ENV_EXAMPLE = "troque-esta-senha";
 
     // Dados cadastrais fixos da empresa de DESENVOLVIMENTO. Nao sao segredos:
     // servem apenas para o geitus_db local nascer com uma empresa completa e
@@ -100,6 +109,7 @@ public class DevAdminBootstrap implements ApplicationRunner {
                     + "Nenhum usuario foi criado.");
             return;
         }
+        recusarSenhaFraca();
 
         if (usuarioRepository.existsByEmail(adminEmail)) {
             log.info("Bootstrap dev-admin: usuario '{}' ja existe. Nada a fazer.", adminEmail);
@@ -125,6 +135,17 @@ public class DevAdminBootstrap implements ApplicationRunner {
 
         log.info("Bootstrap dev-admin: usuario administrador '{}' criado para a empresa '{}'.",
                 adminEmail, companyName);
+    }
+
+    private void recusarSenhaFraca() {
+        if (adminPassword.length() < MINIMO_CARACTERES_DA_SENHA) {
+            throw new IllegalStateException("GEITUS_DEV_ADMIN_PASSWORD muito curta: o admin de desenvolvimento "
+                    + "exige uma senha com no minimo " + MINIMO_CARACTERES_DA_SENHA + " caracteres.");
+        }
+        if (adminPassword.equals(SENHA_DO_ENV_EXAMPLE)) {
+            throw new IllegalStateException("GEITUS_DEV_ADMIN_PASSWORD com o marcador do .env.example. "
+                    + "Defina uma senha propria no .env.");
+        }
     }
 
     /**

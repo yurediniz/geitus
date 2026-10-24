@@ -100,6 +100,9 @@ try {
 
     if (-not $env:POSTGRES_PASSWORD) {
         Write-Warning 'POSTGRES_PASSWORD nao definido: a aplicacao nao sobe sem a senha do banco (nao ha valor padrao).'
+    } elseif ($env:POSTGRES_PASSWORD -ceq 'troque-esta-senha' -or $env:POSTGRES_PASSWORD -ceq 'geitus') {
+        # Compara sem mostrar o valor: so diz que e um valor publico.
+        Write-Warning 'POSTGRES_PASSWORD com o marcador do .env.example ou o antigo padrao: defina uma senha propria no .env (e no conteiner do banco).'
     }
     if (-not $env:JWT_SECRET) {
         Write-Warning 'JWT_SECRET nao definido: a aplicacao nao sobe sem um segredo de no minimo 32 bytes.'

@@ -45,8 +45,8 @@ Backend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Con
 - **Categorias (árvore):** `GET/POST /api/categorias`, `PATCH /api/categorias/{id}` (renomear e mover, sem ciclos), `/inativar`, `/reativar` e `DELETE` (só sem subcategorias e produtos). A listagem é plana com `caminho` ("Ração › Úmida › Sachê"). Escrita: `ADMIN`.
 - **Produto** passa a referenciar unidade de venda (obrigatória), categoria e unidade de compra + fator de conversão (`unidadeId`, `categoriaId`, `unidadeCompraId`, `fatorConversao`).
 - **Clientes:** `GET/POST /api/clientes`, `GET/PATCH /api/clientes/{id}`, `PATCH /api/clientes/{id}/inativar` e `/reativar`, com filtros opcionais `busca` (nome, CPF ou telefone, com ou sem máscara) e `ativo`. O `{id}` é o **UUID público** (o id interno nunca é exposto). Cadastrar/editar: qualquer autenticado; inativar/reativar: `ADMIN` (DEC-029). CPF único por empresa (`409`); identificador malformado → `400`.
-- Segurança liberando os health checks (`/api/health`, `/actuator/health`), o `POST /api/auth/login` e a documentação Swagger; qualquer outra rota exige um JWT válido (responde `401` sem token/token inválido e `403` sem permissão).
-- Documentação da API via Swagger UI (apenas para desenvolvimento).
+- Segurança liberando os health checks (`/api/health`, `/actuator/health`), o `POST /api/auth/login` e, só no perfil `dev`, a documentação Swagger; qualquer outra rota exige um JWT válido (responde `401` sem token/token inválido e `403` sem permissão).
+- Documentação da API via Swagger UI (apenas no perfil `dev`).
 
 ### O que ainda NÃO existe (próximas etapas)
 
@@ -95,6 +95,7 @@ Nenhum dado sensível fica no código. A aplicação lê as variáveis abaixo; a
 | `POSTGRES_USER` | `geitus` | Usuário do banco |
 | `POSTGRES_PASSWORD` | *(sem padrão)* | Senha do banco. **Obrigatória**: sem ela a aplicação não sobe |
 | `SERVER_PORT` | `8080` | Porta da API |
+| `SPRING_PROFILES_ACTIVE` | *(vazio)* | `dev` liga o Swagger UI/api-docs e permite o bootstrap do admin de desenvolvimento. **Nunca** use `dev` em produção |
 | `GEITUS_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origens liberadas no CORS (separadas por vírgula) |
 | `JWT_SECRET` | *(vazio)* | Segredo do JWT (HS256). **Obrigatório**: mínimo 32 bytes / 256 bits e diferente dos valores de exemplo do `.env.example` e da documentação, senão a aplicação não sobe |
 | `JWT_EXPIRATION` | `86400000` | Expiração do token JWT em milissegundos |
@@ -186,15 +187,16 @@ A autenticação usa JWT (HS256) com senha em hash BCrypt. Requer PostgreSQL rod
 
 ### 1. Criar um usuário para testar
 
-Em desenvolvimento, use o bootstrap do admin: defina `GEITUS_BOOTSTRAP_DEV_ADMIN=true` e as variáveis `GEITUS_DEV_ADMIN_*` no `.env` e suba com `.\scripts\dev-backend.ps1`. Equivalente manual (Git Bash):
+Em desenvolvimento, use o bootstrap do admin: com o perfil `dev` (`SPRING_PROFILES_ACTIVE=dev`), defina `GEITUS_BOOTSTRAP_DEV_ADMIN=true` e as variáveis `GEITUS_DEV_ADMIN_*` no `.env` e suba com `.\scripts\dev-backend.ps1`. Fora do perfil `dev` o bootstrap não roda; senha com menos de 8 caracteres ou igual ao marcador do `.env.example` impede a subida. Equivalente manual (Git Bash):
 
 ```bash
 export POSTGRES_PASSWORD="<senha-do-.env>"
 export JWT_SECRET="$(openssl rand -base64 48)"
 export GEITUS_IMAGEM_SEGREDO="$(openssl rand -base64 48)"
+export SPRING_PROFILES_ACTIVE=dev
 export GEITUS_BOOTSTRAP_DEV_ADMIN=true
 export GEITUS_DEV_ADMIN_EMAIL="admin@geitus.dev"
-export GEITUS_DEV_ADMIN_PASSWORD="troque-esta-senha"
+export GEITUS_DEV_ADMIN_PASSWORD="<senha-do-.env>"
 ./mvnw spring-boot:run
 ```
 
@@ -205,7 +207,7 @@ Ao subir, a aplicação cria a empresa e o usuário admin (se ainda não existir
 ```bash
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@geitus.dev","senha":"troque-esta-senha"}'
+  -d '{"email":"admin@geitus.dev","senha":"<senha-do-.env>"}'
 ```
 
 Resposta (200):
@@ -236,7 +238,7 @@ Sem token, ou com token expirado/adulterado, a rota responde `401`.
 
 ### Swagger UI (apenas desenvolvimento)
 
-Com a aplicação no ar: `http://localhost:8080/swagger-ui.html` (OpenAPI em `http://localhost:8080/v3/api-docs`). Use o botão **Authorize** para informar o token JWT. O Swagger é liberado apenas nesta fase de desenvolvimento e **não deve ser exposto em produção** sem decisão futura (ver DEC-012).
+Com a aplicação no ar no perfil `dev` (`SPRING_PROFILES_ACTIVE=dev`): `http://localhost:8080/swagger-ui.html` (OpenAPI em `http://localhost:8080/v3/api-docs`). Use o botão **Authorize** para informar o token JWT. O springdoc fica desligado por padrão no `application.yml` e só o `application-dev.yml` o liga; fora do perfil `dev` esses caminhos não existem e exigem token como qualquer rota protegida. **Não ative o perfil `dev` em produção** (DEC-012, DT-010).
 
 ---
 
@@ -249,7 +251,9 @@ docker run --name geitus-postgres \
   -e POSTGRES_DB=geitus_db \
   -e POSTGRES_USER=geitus \
   -e POSTGRES_PASSWORD=<senha-do-.env> \
-  -p 5432:5432 -d postgres:16
+  -p 127.0.0.1:5432:5432 -d postgres:16
 ```
+
+O `127.0.0.1:` publica a porta do banco só na máquina local; sem ele, o Docker a abre em todas as interfaces de rede.
 
 Ao iniciar a aplicação, o Flyway aplica automaticamente as migrations de `db/migration`.

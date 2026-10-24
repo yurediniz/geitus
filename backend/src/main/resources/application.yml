@@ -75,10 +75,13 @@ geitus:
     # aplicacao NAO sobe (fail-fast, ver SegredoDeImagemValidator).
     segredo: ${GEITUS_IMAGEM_SEGREDO:}
 
-# Documentacao da API (springdoc / Swagger UI). Voltada ao desenvolvimento.
-# NAO expor em producao sem decisao futura (ver DEC-012 no decision-log).
+# Documentacao da API (springdoc / Swagger UI). DESLIGADA por padrao: so o perfil
+# dev a liga (application-dev.yml), e o SecurityConfig so libera os caminhos com
+# ela ligada. NAO expor em producao sem decisao futura (DEC-012, DT-010).
 springdoc:
   swagger-ui:
+    enabled: false
     path: /swagger-ui.html
   api-docs:
+    enabled: false
     path: /v3/api-docs

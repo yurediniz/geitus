@@ -28,6 +28,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -61,6 +62,8 @@ import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Testcontainers
+// Perfil dev: liga a documentacao da API, lida nos testes do OpenAPI (DT-010).
+@ActiveProfiles("dev")
 @Import(CenarioDeEstoque.class)
 class EstoqueServiceIT {
 

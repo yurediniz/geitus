@@ -13,7 +13,7 @@ Permitir que usuários de um pequeno negócio acessem o Geitus de forma segura, 
 - Proteção de rotas no backend (tudo autenticado, exceto rotas públicas explícitas).
 - Estrutura **mínima** de empresa/tenant para sustentar o vínculo do usuário (DEC-016).
 - Tela de login no frontend, separação entre rotas públicas e privadas, e logout simples.
-- Documentação da API via OpenAPI/Swagger em desenvolvimento (DEC-012).
+- Documentação da API via OpenAPI/Swagger apenas no perfil `dev` (DEC-012, DT-010).
 
 ## Fora do escopo
 
@@ -55,7 +55,7 @@ Respostas:
 
 ### Rotas públicas mantidas
 
-`GET /api/health`, `GET /actuator/health(/**)`, `POST /api/auth/login` e os caminhos do Swagger (apenas em desenvolvimento). Todo o restante exige JWT válido.
+`GET /api/health`, `GET /actuator/health(/**)`, `POST /api/auth/login` e os caminhos do Swagger (apenas no perfil `dev`, quando o springdoc está ligado). Todo o restante exige JWT válido.
 
 ## Modelo de dados
 
@@ -125,15 +125,16 @@ Todas com valores **fictícios** no `.env.example` (nunca segredos reais).
 
 ## Usuário inicial de desenvolvimento
 
-Não há usuário padrão com senha fixa no código. Em desenvolvimento, o **bootstrap idempotente** cria (se ainda não existirem) uma empresa e um usuário admin quando habilitado por variável de ambiente:
+Não há usuário padrão com senha fixa no código. Em desenvolvimento, o **bootstrap idempotente** cria (se ainda não existirem) uma empresa e um usuário admin quando habilitado por variável de ambiente **e** no perfil `dev`. Senha com menos de 8 caracteres ou igual ao marcador do `.env.example` impede a subida:
 
 ```bash
 export JWT_SECRET="$(openssl rand -base64 48)"   # valores de exemplo são recusados na subida
 export POSTGRES_PASSWORD="<senha-do-.env>"
 export GEITUS_IMAGEM_SEGREDO="$(openssl rand -base64 48)"
+export SPRING_PROFILES_ACTIVE=dev
 export GEITUS_BOOTSTRAP_DEV_ADMIN=true
 export GEITUS_DEV_ADMIN_EMAIL="admin@geitus.dev"
-export GEITUS_DEV_ADMIN_PASSWORD="troque-esta-senha"
+export GEITUS_DEV_ADMIN_PASSWORD="<senha-do-.env>"
 ./mvnw spring-boot:run
 ```
 
@@ -151,14 +152,13 @@ Rodar novamente não duplica dados. Detalhes em [backend/README.md](../../backen
 
 - **Token no `localStorage`** (frontend): decisão pragmática do MVP, exposta a XSS. Toda leitura/escrita passa por `tokenStorage.ts` para facilitar troca futura por cookie `httpOnly` + refresh.
 - **Sem refresh token**: sessão dura até a expiração do JWT; um usuário inativado após a emissão continua com token válido em rotas que não recarregam o usuário (o `/me` já bloqueia inativos).
-- **Swagger liberado sem gate técnico por perfil**: hoje a restrição a desenvolvimento é documental (DEC-012). **Antes de qualquer deploy de produção**, fechar o Swagger por perfil (`@Profile("dev")` ou `springdoc.*.enabled=false` fora de dev).
+- ~~**Swagger liberado sem gate técnico por perfil**~~ **resolvido (DT-010):** `springdoc.*.enabled=false` por padrão, ligado só no `application-dev.yml`, e o `SecurityConfig` só libera os caminhos com ele ligado.
 - **Unicidade de e-mail global** (não por empresa) nesta fase.
 - **`perfil` como texto livre** (sem enum/CHECK) — apenas `ADMIN` em uso.
 - Auditoria de tempo usa `TIMESTAMP` (sem timezone); reavaliar `TIMESTAMPTZ` antes dos módulos com horário/dinheiro crítico.
 
 ## Próximos passos futuros
 
-- Fechar o Swagger por perfil antes do primeiro deploy produtivo (prioritário).
 - Refresh token + estratégia de revogação. (A revalidação de sessão no boot com estado de "carregando sessão" **já foi implementada** — ver "Regras de UX".)
 - Migrar token para cookie `httpOnly`.
 - Enum/allow-list de `perfil` e autorização por perfil (RBAC básico).

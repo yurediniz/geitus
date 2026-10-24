@@ -21,6 +21,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -62,6 +63,8 @@ import jakarta.persistence.EntityManagerFactory;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Testcontainers
+// Perfil dev: liga a documentacao da API, lida nos testes do OpenAPI (DT-010).
+@ActiveProfiles("dev")
 @Import(CenarioDeEstoque.class)
 class CustoNaEntradaPorCompraIT {
 

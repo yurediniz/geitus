@@ -5,12 +5,19 @@
 # ambiente externas. Nenhum segredo real aqui.
 #
 # Este arquivo SUBSTITUI o application.yml principal no classpath dos testes:
-# os limites do multipart sao repetidos aqui com os mesmos valores do principal.
+# os limites do multipart e a documentacao da API desligada sao repetidos aqui
+# com os mesmos valores do principal. Os testes que leem o /v3/api-docs ativam o
+# perfil dev, que carrega o application-dev.yml principal.
 spring:
   servlet:
     multipart:
       max-file-size: 512KB
       max-request-size: 1MB
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
 geitus:
   cors:
     allowed-origins: http://localhost:5173

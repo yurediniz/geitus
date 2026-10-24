@@ -16,6 +16,7 @@ import org.springframework.core.io.FileSystemResource;
 class ConfiguracaoDoApplicationYmlTest {
 
     private static final String APPLICATION_YML_PRINCIPAL = "src/main/resources/application.yml";
+    private static final String APPLICATION_YML_DEV = "src/main/resources/application-dev.yml";
 
     @Test
     void limitesDoMultipartESegredoDasImagens() {
@@ -32,8 +33,24 @@ class ConfiguracaoDoApplicationYmlTest {
         assertThat(propriedades().getProperty("spring.datasource.password")).isEqualTo("${POSTGRES_PASSWORD}");
     }
 
+    /** CLAUDE.md e DT-010: o Swagger fica desligado por padrao e so o perfil dev o liga. */
+    @Test
+    void documentacaoDaApiSoNoPerfilDev() {
+        Properties principal = propriedades();
+        Properties dev = propriedades(APPLICATION_YML_DEV);
+
+        assertThat(principal.getProperty("springdoc.api-docs.enabled")).isEqualTo("false");
+        assertThat(principal.getProperty("springdoc.swagger-ui.enabled")).isEqualTo("false");
+        assertThat(dev.getProperty("springdoc.api-docs.enabled")).isEqualTo("true");
+        assertThat(dev.getProperty("springdoc.swagger-ui.enabled")).isEqualTo("true");
+    }
+
     private static Properties propriedades() {
-        FileSystemResource arquivo = new FileSystemResource(APPLICATION_YML_PRINCIPAL);
+        return propriedades(APPLICATION_YML_PRINCIPAL);
+    }
+
+    private static Properties propriedades(String caminho) {
+        FileSystemResource arquivo = new FileSystemResource(caminho);
         assertThat(arquivo.exists()).as("rodar a partir de backend/").isTrue();
         YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
         yaml.setResources(arquivo);

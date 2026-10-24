@@ -120,7 +120,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Modulo:** Seguranca/Backend
 - **Origem:** Etapa 5 (auditoria de seguranca)
 - **Prioridade:** alta (pre-producao)
-- **Status:** aberto
+- **Status:** finalizado — `springdoc.api-docs.enabled` e `springdoc.swagger-ui.enabled` sao `false` no `application.yml` e `true` so no `application-dev.yml`; o `SecurityConfig` so libera os caminhos com a documentacao ligada. Testes: `DocumentacaoDaApiForaDoDevIT` (401 sem token), `DocumentacaoDaApiNoDevIT` (200) e `ConfiguracaoDoApplicationYmlTest`. Producao nao deve ativar o perfil `dev`.
 - **Descricao:** Os caminhos do Swagger UI/api-docs sao liberados incondicionalmente no `SecurityConfig`; a restricao a desenvolvimento e apenas documental (DEC-012). Se o mesmo build subir em producao, o mapa da API fica publico.
 - **Impacto:** Sem efeito em desenvolvimento; risco de exposicao da superficie da API em producao.
 - **Quando revisar:** Obrigatoriamente antes de qualquer deploy de producao.
@@ -555,6 +555,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Descricao:**
   - **Seguranca:**
     - ~~o `JwtSecretValidator` aceita o `JWT_SECRET` de exemplo do `.env.example`; aplicar a mesma regra do segredo das imagens;~~ **resolvido:** o `JwtSecretValidator` recusa o valor do `.env.example` e o da documentacao, sem mostrar o valor (teste garante que a constante e igual ao `.env.example`); a senha do banco tambem deixou de ter valor padrao no `application.yml`;
+    - **resolvido (revisao de seguranca):** o `DevAdminBootstrap` so roda no perfil `dev` (alem de `GEITUS_BOOTSTRAP_DEV_ADMIN=true`) e recusa senha com menos de 8 caracteres ou igual ao marcador do `.env.example`, sem mostrar o valor; os exemplos de senha (Swagger do login, READMEs e spec de autenticacao) nao usam mais o marcador; o `dev-backend.ps1` avisa quando o `POSTGRES_PASSWORD` e o marcador ou o antigo padrao;
     - quota de armazenamento de imagens por empresa;
     - limite de requisicoes na rota publica com URL valida;
     - logs de acesso do proxy com as URLs assinadas nao devem ser publicos.

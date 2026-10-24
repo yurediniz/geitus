@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -26,9 +27,9 @@ import com.geitus.app.iam.JwtAuthenticationFilter;
  * <p>API stateless com autenticacao via JWT (Bearer). Rotas publicas: health
  * checks, {@code POST /api/auth/login}, a leitura das imagens dos produtos
  * ({@code GET /api/imagens/**}, autorizada pela assinatura da URL) e a
- * documentacao (Swagger UI / api-docs, liberada apenas para desenvolvimento
- * nesta fase). Todo o restante exige token
- * valido. Respostas de erro seguem o formato {@link com.geitus.app.shared.error.ApiError}
+ * documentacao (Swagger UI / api-docs), esta apenas quando o springdoc esta
+ * ligado, o que so acontece no perfil {@code dev} (DEC-012, DT-010). Todo o
+ * restante exige token valido. Respostas de erro seguem o formato {@link com.geitus.app.shared.error.ApiError}
  * (401 sem token/token invalido, 403 sem permissao), sem vazar detalhes internos.
  */
 @Configuration
@@ -44,7 +45,14 @@ public class SecurityConfig {
     @Value("${geitus.cors.allowed-origins}")
     private String allowedOrigins;
 
-    /** Caminhos do Swagger/OpenAPI liberados apenas em desenvolvimento. */
+    /**
+     * Documentacao da API ligada? Desligada por padrao no {@code application.yml};
+     * so o {@code application-dev.yml} a liga. Sem a propriedade, fica fechada.
+     */
+    @Value("${springdoc.api-docs.enabled:false}")
+    private boolean documentacaoDaApiLigada;
+
+    /** Caminhos do Swagger/OpenAPI, publicos apenas com a documentacao ligada (perfil dev). */
     private static final String[] CAMINHOS_SWAGGER = {
             "/swagger-ui.html",
             "/swagger-ui/**",
@@ -94,6 +102,9 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // Registrada antes das demais regras (a ordem vale): desligada, os caminhos da
+                // documentacao caem na regra final e exigem token.
+                .authorizeHttpRequests(this::liberarDocumentacaoSeLigada)
                 .authorizeHttpRequests(auth -> auth
                         // Preflight do CORS liberado
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
@@ -107,8 +118,6 @@ public class SecurityConfig {
                         // outro metodo sob o caminho e negado (401 sem token, 403 com token).
                         .requestMatchers(HttpMethod.GET, CAMINHO_IMAGENS).permitAll()
                         .requestMatchers(CAMINHO_IMAGENS).denyAll()
-                        // Documentacao (Swagger UI / api-docs) liberada apenas nesta fase de desenvolvimento
-                        .requestMatchers(CAMINHOS_SWAGGER).permitAll()
                         // Troca da propria senha: qualquer usuario autenticado (inclusive OPERADOR).
                         // Precede a regra de gestao abaixo para nao cair na exigencia de ADMIN.
                         .requestMatchers(HttpMethod.PATCH, "/api/usuarios/me/senha").authenticated()
@@ -166,6 +175,14 @@ public class SecurityConfig {
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /** Documentacao (Swagger UI / api-docs) publica so com o springdoc ligado, isto e, no perfil dev. */
+    private void liberarDocumentacaoSeLigada(
+            AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizationManagerRequestMatcherRegistry auth) {
+        if (documentacaoDaApiLigada) {
+            auth.requestMatchers(CAMINHOS_SWAGGER).permitAll();
+        }
     }
 
     /**

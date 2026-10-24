@@ -1,0 +1,9 @@
+# Perfil de DESENVOLVIMENTO (SPRING_PROFILES_ACTIVE=dev, definido no .env local).
+# Complementa o application.yml; nunca ative este perfil em producao.
+
+# Documentacao da API (Swagger UI / api-docs) ligada apenas aqui (DEC-012, DT-010).
+springdoc:
+  swagger-ui:
+    enabled: true
+  api-docs:
+    enabled: true
