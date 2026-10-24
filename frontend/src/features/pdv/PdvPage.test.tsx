@@ -278,6 +278,64 @@ describe('PdvPage', () => {
       await waitFor(() => expect(within(linhas()[0]).getByText('Estoque insuficiente (saldo 2 UN)')).toBeInTheDocument())
     })
 
+    it('código alfanumérico sem espaço (Code128 "RP0012A") vai para a resolução e lança o item', async () => {
+      porCodigo({ RP0012A: itemResolvido({ produto: NEXGARD, codigoLido: 'RP0012A' }) })
+      renderPdv()
+
+      await ler('RP0012A')
+
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+      expect(resolverMock).toHaveBeenCalledWith('RP0012A', expect.any(AbortSignal))
+      expect(buscarProdutosMock).not.toHaveBeenCalled()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('texto com espaço abre a busca direto, sem consultar o código', async () => {
+      buscarProdutosMock.mockResolvedValue([])
+      renderPdv()
+
+      await ler('ração x')
+
+      const janela = await screen.findByRole('dialog', { name: 'Buscar produto' })
+      expect(within(janela).getByLabelText('Nome do produto')).toHaveValue('ração x')
+      expect(resolverMock).not.toHaveBeenCalled()
+    })
+
+    it('texto sem dígito que não é código (404) abre a busca, sem erro nem bipe', async () => {
+      buscarProdutosMock.mockResolvedValue([])
+      renderPdv()
+
+      await ler('ração')
+
+      const janela = await screen.findByRole('dialog', { name: 'Buscar produto' })
+      expect(within(janela).getByLabelText('Nome do produto')).toHaveValue('ração')
+      expect(resolverMock).toHaveBeenCalledWith('ração', expect.any(AbortSignal))
+      expect(bipeMock).not.toHaveBeenCalled()
+      expect(screen.queryByText(/não encontrado/)).not.toBeInTheDocument()
+    })
+
+    it('contrato novo: etiqueta de produto que não é da balança dá 404 e vira erro de leitura com o código', async () => {
+      porCodigo({})
+      renderPdv()
+
+      await ler('2000099010000')
+
+      expect(await screen.findByText('Código 2000099010000 não encontrado.')).toBeInTheDocument()
+      expect(bipeMock).toHaveBeenCalled()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('contrato novo: etiqueta abaixo do preço mínimo vem em itens[i] e marca a linha, bloqueando o pagamento', async () => {
+      const mensagem = 'O valor da etiqueta deixa Queijo minas abaixo do preço mínimo (R$ 30,00 por KG).'
+      calcularMock.mockImplementation(async (carrinho) => calculoFalso(carrinho, { erros: [{ campo: 'itens[0]', mensagem }] }))
+      renderPdv()
+
+      await ler('2000077010000')
+
+      await waitFor(() => expect(within(linhas()[0]).getByText(mensagem)).toBeInTheDocument())
+      expect(screen.getByRole('button', { name: /Pagamento/ })).toBeDisabled()
+    })
+
     it('texto que não é código abre a busca por nome; Enter escolhe o produto', async () => {
       buscarProdutosMock.mockResolvedValue([{ ...RACAO, precoVigente: 24.9 }])
       renderPdv()

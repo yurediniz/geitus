@@ -482,6 +482,29 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
       expect(within(janela).getByRole('button', { name: 'Descartar tentativa' })).toBeEnabled()
     })
 
+    it('200 com a venda já cancelada (chave repetida): não diz "concluída", mantém o carrinho e troca a chave', async () => {
+      finalizarMock
+        .mockResolvedValueOnce(venda({ numero: 128, status: 'CANCELADA', podeCancelar: false }))
+        .mockResolvedValueOnce(venda({ numero: 129, troco: 0 }))
+      renderPdv()
+      await lancar('542')
+      const janela = await abrirPagamento()
+      await pagar(janela, '1')
+      await waitFor(() => expect(within(janela).getByRole('button', { name: /Finalizar venda/ })).toBeEnabled())
+      fireEvent.click(within(janela).getByRole('button', { name: /Finalizar venda/ }))
+
+      expect(await within(janela).findByRole('alert')).toHaveTextContent(
+        'Esta venda já tinha sido registrada e depois cancelada. Confira em Vendas do caixa (F8).',
+      )
+      expect(screen.queryByRole('status', { name: 'Última venda' })).not.toBeInTheDocument()
+      expect(guardado().linhas).toHaveLength(1)
+      expect(lerGuardado(localStorage.getItem(chaveDoCarrinho(EMPRESA, USUARIO)), EMPRESA, USUARIO).tentativa).toBeNull()
+
+      fireEvent.click(within(janela).getByRole('button', { name: /Finalizar venda/ }))
+      await waitFor(() => expect(finalizarMock).toHaveBeenCalledTimes(2))
+      expect(finalizarMock.mock.calls[1][0].chave).not.toBe(finalizarMock.mock.calls[0][0].chave)
+    })
+
     it('Esc com o foco no valor desfaz só a forma escolhida; a janela continua', async () => {
       renderPdv()
       await lancar('542')

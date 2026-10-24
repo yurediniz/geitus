@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ClipboardCheck, Wallet } from 'lucide-react'
+import { ClipboardCheck, MonitorSmartphone, Wallet } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { CAIXA_QUERY_KEY, CHAVE_DA_SESSAO_ATUAL } from '@/features/cash-register/caixaQuery'
@@ -10,6 +10,7 @@ import { FeedbackCatalogo } from '@/features/catalog/FeedbackCatalogo'
 import { chaveDoCarrinho, lerCarrinhoGuardado } from '@/features/pdv/carrinho'
 import { CHAVE_DA_CONFIGURACAO_DO_PDV } from '@/features/pdv/pdvQuery'
 import { TelaDeVenda } from '@/features/pdv/TelaDeVenda'
+import { MENSAGEM_OUTRA_ABA, useAbaDoPdv } from '@/features/pdv/useAbaDoPdv'
 import { useAuth } from '@/hooks/useAuth'
 import { useFeedbackDaTela } from '@/hooks/useFeedbackDaTela'
 import { sessaoAtual } from '@/services/caixaService'
@@ -38,6 +39,8 @@ export function PdvPage() {
   const { sucesso, erro, avisos } = useFeedbackDaTela()
   const atual = useQuery({ queryKey: CHAVE_DA_SESSAO_ATUAL, queryFn: sessaoAtual })
   const configuracao = useQuery({ queryKey: CHAVE_DA_CONFIGURACAO_DO_PDV, queryFn: buscarConfiguracao })
+  // Uma aba so por usuario: a outra aba nunca monta a venda (nem grava o carrinho).
+  const aba = useAbaDoPdv(usuario?.empresa.id ?? 0, usuario?.id ?? 0)
 
   const aoAbrir = (sessao: SessaoDeCaixa) => {
     queryClient.setQueryData(CHAVE_DA_SESSAO_ATUAL, sessao)
@@ -92,6 +95,32 @@ export function PdvPage() {
             <Button asChild className="h-11">
               <Link to="/caixa">Ir para o Caixa</Link>
             </Button>
+          </div>
+        </section>
+      )
+    }
+    if (aba.situacao === 'VERIFICANDO') {
+      return <CarregandoCaixa rotulo="Abrindo o PDV" />
+    }
+    if (aba.situacao === 'EM_OUTRA_ABA') {
+      return (
+        <section aria-labelledby="pdv-outra-aba" className="flex max-w-xl items-start gap-3 rounded-md bg-muted/60 p-4">
+          <MonitorSmartphone className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <div className="space-y-3">
+            <div>
+              <h2 id="pdv-outra-aba" className="font-display text-xl font-semibold">
+                {MENSAGEM_OUTRA_ABA}
+              </h2>
+              <p className="text-sm text-muted-foreground">Para vender aqui, feche a outra aba e toque em "Usar aqui".</p>
+            </div>
+            <Button type="button" className="h-11" onClick={aba.usarAqui}>
+              Usar aqui
+            </Button>
+            {aba.aviso && (
+              <p role="alert" className="text-sm font-medium text-destructive">
+                {aba.aviso}
+              </p>
+            )}
           </div>
         </section>
       )

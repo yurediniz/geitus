@@ -6,6 +6,7 @@
  * servidor (`POST /api/pdv/calculo`).
  */
 import { quantidadeParaTexto } from '@/lib/quantidade'
+import { ehUrlDeImagemPermitida } from '@/services/httpClient'
 import type {
   CarrinhoRequest,
   DescontoInformado,
@@ -340,6 +341,21 @@ function ehTentativa(valor: unknown): valor is TentativaDeVenda {
   )
 }
 
+/**
+ * O carrinho lido do navegador pode ter sido adulterado: a miniatura so vale
+ * sob `/api/imagens/` (a mesma regra do `httpClient`); qualquer outra URL vira null.
+ */
+export function higienizarCarrinho(carrinho: Carrinho): Carrinho {
+  return {
+    ...carrinho,
+    linhas: carrinho.linhas.map((linha) =>
+      linha.produto.miniaturaUrl === null || ehUrlDeImagemPermitida(linha.produto.miniaturaUrl)
+        ? linha
+        : { ...linha, produto: { ...linha.produto, miniaturaUrl: null } },
+    ),
+  }
+}
+
 /** O texto guardado: o carrinho e a tentativa pendente, com a versao do formato, a empresa e o usuario. */
 export function guardarCarrinho(
   carrinho: Carrinho,
@@ -376,7 +392,10 @@ export function lerGuardado(texto: string | null, empresaId: number, usuarioId: 
   ) {
     return NADA_GUARDADO
   }
-  return { carrinho: guardado.carrinho, tentativa: ehTentativa(guardado.tentativa) ? guardado.tentativa : null }
+  return {
+    carrinho: higienizarCarrinho(guardado.carrinho),
+    tentativa: ehTentativa(guardado.tentativa) ? guardado.tentativa : null,
+  }
 }
 
 /** So o carrinho guardado (ver `lerGuardado`). */

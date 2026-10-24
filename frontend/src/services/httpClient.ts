@@ -311,7 +311,7 @@ const PREFIXO_DAS_IMAGENS = '/api/imagens/'
  * texto e depois de normalizada (um `..`, mesmo codificado, que saia da rota
  * e recusado). URLs absolutas, de outra origem ou de outra rota sao recusadas.
  */
-function ehUrlDeImagemPermitida(url: string): boolean {
+export function ehUrlDeImagemPermitida(url: string): boolean {
   if (!url.startsWith(PREFIXO_DAS_IMAGENS) || url.includes('\\')) {
     return false
   }

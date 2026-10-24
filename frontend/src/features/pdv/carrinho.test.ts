@@ -209,6 +209,21 @@ describe('carrinho', () => {
       })
     })
 
+    it.each([
+      ['https://malicioso.example/rastreio.png', null],
+      ['//malicioso.example/x.png', null],
+      ['/api/imagens/%2e%2e/auth/me', null],
+      ['javascript:alert(1)', null],
+      ['/api/imagens/abc/miniatura?assinatura=1', '/api/imagens/abc/miniatura?assinatura=1'],
+    ])('miniatura adulterada no navegador (%s) só é aceita sob /api/imagens/', (url, esperado) => {
+      const adulterado = { ...carrinho, linhas: [{ ...carrinho.linhas[0], produto: { ...RACAO, miniaturaUrl: url } }] }
+
+      const lido = lerGuardado(guardarCarrinho(adulterado, 3, 7), 3, 7)
+
+      expect(lido.carrinho.linhas).toHaveLength(1)
+      expect(lido.carrinho.linhas[0].produto.miniaturaUrl).toBe(esperado)
+    })
+
     it('tentativa malformada é ignorada, o carrinho fica', () => {
       const texto = JSON.stringify({ versao: 1, empresaId: 3, usuarioId: 7, carrinho, tentativa: { chave: 5, trava: 'X' } })
       expect(lerGuardado(texto, 3, 7)).toEqual({ carrinho, tentativa: null })

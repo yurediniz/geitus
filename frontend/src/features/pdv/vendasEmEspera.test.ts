@@ -62,6 +62,15 @@ describe('vendasEmEspera', () => {
     expect(tirarDaEspera([espera('a'), espera('b')], 'a').map((venda) => venda.id)).toEqual(['b'])
   })
 
+  it('miniatura adulterada numa venda em espera vira null', () => {
+    const adulterada = {
+      ...espera('a'),
+      carrinho: { ...CARRINHO, linhas: [{ ...CARRINHO.linhas[0], produto: { ...RACAO, miniaturaUrl: 'https://malicioso.example/x.png' } }] },
+    }
+    const [lida] = lerVendasEmEspera(guardarVendasEmEspera([adulterada], 3, 7), 3, 7)
+    expect(lida.carrinho.linhas[0].produto.miniaturaUrl).toBeNull()
+  })
+
   it('ida e volta no navegador; corrompido, de outra versão ou de outro usuário começa vazio', () => {
     const texto = guardarVendasEmEspera([espera('a')], 3, 7)
     expect(lerVendasEmEspera(texto, 3, 7)).toEqual([espera('a')])

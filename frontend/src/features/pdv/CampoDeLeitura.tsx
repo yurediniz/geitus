@@ -3,7 +3,7 @@ import { Loader2, ScanBarcode } from 'lucide-react'
 
 import { Input } from '@/components/ui/input'
 import { ehMensagemGenerica } from '@/features/catalog/catalogoQuery'
-import { acaoDoAtalho, ehCodigo } from '@/features/pdv/atalhosDoPdv'
+import { acaoDoAtalho, ehCodigo, semDigitos } from '@/features/pdv/atalhosDoPdv'
 import { FilaDeLeituras, LIMITES_DA_LEITURA } from '@/features/pdv/filaDeLeituras'
 import { ID_CAMPO_DE_LEITURA } from '@/features/pdv/focoDoPdv'
 import { HttpError } from '@/services/httpClient'
@@ -175,9 +175,17 @@ export function CampoDeLeitura({
       fila().enfileirar(
         pedido,
         (item) => montado.current && retornos.current.aoResolver(item),
-        (falha) =>
-          montado.current &&
-          retornos.current.aoRecusar(estado.estourou ? MENSAGEM_SEM_RESPOSTA : mensagemDaLeitura(falha, lido)),
+        (falha) => {
+          if (!montado.current) {
+            return
+          }
+          if (!estado.estourou && semDigitos(lido) && falha instanceof HttpError && falha.status === 404) {
+            // Uma palavra sem digito ("ração") que nao e codigo: o operador quis buscar pelo nome.
+            retornos.current.aoBuscar(lido)
+            return
+          }
+          retornos.current.aoRecusar(estado.estourou ? MENSAGEM_SEM_RESPOSTA : mensagemDaLeitura(falha, lido))
+        },
       )
     } else {
       fila().enfileirar(

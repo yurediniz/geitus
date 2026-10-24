@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { chaveDoCarrinho, ehCarrinho, type Carrinho } from '@/features/pdv/carrinho'
+import { chaveDoCarrinho, ehCarrinho, higienizarCarrinho, type Carrinho } from '@/features/pdv/carrinho'
 
 /**
  * Vendas em espera (spec do PDV §3.7): no navegador, por empresa e usuario,
@@ -108,7 +108,7 @@ export function lerVendasEmEspera(texto: string | null, empresaId: number, usuar
   ) {
     return []
   }
-  return guardado.vendas
+  return guardado.vendas.map((venda) => ({ ...venda, carrinho: higienizarCarrinho(venda.carrinho) }))
 }
 
 /** As vendas em espera do usuario, gravadas no navegador a cada mudanca. */

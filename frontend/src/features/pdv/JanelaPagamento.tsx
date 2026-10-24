@@ -54,6 +54,8 @@ const MENSAGEM_VALOR = 'Informe um valor maior que zero.'
 const MENSAGEM_TALVEZ_REGISTRADA =
   'A última tentativa pode ter sido registrada. Tente de novo com os mesmos valores.'
 const MENSAGEM_PODE_TER_SIDO_REGISTRADA = 'Esta venda pode já ter sido registrada. Confira em Vendas do caixa (F8).'
+const MENSAGEM_JA_CANCELADA =
+  'Esta venda já tinha sido registrada e depois cancelada. Confira em Vendas do caixa (F8).'
 const MENSAGEM_ANTES_DE_DESCARTAR =
   'Confira em Vendas do caixa (F8) se a venda não foi registrada antes de mudar o pagamento.'
 
@@ -235,7 +237,13 @@ function ConteudoDoPagamento({
     finalizar(dados)
       .then((venda) => {
         mudarEnvio(false)
+        // A chave ja era de uma venda gravada e depois cancelada: nada foi vendido agora.
+        // O carrinho fica, e a proxima tentativa nasce com outra chave.
         aoMudarTentativa(null)
+        if (venda.status === 'CANCELADA') {
+          setErro(MENSAGEM_JA_CANCELADA)
+          return
+        }
         aoConcluir(venda)
       })
       .catch(async (falha: unknown) => {

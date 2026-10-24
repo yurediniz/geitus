@@ -53,8 +53,12 @@ describe('atalhosDoPdv', () => {
     ['*3', true],
     ['542*-1', true],
     ['7891234567895', true],
+    ['RP0012A', true],
+    ['racao', true],
+    ['ração', true],
+    ['  RP0012A  ', true],
     ['ração x', false],
-    ['racao', false],
+    ['RP 0012', false],
     ['', false],
     ['   ', false],
   ])('"%s" é código: %s', (texto, esperado) => {

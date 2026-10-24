@@ -60,8 +60,17 @@ export function acaoDoAtalho(tecla: TeclaPressionada, campoVazio: boolean): Acao
   return campoVazio ? (COM_O_CAMPO_VAZIO[tecla.key] ?? null) : null
 }
 
-/** Texto lido que vai para a resolucao do codigo (digitos, `*`, separadores); o resto abre a busca por nome. */
+/**
+ * Texto lido que vai para a resolucao do codigo, com a mesma regra do backend
+ * (`InterpretadorDeCodigo`): todo texto sem espaco (inclusive Code128
+ * alfanumerico, como "RP0012A"). Texto com espaco abre a busca por nome.
+ */
 export function ehCodigo(texto: string): boolean {
   const aparado = texto.trim()
-  return aparado !== '' && /^[\d*.,-]+$/.test(aparado)
+  return aparado !== '' && !/\s/.test(aparado)
+}
+
+/** Sem nenhum digito ("ração"): se o codigo nao existir, o texto vira busca por nome. */
+export function semDigitos(texto: string): boolean {
+  return !/\d/.test(texto)
 }
