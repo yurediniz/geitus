@@ -1,10 +1,8 @@
 package com.geitus.app.cashier.sessao;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.text.DecimalFormat;
-import java.text.DecimalFormatSymbols;
-import java.util.Locale;
+
+import com.geitus.app.shared.formato.FormatoBrasileiro;
 
 /**
  * Valores em reais nas mensagens do caixa, no formato da spec:
@@ -13,16 +11,11 @@ import java.util.Locale;
  */
 final class Reais {
 
-    private static final DecimalFormatSymbols SIMBOLOS = DecimalFormatSymbols.getInstance(Locale.of("pt", "BR"));
-    private static final String PADRAO = "#,##0.00";
-
     private Reais() {
         // Apenas metodos estaticos.
     }
 
     static String formatar(BigDecimal valor) {
-        // DecimalFormat nao e thread-safe: um por chamada.
-        DecimalFormat formato = new DecimalFormat(PADRAO, SIMBOLOS);
-        return "R$ " + formato.format(valor.setScale(2, RoundingMode.HALF_UP));
+        return FormatoBrasileiro.reais(valor);
     }
 }

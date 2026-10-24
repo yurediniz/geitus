@@ -148,6 +148,32 @@ public class CenarioDoPdv {
 
     /** Cadastra o produto (nome unico na empresa e preciso; o numero do cenario ajuda). */
     public ProdutoResponse produto(EmpresaDoPdv empresa, NovoProduto novo) {
+        return produtoService.cadastrarParaUsuario(empresa.admin(), request(empresa, novo));
+    }
+
+    /** PATCH do cadastro com os dados informados (por exemplo, sem as embalagens). */
+    public ProdutoResponse atualizarProduto(EmpresaDoPdv empresa, UUID produto, NovoProduto novo) {
+        return produtoService.atualizarDadosBasicosParaUsuario(empresa.admin(), produto, request(empresa, novo));
+    }
+
+    public void inativarProduto(EmpresaDoPdv empresa, UUID produto) {
+        produtoService.inativarParaUsuario(empresa.admin(), produto);
+    }
+
+    /** Troca o preco de venda direto no banco (o "preco mudou entre o calculo e a finalizacao"). */
+    public void trocarPreco(UUID produto, String preco) {
+        jdbcTemplate.update("UPDATE produtos SET preco_venda = ?::numeric WHERE uuid = ?", preco, produto);
+    }
+
+    /** Cliente gravado direto no banco; devolve o UUID publico. */
+    public UUID cliente(EmpresaDoPdv empresa, String nome, boolean ativo) {
+        UUID uuid = UUID.randomUUID();
+        jdbcTemplate.update("INSERT INTO clientes (uuid, empresa_id, numero, nome, ativo) VALUES (?, ?, ?, ?, ?)",
+                uuid, empresa.id(), SEQUENCIA.incrementAndGet() + 100000, nome, ativo);
+        return uuid;
+    }
+
+    private ProdutoRequest request(EmpresaDoPdv empresa, NovoProduto novo) {
         List<EmbalagemRequest> embalagens = novo.embalagens().stream()
                 .map(embalagem -> new EmbalagemRequest(null, unidade(empresa, embalagem.sigla()),
                         new BigDecimal(embalagem.quantidade()), valorOuNulo(embalagem.preco()), false,
@@ -161,7 +187,7 @@ public class CenarioDoPdv {
                 valorOuNulo(novo.precoMinimo()), novo.codigosBarras(), embalagens, null, novo.codigo(),
                 false, promocao, novo.atacado(), novo.controlaEstoque(),
                 valorOuNulo(novo.estoqueInicial()));
-        return produtoService.cadastrarParaUsuario(empresa.admin(), request);
+        return request;
     }
 
     public LocalDate hoje() {

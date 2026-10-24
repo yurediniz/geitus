@@ -86,6 +86,52 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
             """, nativeQuery = true)
     List<Long> travarEmOrdemDeId(@Param("empresaId") Long empresaId, @Param("ids") Long[] ids);
 
+    /**
+     * PDV: os produtos da empresa com estes UUIDs, com a unidade e as
+     * embalagens (e a unidade de cada uma) no mesmo SELECT. UUID de outra
+     * empresa nunca volta (DEC-016).
+     */
+    @Query("""
+            SELECT DISTINCT p FROM Produto p
+              JOIN FETCH p.unidade
+              LEFT JOIN FETCH p.embalagens e
+              LEFT JOIN FETCH e.unidade
+            WHERE p.empresa.id = :empresaId
+              AND p.uuid IN :uuids
+            """)
+    List<Produto> buscarParaVenda(@Param("empresaId") Long empresaId, @Param("uuids") Collection<UUID> uuids);
+
+    /** PDV: como {@link #buscarParaVenda}, pelos ids internos. */
+    @Query("""
+            SELECT DISTINCT p FROM Produto p
+              JOIN FETCH p.unidade
+              LEFT JOIN FETCH p.embalagens e
+              LEFT JOIN FETCH e.unidade
+            WHERE p.empresa.id = :empresaId
+              AND p.id IN :ids
+            """)
+    List<Produto> buscarParaVendaPorIds(@Param("empresaId") Long empresaId, @Param("ids") Collection<Long> ids);
+
+    /** PDV: os ids internos dos produtos da empresa com estes UUIDs, sem carregar as entidades. */
+    @Query("SELECT p.id FROM Produto p WHERE p.empresa.id = :empresaId AND p.uuid IN :uuids")
+    List<Long> idsPorUuids(@Param("empresaId") Long empresaId, @Param("uuids") Collection<UUID> uuids);
+
+    /**
+     * PDV: o produto (e a embalagem, se for o caso) dono deste codigo de
+     * barras na empresa. O codigo e unico na empresa
+     * ({@code uq_codigo_barras_empresa}), entao ha no maximo um dono.
+     */
+    @Query("""
+            SELECT new com.geitus.app.catalog.DonoDoCodigoDeBarras(p.id, e.id)
+              FROM ProdutoCodigoBarras c
+              JOIN c.produto p
+              LEFT JOIN c.embalagem e
+             WHERE c.empresa.id = :empresaId
+               AND c.codigo = :codigo
+            """)
+    Optional<DonoDoCodigoDeBarras> donoDoCodigoDeBarras(@Param("empresaId") Long empresaId,
+            @Param("codigo") String codigo);
+
     boolean existsBySkuAndEmpresa_Id(String sku, Long empresaId);
 
     boolean existsBySkuAndEmpresa_IdAndIdNot(String sku, Long empresaId, Long id);

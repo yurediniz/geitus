@@ -38,6 +38,10 @@ import com.geitus.app.company.DadosEmpresaInvalidosException;
 import com.geitus.app.customer.ClienteConflitoException;
 import com.geitus.app.customer.ClienteNaoEncontradoException;
 import com.geitus.app.customer.DadosClienteInvalidosException;
+import com.geitus.app.sales.DadosDaVendaInvalidosException;
+import com.geitus.app.sales.ErroDaVenda;
+import com.geitus.app.sales.VendaConflitoException;
+import com.geitus.app.sales.VendaNaoEncontradaException;
 import com.geitus.app.shared.paginacao.PaginacaoInvalidaException;
 import com.geitus.app.supplier.DadosFornecedorInvalidosException;
 import com.geitus.app.supplier.FornecedorConflitoException;
@@ -521,6 +525,26 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(corpo);
     }
 
+    /** Regra do carrinho ou da venda violada (400), com todos os campos (docs/modules/pdv.md, 5.4). */
+    @ExceptionHandler(DadosDaVendaInvalidosException.class)
+    public ResponseEntity<ApiError> tratarDadosDaVendaInvalidos(DadosDaVendaInvalidosException ex,
+            HttpServletRequest request) {
+        return erroDaVenda(HttpStatus.BAD_REQUEST, ex, request);
+    }
+
+    /** Recurso do PDV inexistente na empresa (404), com o campo do carrinho quando veio dele. */
+    @ExceptionHandler(VendaNaoEncontradaException.class)
+    public ResponseEntity<ApiError> tratarVendaNaoEncontrada(VendaNaoEncontradaException ex,
+            HttpServletRequest request) {
+        return erroDaVenda(HttpStatus.NOT_FOUND, ex, request);
+    }
+
+    /** Conflito com o estado atual no PDV (409), com os campos quando houver. */
+    @ExceptionHandler(VendaConflitoException.class)
+    public ResponseEntity<ApiError> tratarConflitoDeVenda(VendaConflitoException ex, HttpServletRequest request) {
+        return erroDaVenda(HttpStatus.CONFLICT, ex, request);
+    }
+
     /**
      * Violacao de integridade do banco (constraint UNIQUE, FK, CHECK). Fecha a
      * janela de corrida TOCTOU (DT-015): mesmo que duas requisicoes concorrentes
@@ -566,6 +590,20 @@ public class GlobalExceptionHandler {
         }
         return ApiError.deValidacao(status.value(), status.getReasonPhrase(), mensagem, request.getRequestURI(),
                 List.of(new ApiError.CampoInvalido(campo.get(), mensagem)));
+    }
+
+    /** A primeira mensagem e, se algum erro tem campo, {@code campos} com todos os que tem. */
+    private static ResponseEntity<ApiError> erroDaVenda(HttpStatus status, ErroDaVenda ex,
+            HttpServletRequest request) {
+        List<ApiError.CampoInvalido> campos = ex.erros().stream()
+                .filter(erro -> erro.campo() != null)
+                .map(erro -> new ApiError.CampoInvalido(erro.campo(), erro.mensagem()))
+                .toList();
+        ApiError corpo = campos.isEmpty()
+                ? ApiError.de(status.value(), status.getReasonPhrase(), ex.getMessage(), request.getRequestURI())
+                : ApiError.deValidacao(status.value(), status.getReasonPhrase(), ex.getMessage(),
+                        request.getRequestURI(), campos);
+        return ResponseEntity.status(status).body(corpo);
     }
 
     private ApiError.CampoInvalido mapearCampo(FieldError erro) {

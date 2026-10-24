@@ -95,6 +95,15 @@ public class SecurityConfig {
     /** Configuracao do caixa (DEC-041). */
     private static final String CAMINHO_CONFIGURACAO_DO_CAIXA = "/api/configuracoes/caixa";
 
+    /** PDV (DEC-042): itens, calculo, vendas e cancelamento, para qualquer autenticado. */
+    private static final String[] CAMINHOS_PDV = {
+            "/api/pdv",
+            "/api/pdv/**"
+    };
+
+    /** Configuracao do PDV (DEC-042). */
+    private static final String CAMINHO_CONFIGURACAO_DO_PDV = "/api/configuracoes/pdv";
+
     /** Configuracao e teste da etiqueta de balanca (DEC-036). */
     private static final String CAMINHO_ETIQUETA_BALANCA = "/api/etiqueta-balanca";
 
@@ -190,6 +199,14 @@ public class SecurityConfig {
                         // do modo); qualquer outro metodo exige ADMIN.
                         .requestMatchers(HttpMethod.GET, CAMINHO_CONFIGURACAO_DO_CAIXA).authenticated()
                         .requestMatchers(CAMINHO_CONFIGURACAO_DO_CAIXA).hasRole("ADMIN")
+                        // PDV (DEC-042): toda a venda (itens, calculo, finalizar, consultar e cancelar) fica
+                        // com qualquer autenticado; a regra "dono da sessao ou ADMIN" e o limite de desconto
+                        // pelo perfil do banco ficam nos services.
+                        .requestMatchers(CAMINHOS_PDV).authenticated()
+                        // Configuracao do PDV: leitura para qualquer autenticado (a tela do PDV precisa das
+                        // regras); qualquer outro metodo exige ADMIN, e o service confere o perfil do banco.
+                        .requestMatchers(HttpMethod.GET, CAMINHO_CONFIGURACAO_DO_PDV).authenticated()
+                        .requestMatchers(CAMINHO_CONFIGURACAO_DO_PDV).hasRole("ADMIN")
                         // Todo o restante exige autenticacao (JWT valido)
                         .anyRequest().authenticated())
                 // Respostas de erro padronizadas (sem vazar detalhes internos)
