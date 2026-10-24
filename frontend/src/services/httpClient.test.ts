@@ -132,6 +132,27 @@ describe('httpClient', () => {
       expect((erro as HttpError).campos).toEqual({ telefone: 'Telefone inválido.' })
     })
 
+    it('404 traz os campos do corpo, com a mensagem generica (as telas decidem pelo status)', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(
+        respostaFake(404, {
+          mensagem: 'A embalagem CX c/ 3 UN não existe mais.',
+          campos: [{ campo: 'itens[0]', mensagem: 'A embalagem CX c/ 3 UN não existe mais.' }],
+        }),
+      )
+
+      const erro = await apiPost('/pdv/vendas', {}, { autenticada: true }).catch((e: unknown) => e)
+      expect(erro).toBeInstanceOf(HttpError)
+      expect(erro).toMatchObject({ status: 404, message: 'Requisicao falhou (HTTP 404).' })
+      expect((erro as HttpError).campos).toEqual({ 'itens[0]': 'A embalagem CX c/ 3 UN não existe mais.' })
+    })
+
+    it('404 sem corpo continua sem campos', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(respostaFake(404))
+
+      const erro = await apiGet('/pdv/vendas/x', { autenticada: true }).catch((e: unknown) => e)
+      expect(erro).toMatchObject({ status: 404, campos: undefined })
+    })
+
     it('ignora itens malformados na lista de campos', async () => {
       vi.mocked(globalThis.fetch).mockResolvedValue(
         respostaFake(400, {

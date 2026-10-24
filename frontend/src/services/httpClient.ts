@@ -143,6 +143,13 @@ async function tratarErro(resposta: Response, autenticada: boolean): Promise<nev
     throw new HttpError(409, corpo?.mensagem ?? 'Requisicao falhou (HTTP 409).', normalizarCampos(corpo?.campos))
   }
 
+  if (resposta.status === 404) {
+    // Recurso de outra empresa ou removido: as telas decidem pelo status. Os campos dizem qual
+    // (ex.: `itens[0]` no carrinho do PDV); a mensagem fica a generica.
+    const corpo = await lerCorpoDoErro(resposta)
+    throw new HttpError(404, 'Requisicao falhou (HTTP 404).', normalizarCampos(corpo?.campos))
+  }
+
   throw new HttpError(resposta.status, `Requisicao falhou (HTTP ${resposta.status}).`)
 }
 

@@ -20,8 +20,8 @@ interface PontosParaAbrirProps {
   aoAbrir: (sessao: SessaoDeCaixa) => void
   /** A abertura falhou porque o ponto ou o caixa mudou em outra aba: a tela avisa no topo. */
   aoFalharAoAbrir: (mensagem: string) => void
-  /** ADMIN: abre o caixa de outra pessoa pelo id da sessao. */
-  aoVerCaixa: (sessaoId: string) => void
+  /** ADMIN: abre o caixa de outra pessoa pelo id da sessao. Sem ele (no PDV), o "Ver caixa" nao aparece. */
+  aoVerCaixa?: (sessaoId: string) => void
 }
 
 /**
@@ -149,7 +149,8 @@ export function PontosParaAbrir({ ehAdmin, aoAbrir, aoFalharAoAbrir, aoVerCaixa 
                     Abrir caixa
                   </Button>
                 ) : (
-                  ehAdmin && <VerCaixa ponto={ponto} aoVerCaixa={() => aoVerCaixa(situacao.sessaoId)} />
+                  ehAdmin &&
+                  aoVerCaixa && <VerCaixa ponto={ponto} aoVerCaixa={() => aoVerCaixa(situacao.sessaoId)} />
                 )}
               </li>
             )
