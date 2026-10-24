@@ -23,9 +23,12 @@ export interface ListaDeFornecedoresProps {
 function NomeDoFornecedor({
   fornecedor,
   estado,
+  comSelo = false,
 }: {
   fornecedor: FornecedorItemLista
   estado: EstadoParaFornecedor
+  /** Selo "Inativo" junto do nome (nos cards; a tabela tem a coluna Status). */
+  comSelo?: boolean
 }) {
   return (
     <div className="min-w-0">
@@ -37,7 +40,7 @@ function NomeDoFornecedor({
         >
           {fornecedor.razaoSocial}
         </Link>
-        {!fornecedor.ativo && <SeloStatus ativo={false} />}
+        {comSelo && !fornecedor.ativo && <SeloStatus ativo={false} />}
       </div>
       {fornecedor.nomeFantasia && (
         <p className="mt-0.5 break-words text-xs text-muted-foreground">{fornecedor.nomeFantasia}</p>
@@ -180,7 +183,7 @@ export function ListaDeFornecedores({
             <li key={fornecedor.id}>
               <article className="space-y-3 rounded-md border p-4" aria-label={fornecedor.razaoSocial}>
                 <div className="flex items-start justify-between gap-3">
-                  <NomeDoFornecedor fornecedor={fornecedor} estado={estadoParaFornecedor} />
+                  <NomeDoFornecedor fornecedor={fornecedor} estado={estadoParaFornecedor} comSelo />
                   <span className="shrink-0 text-xs text-muted-foreground tabular-nums">Nº {fornecedor.numero}</span>
                 </div>
                 <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">

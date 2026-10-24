@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Controller, useController, useFormContext, useWatch } from 'react-hook-form'
 import { X } from 'lucide-react'
 
@@ -33,6 +33,8 @@ export function CamposFornecedoresDoProduto({ desabilitado, aoAlterarCampo }: Ca
     field: { value: fornecedores },
   } = useController({ control, name: 'fornecedores' })
   const ultimaCompraId = useWatch({ control, name: 'fornecedorUltimaCompraId' })
+  // O fornecedor da ultima compra saiu da lista (e o campo foi limpo): a ajuda avisa.
+  const [ultimaCompraSaiu, setUltimaCompraSaiu] = useState(false)
   const escolhidos = useMemo(() => new Set(fornecedores.map((fornecedor) => fornecedor.id)), [fornecedores])
   const noLimite = fornecedores.length >= MAXIMO_FORNECEDORES
 
@@ -42,6 +44,7 @@ export function CamposFornecedoresDoProduto({ desabilitado, aoAlterarCampo }: Ca
       // O da ultima compra saiu da lista: o campo e limpo (spec B5 §5, Review Focus 1).
       setValue('fornecedorUltimaCompraId', null, { shouldDirty: true })
       clearErrors('fornecedorUltimaCompraId')
+      setUltimaCompraSaiu(true)
     }
     aoAlterarCampo()
   }
@@ -59,7 +62,7 @@ export function CamposFornecedoresDoProduto({ desabilitado, aoAlterarCampo }: Ca
             {fornecedores.map((fornecedor) => (
               <li
                 key={fornecedor.id}
-                className="flex min-h-9 items-center gap-1 rounded-full bg-accent py-1 pr-1 pl-3 text-sm text-accent-foreground"
+                className="flex min-h-9 items-center gap-1 rounded-full bg-accent py-1 pr-1 pl-3 text-sm text-accent-foreground pointer-coarse:min-h-11"
               >
                 <span>
                   {fornecedor.nome}
@@ -70,7 +73,7 @@ export function CamposFornecedoresDoProduto({ desabilitado, aoAlterarCampo }: Ca
                     type="button"
                     aria-label={`Remover ${fornecedor.nome}`}
                     onClick={() => definirLista(fornecedores.filter((outro) => outro.id !== fornecedor.id))}
-                    className="flex size-7 items-center justify-center rounded-full outline-none hover:bg-background/60 focus-visible:ring-[3px] focus-visible:ring-ring/50 pointer-coarse:size-9"
+                    className="flex size-7 items-center justify-center rounded-full outline-none hover:bg-background/60 focus-visible:ring-[3px] focus-visible:ring-ring/50 pointer-coarse:size-11"
                   >
                     <X className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
@@ -93,12 +96,17 @@ export function CamposFornecedoresDoProduto({ desabilitado, aoAlterarCampo }: Ca
             }}
             desabilitado={noLimite}
             invalido={erroDaLista !== undefined}
-            idsDescricao={erroDaLista ? 'fornecedores-erro' : undefined}
+            idsDescricao={
+              [noLimite && 'fornecedores-limite', erroDaLista && 'fornecedores-erro'].filter(Boolean).join(' ') ||
+              undefined
+            }
           />
         )}
         {desabilitado && fornecedores.length === 0 && <p className="text-sm text-muted-foreground">Nenhum.</p>}
         {noLimite && !desabilitado && (
-          <p className="text-xs text-muted-foreground">Máximo de {MAXIMO_FORNECEDORES} fornecedores.</p>
+          <p id="fornecedores-limite" className="text-xs text-muted-foreground">
+            Máximo de {MAXIMO_FORNECEDORES} fornecedores.
+          </p>
         )}
         <ErroDoCampo id="fornecedores-erro" mensagem={erroDaLista} />
       </div>
@@ -119,6 +127,7 @@ export function CamposFornecedoresDoProduto({ desabilitado, aoAlterarCampo }: Ca
               onBlur={field.onBlur}
               onChange={(event) => {
                 field.onChange(event.target.value === NENHUM ? null : event.target.value)
+                setUltimaCompraSaiu(false)
                 aoAlterarCampo()
               }}
               disabled={desabilitado || fornecedores.length === 0}
@@ -138,9 +147,11 @@ export function CamposFornecedoresDoProduto({ desabilitado, aoAlterarCampo }: Ca
         />
         {!errors.fornecedorUltimaCompraId && (
           <p id="fornecedorUltimaCompraId-ajuda" className="text-xs text-muted-foreground">
-            {fornecedores.length === 0
-              ? 'Adicione um fornecedor à lista para escolher.'
-              : 'A entrada por compra no estoque atualiza este campo.'}
+            {ultimaCompraSaiu && ultimaCompraId === null
+              ? 'O fornecedor da última compra saiu da lista; o campo ficou vazio.'
+              : fornecedores.length === 0
+                ? 'Adicione um fornecedor à lista para escolher.'
+                : 'A entrada por compra no estoque atualiza este campo.'}
           </p>
         )}
         <ErroDoCampo id="fornecedorUltimaCompraId-erro" mensagem={errors.fornecedorUltimaCompraId?.message} />

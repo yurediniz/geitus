@@ -38,6 +38,8 @@ export interface SeletorDaArvoreProps<T extends ItemDaArvore> {
   id?: string
   /** Id do rotulo externo: compoe o nome acessivel com o valor atual. */
   idRotulo?: string
+  /** Ids da ajuda e do erro do campo, para o `aria-describedby` do gatilho. */
+  idsDescricao?: string
   invalido?: boolean
   /** Rotulo da opcao sem item (`null`). Padrao: "Sem categoria"/"Sem marca"; no filtro da lista e "Todas". */
   rotuloSemValor?: string
@@ -96,6 +98,7 @@ export function SeletorDaArvore<T extends ItemDaArvore>({
   desabilitado = false,
   id,
   idRotulo,
+  idsDescricao,
   invalido,
   rotuloSemValor,
   semOpcaoVazia = false,
@@ -299,10 +302,11 @@ export function SeletorDaArvore<T extends ItemDaArvore>({
           type="button"
           id={idGatilho}
           aria-labelledby={idRotulo ? `${idRotulo} ${idValor}` : undefined}
+          aria-describedby={idsDescricao}
           aria-invalid={invalido ? true : undefined}
           onKeyDown={aoTeclarNoGatilho}
           className={cn(
-            'flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-left text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
+            'flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-left text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm pointer-coarse:h-11',
             'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
             'disabled:cursor-not-allowed disabled:opacity-50',
             'aria-invalid:border-destructive aria-invalid:ring-destructive/20',
@@ -560,7 +564,7 @@ function FormularioNovoItem<T extends ItemDaArvore>({
           onChange={(event) => setParentId(event.target.value)}
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <option value={SEM_PAI}>{`Nenhuma — criar como ${textos.singular} principal`}</option>
+          <option value={SEM_PAI}>{textos.principal.semPai}</option>
           {pais.map((pai) => (
             <option key={pai.id} value={pai.id}>
               {pai.caminho}

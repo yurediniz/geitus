@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 
 import { useQuery } from '@tanstack/react-query'
 import { Check, ChevronsUpDown, Loader2, Search } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { chaveDaBuscaDeFornecedores } from '@/features/suppliers/fornecedorQuery'
@@ -12,7 +13,17 @@ import type { FornecedorItemLista } from '@/types/fornecedor'
 import type { FornecedorDoProduto, PaginaResponse } from '@/types/produto'
 
 /** Quantos fornecedores a busca mostra (os primeiros por nome). */
-const TAMANHO_DA_BUSCA = 10
+const FORNECEDORES_NA_BUSCA = 10
+/** Teto do pedido: os ja escolhidos (escondidos) sao pedidos a mais, ate este limite. */
+const MAXIMO_DO_PEDIDO = 30
+
+/** Quantos pedir para sobrarem 10 depois de esconder os ja escolhidos (no maximo 30). */
+function tamanhoDoPedido(ocultos: number): number {
+  return Math.min(FORNECEDORES_NA_BUSCA + ocultos, MAXIMO_DO_PEDIDO)
+}
+
+/** Texto abaixo da lista quando ha mais fornecedores do que os trazidos. */
+const MENSAGEM_HA_MAIS = 'Mostrando os 10 primeiros. Digite para buscar os demais.'
 
 export interface BuscaDeFornecedorProps {
   /** Fornecedor escolhido; null = nenhum. */
@@ -69,17 +80,18 @@ export function BuscaDeFornecedor({
   const [indiceAtivo, setIndiceAtivo] = useState(0)
   const listaRef = useRef<HTMLUListElement>(null)
   const termoComAtraso = useBuscaComAtraso(termo.trim())
+  const tamanho = tamanhoDoPedido(ocultos?.size ?? 0)
 
   const consulta = useQuery<PaginaResponse<FornecedorItemLista>>({
-    queryKey: chaveDaBuscaDeFornecedores(termoComAtraso),
-    queryFn: ({ signal }) =>
-      listarFornecedores({ busca: termoComAtraso, status: 'ativos', pagina: 1, tamanho: TAMANHO_DA_BUSCA }, signal),
+    queryKey: chaveDaBuscaDeFornecedores(termoComAtraso, tamanho),
+    queryFn: ({ signal }) => listarFornecedores({ busca: termoComAtraso, status: 'ativos', pagina: 1, tamanho }, signal),
     enabled: aberto,
   })
 
   const opcoes = useMemo<Opcao[]>(() => {
     const encontrados = (consulta.data?.itens ?? [])
       .filter((item) => !ocultos?.has(item.id))
+      .slice(0, FORNECEDORES_NA_BUSCA)
       .map<Opcao>((item) => ({
         fornecedor: resumoDoItem(item),
         detalhe: [`Nº ${item.numero}`, item.nomeFantasia].filter(Boolean).join(' · '),
@@ -91,6 +103,29 @@ export function BuscaDeFornecedor({
   const indiceSeguro = opcoes.length === 0 ? -1 : Math.min(indiceAtivo, opcoes.length - 1)
   const idOpcao = (indice: number) => `${idBase}-opcao-${indice}`
   const buscando = termo.trim() !== termoComAtraso || consulta.isFetching
+  const trazidos = consulta.data?.itens.length ?? 0
+  const total = consulta.data?.totalItens ?? 0
+  const semOpcaoDeFornecedor = opcoes.every((opcao) => opcao.fornecedor === null)
+
+  /** O que dizer abaixo da lista (null = nada). */
+  const aviso = (): string | null => {
+    if (!consulta.isSuccess) {
+      return null
+    }
+    if (semOpcaoDeFornecedor) {
+      if (total === 0) {
+        return termoComAtraso
+          ? `Nenhum fornecedor ativo encontrado para "${termoComAtraso}".`
+          : 'Nenhum fornecedor ativo para escolher.'
+      }
+      if (total <= trazidos) {
+        return termoComAtraso
+          ? 'Os fornecedores encontrados já foram escolhidos.'
+          : 'Todos os fornecedores ativos já foram escolhidos.'
+      }
+    }
+    return total > trazidos ? MENSAGEM_HA_MAIS : null
+  }
 
   useEffect(() => {
     if (indiceSeguro >= 0) {
@@ -227,12 +262,14 @@ export function BuscaDeFornecedor({
                 Buscando fornecedores...
               </span>
             ) : consulta.isError ? (
-              <span className="text-destructive">Não foi possível buscar os fornecedores.</span>
+              <span className="flex flex-wrap items-center gap-2 text-destructive">
+                Não foi possível buscar os fornecedores.
+                <Button type="button" variant="outline" size="sm" className="h-9 pointer-coarse:h-11" onClick={() => consulta.refetch()}>
+                  Tentar novamente
+                </Button>
+              </span>
             ) : (
-              opcoes.every((opcao) => opcao.fornecedor === null) &&
-              (termoComAtraso
-                ? `Nenhum fornecedor ativo encontrado para "${termoComAtraso}".`
-                : 'Nenhum fornecedor ativo para escolher.')
+              aviso()
             )}
           </div>
         </div>

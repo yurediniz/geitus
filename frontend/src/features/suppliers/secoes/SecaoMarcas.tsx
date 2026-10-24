@@ -82,7 +82,7 @@ export function SecaoMarcas({ marcasQuery, marcasGravadas, desabilitado, podeCri
           {chips.map((chip) => (
             <li
               key={chip.id}
-              className="flex min-h-9 items-center gap-1 rounded-full bg-accent py-1 pr-1 pl-3 text-sm text-accent-foreground"
+              className="flex min-h-9 items-center gap-1 rounded-full bg-accent py-1 pr-1 pl-3 text-sm text-accent-foreground pointer-coarse:min-h-11"
             >
               <span>
                 {chip.caminho}
@@ -93,7 +93,7 @@ export function SecaoMarcas({ marcasQuery, marcasGravadas, desabilitado, podeCri
                   type="button"
                   aria-label={`Remover ${chip.caminho}`}
                   onClick={() => definir(marcaIds.filter((id) => id !== chip.id))}
-                  className="flex size-7 items-center justify-center rounded-full outline-none hover:bg-background/60 focus-visible:ring-[3px] focus-visible:ring-ring/50 pointer-coarse:size-9"
+                  className="flex size-7 items-center justify-center rounded-full outline-none hover:bg-background/60 focus-visible:ring-[3px] focus-visible:ring-ring/50 pointer-coarse:size-11"
                 >
                   <X className="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
@@ -125,8 +125,15 @@ export function SecaoMarcas({ marcasQuery, marcasGravadas, desabilitado, podeCri
             onCriada={(marca) => setCriadas((anteriores) => [...anteriores, marca])}
             desabilitado={noLimite || marcasQuery.isPending}
             invalido={errors.marcaIds !== undefined}
+            idsDescricao={
+              [noLimite && 'marcaIds-limite', errors.marcaIds && 'marcaIds-erro'].filter(Boolean).join(' ') || undefined
+            }
           />
-          {noLimite && <p className="text-xs text-muted-foreground">Máximo de {MAXIMO_MARCAS} marcas.</p>}
+          {noLimite && (
+            <p id="marcaIds-limite" className="text-xs text-muted-foreground">
+              Máximo de {MAXIMO_MARCAS} marcas.
+            </p>
+          )}
           <AvisoCatalogo
             carregouComFalha={marcasQuery.isError}
             mensagemFalha="Não foi possível carregar as marcas."

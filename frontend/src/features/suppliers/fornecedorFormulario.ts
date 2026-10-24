@@ -71,7 +71,7 @@ export const fornecedorSchema = z
   .object({
     tipoPessoa: z.enum(['PJ', 'PF']),
     documento: z.string(),
-    razaoSocial: z.string().trim().max(180, 'Deve ter no máximo 180 caracteres.'),
+    razaoSocial: z.string().trim(),
     nomeFantasia: textoAte(180, 'Nome fantasia deve ter no máximo 180 caracteres.'),
     inscricaoEstadual: z.string().trim(),
     cep: z.string(),
@@ -93,6 +93,8 @@ export const fornecedorSchema = z
     const pj = valores.tipoPessoa === 'PJ'
     if (valores.razaoSocial === '') {
       ctx.addIssue({ path: ['razaoSocial'], code: 'custom', message: pj ? 'Informe a razão social.' : 'Informe o nome.' })
+    } else if (valores.razaoSocial.length > 180) {
+      ctx.addIssue({ path: ['razaoSocial'], code: 'custom', message: `${rotuloDoNome(valores.tipoPessoa)} deve ter no máximo 180 caracteres.` })
     }
     if (apenasDigitos(valores.documento) !== '') {
       const valido = pj ? cnpjValido(valores.documento) : cpfValido(valores.documento)
@@ -167,6 +169,18 @@ export function valoresIniciais(): FornecedorFormValues {
 
 export function novoRepresentante(): RepresentanteFormValues {
   return { id: '', nome: '', telefone: '', email: '' }
+}
+
+/**
+ * Mascara da inscricao estadual: so digitos ("110.042.490.114" -> "110042490114"),
+ * ate 20, salvo enquanto se digita "ISENTO" (aceito em maiusculas).
+ */
+export function mascararInscricaoEstadual(valor: string): string {
+  const letras = valor.replace(/\s/g, '').toUpperCase()
+  if (letras !== '' && /^[A-Z]+$/.test(letras) && IE_ISENTO.startsWith(letras)) {
+    return letras
+  }
+  return apenasDigitos(valor).slice(0, 20)
 }
 
 /** Documento com a mascara do tipo. */

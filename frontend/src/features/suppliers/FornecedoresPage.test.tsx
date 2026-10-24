@@ -138,6 +138,8 @@ describe('FornecedoresPage', () => {
     expect(linha).toHaveTextContent('Carlos Lima')
     expect(linha).toHaveTextContent('(11) 98765-4321')
     expect(within(tabela).getAllByRole('row')[2]).toHaveTextContent('111.444.777-35')
+    // Na tabela o status fica so na coluna Status (o selo nao se repete junto do nome).
+    expect(within(within(tabela).getAllByRole('row')[2]).getAllByText('Inativo')).toHaveLength(1)
 
     const cards = screen.getByRole('list', { name: 'Fornecedores' })
     expect(cards).toHaveClass('lg:hidden')

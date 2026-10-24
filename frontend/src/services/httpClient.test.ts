@@ -4,6 +4,7 @@ import {
   apiDelete,
   apiGet,
   apiPost,
+  apiPostComStatus,
   apiPut,
   HttpError,
   setUnauthorizedHandler,
@@ -296,6 +297,14 @@ describe('httpClient', () => {
 
       const dados = await apiPost('/usuarios/me/senha', { senhaAtual: 'a', novaSenha: 'b' }, { autenticada: true })
       expect(dados).toBeUndefined()
+    })
+
+    it('apiPostComStatus devolve o status junto do corpo (201 criou, 200 ja existia)', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValueOnce(respostaFake(201, { id: 'a' }))
+      vi.mocked(globalThis.fetch).mockResolvedValueOnce(respostaFake(200, { id: 'a' }))
+
+      await expect(apiPostComStatus('/x', {}, { autenticada: true })).resolves.toEqual({ status: 201, corpo: { id: 'a' } })
+      await expect(apiPostComStatus('/x', {}, { autenticada: true })).resolves.toEqual({ status: 200, corpo: { id: 'a' } })
     })
 
     it('envia o corpo serializado e Content-Type JSON em POST', async () => {

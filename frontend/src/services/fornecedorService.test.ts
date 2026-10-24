@@ -12,7 +12,7 @@ import {
   reativarFornecedor,
   removerProdutoDoFornecedor,
 } from '@/services/fornecedorService'
-import { apiDelete, apiGet, apiPatch, apiPost } from '@/services/httpClient'
+import { apiDelete, apiGet, apiPatch, apiPost, apiPostComStatus } from '@/services/httpClient'
 import type { FornecedorRequest } from '@/types/fornecedor'
 
 vi.mock('@/services/httpClient', () => ({
@@ -20,12 +20,14 @@ vi.mock('@/services/httpClient', () => ({
   apiGet: vi.fn(),
   apiPatch: vi.fn(),
   apiPost: vi.fn(),
+  apiPostComStatus: vi.fn(),
 }))
 
 const apiGetMock = vi.mocked(apiGet)
 const apiPostMock = vi.mocked(apiPost)
 const apiPatchMock = vi.mocked(apiPatch)
 const apiDeleteMock = vi.mocked(apiDelete)
+const apiPostComStatusMock = vi.mocked(apiPostComStatus)
 
 const ID = '5e1c2b9e-8d4a-4c6f-9b1e-2a7d5c0e4f81'
 const PRODUTO_ID = '8b2c2b9e-8d4a-4c6f-9b1e-2a7d5c0e4f81'
@@ -100,16 +102,19 @@ describe('fornecedorService', () => {
   })
 
   it('lista, liga e desliga os produtos do fornecedor', async () => {
+    const produto = { id: PRODUTO_ID, numero: 1, nome: 'Arroz', codigo: null, sku: null, ativo: true, fornecedorDaUltimaCompra: false }
     apiGetMock.mockResolvedValue({ itens: [], pagina: 1, tamanho: 25, totalItens: 0 })
-    apiPostMock.mockResolvedValue(undefined)
+    apiPostComStatusMock.mockResolvedValueOnce({ status: 201, corpo: produto })
+    apiPostComStatusMock.mockResolvedValueOnce({ status: 200, corpo: produto })
     apiDeleteMock.mockResolvedValue(undefined)
 
     await listarProdutosDoFornecedor(ID, 2)
-    await adicionarProdutoAoFornecedor(ID, PRODUTO_ID)
+    await expect(adicionarProdutoAoFornecedor(ID, PRODUTO_ID)).resolves.toEqual({ produto, criado: true })
+    await expect(adicionarProdutoAoFornecedor(ID, PRODUTO_ID)).resolves.toEqual({ produto, criado: false })
     await removerProdutoDoFornecedor(ID, PRODUTO_ID)
 
     expect(apiGetMock).toHaveBeenCalledWith(`/fornecedores/${ID}/produtos?pagina=1&tamanho=25`, { autenticada: true })
-    expect(apiPostMock).toHaveBeenCalledWith(`/fornecedores/${ID}/produtos`, { produtoId: PRODUTO_ID }, {
+    expect(apiPostComStatusMock).toHaveBeenCalledWith(`/fornecedores/${ID}/produtos`, { produtoId: PRODUTO_ID }, {
       autenticada: true,
     })
     expect(apiDeleteMock).toHaveBeenCalledWith(`/fornecedores/${ID}/produtos/${PRODUTO_ID}`, { autenticada: true })

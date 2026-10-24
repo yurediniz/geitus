@@ -76,49 +76,53 @@ export function SecaoRepresentantes({ desabilitado, aoAlterarCampo }: SecaoRepre
           {fields.map((campo, indice) => {
             const erro = errors.representantes?.[indice]
             return (
-              <li key={campo.chave} className="rounded-md bg-muted/40 p-4">
-                <div className="grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.2fr)_auto] md:items-start">
-                  <CampoDeTexto
-                    nome={`representantes.${indice}.nome`}
-                    rotulo={`Nome do representante ${indice + 1}`}
-                    obrigatorio
-                    maxLength={120}
-                    erro={erro?.nome?.message}
-                    desabilitado={desabilitado}
-                    aoAlterar={aoAlterarCampo}
-                  />
-                  <CampoComMascara
-                    nome={`representantes.${indice}.telefone`}
-                    rotulo="Telefone (opcional)"
-                    inputMode="tel"
-                    placeholder="(00) 00000-0000"
-                    mascara={mascararTelefone}
-                    erro={erro?.telefone?.message}
-                    desabilitado={desabilitado}
-                    aoAlterar={aoAlterarCampo}
-                  />
-                  <CampoDeTexto
-                    nome={`representantes.${indice}.email`}
-                    rotulo="E-mail (opcional)"
-                    type="email"
-                    maxLength={180}
-                    erro={erro?.email?.message}
-                    desabilitado={desabilitado}
-                    aoAlterar={aoAlterarCampo}
-                  />
-                  {!desabilitado && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-11 self-end text-muted-foreground hover:text-destructive md:h-9 md:mt-7"
-                      aria-label={`Remover o representante ${indice + 1}`}
-                      onClick={() => remover(indice)}
-                    >
-                      <Trash2 className="h-4 w-4" aria-hidden="true" />
-                      <span className="md:sr-only">Remover</span>
-                    </Button>
-                  )}
-                </div>
+              <li key={campo.chave}>
+                {/* Um grupo por representante: o leitor de tela diz de qual sao o nome, o telefone e o e-mail. */}
+                <fieldset className="rounded-md bg-muted/40 p-4">
+                  <legend className="float-left mb-3 w-full text-sm font-medium">Representante {indice + 1}</legend>
+                  <div className="clear-both grid gap-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.2fr)_auto] md:items-start">
+                    <CampoDeTexto
+                      nome={`representantes.${indice}.nome`}
+                      rotulo="Nome"
+                      obrigatorio
+                      maxLength={120}
+                      erro={erro?.nome?.message}
+                      desabilitado={desabilitado}
+                      aoAlterar={aoAlterarCampo}
+                    />
+                    <CampoComMascara
+                      nome={`representantes.${indice}.telefone`}
+                      rotulo="Telefone (opcional)"
+                      inputMode="tel"
+                      placeholder="(00) 00000-0000"
+                      mascara={mascararTelefone}
+                      erro={erro?.telefone?.message}
+                      desabilitado={desabilitado}
+                      aoAlterar={aoAlterarCampo}
+                    />
+                    <CampoDeTexto
+                      nome={`representantes.${indice}.email`}
+                      rotulo="E-mail (opcional)"
+                      type="email"
+                      maxLength={180}
+                      erro={erro?.email?.message}
+                      desabilitado={desabilitado}
+                      aoAlterar={aoAlterarCampo}
+                    />
+                    {!desabilitado && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-11 self-end text-muted-foreground hover:text-destructive md:mt-7 md:h-9 pointer-coarse:h-11"
+                        aria-label={`Remover representante ${indice + 1}`}
+                        onClick={() => remover(indice)}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        <span className="md:sr-only">Remover</span>
+                      </Button>
+                    )}
+                  </div>
+                </fieldset>
               </li>
             )
           })}
@@ -134,7 +138,7 @@ export function SecaoRepresentantes({ desabilitado, aoAlterarCampo }: SecaoRepre
             id="representantes"
             type="button"
             variant="outline"
-            className="h-11 md:h-9"
+            className="h-11 md:h-9 pointer-coarse:h-11"
             disabled={noLimite}
             onClick={adicionar}
           >

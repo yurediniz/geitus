@@ -60,6 +60,17 @@ describe('marcaService', () => {
     )
   })
 
+  it('codifica o id na rota', async () => {
+    apiPatchMock.mockResolvedValue({})
+    apiDeleteMock.mockResolvedValue(undefined)
+
+    await atualizarMarca('a/b', { nome: 'X', parentId: null })
+    await excluirMarca('a/b')
+
+    expect(apiPatchMock).toHaveBeenCalledWith('/marcas/a%2Fb', { nome: 'X', parentId: null }, { autenticada: true })
+    expect(apiDeleteMock).toHaveBeenCalledWith('/marcas/a%2Fb', { autenticada: true })
+  })
+
   it('inativa, reativa e exclui', async () => {
     apiPatchMock.mockResolvedValue({})
     apiDeleteMock.mockResolvedValue(undefined)

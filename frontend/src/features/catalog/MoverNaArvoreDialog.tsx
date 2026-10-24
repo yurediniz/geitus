@@ -137,7 +137,7 @@ function ConteudoMover<T extends ItemDaArvore>({
         <OpcaoDestino
           nome={`destino-${textos.singular}`}
           valor={DESTINO_PRINCIPAL}
-          rotulo={`Tornar ${textos.singular} principal`}
+          rotulo={textos.principal.tornar}
           atual={paiAtual === DESTINO_PRINCIPAL}
           selecionado={destino === DESTINO_PRINCIPAL}
           onSelecionar={setDestino}

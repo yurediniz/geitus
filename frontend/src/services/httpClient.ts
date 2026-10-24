@@ -202,6 +202,18 @@ export async function apiPost<T>(
   corpo: unknown,
   opcoes: { autenticada?: boolean } = {},
 ): Promise<T> {
+  return (await apiPostComStatus<T>(path, corpo, opcoes)).corpo
+}
+
+/**
+ * POST que devolve tambem o status de sucesso, para quando ele tem sentido
+ * (ex.: 201 criou, 200 ja existia). Mesmo tratamento de erro e de 204 do `apiPost`.
+ */
+export async function apiPostComStatus<T>(
+  path: string,
+  corpo: unknown,
+  opcoes: { autenticada?: boolean } = {},
+): Promise<{ status: number; corpo: T }> {
   const autenticada = opcoes.autenticada ?? false
   let resposta: Response
   try {
@@ -219,10 +231,10 @@ export async function apiPost<T>(
   }
 
   if (resposta.status === 204) {
-    return undefined as T
+    return { status: resposta.status, corpo: undefined as T }
   }
 
-  return (await resposta.json()) as T
+  return { status: resposta.status, corpo: (await resposta.json()) as T }
 }
 
 /** PATCH e PUT: corpo JSON, mesmo tratamento de erro e de 204 do POST. */

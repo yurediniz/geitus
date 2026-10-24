@@ -1036,6 +1036,20 @@ describe('ModalAjusteEstoque', () => {
       expect(ultimoAjuste()).not.toHaveProperty('fornecedorId')
     })
 
+    it('o limite de 20 fornecedores do produto (400) aparece no campo Fornecedor, com o foco nele', async () => {
+      ajustarEstoqueMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { fornecedorId: 'Este produto já tem 20 fornecedores. Tire um da lista do produto para ligar outro.' }),
+      )
+      renderModal({ fornecedorDaCompra: SUL })
+
+      preencherCompra()
+      confirmar()
+
+      expect(await within(dialogo()).findByText('Este produto já tem 20 fornecedores. Tire um da lista do produto para ligar outro.')).toBeInTheDocument()
+      await waitFor(() => expect(campoFornecedor()).toHaveFocus())
+      expect(campoFornecedor()).toHaveAccessibleDescription('Este produto já tem 20 fornecedores. Tire um da lista do produto para ligar outro.')
+    })
+
     it('mostra no campo o fornecedor recusado pelo backend (inativo)', async () => {
       ajustarEstoqueMock.mockRejectedValue(
         new HttpError(400, 'Dados invalidos.', { fornecedorId: 'Este fornecedor está inativo.' }),

@@ -12,8 +12,8 @@ export function chaveDaListaDeFornecedores(filtros: FiltrosDaListaDeFornecedores
 export const FORNECEDORES_EXISTENTES_QUERY_KEY = [...FORNECEDORES_QUERY_KEY, 'existe-algum'] as const
 
 /** Busca de fornecedores ativos nos seletores (produto e entrada por compra). */
-export function chaveDaBuscaDeFornecedores(termo: string) {
-  return [...FORNECEDORES_QUERY_KEY, 'busca', termo] as const
+export function chaveDaBuscaDeFornecedores(termo: string, tamanho: number) {
+  return [...FORNECEDORES_QUERY_KEY, 'busca', termo, tamanho] as const
 }
 
 export function chaveDoFornecedor(id: string) {

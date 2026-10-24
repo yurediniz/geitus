@@ -20,9 +20,17 @@ describe('mesclarFornecedores', () => {
     expect(mesclarFornecedores(anterior, gravado, naTela)).toEqual(gravados([SUL, LESTE, NORTE], 'norte'))
   })
 
-  it('o da ultima compra escolhido pelo usuario fica', () => {
+  it('a compra nova define o da ultima compra, mesmo com outro escolhido na tela', () => {
     const anterior = gravados([SUL, LESTE], 'sul')
     const gravado = gravados([NORTE, SUL, LESTE], 'norte')
+    const naTela = gravados([SUL, LESTE], 'leste')
+
+    expect(mesclarFornecedores(anterior, gravado, naTela)).toEqual(gravados([SUL, LESTE, NORTE], 'norte'))
+  })
+
+  it('sem mudanca da ultima compra no banco, fica a escolha da tela', () => {
+    const anterior = gravados([SUL, LESTE], 'sul')
+    const gravado = gravados([NORTE, SUL, LESTE], 'sul')
     const naTela = gravados([SUL, LESTE], 'leste')
 
     expect(mesclarFornecedores(anterior, gravado, naTela)).toEqual(gravados([SUL, LESTE, NORTE], 'leste'))

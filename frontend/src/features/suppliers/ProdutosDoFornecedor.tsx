@@ -1,12 +1,12 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, Loader2, Package, Plus, Search, Trash2 } from 'lucide-react'
+import { AlertCircle, Check, Loader2, Package, Plus, Search, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PaginacaoLista } from '@/components/ui/paginacao-lista'
-import { FORNECEDORES_QUERY_KEY, PRODUTOS_QUERY_KEY } from '@/features/catalog/catalogoQuery'
+import { FORNECEDORES_QUERY_KEY, PRODUTOS_QUERY_KEY, ehMensagemGenerica } from '@/features/catalog/catalogoQuery'
 import { ConfirmarExclusaoDialog } from '@/features/catalog/ConfirmarExclusaoDialog'
 import { FILTROS_PADRAO } from '@/features/products/listagem/useFiltrosDaListaDeProdutos'
 import { rotaDoProduto } from '@/features/products/navegacaoProdutos'
@@ -18,6 +18,7 @@ import {
   adicionarProdutoAoFornecedor,
   listarProdutosDoFornecedor,
   removerProdutoDoFornecedor,
+  type ProdutoLigado,
 } from '@/services/fornecedorService'
 import { listarProdutos } from '@/services/produtoService'
 import type { ProdutoDoFornecedor } from '@/types/fornecedor'
@@ -25,6 +26,9 @@ import type { PaginaResponse, Produto } from '@/types/produto'
 
 /** Resultados da busca de produto para adicionar (os primeiros, por nome). */
 const TAMANHO_DA_BUSCA = 8
+
+/** Titulo da secao (recebe o foco quando a lista fica vazia apos remover). */
+const ID_TITULO_PRODUTOS_DO_FORNECEDOR = 'secao-produtos-titulo'
 
 interface ProdutosDoFornecedorProps {
   fornecedorId: string
@@ -34,6 +38,16 @@ interface ProdutosDoFornecedorProps {
 }
 
 function mensagemDeErro(erro: unknown, acao: 'adicionar' | 'remover'): string {
+  if (erro instanceof HttpError && erro.status === 400) {
+    // Ex.: "Este produto já tem 20 fornecedores. ..." (campo `produtoId`).
+    const doCampo = erro.campos?.produtoId
+    if (doCampo) {
+      return doCampo
+    }
+    if (!ehMensagemGenerica(erro.message)) {
+      return erro.message
+    }
+  }
   if (erro instanceof HttpError) {
     if (erro.status === 403) {
       return 'Somente administradores podem alterar os produtos do fornecedor.'
@@ -61,7 +75,18 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
   const [pagina, setPagina] = useState(1)
   const [termo, setTermo] = useState('')
   const [confirmando, setConfirmando] = useState<ProdutoDoFornecedor | null>(null)
+  // Ligados nesta abertura (201 ou 200): os resultados da busca os marcam "Já ligado".
+  // Falha ao adicionar: fica na secao, junto da busca (o foco volta ao campo).
+  const [erroAoAdicionar, setErroAoAdicionar] = useState<string | null>(null)
+  const idErroAoAdicionar = useId()
+  const [ligadosAgora, setLigadosAgora] = useState<ReadonlySet<string>>(() => new Set())
   const termoComAtraso = useBuscaComAtraso(termo.trim())
+  const buscaRef = useRef<HTMLInputElement>(null)
+  const listaRef = useRef<HTMLUListElement>(null)
+  // Posicao da linha removida: o foco vai para a que ocupar o lugar dela (ou a anterior).
+  const focoAposRemoverRef = useRef<number | null>(null)
+  // Produto da confirmacao aberta: cancelada, o foco volta ao "Remover" dele.
+  const origemDaConfirmacaoRef = useRef<string | null>(null)
 
   const listaQuery = useQuery<PaginaResponse<ProdutoDoFornecedor>>({
     queryKey: chaveDosProdutosDoFornecedor(fornecedorId, pagina),
@@ -76,6 +101,37 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
     enabled: !somenteLeitura && termoComAtraso !== '',
   })
 
+  const dados = listaQuery.data
+  const itens = dados?.itens ?? []
+
+  // Pagina alem do fim (ex.: removeu o unico item da ultima pagina): volta para a ultima valida.
+  const ultimaPagina = dados ? Math.max(1, Math.ceil(dados.totalItens / dados.tamanho)) : 1
+  const alemDoFim =
+    dados !== undefined && !listaQuery.isPlaceholderData && itens.length === 0 && dados.totalItens > 0 && pagina > ultimaPagina
+  useEffect(() => {
+    if (alemDoFim && !listaQuery.isFetching) {
+      setPagina(ultimaPagina)
+    }
+  }, [alemDoFim, listaQuery.isFetching, ultimaPagina])
+
+  /** A linha que ocupa o lugar da removida (o botao "Remover" dela), a anterior ou o titulo da secao. */
+  const alvoAposRemover = (): HTMLElement | null => {
+    const indice = focoAposRemoverRef.current
+    const botoes = Array.from(listaRef.current?.querySelectorAll<HTMLElement>('button[data-remover]') ?? [])
+    const alvo = indice === null ? undefined : (botoes[indice] ?? botoes[botoes.length - 1])
+    return alvo ?? document.getElementById(ID_TITULO_PRODUTOS_DO_FORNECEDOR)
+  }
+
+  // Depois de remover e da lista recarregar, o foco nao fica perdido no documento.
+  useEffect(() => {
+    // Com a confirmacao aberta, quem devolve o foco e o dialogo (destinoFoco), ao fechar.
+    if (focoAposRemoverRef.current === null || listaQuery.isFetching || alemDoFim || confirmando !== null) {
+      return
+    }
+    alvoAposRemover()?.focus()
+    focoAposRemoverRef.current = null
+  })
+
   const atualizar = async () => {
     // A lista, o "quantidadeProdutos" do fornecedor e os fornecedores dos produtos mudam juntos.
     await Promise.all([
@@ -84,22 +140,35 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
     ])
   }
 
-  const adicionarMutation = useMutation<void, unknown, Produto>({
+  const adicionarMutation = useMutation<ProdutoLigado, unknown, Produto>({
     mutationFn: (produto) => adicionarProdutoAoFornecedor(fornecedorId, produto.id),
-    onSuccess: async () => {
+    onMutate: () => setErroAoAdicionar(null),
+    onSuccess: async ({ criado }, produto) => {
+      setLigadosAgora((anteriores) => new Set([...anteriores, produto.id]))
       await atualizar()
-      setTermo('')
-      aoInformar({ sucesso: 'Produto adicionado ao fornecedor.' })
+      if (criado) {
+        setTermo('')
+        aoInformar({ sucesso: 'Produto adicionado ao fornecedor.' })
+      } else {
+        // 200: ja estava ligado. A busca fica, com o produto marcado "Já ligado".
+        aoInformar({ sucesso: `${produto.nome} já estava ligado a este fornecedor.` })
+      }
+      buscaRef.current?.focus()
     },
     onError: async (erro) => {
       await atualizar()
-      aoInformar({ erro: mensagemDeErro(erro, 'adicionar') })
+      setErroAoAdicionar(mensagemDeErro(erro, 'adicionar'))
+      buscaRef.current?.focus()
     },
   })
 
   const removerMutation = useMutation<void, unknown, ProdutoDoFornecedor>({
     mutationFn: (produto) => removerProdutoDoFornecedor(fornecedorId, produto.id),
-    onSuccess: async () => {
+    onMutate: (produto) => {
+      focoAposRemoverRef.current = Math.max(0, itens.findIndex((item) => item.id === produto.id))
+    },
+    onSuccess: async (_, produto) => {
+      setLigadosAgora((anteriores) => new Set([...anteriores].filter((id) => id !== produto.id)))
       await atualizar()
       aoInformar({ sucesso: 'Produto removido do fornecedor.' })
     },
@@ -112,16 +181,16 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
 
   const pedirRemocao = (produto: ProdutoDoFornecedor) => {
     if (produto.fornecedorDaUltimaCompra) {
+      origemDaConfirmacaoRef.current = produto.id
       setConfirmando(produto)
       return
     }
     removerMutation.mutate(produto)
   }
 
-  const dados = listaQuery.data
-  const itens = dados?.itens ?? []
   const resultados = buscaQuery.data?.itens ?? []
   const buscando = termo.trim() !== '' && (termo.trim() !== termoComAtraso || buscaQuery.isFetching)
+  const jaLigado = (produtoId: string) => ligadosAgora.has(produtoId) || itens.some((item) => item.id === produtoId)
 
   return (
     <div className="space-y-4">
@@ -136,13 +205,19 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
               aria-hidden="true"
             />
             <Input
+              ref={buscaRef}
               id={idBusca}
               type="search"
               value={termo}
               autoComplete="off"
               placeholder="Buscar pelo nome ou código"
               aria-controls={idResultados}
-              onChange={(event) => setTermo(event.target.value)}
+              aria-invalid={erroAoAdicionar ? true : undefined}
+              aria-describedby={erroAoAdicionar ? idErroAoAdicionar : undefined}
+              onChange={(event) => {
+                setTermo(event.target.value)
+                setErroAoAdicionar(null)
+              }}
               onKeyDown={(event) => {
                 // Enter aqui nao salva o fornecedor: a busca ja acontece enquanto se digita.
                 if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey) {
@@ -152,6 +227,12 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
               className="h-11 pl-9 md:h-9"
             />
           </div>
+          {erroAoAdicionar && (
+            <p id={idErroAoAdicionar} role="alert" className="flex items-start gap-1.5 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              {erroAoAdicionar}
+            </p>
+          )}
           <div id={idResultados} aria-live="polite">
             {buscando && (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -177,22 +258,29 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
                         {!produto.ativo && ' · Inativo'}
                       </span>
                     </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-11 shrink-0 md:h-9"
-                      disabled={adicionarMutation.isPending}
-                      aria-label={`Adicionar ${produto.nome}`}
-                      onClick={() => adicionarMutation.mutate(produto)}
-                    >
-                      {adicionarMutation.isPending && adicionarMutation.variables?.id === produto.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                      ) : (
-                        <Plus className="h-4 w-4" aria-hidden="true" />
-                      )}
-                      Adicionar
-                    </Button>
+                    {jaLigado(produto.id) ? (
+                      <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground">
+                        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                        Já ligado
+                      </span>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-11 shrink-0 md:h-9"
+                        disabled={adicionarMutation.isPending}
+                        aria-label={`Adicionar ${produto.nome}`}
+                        onClick={() => adicionarMutation.mutate(produto)}
+                      >
+                        {adicionarMutation.isPending && adicionarMutation.variables?.id === produto.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Plus className="h-4 w-4" aria-hidden="true" />
+                        )}
+                        Adicionar
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -201,7 +289,7 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
         </div>
       )}
 
-      {listaQuery.isPending ? (
+      {listaQuery.isPending || alemDoFim ? (
         <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           Carregando produtos do fornecedor...
@@ -219,14 +307,14 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
             Tentar de novo
           </Button>
         </div>
-      ) : itens.length === 0 ? (
+      ) : !dados || dados.totalItens === 0 ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Package className="h-4 w-4" aria-hidden="true" />
           Nenhum produto ligado a este fornecedor.
         </p>
       ) : (
         <div className="space-y-3">
-          <ul className="divide-y rounded-md border" aria-label="Produtos que vende">
+          <ul ref={listaRef} className="divide-y rounded-md border" aria-label="Produtos que vende">
             {itens.map((produto) => (
               <li key={produto.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2">
                 <div className="min-w-0 text-sm">
@@ -247,11 +335,13 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
                   <p className="text-xs text-muted-foreground tabular-nums">
                     Nº {produto.numero}
                     {produto.codigo !== null && ` · Cód. ${produto.codigo}`}
+                    {produto.sku && ` · SKU ${produto.sku}`}
                   </p>
                 </div>
                 {!somenteLeitura && (
                   <Button
                     type="button"
+                    data-remover={produto.id}
                     variant="ghost"
                     size="sm"
                     className="h-11 text-muted-foreground hover:text-destructive md:h-9"
@@ -270,9 +360,7 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
               </li>
             ))}
           </ul>
-          {dados && (
-            <PaginacaoLista pagina={pagina} total={dados.totalItens} tamanho={dados.tamanho} aoMudar={setPagina} />
-          )}
+          <PaginacaoLista pagina={pagina} total={dados.totalItens} tamanho={dados.tamanho} aoMudar={setPagina} />
         </div>
       )}
 
@@ -292,6 +380,21 @@ export function ProdutosDoFornecedor({ fornecedorId, somenteLeitura, aoInformar 
         }}
         onConfirmar={() => undefined}
         onCancelar={() => setConfirmando(null)}
+        // Removido, o foco vai para a linha que ficou no lugar; cancelado, volta ao "Remover" de origem.
+        destinoFoco={(origem) => {
+          const produtoId = origemDaConfirmacaoRef.current
+          origemDaConfirmacaoRef.current = null
+          if (origem?.isConnected) {
+            return origem
+          }
+          if (focoAposRemoverRef.current !== null) {
+            return alvoAposRemover()
+          }
+          return (
+            listaRef.current?.querySelector<HTMLElement>(`button[data-remover="${produtoId ?? ''}"]`) ??
+            alvoAposRemover()
+          )
+        }}
       />
     </div>
   )

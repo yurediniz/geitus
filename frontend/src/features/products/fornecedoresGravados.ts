@@ -21,7 +21,7 @@ export function fornecedorParaACompra(produto: Produto): FornecedorDoProduto | n
   if (!ultima) {
     return null
   }
-  const daLista = produto.fornecedores?.find((fornecedor) => fornecedor.id === ultima.id)
+  const daLista = produto.fornecedores.find((fornecedor) => fornecedor.id === ultima.id)
   return daLista && daLista.ativo ? daLista : null
 }
 
@@ -48,7 +48,8 @@ function mesmosGravados(a: FornecedoresGravados, b: FornecedoresGravados): boole
  *
  * - Fornecedor ligado no banco entra na lista da tela; desligado no banco sai dela.
  * - O que o usuario mudou na tela fica (os demais itens sao os dele).
- * - O da ultima compra segue o banco se o usuario nao o mudou; se ele saiu da lista, fica vazio.
+ * - O da ultima compra segue o banco quando ele mudou la (a compra e mais recente que a edicao
+ *   na tela); senao fica o da tela. Se ele saiu da lista, fica vazio.
  */
 export function mesclarFornecedores(
   anterior: FornecedoresGravados,
@@ -65,7 +66,7 @@ export function mesclarFornecedores(
     (fornecedor) => !idsAnteriores.has(fornecedor.id) && !mantidos.some((outro) => outro.id === fornecedor.id),
   )
   const lista = [...mantidos, ...ligadosAgora]
-  const seguida = naTela.ultimaCompraId === anterior.ultimaCompraId ? gravado.ultimaCompraId : naTela.ultimaCompraId
+  const seguida = gravado.ultimaCompraId !== anterior.ultimaCompraId ? gravado.ultimaCompraId : naTela.ultimaCompraId
   const ultimaCompraId = seguida !== null && lista.some((fornecedor) => fornecedor.id === seguida) ? seguida : null
   return { lista, ultimaCompraId }
 }

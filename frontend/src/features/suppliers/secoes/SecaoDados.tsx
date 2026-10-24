@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import {
   IE_ISENTO,
   mascararDocumento,
+  mascararInscricaoEstadual,
   rotuloDoDocumento,
   rotuloDoNome,
   type FornecedorFormValues,
@@ -121,11 +122,12 @@ export function SecaoDados({ numero, desabilitado, aoAlterarCampo }: SecaoDadosP
           aoAlterar={aoAlterarCampo}
         />
         {pj && (
-          <CampoDeTexto
+          <CampoComMascara
             nome="inscricaoEstadual"
             rotulo="Inscrição estadual (opcional)"
             maxLength={20}
-            inputMode="numeric"
+            inputMode="text"
+            mascara={mascararInscricaoEstadual}
             ajuda="Só números, ou ISENTO."
             erro={errors.inscricaoEstadual?.message}
             desabilitado={desabilitado}

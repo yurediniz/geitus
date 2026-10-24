@@ -236,7 +236,7 @@ export function FornecedoresPage() {
           </p>
         </div>
         {!somenteLeitura && (
-          <Button asChild>
+          <Button asChild className="pointer-coarse:h-11">
             <Link to={ROTA_NOVO_FORNECEDOR} state={estadoParaFornecedor}>
               <Plus className="h-4 w-4" aria-hidden="true" />
               Novo fornecedor

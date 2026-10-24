@@ -154,7 +154,7 @@ describe('MarcasPage', () => {
     expect(
       screen.getByText('Crie o primeiro fabricante, como Boehringer ou Nestlé, e as marcas dentro dele.'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Criar marca' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Criar fabricante' })).toBeInTheDocument()
   })
 
   it('cria uma submarca dentro do fabricante', async () => {
@@ -178,8 +178,9 @@ describe('MarcasPage', () => {
     renderPagina()
 
     await screen.findByRole('tree')
-    fireEvent.click(screen.getByRole('button', { name: 'Nova marca principal' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Criar marca' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Novo fabricante' }))
+    expect(screen.getByLabelText('Nome do novo fabricante')).toHaveFocus()
+    fireEvent.click(screen.getByRole('button', { name: 'Criar fabricante' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Informe o nome da marca.')
     expect(cadastrarMarcaMock).not.toHaveBeenCalled()
@@ -207,10 +208,10 @@ describe('MarcasPage', () => {
       'Uma marca não pode ficar dentro dela mesma ou de uma submarca sua.',
     )
 
-    fireEvent.click(within(dialogo).getByRole('radio', { name: 'Tornar marca principal' }))
+    fireEvent.click(within(dialogo).getByRole('radio', { name: 'Mover para o primeiro nível (fabricante)' }))
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Mover' }))
     await waitFor(() => expect(atualizarMarcaMock).toHaveBeenLastCalledWith('nexgard', { nome: 'Nexgard', parentId: null }))
-    expect(await screen.findByRole('status')).toHaveTextContent('"Nexgard" agora é uma marca principal.')
+    expect(await screen.findByRole('status')).toHaveTextContent('"Nexgard" agora está no primeiro nível (fabricante).')
   })
 
   it('inativa a marca avisando que ela sai dos cadastros de produtos e fornecedores', async () => {
@@ -274,7 +275,7 @@ describe('MarcasPage', () => {
     expect(
       screen.getByText('Somente administradores podem gerenciar marcas. Você está no modo leitura.'),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Nova marca principal' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Novo fabricante' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Mais ações/ })).not.toBeInTheDocument()
   })
 })

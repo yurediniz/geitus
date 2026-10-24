@@ -11,7 +11,10 @@ import {
   atualizarFornecedor,
   buscarFornecedor,
   cadastrarFornecedor,
+  excluirFornecedor,
+  inativarFornecedor,
   listarProdutosDoFornecedor,
+  reativarFornecedor,
   removerProdutoDoFornecedor,
 } from '@/services/fornecedorService'
 import { HttpError } from '@/services/httpClient'
@@ -58,6 +61,9 @@ const listarProdutosDoFornecedorMock = vi.mocked(listarProdutosDoFornecedor)
 const adicionarProdutoMock = vi.mocked(adicionarProdutoAoFornecedor)
 const removerProdutoMock = vi.mocked(removerProdutoDoFornecedor)
 const listarMarcasMock = vi.mocked(listarMarcas)
+const excluirFornecedorMock = vi.mocked(excluirFornecedor)
+const inativarFornecedorMock = vi.mocked(inativarFornecedor)
+const reativarFornecedorMock = vi.mocked(reativarFornecedor)
 const listarProdutosMock = vi.mocked(listarProdutos)
 const buscarCepMock = vi.mocked(buscarCep)
 const useAuthMock = vi.mocked(useAuth)
@@ -128,7 +134,13 @@ function pagina<T>(itens: T[]): PaginaResponse<T> {
 
 function SondaLista() {
   const location = useLocation()
-  return <h1>Lista de fornecedores{location.search}</h1>
+  const estado = location.state as { sucesso?: string } | null
+  return (
+    <div>
+      <h1>Lista de fornecedores{location.search}</h1>
+      {estado?.sucesso && <p>{estado.sucesso}</p>}
+    </div>
+  )
 }
 
 function renderPagina(caminho: string, state?: unknown) {
@@ -166,6 +178,15 @@ async function renderEdicao(fornecedor: Fornecedor = FORNECEDOR) {
 
 function botaoSalvar(): HTMLElement {
   return screen.getByRole('button', { name: /^salvar$/i })
+}
+
+/** O grupo de um representante ("Representante 1"). */
+function representante(numero: number): HTMLElement {
+  return screen.getByRole('group', { name: `Representante ${numero}` })
+}
+
+function nomeDoRepresentante(numero: number): HTMLElement {
+  return within(representante(numero)).getByLabelText(/^Nome/)
 }
 
 /** "Nome" (PF), sem confundir com "Nome fantasia". */
@@ -245,7 +266,11 @@ describe('FornecedorPage', () => {
       fireEvent.change(screen.getByLabelText(/^Razão social/), { target: { value: 'Distribuidora Sul' } })
       fireEvent.change(screen.getByLabelText('CNPJ (opcional)'), { target: { value: '11222333000182' } })
       expect(screen.getByLabelText('CNPJ (opcional)')).toHaveValue('11.222.333/0001-82')
+      // A mascara tira os pontos; "isent" (ISENTO incompleto) passa pela mascara e o schema barra.
       fireEvent.change(screen.getByLabelText('Inscrição estadual (opcional)'), { target: { value: '12.3' } })
+      expect(screen.getByLabelText('Inscrição estadual (opcional)')).toHaveValue('123')
+      fireEvent.change(screen.getByLabelText('Inscrição estadual (opcional)'), { target: { value: 'isent' } })
+      expect(screen.getByLabelText('Inscrição estadual (opcional)')).toHaveValue('ISENT')
       fireEvent.change(screen.getByLabelText('Telefone (opcional)'), { target: { value: '1132104000' } })
       expect(screen.getByLabelText('Telefone (opcional)')).toHaveValue('(11) 3210-4000')
       fireEvent.change(screen.getByLabelText('E-mail (opcional)'), { target: { value: 'compras@' } })
@@ -286,11 +311,11 @@ describe('FornecedorPage', () => {
       expect(within(representantes).getByText('Nenhum representante cadastrado.')).toBeInTheDocument()
 
       fireEvent.click(within(representantes).getByRole('button', { name: 'Adicionar representante' }))
-      await waitFor(() => expect(screen.getByLabelText(/^Nome do representante 1/)).toHaveFocus())
-      fireEvent.change(screen.getByLabelText(/^Nome do representante 1/), { target: { value: 'Carlos' } })
+      await waitFor(() => expect(nomeDoRepresentante(1)).toHaveFocus())
+      fireEvent.change(nomeDoRepresentante(1), { target: { value: 'Carlos' } })
       fireEvent.click(within(representantes).getByRole('button', { name: 'Adicionar representante' }))
-      fireEvent.click(within(representantes).getByRole('button', { name: 'Remover o representante 2' }))
-      expect(screen.queryByLabelText(/^Nome do representante 2/)).not.toBeInTheDocument()
+      fireEvent.click(within(representantes).getByRole('button', { name: 'Remover representante 2' }))
+      expect(screen.queryByRole('group', { name: 'Representante 2' })).not.toBeInTheDocument()
 
       for (let indice = 1; indice < 10; indice += 1) {
         fireEvent.click(within(representantes).getByRole('button', { name: 'Adicionar representante' }))
@@ -302,7 +327,7 @@ describe('FornecedorPage', () => {
       fireEvent.click(botaoSalvar())
       // Os novos estao sem nome: o primeiro com erro recebe o foco.
       expect((await screen.findAllByText('Informe o nome do representante.')).length).toBe(9)
-      await waitFor(() => expect(screen.getByLabelText(/^Nome do representante 2/)).toHaveFocus())
+      await waitFor(() => expect(nomeDoRepresentante(2)).toHaveFocus())
     })
 
     it('marcas que vende: escolhe pela árvore, mostra o caminho como chip e remove', async () => {
@@ -340,8 +365,10 @@ describe('FornecedorPage', () => {
       fireEvent.change(screen.getByLabelText('CNPJ (opcional)'), { target: { value: '11222333000181' } })
       fireEvent.change(screen.getByLabelText('UF'), { target: { value: 'RS' } })
       fireEvent.click(within(secao('Representantes')).getByRole('button', { name: 'Adicionar representante' }))
-      fireEvent.change(screen.getByLabelText(/^Nome do representante 1/), { target: { value: 'Carlos Lima' } })
-      fireEvent.change(screen.getAllByLabelText('Telefone (opcional)')[1], { target: { value: '11987654321' } })
+      fireEvent.change(nomeDoRepresentante(1), { target: { value: 'Carlos Lima' } })
+      fireEvent.change(within(representante(1)).getByLabelText('Telefone (opcional)'), {
+        target: { value: '11987654321' },
+      })
       fireEvent.click(botaoSalvar())
 
       await waitFor(() => expect(cadastrarFornecedorMock).toHaveBeenCalledTimes(1))
@@ -387,11 +414,11 @@ describe('FornecedorPage', () => {
       )
       await renderEdicao()
 
-      fireEvent.change(screen.getByLabelText(/^Nome do representante 1/), { target: { value: 'Carlos' } })
+      fireEvent.change(nomeDoRepresentante(1), { target: { value: 'Carlos' } })
       fireEvent.click(botaoSalvar())
 
       expect(await screen.findByText('Informe o nome do representante.')).toBeInTheDocument()
-      expect(screen.getByLabelText(/^Nome do representante 1/)).toHaveAttribute('aria-invalid', 'true')
+      expect(nomeDoRepresentante(1)).toHaveAttribute('aria-invalid', 'true')
     })
 
     it('Ctrl+Enter salva', async () => {
@@ -424,7 +451,7 @@ describe('FornecedorPage', () => {
 
       expect(screen.getByText('Nº 7')).toBeInTheDocument()
       expect(screen.getByLabelText('CNPJ (opcional)')).toHaveValue('11.222.333/0001-81')
-      expect(screen.getByLabelText(/^Nome do representante 1/)).toHaveValue('Carlos Lima')
+      expect(nomeDoRepresentante(1)).toHaveValue('Carlos Lima')
       expect(within(screen.getByRole('list', { name: 'Marcas escolhidas' })).getByText('Camil › Tio João')).toBeInTheDocument()
 
       fireEvent.change(screen.getByLabelText('Nome fantasia (opcional)'), { target: { value: 'Dist Sul' } })
@@ -464,10 +491,245 @@ describe('FornecedorPage', () => {
     })
   })
 
+  describe('tipo de pessoa (Review Focus 4)', () => {
+    it('PJ -> PF -> PJ volta com a IE vazia', async () => {
+      await renderNovo()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Isento' }))
+      fireEvent.click(screen.getByRole('radio', { name: 'Pessoa física' }))
+      fireEvent.click(screen.getByRole('radio', { name: 'Pessoa jurídica' }))
+
+      expect(screen.getByLabelText('Inscrição estadual (opcional)')).toHaveValue('')
+      expect(screen.getByLabelText('CNPJ (opcional)')).toHaveValue('')
+    })
+
+    it('na edição, PJ com IE e CNPJ trocado para PF manda IE e documento nulos', async () => {
+      atualizarFornecedorMock.mockResolvedValue({ ...FORNECEDOR, tipoPessoa: 'PF', documento: null })
+      await renderEdicao({ ...FORNECEDOR, inscricaoEstadual: 'ISENTO' })
+      expect(screen.getByLabelText('Inscrição estadual (opcional)')).toHaveValue('ISENTO')
+
+      fireEvent.click(screen.getByRole('radio', { name: 'Pessoa física' }))
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(atualizarFornecedorMock).toHaveBeenCalledTimes(1))
+      expect(ultimoRequest()).toMatchObject({ tipoPessoa: 'PF', inscricaoEstadual: null, documento: null })
+    })
+  })
+
+  describe('cabeçalho: status e exclusão', () => {
+    const SEM_PRODUTOS: Fornecedor = { ...FORNECEDOR, quantidadeProdutos: 0 }
+
+    function botaoExcluir(): HTMLElement {
+      return screen.getByRole('button', { name: 'Excluir' })
+    }
+
+    it('inativa e reativa pelo cabeçalho', async () => {
+      inativarFornecedorMock.mockResolvedValue({ ...FORNECEDOR, ativo: false })
+      reativarFornecedorMock.mockResolvedValue(FORNECEDOR)
+      await renderEdicao()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Inativar' }))
+      await waitFor(() => expect(inativarFornecedorMock).toHaveBeenCalledWith('dist-sul'))
+      expect(await screen.findByText('Fornecedor inativado.')).toBeInTheDocument()
+      expect(screen.getByText('Fornecedor inativo não aparece para escolha no produto nem na entrada por compra.')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reativar' }))
+      await waitFor(() => expect(reativarFornecedorMock).toHaveBeenCalledWith('dist-sul'))
+      expect(await screen.findByText('Fornecedor reativado.')).toBeInTheDocument()
+    })
+
+    it('exclui (204) e volta para a lista com a mensagem', async () => {
+      excluirFornecedorMock.mockResolvedValue(undefined)
+      await renderEdicao(SEM_PRODUTOS)
+
+      fireEvent.click(botaoExcluir())
+      const dialogo = await screen.findByRole('dialog', { name: 'Excluir Distribuidora Sul Ltda?' })
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Excluir' }))
+
+      await waitFor(() => expect(excluirFornecedorMock).toHaveBeenCalledWith('dist-sul'))
+      expect(await screen.findByRole('heading', { name: 'Lista de fornecedores' })).toBeInTheDocument()
+      expect(screen.getByText('Fornecedor "Distribuidora Sul Ltda" excluído.')).toBeInTheDocument()
+    })
+
+    it('com produtos ligados, abre já bloqueado e oferece inativar', async () => {
+      inativarFornecedorMock.mockResolvedValue({ ...FORNECEDOR, ativo: false })
+      await renderEdicao()
+
+      fireEvent.click(botaoExcluir())
+      const dialogo = await screen.findByRole('dialog', { name: 'Não é possível excluir "Distribuidora Sul Ltda"' })
+      expect(dialogo).toHaveTextContent(
+        'Este fornecedor tem 2 produto(s) ligados. Inative-o para tirá-lo das escolhas; dá para reativar depois.',
+      )
+      expect(within(dialogo).queryByRole('button', { name: 'Excluir' })).not.toBeInTheDocument()
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Inativar' }))
+
+      await waitFor(() => expect(inativarFornecedorMock).toHaveBeenCalledWith('dist-sul'))
+      expect(excluirFornecedorMock).not.toHaveBeenCalled()
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    })
+
+    it('já inativo e com produtos: diz que já está inativo e não oferece inativar', async () => {
+      await renderEdicao({ ...FORNECEDOR, ativo: false })
+
+      fireEvent.click(botaoExcluir())
+      const dialogo = await screen.findByRole('dialog', { name: 'Não é possível excluir "Distribuidora Sul Ltda"' })
+      expect(dialogo).toHaveTextContent('Ele já está inativo.')
+      expect(within(dialogo).queryByRole('button', { name: 'Inativar' })).not.toBeInTheDocument()
+      expect(within(dialogo).getAllByRole('button', { name: 'Fechar' }).length).toBeGreaterThan(0)
+    })
+
+    it('409 do backend (entradas registradas) mostra o motivo e deixa só "Inativar"', async () => {
+      const mensagem = 'Não é possível excluir: o fornecedor tem 0 produto(s) ligados e 3 entrada(s) registradas. Inative-o.'
+      excluirFornecedorMock.mockRejectedValue(new HttpError(409, mensagem))
+      await renderEdicao(SEM_PRODUTOS)
+
+      fireEvent.click(botaoExcluir())
+      const dialogo = await screen.findByRole('dialog', { name: 'Excluir Distribuidora Sul Ltda?' })
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Excluir' }))
+
+      expect(await within(dialogo).findByText(mensagem)).toBeInTheDocument()
+      expect(within(dialogo).queryByRole('button', { name: 'Excluir' })).not.toBeInTheDocument()
+      expect(within(dialogo).getByRole('button', { name: 'Inativar' })).toBeInTheDocument()
+    })
+
+    it('OPERADOR não vê Excluir nem Inativar', async () => {
+      definirPerfil('OPERADOR')
+      await renderEdicao()
+
+      expect(screen.queryByRole('button', { name: 'Excluir' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Inativar' })).not.toBeInTheDocument()
+    })
+  })
+
+  describe('erros do backend', () => {
+    it('a marca recusada fica ligada ao campo "Adicionar marca"', async () => {
+      atualizarFornecedorMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { 'marcaIds[0]': 'Esta marca não existe mais.' }),
+      )
+      await renderEdicao()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('Esta marca não existe mais.')).toBeInTheDocument()
+      const seletor = screen.getByRole('button', { name: /^Adicionar marca/ })
+      expect(seletor).toHaveAttribute('aria-invalid', 'true')
+      expect(seletor).toHaveAccessibleDescription('Esta marca não existe mais.')
+    })
+
+    it('a mensagem do backend sem campo da tela aparece como veio', async () => {
+      atualizarFornecedorMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { fornecedor: 'Não foi possível validar o fornecedor agora.' }),
+      )
+      await renderEdicao()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('Não foi possível validar o fornecedor agora.')).toBeInTheDocument()
+    })
+  })
+
   describe('produtos que vende', () => {
+    it('o produto já ligado (200) avisa e fica marcado "Já ligado" na busca', async () => {
+      listarProdutosMock.mockResolvedValue(pagina([produtoSimples]))
+      adicionarProdutoMock.mockResolvedValue({ produto: produtoDoFornecedor({ id: produtoSimples.id }), criado: false })
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      await renderEdicao()
+
+      const produtos = secao('Produtos que vende')
+      fireEvent.change(within(produtos).getByLabelText('Adicionar produto'), { target: { value: 'simples' } })
+      act(() => vi.advanceTimersByTime(300))
+      fireEvent.click(await within(produtos).findByRole('button', { name: 'Adicionar Produto Simples' }))
+
+      expect(await screen.findByText('Produto Simples já estava ligado a este fornecedor.')).toBeInTheDocument()
+      expect(within(produtos).getByText('Já ligado')).toBeInTheDocument()
+      expect(within(produtos).queryByRole('button', { name: 'Adicionar Produto Simples' })).not.toBeInTheDocument()
+      await waitFor(() => expect(within(produtos).getByLabelText('Adicionar produto')).toHaveFocus())
+    })
+
+    it('o limite de 20 fornecedores do produto (400) aparece na seção, junto da busca', async () => {
+      listarProdutosMock.mockResolvedValue(pagina([produtoSimples]))
+      adicionarProdutoMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { produtoId: 'Este produto já tem 20 fornecedores. Tire um da lista do produto para ligar outro.' }),
+      )
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      await renderEdicao()
+
+      const produtos = secao('Produtos que vende')
+      fireEvent.change(within(produtos).getByLabelText('Adicionar produto'), { target: { value: 'simples' } })
+      act(() => vi.advanceTimersByTime(300))
+      fireEvent.click(await within(produtos).findByRole('button', { name: 'Adicionar Produto Simples' }))
+
+      expect(await within(produtos).findByRole('alert')).toHaveTextContent('Este produto já tem 20 fornecedores. Tire um da lista do produto para ligar outro.')
+      const busca = within(produtos).getByLabelText('Adicionar produto')
+      await waitFor(() => expect(busca).toHaveFocus())
+      expect(busca).toHaveAccessibleDescription('Este produto já tem 20 fornecedores. Tire um da lista do produto para ligar outro.')
+      // Digitar de novo tira o aviso.
+      fireEvent.change(busca, { target: { value: 'outro' } })
+      expect(within(produtos).queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    it('remover o único item da página 2 volta para a última página válida', async () => {
+      const primeiraPagina = Array.from({ length: 25 }, (_, indice) =>
+        produtoDoFornecedor({ id: `p${indice}`, numero: indice + 1, nome: `Produto ${indice + 1}`, codigo: null }),
+      )
+      const ultimo = produtoDoFornecedor({ id: 'p25', numero: 26, nome: 'Produto 26', codigo: null })
+      let total = 26
+      listarProdutosDoFornecedorMock.mockImplementation(async (_, numero) => ({
+        itens: numero === 1 ? primeiraPagina : total > 25 ? [ultimo] : [],
+        pagina: numero - 1,
+        tamanho: 25,
+        totalItens: total,
+      }))
+      removerProdutoMock.mockImplementation(async () => {
+        total = 25
+      })
+      await renderEdicao()
+
+      const produtos = secao('Produtos que vende')
+      fireEvent.click(await within(produtos).findByRole('button', { name: /Próxima/ }))
+      fireEvent.click(await within(produtos).findByRole('button', { name: 'Remover Produto 26' }))
+
+      expect(await within(produtos).findByRole('link', { name: 'Produto 1' })).toBeInTheDocument()
+      expect(within(produtos).queryByText('Nenhum produto ligado a este fornecedor.')).not.toBeInTheDocument()
+      expect(listarProdutosDoFornecedorMock).toHaveBeenLastCalledWith('dist-sul', 1)
+    })
+
+    it('depois de remover, o foco vai para a linha seguinte ou para o título da seção', async () => {
+      const outro = produtoDoFornecedor({ id: produtoSimples.id, numero: 3, nome: 'Produto Simples', codigo: null })
+      let ligados = [produtoDoFornecedor(), outro]
+      listarProdutosDoFornecedorMock.mockImplementation(async () => pagina(ligados))
+      removerProdutoMock.mockImplementation(async (_, produtoId) => {
+        ligados = ligados.filter((produto) => produto.id !== produtoId)
+      })
+      await renderEdicao()
+
+      const lista = await screen.findByRole('list', { name: 'Produtos que vende' })
+      fireEvent.click(within(lista).getByRole('button', { name: 'Remover Arroz 5kg' }))
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Remover Produto Simples' })).toHaveFocus())
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remover Produto Simples' }))
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Produtos que vende' })).toHaveFocus())
+      expect(screen.getByText('Nenhum produto ligado a este fornecedor.')).toBeInTheDocument()
+    })
+
+    it('Cancelar na confirmação da última compra não remove', async () => {
+      listarProdutosDoFornecedorMock.mockResolvedValue(pagina([produtoDoFornecedor({ fornecedorDaUltimaCompra: true })]))
+      await renderEdicao()
+
+      const lista = await screen.findByRole('list', { name: 'Produtos que vende' })
+      fireEvent.click(within(lista).getByRole('button', { name: 'Remover Arroz 5kg' }))
+      const dialogo = await screen.findByRole('dialog', { name: 'Remover o produto do fornecedor?' })
+      fireEvent.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(removerProdutoMock).not.toHaveBeenCalled()
+      expect(within(lista).getByRole('link', { name: 'Arroz 5kg' })).toBeInTheDocument()
+      await waitFor(() => expect(within(lista).getByRole('button', { name: 'Remover Arroz 5kg' })).toHaveFocus())
+    })
+
     it('busca e adiciona o produto com o feedback', async () => {
       listarProdutosMock.mockResolvedValue(pagina([produtoSimples]))
-      adicionarProdutoMock.mockResolvedValue(undefined)
+      adicionarProdutoMock.mockResolvedValue({ produto: produtoDoFornecedor({ id: produtoSimples.id }), criado: true })
       vi.useFakeTimers({ shouldAdvanceTime: true })
       await renderEdicao()
 
@@ -480,6 +742,9 @@ describe('FornecedorPage', () => {
       await waitFor(() => expect(adicionarProdutoMock).toHaveBeenCalledWith('dist-sul', produtoSimples.id))
       expect(listarProdutosMock).toHaveBeenCalledWith(expect.objectContaining({ busca: 'simples' }), expect.anything())
       expect(await screen.findByText('Produto adicionado ao fornecedor.')).toBeInTheDocument()
+      // O foco volta a busca, para adicionar o proximo.
+      await waitFor(() => expect(within(produtos).getByLabelText('Adicionar produto')).toHaveFocus())
+      expect(within(produtos).getByLabelText('Adicionar produto')).toHaveValue('')
       // A lista do fornecedor e recarregada.
       await waitFor(() => expect(listarProdutosDoFornecedorMock.mock.calls.length).toBeGreaterThan(1))
     })

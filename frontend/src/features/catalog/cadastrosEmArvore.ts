@@ -71,6 +71,26 @@ export interface TextosDaArvore {
   ondeAparece: string
   /** Quem continua com o item inativo ("produtos"). */
   usadoPor: string
+  /** Textos do item do primeiro nivel (categoria principal, fabricante). */
+  principal: TextosDoPrincipal
+}
+
+/** O primeiro nivel da arvore: "categoria principal" nas categorias, "fabricante" nas marcas. */
+export interface TextosDoPrincipal {
+  /** Botao e titulo do cartao: "Nova categoria principal". */
+  novo: string
+  /** Botao de salvar e do estado vazio: "Criar categoria". */
+  criar: string
+  /** Rotulo do campo: "Nome da nova categoria principal". */
+  rotuloDoNome: string
+  /** Descricao do cartao de criacao. */
+  descricaoDoNovo: string
+  /** Destino raiz do "Mover": "Tornar categoria principal". */
+  tornar: string
+  /** Mensagem depois de mover para a raiz. */
+  virou: (nome: string) => string
+  /** Opcao sem pai do mini-formulario do seletor: "Nenhuma — criar como categoria principal". */
+  semPai: string
 }
 
 export interface ConfiguracaoDaArvore<T extends ItemDaArvore> {
@@ -106,6 +126,15 @@ export const CONFIGURACAO_CATEGORIAS: ConfiguracaoDaArvore<Categoria> = {
     orientacaoVazia: 'Crie a primeira categoria, como Mercearia ou Ração, e organize os produtos por ela.',
     ondeAparece: 'no cadastro de produtos',
     usadoPor: 'produtos',
+    principal: {
+      novo: 'Nova categoria principal',
+      criar: 'Criar categoria',
+      rotuloDoNome: 'Nome da nova categoria principal',
+      descricaoDoNovo: 'Ela fica no topo da árvore; depois você pode adicionar subcategorias dentro dela.',
+      tornar: 'Tornar categoria principal',
+      virou: (nome) => `"${nome}" agora é uma categoria principal.`,
+      semPai: 'Nenhuma — criar como categoria principal',
+    },
   },
   rota: '/produtos/categorias',
   chave: CATEGORIAS_QUERY_KEY,
@@ -141,6 +170,15 @@ export const CONFIGURACAO_MARCAS: ConfiguracaoDaArvore<Marca> = {
     orientacaoVazia: 'Crie o primeiro fabricante, como Boehringer ou Nestlé, e as marcas dentro dele.',
     ondeAparece: 'nos cadastros de produtos e fornecedores',
     usadoPor: 'produtos e fornecedores',
+    principal: {
+      novo: 'Novo fabricante',
+      criar: 'Criar fabricante',
+      rotuloDoNome: 'Nome do novo fabricante',
+      descricaoDoNovo: 'Ele fica no primeiro nível da árvore; depois você pode adicionar as marcas e linhas dele.',
+      tornar: 'Mover para o primeiro nível (fabricante)',
+      virou: (nome) => `"${nome}" agora está no primeiro nível (fabricante).`,
+      semPai: 'Nenhum — criar como fabricante',
+    },
   },
   rota: '/produtos/marcas',
   chave: MARCAS_QUERY_KEY,

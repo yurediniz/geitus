@@ -200,6 +200,7 @@ export function SecaoGeral({
                 podeCriar={!somenteLeitura}
                 desabilitado={desabilitado || marcasQuery.isPending}
                 invalido={errors.marcaId !== undefined}
+                idsDescricao={errors.marcaId ? 'marcaId-erro' : undefined}
               />
             )}
           />

@@ -1941,6 +1941,7 @@ describe('ProdutoPage', () => {
 
       expect(await screen.findByText('Esta marca está inativa. Escolha uma marca ativa.')).toBeInTheDocument()
       expect(seletorDeMarca()).toHaveAttribute('aria-invalid', 'true')
+      expect(seletorDeMarca()).toHaveAccessibleDescription('Esta marca está inativa. Escolha uma marca ativa.')
       await waitFor(() => expect(listarMarcasMock).toHaveBeenCalledTimes(2))
     })
 
@@ -1980,7 +1981,7 @@ describe('ProdutoPage', () => {
         expect.anything(),
       )
       fireEvent.click(botaoAdicionarFornecedor())
-      expect(await screen.findByText('Nenhum fornecedor ativo para escolher.')).toBeInTheDocument()
+      expect(await screen.findByText('Todos os fornecedores ativos já foram escolhidos.')).toBeInTheDocument()
       fireEvent.keyDown(screen.getByRole('combobox', { name: 'Buscar fornecedor' }), { key: 'Escape' })
 
       expect(rotulosDasOpcoes(campoUltimaCompra())).toEqual(['Nenhum', 'Distribuidora Sul', 'Atacadão Norte'])
@@ -2005,6 +2006,9 @@ describe('ProdutoPage', () => {
       expect(screen.queryByRole('list', { name: /^fornecedores \(opcional\)/i })).not.toBeInTheDocument()
       expect(campoUltimaCompra()).toHaveValue('')
       expect(campoUltimaCompra()).toBeDisabled()
+      expect(campoUltimaCompra()).toHaveAccessibleDescription(
+        'O fornecedor da última compra saiu da lista; o campo ficou vazio.',
+      )
       fireEvent.click(botaoSalvar())
 
       await waitFor(() =>
@@ -2086,6 +2090,88 @@ describe('ProdutoPage', () => {
           expect.objectContaining({ fornecedorIds: ['norte', 'dist-sul'], fornecedorUltimaCompraId: 'norte' }),
         ),
       )
+    })
+
+    it('com os fornecedores alterados na tela, a compra pelo modal mescla: o novo entra e a escolha do usuário fica', async () => {
+      const compra: MovimentoEstoque = {
+        id: 'mov-compra',
+        tipo: 'ENTRADA',
+        motivo: 'COMPRA',
+        origem: 'AJUSTE_MANUAL',
+        quantidade: 5,
+        saldoAnterior: 12,
+        saldoNovo: 17,
+        observacao: null,
+        usuarioNome: 'Ana Souza',
+        criadoEm: '2026-10-24T10:15:00',
+        embalagem: null,
+        custoInformado: 18,
+        custoUnitario: 18,
+        fornecedor: { id: 'norte', nome: 'Atacadão Norte' },
+      }
+      const depois: Produto = {
+        ...produtoAtivo,
+        estoqueAtual: 17,
+        fornecedores: [
+          { id: 'norte', numero: 2, nome: 'Atacadão Norte', ativo: true },
+          { id: 'dist-sul', numero: 1, nome: 'Distribuidora Sul', ativo: true },
+        ],
+        fornecedorUltimaCompra: { id: 'norte', numero: 2, nome: 'Atacadão Norte' },
+      }
+      ajustarEstoqueMock.mockResolvedValue(compra)
+      atualizarProdutoMock.mockResolvedValue(depois)
+      renderEdicao()
+      await esperarFormulario()
+      // O usuario tira a Distribuidora Sul (que era a da ultima compra) antes da compra.
+      fireEvent.click(within(listaDeFornecedores()).getByRole('button', { name: 'Remover Distribuidora Sul' }))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Ajustar estoque' }))
+      const modal = screen.getByRole('dialog', { name: 'Ajustar estoque' })
+      fireEvent.click(within(modal).getByRole('button', { name: /^Fornecedor \(opcional\)/ }))
+      fireEvent.click(await screen.findByRole('option', { name: /Atacadão Norte/ }))
+      fireEvent.change(within(modal).getByRole('textbox', { name: /^quantidade/i }), { target: { value: '5' } })
+      fireEvent.change(within(modal).getByRole('textbox', { name: /^custo por UN/i }), { target: { value: '18,00' } })
+      buscarProdutoMock.mockResolvedValue(depois)
+      fireEvent.click(modal.querySelector('button[type="submit"]') as HTMLElement)
+
+      await waitFor(() => expect(campoUltimaCompra()).toHaveValue('norte'))
+      // A Sul, tirada pelo usuario, nao volta; a Norte, ligada pela compra, entra.
+      expect(within(listaDeFornecedores()).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+        'Atacadão Norte',
+      ])
+      fireEvent.click(botaoSalvar())
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(
+          ID_ARROZ,
+          expect.objectContaining({ fornecedorIds: ['norte'], fornecedorUltimaCompraId: 'norte' }),
+        ),
+      )
+    })
+
+    it('o 400 em fornecedorIds aparece no campo "Fornecedores"', async () => {
+      const mensagem = 'Informe a lista de fornecedores.'
+      atualizarProdutoMock.mockRejectedValue(new HttpError(400, 'Dados invalidos.', { fornecedorIds: mensagem }))
+      renderEdicao()
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText(mensagem)).toBeInTheDocument()
+      expect(botaoAdicionarFornecedor()).toHaveAttribute('aria-invalid', 'true')
+      expect(botaoAdicionarFornecedor()).toHaveAccessibleDescription(mensagem)
+    })
+
+    it('o 400 do último fornecedor fora da lista aparece no campo', async () => {
+      const mensagem = 'O fornecedor da última compra precisa estar na lista de fornecedores.'
+      atualizarProdutoMock.mockRejectedValue(new HttpError(400, 'Dados invalidos.', { fornecedorUltimaCompraId: mensagem }))
+      renderEdicao()
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText(mensagem)).toBeInTheDocument()
+      expect(campoUltimaCompra()).toHaveAttribute('aria-invalid', 'true')
+      expect(campoUltimaCompra()).toHaveAccessibleDescription(mensagem)
     })
 
     it('a nota do custo cita o fornecedor da compra', async () => {

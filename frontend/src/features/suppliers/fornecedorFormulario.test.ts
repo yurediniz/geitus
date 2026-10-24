@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import {
   MAXIMO_MARCAS,
+  mascararInscricaoEstadual,
   MAXIMO_REPRESENTANTES,
   campoDoErroDoServidor,
   fornecedorSchema,
@@ -70,6 +71,22 @@ describe('fornecedorFormulario', () => {
     expect(erros({ ...BASE, inscricaoEstadual: 'isento' })).toEqual({})
     expect(erros({ ...BASE, tipoPessoa: 'PF', inscricaoEstadual: '110042490114' })).toEqual({
       inscricaoEstadual: 'Inscrição estadual só para pessoa jurídica.',
+    })
+  })
+
+  it('a mascara da IE tira o que nao e digito, mas deixa digitar ISENTO', () => {
+    expect(mascararInscricaoEstadual('110.042.490.114')).toBe('110042490114')
+    expect(mascararInscricaoEstadual('is')).toBe('IS')
+    expect(mascararInscricaoEstadual('isento')).toBe('ISENTO')
+    expect(mascararInscricaoEstadual('isentos')).toBe('')
+    expect(mascararInscricaoEstadual('12a3')).toBe('123')
+  })
+
+  it('o nome longo diz o rotulo do tipo', () => {
+    const longo = 'x'.repeat(181)
+    expect(erros({ ...BASE, razaoSocial: longo })).toEqual({ razaoSocial: 'Razão social deve ter no máximo 180 caracteres.' })
+    expect(erros({ ...BASE, tipoPessoa: 'PF', razaoSocial: longo })).toEqual({
+      razaoSocial: 'Nome deve ter no máximo 180 caracteres.',
     })
   })
 

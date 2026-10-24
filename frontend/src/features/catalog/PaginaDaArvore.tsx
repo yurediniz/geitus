@@ -200,7 +200,7 @@ export function PaginaDaArvore<T extends ItemDaArvore>({ configuracao }: PaginaD
       setMensagemSucesso(
         destino
           ? `"${movido.nome}" agora está em "${destino.caminho}".`
-          : `"${movido.nome}" agora é uma ${textos.singular} principal.`,
+          : textos.principal.virou(movido.nome),
       )
       // A lista ja voltou do refetch: ao fechar, o foco vai ao no na nova posicao.
       if (focoAposDialogoRef.current) {
@@ -308,7 +308,7 @@ export function PaginaDaArvore<T extends ItemDaArvore>({ configuracao }: PaginaD
         {podeGerenciar && (
           <Button ref={botaoNovaRef} type="button" onClick={() => abrirAcaoNome({ tipo: 'principal' })}>
             <Plus className="h-4 w-4" />
-            Nova {textos.singular} principal
+            {textos.principal.novo}
           </Button>
         )}
       </div>
@@ -324,18 +324,16 @@ export function PaginaDaArvore<T extends ItemDaArvore>({ configuracao }: PaginaD
       {podeGerenciar && acaoNome?.tipo === 'principal' && (
         <Card className="max-w-2xl">
           <CardHeader>
-            <CardTitle>Nova {textos.singular} principal</CardTitle>
-            <CardDescription>
-              Ela fica no topo da árvore; depois você pode adicionar {textos.subPlural} dentro dela.
-            </CardDescription>
+            <CardTitle>{textos.principal.novo}</CardTitle>
+            <CardDescription>{textos.principal.descricaoDoNovo}</CardDescription>
           </CardHeader>
           <CardContent>
             <FormularioNomeDaArvore
               key={chaveCriacao}
-              rotulo={`Nome da nova ${textos.singular} principal`}
+              rotulo={textos.principal.rotuloDoNome}
               singular={textos.singular}
               placeholder={textos.exemploPrincipal}
-              textoSalvar={`Criar ${textos.singular}`}
+              textoSalvar={textos.principal.criar}
               salvando={salvarNomeMutation.isPending}
               erro={erroNome}
               onSalvar={salvarNome}
@@ -404,7 +402,7 @@ export function PaginaDaArvore<T extends ItemDaArvore>({ configuracao }: PaginaD
                 {podeGerenciar && acaoNome?.tipo !== 'principal' && (
                   <Button type="button" size="sm" className="mt-3" onClick={() => abrirAcaoNome({ tipo: 'principal' })}>
                     <Plus className="h-4 w-4" />
-                    Criar {textos.singular}
+                    {textos.principal.criar}
                   </Button>
                 )}
               </div>

@@ -296,6 +296,12 @@ function FormularioFornecedor({ fornecedor, voltarPara, somenteLeitura }: Formul
   }, [temSucessoNaNavegacao, navigate, location.pathname, voltarPara])
   // Fornecedor como gravado agora (salvar e inativar/reativar o atualizam; o formulario so le na montagem).
   const [fornecedorAtual, setFornecedorAtual] = useState<Fornecedor | null>(fornecedor)
+  // O fornecedor recarregado (ex.: depois de ligar um produto, a contagem muda) passa a ser o atual.
+  const [fornecedorRecebido, setFornecedorRecebido] = useState(fornecedor)
+  if (fornecedor !== fornecedorRecebido) {
+    setFornecedorRecebido(fornecedor)
+    setFornecedorAtual(fornecedor)
+  }
   const [erroGeral, setErroGeral] = useState<string | null>(null)
   const [erroSalvar, setErroSalvar] = useState<string | null>(null)
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false)
@@ -370,7 +376,8 @@ function FormularioFornecedor({ fornecedor, voltarPara, somenteLeitura }: Formul
           focarCampo(primeiro)
         }
       } else {
-        setErroSalvar(mensagemErroSalvar(erro))
+        // Mensagens do backend sem campo da tela (ex.: uma marca recusada) vao como vieram.
+        setErroSalvar(restantes.length > 0 ? restantes.join(' ') : mensagemErroSalvar(erro))
       }
       if (erro instanceof HttpError && (erro.status === 400 || erro.status === 404)) {
         // A marca escolhida pode ter sido removida ou inativada por outra pessoa.
@@ -434,8 +441,11 @@ function FormularioFornecedor({ fornecedor, voltarPara, somenteLeitura }: Formul
     }
   }
 
+  // Com produtos ligados, o backend recusaria: o dialogo ja abre bloqueado e oferece inativar.
+  const comProdutosLigados = (fornecedorAtual?.quantidadeProdutos ?? 0) > 0
   const exclusaoBloqueada =
-    erroExcluir !== null && excluirMutation.error instanceof HttpError && excluirMutation.error.status === 409
+    comProdutosLigados ||
+    (erroExcluir !== null && excluirMutation.error instanceof HttpError && excluirMutation.error.status === 409)
 
   return (
     <EstruturaPagina
@@ -575,13 +585,28 @@ function FormularioFornecedor({ fornecedor, voltarPara, somenteLeitura }: Formul
       {fornecedorAtual && (
         <ConfirmarExclusaoDialog
           aberto={confirmandoExclusao}
-          titulo={`Excluir ${fornecedorAtual.razaoSocial}?`}
+          titulo={
+            comProdutosLigados
+              ? `Não é possível excluir "${fornecedorAtual.razaoSocial}"`
+              : `Excluir ${fornecedorAtual.razaoSocial}?`
+          }
           descricao={
-            <>
-              <p>Esta ação não pode ser desfeita. Os representantes e as marcas ligadas saem junto.</p>
-              {fornecedorAtual.ativo && <p>Se quiser apenas tirá-lo das escolhas, inative-o; dá para reativar depois.</p>}
-              {erroExcluir && <ErroInline mensagem={erroExcluir} />}
-            </>
+            comProdutosLigados ? (
+              <>
+                <p>
+                  {`Este fornecedor tem ${fornecedorAtual.quantidadeProdutos} produto(s) ligados. Inative-o para tirá-lo das escolhas; dá para reativar depois.`}
+                </p>
+                {!fornecedorAtual.ativo && <p>Ele já está inativo.</p>}
+              </>
+            ) : (
+              <>
+                <p>Esta ação não pode ser desfeita. Os representantes e as marcas ligadas saem junto.</p>
+                {fornecedorAtual.ativo && (
+                  <p>Se quiser apenas tirá-lo das escolhas, inative-o; dá para reativar depois.</p>
+                )}
+                {erroExcluir && <ErroInline mensagem={erroExcluir} />}
+              </>
+            )
           }
           excluindo={excluirMutation.isPending}
           onConfirmar={() => excluirMutation.mutate(fornecedorAtual)}

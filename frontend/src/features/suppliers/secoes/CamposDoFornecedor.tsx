@@ -115,6 +115,8 @@ export function CampoComMascara({
   placeholder,
   inputMode = 'numeric',
   autoComplete,
+  maxLength,
+  acessorio,
   mascara,
   aoMudarValor,
   aoAlterar,
@@ -127,25 +129,29 @@ export function CampoComMascara({
       render={({ field }) => (
         <Estrutura id={nome} rotulo={rotulo} obrigatorio={obrigatorio} erro={erro} ajuda={ajuda}>
           {(ariaDescribedby) => (
-            <Input
-              id={nome}
-              ref={field.ref}
-              name={field.name}
-              inputMode={inputMode}
-              autoComplete={autoComplete}
-              placeholder={placeholder}
-              disabled={desabilitado}
-              aria-invalid={erro ? true : undefined}
-              aria-describedby={ariaDescribedby}
-              value={typeof field.value === 'string' ? field.value : ''}
-              onBlur={field.onBlur}
-              onChange={(evento) => {
-                const formatado = mascara(evento.target.value)
-                field.onChange(formatado)
-                aoAlterar()
-                aoMudarValor?.(formatado)
-              }}
-            />
+            <div className="flex gap-2">
+              <Input
+                id={nome}
+                ref={field.ref}
+                name={field.name}
+                inputMode={inputMode}
+                autoComplete={autoComplete}
+                placeholder={placeholder}
+                maxLength={maxLength}
+                disabled={desabilitado}
+                aria-invalid={erro ? true : undefined}
+                aria-describedby={ariaDescribedby}
+                value={typeof field.value === 'string' ? field.value : ''}
+                onBlur={field.onBlur}
+                onChange={(evento) => {
+                  const formatado = mascara(evento.target.value)
+                  field.onChange(formatado)
+                  aoAlterar()
+                  aoMudarValor?.(formatado)
+                }}
+              />
+              {acessorio}
+            </div>
           )}
         </Estrutura>
       )}

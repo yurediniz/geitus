@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from '@/services/httpClient'
+import { apiDelete, apiGet, apiPatch, apiPost, apiPostComStatus } from '@/services/httpClient'
 import type {
   FiltrosDaListaDeFornecedores,
   Fornecedor,
@@ -84,9 +84,21 @@ export function listarProdutosDoFornecedor(
   })
 }
 
+/** Resultado de ligar um produto: o produto como aparece na lista e se a ligacao foi criada agora. */
+export interface ProdutoLigado {
+  produto: ProdutoDoFornecedor
+  /** false: o produto ja estava ligado (200). */
+  criado: boolean
+}
+
 /** Liga o produto ao fornecedor (idempotente: 201 na criacao, 200 se ja estava ligado). */
-export async function adicionarProdutoAoFornecedor(id: string, produtoId: string): Promise<void> {
-  await apiPost<unknown>(`${caminhoDoFornecedor(id)}/produtos`, { produtoId }, { autenticada: true })
+export async function adicionarProdutoAoFornecedor(id: string, produtoId: string): Promise<ProdutoLigado> {
+  const { status, corpo } = await apiPostComStatus<ProdutoDoFornecedor>(
+    `${caminhoDoFornecedor(id)}/produtos`,
+    { produtoId },
+    { autenticada: true },
+  )
+  return { produto: corpo, criado: status === 201 }
 }
 
 /** Desliga o produto do fornecedor; se ele era o da ultima compra, o backend limpa esse campo do produto. */
