@@ -1,8 +1,8 @@
 /**
- * Mascaras e validacoes de documentos de pessoa fisica (CPF e telefone BR).
+ * Mascaras e validacoes de documentos (CPF, CNPJ, telefone BR, CEP e UF).
  *
- * Compartilhadas entre Empresa e Clientes. Espelham as regras do backend
- * (`shared.validation`) para o formulario nao aceitar o que a API rejeita.
+ * Compartilhadas entre Empresa, Clientes e Fornecedores. Espelham as regras do
+ * backend (`shared.validation`) para o formulario nao aceitar o que a API rejeita.
  */
 
 // --- Normalizacao e mascaras ------------------------------------------------
@@ -10,6 +10,22 @@
 /** Mantem apenas os digitos de um texto. */
 export function apenasDigitos(valor: string): string {
   return valor.replace(/\D/g, '')
+}
+
+/** Formata CNPJ progressivamente: 00.000.000/0000-00. */
+export function mascararCnpj(valor: string): string {
+  const d = apenasDigitos(valor).slice(0, 14)
+  return d
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3/$4')
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, '$1.$2.$3/$4-$5')
+}
+
+/** Formata CEP progressivamente: 00000-000. */
+export function mascararCep(valor: string): string {
+  const d = apenasDigitos(valor).slice(0, 8)
+  return d.replace(/^(\d{5})(\d)/, '$1-$2')
 }
 
 /** Formata CPF progressivamente: 000.000.000-00. */
@@ -84,6 +100,41 @@ export function cpfValido(valor: string): boolean {
     d2 = 0
   }
   return d2 === Number(c[10])
+}
+
+/** Valida um CNPJ pelos digitos verificadores. */
+export function cnpjValido(valor: string): boolean {
+  const c = apenasDigitos(valor)
+  if (c.length !== 14 || /^(\d)\1{13}$/.test(c)) {
+    return false
+  }
+  const calcularDigito = (tamanho: number): number => {
+    const pesos =
+      tamanho === 12
+        ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+        : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    let soma = 0
+    for (let i = 0; i < tamanho; i += 1) {
+      soma += Number(c[i]) * pesos[i]
+    }
+    const resto = soma % 11
+    return resto < 2 ? 0 : 11 - resto
+  }
+  if (calcularDigito(12) !== Number(c[12])) {
+    return false
+  }
+  return calcularDigito(13) === Number(c[13])
+}
+
+/** Unidades federativas do Brasil (allow-list; espelha o backend). */
+export const UFS = [
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
+  'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO',
+] as const
+
+/** Sigla de UF valida (sem diferenciar maiusculas). */
+export function ufValida(valor: string): boolean {
+  return (UFS as readonly string[]).includes(valor.trim().toUpperCase())
 }
 
 /**

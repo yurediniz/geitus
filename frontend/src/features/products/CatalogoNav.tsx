@@ -2,12 +2,14 @@ import { NavLink, useLocation } from 'react-router-dom'
 
 import { cn } from '@/lib/utils'
 
+/** Abas na ordem da spec B5 §2. `subrotas`: a aba continua ativa nas paginas dentro dela (ex.: um fornecedor). */
 const ABAS = [
-  { rotulo: 'Produtos', to: '/produtos' },
-  { rotulo: 'Categorias', to: '/produtos/categorias' },
-  { rotulo: 'Marcas', to: '/produtos/marcas' },
-  { rotulo: 'Unidades', to: '/produtos/unidades' },
-  { rotulo: 'Balança', to: '/produtos/balanca' },
+  { rotulo: 'Produtos', to: '/produtos', subrotas: false },
+  { rotulo: 'Categorias', to: '/produtos/categorias', subrotas: false },
+  { rotulo: 'Marcas', to: '/produtos/marcas', subrotas: false },
+  { rotulo: 'Fornecedores', to: '/produtos/fornecedores', subrotas: true },
+  { rotulo: 'Unidades', to: '/produtos/unidades', subrotas: false },
+  { rotulo: 'Balança', to: '/produtos/balanca', subrotas: false },
 ] as const
 
 /** Pagina de um produto (`/produtos/novo`, `/produtos/:id`): fora das demais abas. */
@@ -32,7 +34,7 @@ export function CatalogoNav() {
           <li key={aba.to}>
             <NavLink
               to={aba.to}
-              end
+              end={!aba.subrotas}
               className={({ isActive }) =>
                 cn(
                   'flex h-11 items-center border-b-2 px-3 text-sm transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',

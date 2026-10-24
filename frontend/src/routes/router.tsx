@@ -10,6 +10,8 @@ import { EmpresaPage } from '@/features/company/EmpresaPage'
 import { ClientesPage } from '@/features/customers/ClientesPage'
 import { ProdutoPage } from '@/features/products/ProdutoPage'
 import { ProdutosListaPage } from '@/features/products/ProdutosListaPage'
+import { FornecedoresPage } from '@/features/suppliers/FornecedoresPage'
+import { FornecedorPage } from '@/features/suppliers/FornecedorPage'
 import { UsuariosPage } from '@/features/usuarios/UsuariosPage'
 import { AdminRoute } from '@/routes/AdminRoute'
 import { HomePage } from '@/routes/HomePage'
@@ -52,6 +54,10 @@ const privateRoutes: RouteObject[] = [
           // Declaradas antes de `produtos/:id` por legibilidade (o ranking do React Router ja prefere o segmento fixo).
           { path: 'produtos/categorias', element: <CategoriasPage /> },
           { path: 'produtos/marcas', element: <MarcasPage /> },
+          // Fornecedores: leitura a qualquer autenticado; escrita so ADMIN (pagina e backend).
+          { path: 'produtos/fornecedores', element: <FornecedoresPage /> },
+          { path: 'produtos/fornecedores/novo', element: <FornecedorPage /> },
+          { path: 'produtos/fornecedores/:id', element: <FornecedorPage /> },
           { path: 'produtos/unidades', element: <UnidadesPage /> },
           // Etiqueta de balanca: leitura e teste a qualquer autenticado; salvar so ADMIN (pagina e backend).
           { path: 'produtos/balanca', element: <EtiquetaBalancaPage /> },

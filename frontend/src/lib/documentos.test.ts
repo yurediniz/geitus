@@ -2,12 +2,42 @@ import { describe, it, expect } from 'vitest'
 
 import {
   apenasDigitos,
+  cnpjValido,
   cpfValido,
+  mascararCep,
+  mascararCnpj,
   mascararCpf,
   mascararTelefone,
   normalizarDigitosTelefone,
   telefoneValido,
+  ufValida,
 } from '@/lib/documentos'
+
+describe('documentos de pessoa juridica e endereco', () => {
+  it('mascara CNPJ progressivamente', () => {
+    expect(mascararCnpj('11222333000181')).toBe('11.222.333/0001-81')
+    expect(mascararCnpj('112223')).toBe('11.222.3')
+    expect(mascararCnpj('11.222.333/0001-8199')).toBe('11.222.333/0001-81')
+  })
+
+  it('valida o CNPJ pelos digitos verificadores', () => {
+    expect(cnpjValido('11.222.333/0001-81')).toBe(true)
+    expect(cnpjValido('11222333000182')).toBe(false)
+    expect(cnpjValido('11111111111111')).toBe(false)
+    expect(cnpjValido('1122233300018')).toBe(false)
+  })
+
+  it('mascara o CEP', () => {
+    expect(mascararCep('01001000')).toBe('01001-000')
+    expect(mascararCep('0100')).toBe('0100')
+  })
+
+  it('aceita so as UFs do Brasil', () => {
+    expect(ufValida('SP')).toBe(true)
+    expect(ufValida('sp')).toBe(true)
+    expect(ufValida('XX')).toBe(false)
+  })
+})
 
 describe('documentos', () => {
   it('mantem apenas os digitos', () => {

@@ -116,7 +116,14 @@ describe('MarcasPage', () => {
     renderPagina()
 
     const abas = within(screen.getByRole('navigation', { name: 'Catálogo' })).getAllByRole('link')
-    expect(abas.map((aba) => aba.textContent)).toEqual(['Produtos', 'Categorias', 'Marcas', 'Unidades', 'Balança'])
+    expect(abas.map((aba) => aba.textContent)).toEqual([
+      'Produtos',
+      'Categorias',
+      'Marcas',
+      'Fornecedores',
+      'Unidades',
+      'Balança',
+    ])
     expect(within(screen.getByRole('navigation', { name: 'Catálogo' })).getByRole('link', { name: 'Marcas' })).toHaveAttribute(
       'aria-current',
       'page',
