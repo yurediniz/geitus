@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { formatarPercentual } from '@/features/products/formatacaoProduto'
 import { AcoesDoProduto } from '@/features/products/listagem/AcoesDoProduto'
 import { identificacaoDoProduto } from '@/features/products/listagem/identificacaoDoProduto'
+import { MiniaturaDoProduto } from '@/features/products/listagem/MiniaturaDoProduto'
 import type { ListaDeProdutosProps } from '@/features/products/listagem/tipos'
 import { EstoqueDoProduto, PrecoDoProduto, SemValor } from '@/features/products/listagem/ValoresDoProduto'
 import { rotaDoProduto } from '@/features/products/navegacaoProdutos'
@@ -91,6 +92,10 @@ export function TabelaProdutos({
       <table aria-labelledby={idDoTitulo} className="w-full text-sm">
         <thead className="border-b text-left text-muted-foreground">
           <tr>
+            {/* Coluna estreita (w-px: so a largura do quadro) e sem padding a direita, para caber a 1.024 px. */}
+            <th scope="col" className="w-px py-2 pr-0 pl-3">
+              <span className="sr-only">Imagem</span>
+            </th>
             <CabecalhoOrdenavel coluna="nome" {...cabecalho}>
               Nome
             </CabecalhoOrdenavel>
@@ -120,6 +125,9 @@ export function TabelaProdutos({
             const margem = formatarPercentual(produto.margem)
             return (
               <tr key={produto.id} className="align-middle">
+                <td className="w-px py-2 pr-0 pl-3">
+                  <MiniaturaDoProduto imagem={produto.imagem} tamanho="tabela" />
+                </td>
                 <td className="px-3 py-3">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <Link

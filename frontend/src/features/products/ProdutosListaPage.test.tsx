@@ -353,7 +353,7 @@ describe('ProdutosListaPage', () => {
       const cabecalhos = within(tabela)
         .getAllByRole('columnheader')
         .map((th) => th.textContent?.trim())
-      expect(cabecalhos).toEqual(['Nome', 'Categoria', 'Unidade', 'Preço', 'Margem', 'Estoque', 'Ações'])
+      expect(cabecalhos).toEqual(['Imagem', 'Nome', 'Categoria', 'Unidade', 'Preço', 'Margem', 'Estoque', 'Ações'])
 
       const linha = await linhaDoProduto('Arroz 5kg')
       // Linha secundaria da Fase B2: Nº, codigo do produto e SKU (as partes que existirem).
@@ -470,6 +470,84 @@ describe('ProdutosListaPage', () => {
       const linha = await linhaDoProduto('Arroz 5kg')
       expect(within(linha).getByText('Não controla estoque')).toHaveClass('sr-only')
       expect(within(linha).queryByText(/12 UN/)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('miniatura (Fase F)', () => {
+    const IMAGEM = {
+      miniaturaUrl: '/api/imagens/produtos/p/v1/miniatura?expira=1&assinatura=a',
+      grandeUrl: '/api/imagens/produtos/p/v1/grande?expira=1&assinatura=b',
+      largura: 1200,
+      altura: 900,
+      atualizadaEm: '2026-10-24T10:00:00',
+    }
+
+    /** A miniatura de uma area (linha ou card): o quadro e a imagem dele, se houver. */
+    function miniaturaDa(area: HTMLElement): { quadro: HTMLElement; imagem: HTMLImageElement | null } {
+      const quadro = area.querySelector<HTMLElement>('[data-miniatura]')
+      if (!quadro) {
+        throw new Error('miniatura nao encontrada')
+      }
+      return { quadro, imagem: quadro.querySelector('img') }
+    }
+
+    it('com imagem: a miniatura na tabela (40 px, primeira coluna) e no card (56 px), carregada sem pressa', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([{ ...produtoAtivo, imagem: IMAGEM }]))
+      renderLista()
+
+      const linha = await linhaDoProduto('Arroz 5kg')
+      const card = await cardDoProduto('Arroz 5kg')
+      const naTabela = miniaturaDa(linha)
+      const noCard = miniaturaDa(card)
+
+      expect(linha.querySelector('td')?.contains(naTabela.quadro)).toBe(true)
+      expect(naTabela.quadro).toHaveClass('size-10')
+      expect(noCard.quadro).toHaveClass('size-14')
+      for (const { imagem } of [naTabela, noCard]) {
+        expect(imagem).toHaveAttribute('src', IMAGEM.miniaturaUrl)
+        expect(imagem).toHaveAttribute('loading', 'lazy')
+        expect(imagem).toHaveAttribute('decoding', 'async')
+        // O nome ja esta ao lado: a miniatura e decorativa.
+        expect(imagem).toHaveAttribute('alt', '')
+        expect(imagem).toHaveClass('object-contain')
+      }
+    })
+
+    it('sem imagem: o icone neutro no lugar da foto', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
+      renderLista()
+
+      for (const area of [await linhaDoProduto('Arroz 5kg'), await cardDoProduto('Arroz 5kg')]) {
+        const { quadro, imagem } = miniaturaDa(area)
+        expect(imagem).toBeNull()
+        expect(quadro.querySelector('svg')).not.toBeNull()
+      }
+    })
+
+    it('a imagem que falha ao carregar (URL vencida) volta ao icone (Review Focus 3)', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([{ ...produtoAtivo, imagem: IMAGEM }]))
+      renderLista()
+
+      const linha = await linhaDoProduto('Arroz 5kg')
+      const { imagem } = miniaturaDa(linha)
+      fireEvent.error(imagem as HTMLImageElement)
+
+      const depois = miniaturaDa(linha)
+      expect(depois.imagem).toBeNull()
+      expect(depois.quadro.querySelector('svg')).not.toBeNull()
+      // O card tem a sua propria imagem, que continua.
+      expect(miniaturaDa(await cardDoProduto('Arroz 5kg')).imagem).not.toBeNull()
+    })
+
+    it('a coluna da miniatura e estreita e fica na tabela desde 1024 px', async () => {
+      listarProdutosMock.mockResolvedValue(paginaDe([produtoAtivo]))
+      renderLista()
+
+      const tabela = await screen.findByRole('table')
+      const cabecalho = within(tabela).getByRole('columnheader', { name: 'Imagem' })
+      expect(cabecalho).toHaveClass('w-px')
+      expect(cabecalho).not.toHaveClass('hidden')
+      expect(tabela.parentElement).toHaveClass('hidden', 'lg:block', 'overflow-x-auto')
     })
   })
 
