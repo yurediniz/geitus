@@ -148,7 +148,8 @@ CREATE TABLE fornecedor_representantes (
     CONSTRAINT ck_representante_ordem CHECK (ordem >= 0)
 );
 
-CREATE INDEX ix_representante_fornecedor ON fornecedor_representantes (empresa_id, fornecedor_id, ordem);
+-- Lista do fornecedor na ordem da tela (e o ON DELETE CASCADE da FK).
+CREATE INDEX ix_representante_fornecedor ON fornecedor_representantes (fornecedor_id, ordem);
 
 -- =====================================================================
 -- Passo 4: marcas que o fornecedor vende (0..200; o limite e da aplicacao).
@@ -167,6 +168,9 @@ CREATE TABLE fornecedor_marcas (
 
 CREATE INDEX ix_fornecedor_marca_marca ON fornecedor_marcas (marca_id);
 
+-- Marcas de um fornecedor (a PK comeca por empresa_id; a colecao e lida pelo fornecedor_id).
+CREATE INDEX ix_fornecedor_marca_fornecedor ON fornecedor_marcas (fornecedor_id);
+
 -- =====================================================================
 -- Passo 5: fornecedores do produto (a mesma lista vista dos dois lados; ate 20
 -- por produto, limite da aplicacao).
@@ -184,6 +188,9 @@ CREATE TABLE produto_fornecedores (
 );
 
 CREATE INDEX ix_produto_fornecedor_fornecedor ON produto_fornecedores (fornecedor_id);
+
+-- Fornecedores de um produto (a colecao do produto e lida pelo produto_id).
+CREATE INDEX ix_produto_fornecedor_produto ON produto_fornecedores (produto_id);
 
 -- =====================================================================
 -- Passo 6: colunas novas de produtos, do movimento de estoque e da numeracao.
@@ -252,12 +259,12 @@ AS $$
                    translate(texto,
                              'ÀÁÂÃÄÅàáâãäåÈÉÊËèéêëÌÍÎÏìíîïÒÓÔÕÖòóôõöÙÚÛÜùúûüÇçÑñÝýÿ',
                              'AAAAAAaaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNnYyy'),
-                   '[̀-ͯ'
+                   '[\u0300-\u036f'
                    || '\u0001-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f'
-                   || '­؀-؅؜۝܏࢐࢑࣢᠎'
-                   || '​-‏‪-‮⁠-⁤⁦-⁯﻿￹-￻]',
+                   || '\u00ad\u0600-\u0605\u061c\u06dd\u070f\u0890\u0891\u08e2\u180e'
+                   || '\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff\ufff9-\ufffb]',
                    '', 'g')),
-               '[\s\u0085   -     　]+', ' ', 'g'))
+               '[\s\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+', ' ', 'g'))
 $$;
 
 -- Por empresa, cada valor distinto de lower(fornecedor) (a V7 ja garante o
@@ -267,7 +274,8 @@ INSERT INTO fornecedores (uuid, empresa_id, numero, tipo_pessoa, razao_social, b
 SELECT gen_random_uuid(),
        distinto.empresa_id,
        row_number() OVER (PARTITION BY distinto.empresa_id
-                          ORDER BY pg_temp.normalizar_busca(distinto.nome), distinto.primeiro_produto_id),
+                          ORDER BY pg_temp.normalizar_busca(distinto.nome) COLLATE "C",
+                                   distinto.primeiro_produto_id),
        'PJ',
        distinto.nome,
        pg_temp.normalizar_busca(distinto.nome),
@@ -305,8 +313,6 @@ ALTER TABLE produtos
     ADD CONSTRAINT fk_produto_fornecedor_ultima_compra
         FOREIGN KEY (empresa_id, id, fornecedor_ultima_compra_id)
         REFERENCES produto_fornecedores (empresa_id, produto_id, fornecedor_id);
-
-CREATE INDEX idx_produto_fornecedor_ultima_compra ON produtos (fornecedor_ultima_compra_id);
 
 -- =====================================================================
 -- Passo 10: conferencia (spec 7, item 3): todo produto que tinha texto ficou

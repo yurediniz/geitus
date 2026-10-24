@@ -123,6 +123,45 @@ class MigracaoV14IT {
                 + " AND tipo = 'FORNECEDOR'")).isEqualTo("2");
     }
 
+    /** Numeracao pelo nome normalizado em collation "C": "Ótica" (otica) vem antes de "Padaria". */
+    @Test
+    void numeracaoDosFornecedoresMigradosIgnoraOAcento() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        inserirProduto(empresa, "Pão", null, "Padaria Central");
+        inserirProduto(empresa, "Óculos", null, "Ótica Visão");
+        inserirProduto(empresa, "Arroz", null, "atacado norte");
+
+        aplicarV14();
+
+        assertThat(texto("SELECT string_agg(numero || ':' || razao_social, ', ' ORDER BY numero) FROM fornecedores"
+                + " WHERE empresa_id = " + empresa))
+                .isEqualTo("1:atacado norte, 2:Ótica Visão, 3:Padaria Central");
+    }
+
+    @Test
+    void mesmoFornecedorEmDuasEmpresasENumeradoEmCadaUma() throws SQLException {
+        long empresaA = inserirEmpresa("Empresa A");
+        long empresaB = inserirEmpresa("Empresa B");
+        long produtoA = inserirProduto(empresaA, "Arroz", null, "Distribuidora Xavier");
+        inserirProduto(empresaB, "Feijão", null, "Atacado Sul");
+        long produtoB = inserirProduto(empresaB, "Arroz", null, "distribuidora xavier");
+
+        aplicarV14();
+
+        assertThat(texto("SELECT string_agg(numero || ':' || razao_social, ', ' ORDER BY numero) FROM fornecedores"
+                + " WHERE empresa_id = " + empresaB)).isEqualTo("1:Atacado Sul, 2:distribuidora xavier");
+        assertThat(texto("SELECT numero || ':' || razao_social FROM fornecedores WHERE empresa_id = " + empresaA))
+                .isEqualTo("1:Distribuidora Xavier");
+        assertThat(texto("SELECT f.empresa_id::text FROM produtos p JOIN fornecedores f"
+                + " ON f.id = p.fornecedor_ultima_compra_id WHERE p.id = " + produtoA))
+                .isEqualTo(String.valueOf(empresaA));
+        assertThat(texto("SELECT f.empresa_id::text FROM produtos p JOIN fornecedores f"
+                + " ON f.id = p.fornecedor_ultima_compra_id WHERE p.id = " + produtoB))
+                .isEqualTo(String.valueOf(empresaB));
+        assertThat(texto("SELECT string_agg(empresa_id || '=' || ultimo_numero, ',' ORDER BY empresa_id)"
+                + " FROM numeracoes WHERE tipo = 'FORNECEDOR'")).isEqualTo(empresaA + "=1," + empresaB + "=2");
+    }
+
     @Test
     void colunasDeTextoESuaConstraintSaemDosProdutos() throws SQLException {
         aplicarV14();
@@ -130,6 +169,18 @@ class MigracaoV14IT {
         assertThat(colunaExiste("produtos", "marca")).isFalse();
         assertThat(colunaExiste("produtos", "fornecedor")).isFalse();
         assertThat(texto("SELECT count(*)::text FROM pg_constraint WHERE conname = 'ck_produto_fornecedor_valido'"))
+                .isEqualTo("0");
+    }
+
+    /** Indices das listas: pelo fornecedor e pelo produto; nenhum indice so para o ultimo fornecedor. */
+    @Test
+    void indicesDasListasDoFornecedorEDoProduto() throws SQLException {
+        aplicarV14();
+
+        assertThat(definicaoDoIndice("ix_representante_fornecedor")).contains("(fornecedor_id, ordem)");
+        assertThat(definicaoDoIndice("ix_fornecedor_marca_fornecedor")).contains("(fornecedor_id)");
+        assertThat(definicaoDoIndice("ix_produto_fornecedor_produto")).contains("(produto_id)");
+        assertThat(texto("SELECT count(*)::text FROM pg_indexes WHERE indexname = 'idx_produto_fornecedor_ultima_compra'"))
                 .isEqualTo("0");
     }
 
@@ -220,6 +271,39 @@ class MigracaoV14IT {
                 .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_marca_nome_valido"));
     }
 
+    @Test
+    void paiDaMarcaDeOutraEmpresaEVioladoPelaFk() throws SQLException {
+        long empresaA = inserirEmpresa("Empresa A");
+        long empresaB = inserirEmpresa("Empresa B");
+        aplicarV14();
+        long paiDeB = inserirMarca(empresaB, null, "Boehringer");
+
+        assertThatThrownBy(() -> inserirMarca(empresaA, paiDeB, "Nexgard"))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_FK, "fk_marca_pai"));
+    }
+
+    // ---------- Constraints dos representantes ----------
+
+    @Test
+    void representanteComNomeAparadoTelefoneSoDigitosEOrdemNaoNegativa() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        aplicarV14();
+        long fornecedor = inserirFornecedor(empresa, "observacoes", "'representantes'");
+
+        assertThatCode(() -> inserirRepresentante(empresa, fornecedor, "'Ana'", "'11987654321'", "'ana@x.test'", 0))
+                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> inserirRepresentante(empresa, fornecedor, "' Ana'", "NULL", "NULL", 1))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_representante_nome_valido"));
+        assertThatThrownBy(() -> inserirRepresentante(empresa, fornecedor, "''", "NULL", "NULL", 1))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_representante_nome_valido"));
+        assertThatThrownBy(() -> inserirRepresentante(empresa, fornecedor, "'Ana'", "'(11) 9876-5432'", "NULL", 1))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_representante_telefone"));
+        assertThatThrownBy(() -> inserirRepresentante(empresa, fornecedor, "'Ana'", "NULL", "''", 1))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_representante_email"));
+        assertThatThrownBy(() -> inserirRepresentante(empresa, fornecedor, "'Ana'", "NULL", "NULL", -1))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_representante_ordem"));
+    }
+
     // ---------- Fornecedor da ultima compra ----------
 
     @Test
@@ -292,6 +376,12 @@ class MigracaoV14IT {
                 fornecedor))
                 .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_fornecedor_so_na_compra"));
         assertThatThrownBy(() -> inserirMovimento(empresa, produto, usuario, "SAIDA", "PERDA_AVARIA", "-5",
+                fornecedor))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_fornecedor_so_na_compra"));
+        assertThatThrownBy(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "ESTOQUE_INICIAL", "CADASTRO",
+                "5", fornecedor))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_fornecedor_so_na_compra"));
+        assertThatThrownBy(() -> inserirMovimento(empresa, produto, usuario, "SAIDA", "VENDA", "VENDA", "-5",
                 fornecedor))
                 .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_fornecedor_so_na_compra"));
         assertThatThrownBy(() -> executar("DELETE FROM fornecedores WHERE id = " + fornecedor))
@@ -500,6 +590,13 @@ class MigracaoV14IT {
                 + (paiId == null ? "NULL" : paiId) + ", '" + nome + "') RETURNING id");
     }
 
+    private static void inserirRepresentante(long empresaId, long fornecedorId, String nome, String telefone,
+            String email, int ordem) throws SQLException {
+        executar("INSERT INTO fornecedor_representantes (empresa_id, fornecedor_id, nome, telefone, email, ordem)"
+                + " VALUES (" + empresaId + ", " + fornecedorId + ", " + nome + ", " + telefone + ", " + email + ", "
+                + ordem + ")");
+    }
+
     private static void ligar(long empresaId, long produtoId, long fornecedorId) throws SQLException {
         executar("INSERT INTO produto_fornecedores (empresa_id, produto_id, fornecedor_id) VALUES (" + empresaId
                 + ", " + produtoId + ", " + fornecedorId + ")");
@@ -511,13 +608,23 @@ class MigracaoV14IT {
      */
     private static void inserirMovimento(long empresaId, long produtoId, long usuarioId, String tipo, String motivo,
             String quantidade, long fornecedorId) throws SQLException {
+        inserirMovimento(empresaId, produtoId, usuarioId, tipo, motivo, "AJUSTE_MANUAL", quantidade, fornecedorId);
+    }
+
+    /** Como o movimento manual, com a origem informada (CADASTRO e VENDA). */
+    private static void inserirMovimento(long empresaId, long produtoId, long usuarioId, String tipo, String motivo,
+            String origem, String quantidade, long fornecedorId) throws SQLException {
         String anterior = "greatest(0, -(" + quantidade + "))";
         String custo = "COMPRA".equals(motivo) ? "10.00, 10.0000" : "NULL, NULL";
         executar("INSERT INTO movimentos_estoque (empresa_id, produto_id, tipo, motivo, origem, quantidade,"
                 + " saldo_anterior, saldo_novo, usuario_id, custo_informado, custo_unitario, fornecedor_id) VALUES ("
-                + empresaId + ", " + produtoId + ", '" + tipo + "', '" + motivo + "', 'AJUSTE_MANUAL', " + quantidade
+                + empresaId + ", " + produtoId + ", '" + tipo + "', '" + motivo + "', '" + origem + "', " + quantidade
                 + ", " + anterior + ", " + anterior + " + (" + quantidade + "), " + usuarioId + ", " + custo + ", "
                 + fornecedorId + ")");
+    }
+
+    private static String definicaoDoIndice(String nome) throws SQLException {
+        return texto("SELECT indexdef FROM pg_indexes WHERE indexname = '" + nome + "'");
     }
 
     private static boolean colunaExiste(String tabela, String coluna) throws SQLException {
