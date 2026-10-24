@@ -176,20 +176,19 @@ export function mascararDocumento(tipo: TipoPessoaFornecedor, valor: string): st
 
 /** Valores do formulario a partir do fornecedor vindo da API (edicao). */
 export function valoresDoFornecedor(fornecedor: Fornecedor): FornecedorFormValues {
-  const endereco = fornecedor.endereco
   return {
     tipoPessoa: fornecedor.tipoPessoa,
     documento: fornecedor.documento ? mascararDocumento(fornecedor.tipoPessoa, fornecedor.documento) : '',
     razaoSocial: fornecedor.razaoSocial,
     nomeFantasia: fornecedor.nomeFantasia ?? '',
     inscricaoEstadual: fornecedor.inscricaoEstadual ?? '',
-    cep: endereco?.cep ? mascararCep(endereco.cep) : '',
-    logradouro: endereco?.logradouro ?? '',
-    numeroEndereco: endereco?.numero ?? '',
-    complemento: endereco?.complemento ?? '',
-    bairro: endereco?.bairro ?? '',
-    municipio: endereco?.municipio ?? '',
-    uf: endereco?.uf ?? '',
+    cep: fornecedor.cep ? mascararCep(fornecedor.cep) : '',
+    logradouro: fornecedor.logradouro ?? '',
+    numeroEndereco: fornecedor.numeroEndereco ?? '',
+    complemento: fornecedor.complemento ?? '',
+    bairro: fornecedor.bairro ?? '',
+    municipio: fornecedor.municipio ?? '',
+    uf: fornecedor.uf ?? '',
     telefone: mascararTelefone(fornecedor.telefone ?? ''),
     email: fornecedor.email ?? '',
     observacoes: fornecedor.observacoes ?? '',
@@ -241,15 +240,13 @@ export function montarRequest(valores: FornecedorFormValues): FornecedorRequest 
     razaoSocial: valores.razaoSocial.trim(),
     nomeFantasia: textoOuNulo(valores.nomeFantasia),
     inscricaoEstadual: pj && ie ? ie.toUpperCase() : null,
-    endereco: {
-      cep: digitosOuNulo(valores.cep),
-      logradouro: textoOuNulo(valores.logradouro),
-      numero: textoOuNulo(valores.numeroEndereco),
-      complemento: textoOuNulo(valores.complemento),
-      bairro: textoOuNulo(valores.bairro),
-      municipio: textoOuNulo(valores.municipio),
-      uf: textoOuNulo(valores.uf)?.toUpperCase() ?? null,
-    },
+    cep: digitosOuNulo(valores.cep),
+    logradouro: textoOuNulo(valores.logradouro),
+    numeroEndereco: textoOuNulo(valores.numeroEndereco),
+    complemento: textoOuNulo(valores.complemento),
+    bairro: textoOuNulo(valores.bairro),
+    municipio: textoOuNulo(valores.municipio),
+    uf: textoOuNulo(valores.uf)?.toUpperCase() ?? null,
     telefone: telefoneOuNulo(valores.telefone),
     email: textoOuNulo(valores.email),
     observacoes: textoOuNulo(valores.observacoes),
@@ -258,32 +255,18 @@ export function montarRequest(valores: FornecedorFormValues): FornecedorRequest 
   }
 }
 
-const CAMPO_DO_ENDERECO: Readonly<Record<string, keyof FornecedorFormValues>> = {
-  cep: 'cep',
-  logradouro: 'logradouro',
-  numero: 'numeroEndereco',
-  complemento: 'complemento',
-  bairro: 'bairro',
-  municipio: 'municipio',
-  uf: 'uf',
-}
-
 const CAMPOS_DO_FORMULARIO: ReadonlySet<string> = new Set(CAMPOS_NA_ORDEM)
 
 /**
- * Caminho no formulario de uma chave de erro do backend: "endereco.cep" (ou
- * "cep") -> "cep", "representantes[2].nome" -> "representantes.2.nome",
+ * Caminho no formulario de uma chave de erro do backend (os campos tem os
+ * nomes do request): "representantes[2].nome" -> "representantes.2.nome",
  * "marcaIds[3]" -> "marcaIds". Chave desconhecida -> null (vira mensagem geral).
  */
 export function campoDoErroDoServidor(chave: string): string | null {
-  const doEndereco = /^endereco\.(\w+)$/.exec(chave)
-  if (doEndereco) {
-    return CAMPO_DO_ENDERECO[doEndereco[1]] ?? null
-  }
   const doRepresentante = /^representantes\[(\d+)]\.(nome|telefone|email)$/.exec(chave)
   if (doRepresentante) {
     return `representantes.${doRepresentante[1]}.${doRepresentante[2]}`
   }
   const raiz = chave.split(/[[.]/)[0]
-  return CAMPOS_DO_FORMULARIO.has(raiz) && raiz !== 'numeroEndereco' ? raiz : null
+  return CAMPOS_DO_FORMULARIO.has(raiz) ? raiz : null
 }

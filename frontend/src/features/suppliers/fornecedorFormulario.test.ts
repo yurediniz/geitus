@@ -30,15 +30,13 @@ const FORNECEDOR: Fornecedor = {
   razaoSocial: 'Distribuidora Sul Ltda',
   nomeFantasia: 'Dist Sul',
   inscricaoEstadual: 'ISENTO',
-  endereco: {
-    cep: '01001000',
-    logradouro: 'Praça da Sé',
-    numero: '100',
-    complemento: null,
-    bairro: 'Sé',
-    municipio: 'São Paulo',
-    uf: 'SP',
-  },
+  cep: '01001000',
+  logradouro: 'Praça da Sé',
+  numeroEndereco: '100',
+  complemento: null,
+  bairro: 'Sé',
+  municipio: 'São Paulo',
+  uf: 'SP',
   telefone: '1132104000',
   email: 'compras@distsul.com.br',
   observacoes: null,
@@ -114,15 +112,13 @@ describe('fornecedorFormulario', () => {
       razaoSocial: 'Distribuidora Sul Ltda',
       nomeFantasia: 'Dist Sul',
       inscricaoEstadual: 'ISENTO',
-      endereco: {
-        cep: '01001000',
-        logradouro: 'Praça da Sé',
-        numero: '100',
-        complemento: null,
-        bairro: 'Sé',
-        municipio: 'São Paulo',
-        uf: 'SP',
-      },
+      cep: '01001000',
+      logradouro: 'Praça da Sé',
+      numeroEndereco: '100',
+      complemento: null,
+      bairro: 'Sé',
+      municipio: 'São Paulo',
+      uf: 'SP',
       telefone: '1132104000',
       email: 'compras@distsul.com.br',
       observacoes: null,
@@ -147,7 +143,8 @@ describe('fornecedorFormulario', () => {
       documento: '11144477735',
       inscricaoEstadual: null,
       nomeFantasia: null,
-      endereco: { cep: null, uf: 'SP' },
+      cep: null,
+      uf: 'SP',
       representantes: [{ nome: 'Ana', telefone: null, email: null }],
     })
     expect(request.representantes[0]).not.toHaveProperty('id')
@@ -155,8 +152,9 @@ describe('fornecedorFormulario', () => {
 
   it('leva as chaves de erro do backend ao campo da tela', () => {
     expect(campoDoErroDoServidor('documento')).toBe('documento')
-    expect(campoDoErroDoServidor('endereco.cep')).toBe('cep')
-    expect(campoDoErroDoServidor('endereco.numero')).toBe('numeroEndereco')
+    expect(campoDoErroDoServidor('cep')).toBe('cep')
+    expect(campoDoErroDoServidor('uf')).toBe('uf')
+    expect(campoDoErroDoServidor('numeroEndereco')).toBe('numeroEndereco')
     expect(campoDoErroDoServidor('representantes[2].nome')).toBe('representantes.2.nome')
     expect(campoDoErroDoServidor('marcaIds[3]')).toBe('marcaIds')
     expect(campoDoErroDoServidor('desconhecido')).toBeNull()

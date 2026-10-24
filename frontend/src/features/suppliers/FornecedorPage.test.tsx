@@ -82,7 +82,7 @@ function definirPerfil(perfil: 'ADMIN' | 'OPERADOR') {
 const ENDERECO_VAZIO = {
   cep: null,
   logradouro: null,
-  numero: null,
+  numeroEndereco: null,
   complemento: null,
   bairro: null,
   municipio: null,
@@ -97,7 +97,7 @@ const FORNECEDOR: Fornecedor = {
   razaoSocial: 'Distribuidora Sul Ltda',
   nomeFantasia: null,
   inscricaoEstadual: null,
-  endereco: ENDERECO_VAZIO,
+  ...ENDERECO_VAZIO,
   telefone: null,
   email: null,
   observacoes: null,
@@ -110,7 +110,16 @@ const FORNECEDOR: Fornecedor = {
 }
 
 function produtoDoFornecedor(extras: Partial<ProdutoDoFornecedor> = {}): ProdutoDoFornecedor {
-  return { id: produtoAtivo.id, numero: 15, nome: 'Arroz 5kg', codigo: 542, ativo: true, fornecedorDaUltimaCompra: false, ...extras }
+  return {
+    id: produtoAtivo.id,
+    numero: 15,
+    nome: 'Arroz 5kg',
+    codigo: 542,
+    sku: 'SKU-ARROZ',
+    ativo: true,
+    fornecedorDaUltimaCompra: false,
+    ...extras,
+  }
 }
 
 function pagina<T>(itens: T[]): PaginaResponse<T> {
@@ -342,7 +351,8 @@ describe('FornecedorPage', () => {
         razaoSocial: 'Distribuidora Sul Ltda',
         nomeFantasia: null,
         inscricaoEstadual: null,
-        endereco: { ...ENDERECO_VAZIO, uf: 'RS' },
+        ...ENDERECO_VAZIO,
+        uf: 'RS',
         telefone: null,
         email: null,
         observacoes: null,

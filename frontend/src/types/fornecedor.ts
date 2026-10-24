@@ -13,13 +13,16 @@ import type { StatusFiltro } from '@/types/produto'
 /** Pessoa juridica (CNPJ, razao social e inscricao estadual) ou fisica (CPF e nome). */
 export type TipoPessoaFornecedor = 'PJ' | 'PF'
 
-/** Endereco do fornecedor: todos os campos sao opcionais. */
+/**
+ * Endereco do fornecedor, em campos no proprio fornecedor (todos opcionais).
+ * O numero do endereco e `numeroEndereco` (o `numero` e o Nº do fornecedor).
+ */
 export interface EnderecoFornecedor {
   /** 8 digitos. */
   cep: string | null
   logradouro: string | null
   /** Numero do endereco (texto: "123", "S/N", "km 4"). */
-  numero: string | null
+  numeroEndereco: string | null
   complemento: string | null
   bairro: string | null
   municipio: string | null
@@ -36,7 +39,7 @@ export interface RepresentanteDeVenda {
 }
 
 /** Fornecedor conforme retornado pela API (detalhe). */
-export interface Fornecedor {
+export interface Fornecedor extends EnderecoFornecedor {
   id: string
   /** Nº sequencial por empresa, gerado na criacao e imutavel. */
   numero: number
@@ -48,7 +51,6 @@ export interface Fornecedor {
   nomeFantasia: string | null
   /** So digitos ou "ISENTO"; sempre null no PF. */
   inscricaoEstadual: string | null
-  endereco: EnderecoFornecedor | null
   telefone: string | null
   email: string | null
   observacoes: string | null
@@ -70,13 +72,12 @@ export interface RepresentanteRequest {
 }
 
 /** Corpo do POST/PATCH (listas sempre completas). */
-export interface FornecedorRequest {
+export interface FornecedorRequest extends EnderecoFornecedor {
   tipoPessoa: TipoPessoaFornecedor
   documento: string | null
   razaoSocial: string
   nomeFantasia: string | null
   inscricaoEstadual: string | null
-  endereco: EnderecoFornecedor
   telefone: string | null
   email: string | null
   observacoes: string | null
@@ -115,6 +116,7 @@ export interface ProdutoDoFornecedor {
   numero: number
   nome: string
   codigo: number | null
+  sku: string | null
   ativo: boolean
   /** O fornecedor e o "Fornecedor da última compra" deste produto (remover pede confirmacao). */
   fornecedorDaUltimaCompra: boolean
