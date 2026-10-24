@@ -61,6 +61,12 @@ public class SecurityConfig {
             "/api/marcas/**"
     };
 
+    /** Fornecedores (DEC-039): leitura para qualquer autenticado, qualquer escrita so ADMIN. */
+    private static final String[] CAMINHOS_FORNECEDORES = {
+            "/api/fornecedores",
+            "/api/fornecedores/**"
+    };
+
     /** Configuracao e teste da etiqueta de balanca (DEC-036). */
     private static final String CAMINHO_ETIQUETA_BALANCA = "/api/etiqueta-balanca";
 
@@ -124,6 +130,11 @@ public class SecurityConfig {
                         // como em Clientes: cobre POST/PATCH/PUT/DELETE e /{id}/inativar|reativar.
                         .requestMatchers(HttpMethod.GET, CAMINHOS_CADASTROS_DO_CATALOGO).authenticated()
                         .requestMatchers(CAMINHOS_CADASTROS_DO_CATALOGO).hasRole("ADMIN")
+                        // Fornecedores (DEC-039): leitura (GET) para qualquer autenticado; qualquer
+                        // outro metodo (cadastro, edicao, inativar/reativar, excluir e ligar ou
+                        // desligar produtos) exige ADMIN. Matcher de ADMIN sem metodo, como acima.
+                        .requestMatchers(HttpMethod.GET, CAMINHOS_FORNECEDORES).authenticated()
+                        .requestMatchers(CAMINHOS_FORNECEDORES).hasRole("ADMIN")
                         // Etiqueta de balanca (DEC-036): ler a configuracao (GET) e testar uma
                         // etiqueta (POST /teste, nao grava nada) liberados a qualquer autenticado;
                         // salvar (PUT) e qualquer outro metodo/rota sob o caminho exigem ADMIN.

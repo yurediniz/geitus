@@ -28,6 +28,9 @@ import com.geitus.app.company.DadosEmpresaInvalidosException;
 import com.geitus.app.customer.ClienteConflitoException;
 import com.geitus.app.customer.ClienteNaoEncontradoException;
 import com.geitus.app.customer.DadosClienteInvalidosException;
+import com.geitus.app.supplier.DadosFornecedorInvalidosException;
+import com.geitus.app.supplier.FornecedorConflitoException;
+import com.geitus.app.supplier.FornecedorNaoEncontradoException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -340,6 +343,38 @@ public class GlobalExceptionHandler {
                 request.getRequestURI());
 
         return ResponseEntity.badRequest().body(corpo);
+    }
+
+    /**
+     * Fornecedor (ou representante) nao encontrado na empresa do usuario,
+     * inclusive o de outra empresa: resposta identica (DEC-016). Mensagem fixa.
+     */
+    @ExceptionHandler(FornecedorNaoEncontradoException.class)
+    public ResponseEntity<ApiError> tratarFornecedorNaoEncontrado(FornecedorNaoEncontradoException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.NOT_FOUND.value(),
+                HttpStatus.NOT_FOUND.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(corpo);
+    }
+
+    /** Dado invalido no cadastro do fornecedor (spec 4.6), com o campo quando houver. */
+    @ExceptionHandler(DadosFornecedorInvalidosException.class)
+    public ResponseEntity<ApiError> tratarDadosFornecedorInvalidos(DadosFornecedorInvalidosException ex,
+            HttpServletRequest request) {
+        ApiError corpo = erroComCampoOpcional(HttpStatus.BAD_REQUEST, ex.getMessage(), request, ex.campo());
+        return ResponseEntity.badRequest().body(corpo);
+    }
+
+    /** Documento repetido ou exclusao de fornecedor com vinculos (409), com o campo quando houver. */
+    @ExceptionHandler(FornecedorConflitoException.class)
+    public ResponseEntity<ApiError> tratarConflitoDeFornecedor(FornecedorConflitoException ex,
+            HttpServletRequest request) {
+        ApiError corpo = erroComCampoOpcional(HttpStatus.CONFLICT, ex.getMessage(), request, ex.campo());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(corpo);
     }
 
     /**

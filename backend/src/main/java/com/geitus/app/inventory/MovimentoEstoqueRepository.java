@@ -126,4 +126,7 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
             """)
     int apagarDoProdutoPelaOrigem(@Param("empresaId") Long empresaId, @Param("produtoId") Long produtoId,
             @Param("origem") OrigemMovimento origem);
+
+    /** Fase B5: entradas por compra registradas com o fornecedor (id interno), na empresa. */
+    long countByEmpresaIdAndFornecedorId(Long empresaId, Long fornecedorId);
 }
