@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPatch, apiPost, apiPutMultipart } from '@/services/httpClient'
+import { apiDelete, apiGet, apiGetBlob, apiPatch, apiPost, apiPutMultipart } from '@/services/httpClient'
 import type {
   FiltrosDaListaDeProdutos,
   HistoricoPreco,
@@ -97,6 +97,11 @@ export function enviarImagemDoProduto(id: string, grande: Blob, miniatura: Blob)
   formulario.append('grande', grande, nomeDaParte('grande', grande))
   formulario.append('miniatura', miniatura, nomeDaParte('miniatura', miniatura))
   return apiPutMultipart<ImagemDoProduto>(`${caminhoDoProduto(id)}/imagem`, formulario)
+}
+
+/** Baixa a imagem gravada (a versao grande, pela URL assinada), para girar sem o arquivo original. */
+export function baixarImagemDoProduto(url: string): Promise<Blob> {
+  return apiGetBlob(url)
 }
 
 /** Remove a imagem do produto (404 se ele nao tem imagem). */

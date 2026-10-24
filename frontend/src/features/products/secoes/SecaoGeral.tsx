@@ -17,6 +17,8 @@ import {
 } from '@/features/products/produtoFormulario'
 import { SeletorCategoria, SeletorMarca } from '@/features/products/SeletorCategoria'
 import { CamposFornecedoresDoProduto } from '@/features/products/secoes/CamposFornecedoresDoProduto'
+import { QuadroDaImagem } from '@/features/products/secoes/QuadroDaImagem'
+import type { ControleDaImagem } from '@/features/products/imagemPendente'
 import type { Categoria, Marca, UnidadeMedida } from '@/types/catalogo'
 import type { Produto } from '@/types/produto'
 
@@ -31,6 +33,10 @@ export interface SecaoGeralProps {
   desabilitado: boolean
   somenteLeitura: boolean
   aoAlterarCampo: () => void
+  /** Imagem gravada e a mudanca pendente (gravada com o Salvar da tela). */
+  imagem: ControleDaImagem
+  /** A imagem esta subindo, depois do Salvar. */
+  enviandoImagem: boolean
 }
 
 /**
@@ -63,7 +69,7 @@ function AjudaNomeCurto({ nome, nomeCurto }: { nome: string; nomeCurto: string }
 }
 
 /**
- * Secao Geral (o Nº do produto fica na linha do titulo, na pagina): o cadastro
+ * Secao Geral (o Nº do produto fica na linha do titulo, na pagina): a imagem no topo (Fase F), o cadastro
  * rapido (nome, unidade e preco de venda, os essenciais para vender) primeiro; depois identificacao e descricao.
  * Os codigos ficam na secao Codigos e as embalagens, na Embalagens. O
  * status fica no cabecalho da pagina.
@@ -77,6 +83,8 @@ export function SecaoGeral({
   desabilitado,
   somenteLeitura,
   aoAlterarCampo,
+  imagem,
+  enviandoImagem,
 }: SecaoGeralProps) {
   const {
     control,
@@ -102,6 +110,14 @@ export function SecaoGeral({
 
   return (
     <div className="space-y-6">
+      <QuadroDaImagem
+        imagem={imagem}
+        nomeDoProduto={nomeAtual.trim() || produto?.nome || 'Imagem do produto'}
+        somenteLeitura={somenteLeitura}
+        desabilitado={desabilitado}
+        enviando={enviandoImagem}
+        aoAlterar={aoAlterarCampo}
+      />
       <div className="grid gap-4 md:grid-cols-2">
         <CampoTexto
           id="nome"

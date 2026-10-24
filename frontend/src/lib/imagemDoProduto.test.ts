@@ -75,7 +75,6 @@ beforeEach(() => {
     const tamanho = tamanhoDoBlob(codificacao, codificacoes.length - 1)
     callback(new Blob([new Uint8Array(tamanho)], { type: tipoDevolvido(codificacao.tipo) }))
   })
-  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:previa') }))
   simularBitmap(4000, 3000)
 })
 
@@ -103,14 +102,13 @@ describe('prepararImagem', () => {
   it('gera a grande com ate 1200 px e a miniatura com 200 px, em WebP', async () => {
     const preparada = await prepararImagem(arquivo(), 0)
 
-    expect(preparada).toMatchObject({ tipo: 'image/webp', largura: 1200, altura: 900, previa: 'blob:previa' })
+    expect(preparada).toMatchObject({ tipo: 'image/webp', largura: 1200, altura: 900 })
     expect(preparada.grande.type).toBe('image/webp')
     expect(preparada.miniatura.type).toBe('image/webp')
     expect(codificacoes).toEqual([
       { largura: 1200, altura: 900, tipo: 'image/webp', qualidade: 0.82 },
       { largura: 200, altura: 150, tipo: 'image/webp', qualidade: 0.8 },
     ])
-    expect(URL.createObjectURL).toHaveBeenCalledWith(preparada.grande)
     expect(fechar).toHaveBeenCalled()
   })
 

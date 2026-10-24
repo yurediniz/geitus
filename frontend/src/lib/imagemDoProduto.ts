@@ -32,8 +32,6 @@ export interface ImagemPreparada {
   /** Dimensoes da grande. */
   largura: number
   altura: number
-  /** Object URL da grande, para a previa (quem usa revoga). */
-  previa: string
 }
 
 /** Falha esperada ao preparar a imagem, com a mensagem para o usuario. */
@@ -201,7 +199,6 @@ export async function prepararImagem(arquivo: File, rotacao: RotacaoDaImagem): P
       tipo: grande.tipo,
       largura: grande.largura,
       altura: grande.altura,
-      previa: URL.createObjectURL(grande.blob),
     }
   } finally {
     imagem.close()

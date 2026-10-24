@@ -291,6 +291,24 @@ export function apiPut<T>(path: string, corpo: unknown, opcoes: { autenticada?: 
 }
 
 /**
+ * Baixa um arquivo (ex.: a imagem do produto) por uma URL ja pronta, recebida
+ * da API: as URLs assinadas da imagem ja vem com `/api` e dispensam o token
+ * (a assinatura e a autorizacao). Por isso nao prefixa a base nem autentica.
+ */
+export async function apiGetBlob(url: string): Promise<Blob> {
+  let resposta: Response
+  try {
+    resposta = await fetch(url)
+  } catch {
+    throw new HttpError(0, 'Nao foi possivel conectar ao servidor.')
+  }
+  if (!resposta.ok) {
+    throw new HttpError(resposta.status, `Requisicao falhou (HTTP ${resposta.status}).`)
+  }
+  return resposta.blob()
+}
+
+/**
  * Executa um PUT autenticado com corpo `multipart/form-data` (ex.: a imagem do
  * produto) e retorna o corpo em JSON. Sem `Content-Type` manual: o navegador o
  * monta com o boundary das partes. Mesmo tratamento de erro e de 204 do PUT.

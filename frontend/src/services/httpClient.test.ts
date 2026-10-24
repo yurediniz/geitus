@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   apiDelete,
   apiGet,
+  apiGetBlob,
   apiPost,
   apiPostComStatus,
   apiPut,
@@ -396,6 +397,28 @@ describe('httpClient', () => {
       const erro = await apiDelete('/unidades/abc').catch((e: unknown) => e)
       expect(erro).toBeInstanceOf(HttpError)
       expect((erro as HttpError).status).toBe(0)
+    })
+  })
+
+  describe('apiGetBlob', () => {
+    it('baixa o arquivo pela URL recebida da API, sem prefixar a base nem enviar o token', async () => {
+      getStoredTokenMock.mockReturnValue('token-abc')
+      const arquivo = new Blob(['x'], { type: 'image/webp' })
+      vi.mocked(globalThis.fetch).mockResolvedValue({ ok: true, status: 200, blob: async () => arquivo } as Response)
+
+      await expect(apiGetBlob('/api/imagens/produtos/p/v/grande?expira=1&assinatura=a')).resolves.toBe(arquivo)
+
+      const chamada = vi.mocked(globalThis.fetch).mock.calls[0]
+      expect(chamada?.[0]).toBe('/api/imagens/produtos/p/v/grande?expira=1&assinatura=a')
+      expect(headersDaChamada().Authorization).toBeUndefined()
+    })
+
+    it('erro HTTP e falha de rede viram HttpError', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValueOnce(respostaFake(404))
+      await expect(apiGetBlob('/api/imagens/x')).rejects.toMatchObject({ status: 404 })
+
+      vi.mocked(globalThis.fetch).mockRejectedValueOnce(new TypeError('network error'))
+      await expect(apiGetBlob('/api/imagens/x')).rejects.toMatchObject({ status: 0 })
     })
   })
 

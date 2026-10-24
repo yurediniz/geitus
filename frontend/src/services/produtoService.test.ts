@@ -9,11 +9,12 @@ import {
   listarHistoricoDePrecos,
   listarProdutos,
   reativarProduto,
+  baixarImagemDoProduto,
   enviarImagemDoProduto,
   removerImagemDoProduto,
   sugerirSku,
 } from '@/services/produtoService'
-import { apiDelete, apiGet, apiPatch, apiPost, apiPutMultipart } from '@/services/httpClient'
+import { apiDelete, apiGet, apiGetBlob, apiPatch, apiPost, apiPutMultipart } from '@/services/httpClient'
 import type { ProdutoRequest } from '@/types/produto'
 
 vi.mock('@/services/httpClient', () => ({
@@ -22,6 +23,7 @@ vi.mock('@/services/httpClient', () => ({
   apiPost: vi.fn(),
   apiDelete: vi.fn(),
   apiPutMultipart: vi.fn(),
+  apiGetBlob: vi.fn(),
 }))
 
 const apiGetMock = vi.mocked(apiGet)
@@ -217,6 +219,14 @@ describe('produtoService', () => {
       const [, formulario] = apiPutMultipartMock.mock.calls[0]
       expect((formulario.get('grande') as File).name).toBe('grande.jpg')
       expect((formulario.get('miniatura') as File).name).toBe('miniatura.jpg')
+    })
+
+    it('baixa a imagem gravada pela URL assinada (para girar)', async () => {
+      const blob = new Blob(['x'], { type: 'image/webp' })
+      vi.mocked(apiGetBlob).mockResolvedValue(blob)
+
+      await expect(baixarImagemDoProduto('/api/imagens/produtos/p/v/grande?expira=1')).resolves.toBe(blob)
+      expect(apiGetBlob).toHaveBeenCalledWith('/api/imagens/produtos/p/v/grande?expira=1')
     })
 
     it('remove a imagem com DELETE autenticado', async () => {

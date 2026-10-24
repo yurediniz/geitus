@@ -16,8 +16,11 @@ import {
   inativarProduto,
   listarHistoricoDePrecos,
   reativarProduto,
+  enviarImagemDoProduto,
+  removerImagemDoProduto,
   sugerirSku,
 } from '@/services/produtoService'
+import { ErroDeImagem, prepararImagem, type ImagemPreparada } from '@/lib/imagemDoProduto'
 import { cadastrarCategoria, listarCategorias } from '@/services/categoriaService'
 import { cadastrarMarca, listarMarcas } from '@/services/marcaService'
 import { listarFornecedores } from '@/services/fornecedorService'
@@ -51,7 +54,7 @@ import {
 import type { Categoria } from '@/types/catalogo'
 import type { MovimentoEstoque } from '@/types/estoque'
 import type { FornecedorItemLista } from '@/types/fornecedor'
-import type { HistoricoPreco, PaginaResponse, Produto, ProdutoRequest } from '@/types/produto'
+import type { HistoricoPreco, ImagemDoProduto, PaginaResponse, Produto, ProdutoRequest } from '@/types/produto'
 
 vi.mock('@/services/produtoService', () => ({
   buscarProduto: vi.fn(),
@@ -62,7 +65,16 @@ vi.mock('@/services/produtoService', () => ({
   excluirProduto: vi.fn(),
   sugerirSku: vi.fn(),
   listarHistoricoDePrecos: vi.fn(),
+  enviarImagemDoProduto: vi.fn(),
+  removerImagemDoProduto: vi.fn(),
+  baixarImagemDoProduto: vi.fn(),
 }))
+
+// O jsdom nao tem canvas: a compressao (testada em lib/imagemDoProduto.test) e simulada.
+vi.mock('@/lib/imagemDoProduto', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/lib/imagemDoProduto')>()
+  return { ...original, prepararImagem: vi.fn() }
+})
 
 vi.mock('@/services/estoqueService', () => ({
   ajustarEstoque: vi.fn(),
@@ -113,6 +125,9 @@ const cadastrarCategoriaMock = vi.mocked(cadastrarCategoria)
 const listarMarcasMock = vi.mocked(listarMarcas)
 const cadastrarMarcaMock = vi.mocked(cadastrarMarca)
 const useAuthMock = vi.mocked(useAuth)
+const enviarImagemMock = vi.mocked(enviarImagemDoProduto)
+const removerImagemMock = vi.mocked(removerImagemDoProduto)
+const prepararImagemMock = vi.mocked(prepararImagem)
 // O jsdom nao rola: o mock registra em que elemento a pagina pediu a rolagem.
 const scrollIntoViewMock = vi.fn()
 
@@ -5391,6 +5406,281 @@ describe('ProdutoPage', () => {
 
       expect(await screen.findByText('Carla Dias')).toBeInTheDocument()
       expect(within(blocoDoHistorico('Movimentações de estoque')).getByText('Este produto não controla estoque no momento.')).toBeInTheDocument()
+    })
+  })
+
+  describe('imagem do produto (Fase F)', () => {
+    const GRAVADA: ImagemDoProduto = {
+      miniaturaUrl: '/api/imagens/produtos/p/v1/miniatura?expira=1&assinatura=a',
+      grandeUrl: '/api/imagens/produtos/p/v1/grande?expira=1&assinatura=b',
+      largura: 1200,
+      altura: 900,
+      atualizadaEm: '2026-10-24T10:00:00',
+    }
+    const NOVA_GRAVADA: ImagemDoProduto = { ...GRAVADA, grandeUrl: '/api/imagens/produtos/p/v2/grande?expira=1&assinatura=c' }
+
+    function versoes(): ImagemPreparada {
+      return {
+        grande: new Blob(['grande'], { type: 'image/webp' }),
+        miniatura: new Blob(['mini'], { type: 'image/webp' }),
+        tipo: 'image/webp',
+        largura: 1200,
+        altura: 900,
+      }
+    }
+
+    let preparada: ImagemPreparada
+
+    beforeEach(() => {
+      preparada = versoes()
+      prepararImagemMock.mockResolvedValue(preparada)
+      enviarImagemMock.mockResolvedValue(NOVA_GRAVADA)
+      removerImagemMock.mockResolvedValue(undefined)
+      let urls = 0
+      vi.stubGlobal(
+        'URL',
+        Object.assign(URL, { createObjectURL: vi.fn(() => `blob:previa-${++urls}`), revokeObjectURL: vi.fn() }),
+      )
+    })
+
+    function foto(): File {
+      return new File(['x'], 'foto.jpg', { type: 'image/jpeg' })
+    }
+
+    function imagemDoQuadro(): HTMLImageElement | null {
+      return screen.getByTestId('quadro-da-imagem').querySelector('img')
+    }
+
+    /** Escolhe o arquivo pelo seletor e espera a previa (a compressao simulada). */
+    async function adicionarImagem(arquivo: File = foto()) {
+      fireEvent.change(screen.getByLabelText('Escolher a imagem do produto'), { target: { files: [arquivo] } })
+      await waitFor(() => expect(imagemDoQuadro()).toHaveAttribute('src', expect.stringMatching(/^blob:/)))
+    }
+
+    it('fica no topo da seção Geral; a imagem gravada usa o nome do produto como alt', async () => {
+      renderEdicao({ ...produtoAtivo, imagem: GRAVADA })
+      await esperarFormulario()
+
+      const geral = secao(/^geral$/i)
+      expect(within(geral).getByRole('img', { name: 'Arroz 5kg' })).toHaveAttribute('src', GRAVADA.grandeUrl)
+      expect(within(geral).getByRole('button', { name: 'Trocar imagem' })).toBeInTheDocument()
+    })
+
+    it('edição: Salvar envia o PATCH e depois o PUT com as duas versões, e volta para a lista', async () => {
+      atualizarProdutoMock.mockResolvedValue(produtoAtivo)
+      renderEdicao(produtoAtivo, { voltarPara: '/produtos?busca=arroz' })
+      await esperarFormulario()
+      await adicionarImagem()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByRole('heading', { name: 'Lista de produtos?busca=arroz' })).toBeInTheDocument()
+      expect(screen.getByText('Produto "Arroz 5kg" atualizado com sucesso.')).toBeInTheDocument()
+      expect(atualizarProdutoMock).toHaveBeenCalledTimes(1)
+      expect(enviarImagemMock).toHaveBeenCalledWith(ID_ARROZ, preparada.grande, preparada.miniatura)
+      expect(atualizarProdutoMock.mock.invocationCallOrder[0]).toBeLessThan(enviarImagemMock.mock.invocationCallOrder[0])
+      expect(removerImagemMock).not.toHaveBeenCalled()
+    })
+
+    it('edição: remover a imagem gravada envia o PATCH e depois o DELETE', async () => {
+      atualizarProdutoMock.mockResolvedValue({ ...produtoAtivo, imagem: GRAVADA })
+      renderEdicao({ ...produtoAtivo, imagem: GRAVADA })
+      await esperarFormulario()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remover imagem' }))
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByRole('heading', { name: 'Lista de produtos' })).toBeInTheDocument()
+      expect(removerImagemMock).toHaveBeenCalledWith(ID_ARROZ)
+      expect(atualizarProdutoMock.mock.invocationCallOrder[0]).toBeLessThan(removerImagemMock.mock.invocationCallOrder[0])
+      expect(enviarImagemMock).not.toHaveBeenCalled()
+    })
+
+    it('edição: o DELETE com 404 (a imagem já tinha saído) conta como removida', async () => {
+      atualizarProdutoMock.mockResolvedValue({ ...produtoAtivo, imagem: GRAVADA })
+      removerImagemMock.mockRejectedValue(new HttpError(404, 'Requisicao falhou (HTTP 404).'))
+      renderEdicao({ ...produtoAtivo, imagem: GRAVADA })
+      await esperarFormulario()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remover imagem' }))
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByRole('heading', { name: 'Lista de produtos' })).toBeInTheDocument()
+    })
+
+    it('sem mudança na imagem, o Salvar não envia nem remove a imagem', async () => {
+      atualizarProdutoMock.mockResolvedValue({ ...produtoAtivo, imagem: GRAVADA })
+      renderEdicao({ ...produtoAtivo, imagem: GRAVADA })
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByRole('heading', { name: 'Lista de produtos' })).toBeInTheDocument()
+      expect(enviarImagemMock).not.toHaveBeenCalled()
+      expect(removerImagemMock).not.toHaveBeenCalled()
+    })
+
+    it('cadastro novo: Salvar envia o POST e depois o PUT para o produto criado', async () => {
+      cadastrarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Café 500g' })
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      await adicionarImagem()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('Produto "Café 500g" cadastrado com sucesso.')).toBeInTheDocument()
+      expect(enviarImagemMock).toHaveBeenCalledWith(ID_ARROZ, preparada.grande, preparada.miniatura)
+      expect(cadastrarProdutoMock.mock.invocationCallOrder[0]).toBeLessThan(enviarImagemMock.mock.invocationCallOrder[0])
+    })
+
+    it('"Salvar e cadastrar outro" envia a imagem e o próximo produto começa sem imagem', async () => {
+      cadastrarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Café 500g' })
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      await adicionarImagem()
+
+      fireEvent.click(screen.getByRole('button', { name: /salvar e cadastrar outro/i }))
+
+      expect(await screen.findByText('Produto "Café 500g" cadastrado (Nº 15 · Cód. 542).')).toBeInTheDocument()
+      expect(enviarImagemMock).toHaveBeenCalledTimes(1)
+      expect(within(secao(/^geral$/i)).getByText('Sem imagem')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Adicionar imagem' })).toBeInTheDocument()
+    })
+
+    it('cadastro novo com falha no PUT: vai para a edição com a mensagem e a imagem pendente; um novo Salvar só envia a imagem (Review Focus 5)', async () => {
+      const criado = { ...produtoAtivo, nome: 'Café 500g' }
+      cadastrarProdutoMock.mockResolvedValue(criado)
+      buscarProdutoMock.mockResolvedValue(criado)
+      enviarImagemMock.mockRejectedValueOnce(new HttpError(413, 'Requisicao falhou (HTTP 413).'))
+      const router = renderNovo({ voltarPara: '/produtos?busca=caf' })
+      await esperarFormulario()
+      await preencherMinimo()
+      await adicionarImagem()
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(router.state.location.pathname).toBe(`/produtos/${ID_ARROZ}`))
+      expect(await screen.findByText('Produto salvo, mas a imagem não foi enviada. Tente de novo.')).toBeInTheDocument()
+      expect(cadastrarProdutoMock).toHaveBeenCalledTimes(1)
+      // A imagem pendente continua no quadro, com a previa, e conta no atalho Geral.
+      await waitFor(() =>
+        expect(within(secao(/^geral$/i)).getByRole('img', { name: 'Café 500g' })).toHaveAttribute(
+          'src',
+          expect.stringMatching(/^blob:/),
+        ),
+      )
+      expect(atalho(/geral/i)).toHaveAccessibleName('Geral (1 erro)')
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByRole('heading', { name: 'Lista de produtos?busca=caf' })).toBeInTheDocument()
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
+      expect(cadastrarProdutoMock).toHaveBeenCalledTimes(1)
+      expect(enviarImagemMock).toHaveBeenCalledTimes(2)
+      expect(enviarImagemMock).toHaveBeenLastCalledWith(ID_ARROZ, preparada.grande, preparada.miniatura)
+    })
+
+    it('edição com falha no PUT: o produto fica salvo, a mensagem aparece e um novo Salvar só reenvia a imagem', async () => {
+      atualizarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Arroz Tipo 1' })
+      enviarImagemMock.mockRejectedValueOnce(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
+      const router = renderEdicao()
+      await esperarFormulario()
+      fireEvent.change(campoNome(), { target: { value: 'Arroz Tipo 1' } })
+      await adicionarImagem()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByText('Produto salvo, mas a imagem não foi enviada. Tente de novo.')).toBeInTheDocument()
+      expect(router.state.location.pathname).toBe(`/produtos/${ID_ARROZ}`)
+      expect(imagemDoQuadro()).toHaveAttribute('src', expect.stringMatching(/^blob:/))
+      expect(atalho(/geral/i)).toHaveAccessibleName('Geral (1 erro)')
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await screen.findByRole('heading', { name: 'Lista de produtos' })).toBeInTheDocument()
+      expect(atualizarProdutoMock).toHaveBeenCalledTimes(1)
+      expect(enviarImagemMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('a imagem nova conta como alteração não salva (aviso ao sair)', async () => {
+      renderEdicao()
+      await esperarFormulario()
+      await adicionarImagem()
+
+      fireEvent.click(screen.getByRole('link', { name: /voltar para produtos/i }))
+
+      expect(await screen.findByRole('dialog', { name: 'Descartar alterações?' })).toBeInTheDocument()
+    })
+
+    it('remover a imagem gravada também conta como alteração não salva', async () => {
+      renderEdicao({ ...produtoAtivo, imagem: GRAVADA })
+      await esperarFormulario()
+      fireEvent.click(screen.getByRole('button', { name: 'Remover imagem' }))
+
+      fireEvent.click(screen.getByRole('link', { name: /voltar para produtos/i }))
+
+      expect(await screen.findByRole('dialog', { name: 'Descartar alterações?' })).toBeInTheDocument()
+    })
+
+    it('Cancelar descarta a imagem pendente, sem enviar', async () => {
+      renderEdicao({ ...produtoAtivo, imagem: GRAVADA })
+      await esperarFormulario()
+      await adicionarImagem()
+
+      fireEvent.click(screen.getByRole('link', { name: 'Cancelar' }))
+      fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Descartar' }))
+
+      expect(await screen.findByRole('heading', { name: 'Lista de produtos' })).toBeInTheDocument()
+      expect(enviarImagemMock).not.toHaveBeenCalled()
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('arquivo inválido: a mensagem no quadro e a contagem no atalho Geral', async () => {
+      prepararImagemMock.mockRejectedValue(new ErroDeImagem('Não foi possível ler esta imagem. Use JPG, PNG ou WebP.'))
+      renderEdicao()
+      await esperarFormulario()
+
+      fireEvent.change(screen.getByLabelText('Escolher a imagem do produto'), { target: { files: [foto()] } })
+
+      expect(await screen.findByText('Não foi possível ler esta imagem. Use JPG, PNG ou WebP.')).toBeInTheDocument()
+      expect(atalho(/geral/i)).toHaveAccessibleName('Geral (1 erro)')
+    })
+
+    it('enquanto a imagem é processada, o Salvar fica ocupado', async () => {
+      prepararImagemMock.mockReturnValue(new Promise(() => {}))
+      renderEdicao()
+      await esperarFormulario()
+
+      fireEvent.change(screen.getByLabelText('Escolher a imagem do produto'), { target: { files: [foto()] } })
+
+      expect(await screen.findByText('Processando imagem…')).toBeInTheDocument()
+      expect(botaoSalvar()).toBeDisabled()
+      fireEvent.keyDown(campoNome(), { key: 'Enter', ctrlKey: true })
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('enquanto a imagem sobe, o quadro mostra "Processando imagem…"', async () => {
+      atualizarProdutoMock.mockResolvedValue(produtoAtivo)
+      enviarImagemMock.mockReturnValue(new Promise(() => {}))
+      renderEdicao()
+      await esperarFormulario()
+      await adicionarImagem()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await within(secao(/^geral$/i)).findByText('Processando imagem…')).toBeInTheDocument()
+    })
+
+    it('OPERADOR vê a imagem, sem os botões', async () => {
+      definirPerfil('OPERADOR')
+      renderEdicao({ ...produtoAtivo, imagem: GRAVADA })
+      await esperarFormulario()
+
+      expect(screen.getByRole('img', { name: 'Arroz 5kg' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /imagem/i })).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Escolher a imagem do produto')).not.toBeInTheDocument()
     })
   })
 })

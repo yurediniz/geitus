@@ -19,7 +19,19 @@ import { AvisoSomenteLeitura, ErroInline, FeedbackCatalogo } from '@/features/ca
 import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { formatarQuantidade } from '@/features/products/formatacaoProduto'
 import { useFornecedoresGravados } from '@/features/products/fornecedoresGravados'
-import { destinoDaLista, type EstadoParaLista } from '@/features/products/navegacaoProdutos'
+import {
+  MENSAGEM_IMAGEM_NAO_ENVIADA,
+  imagemNaoEnviadaDaNavegacao,
+  useImagemDoProduto,
+  type EstadoDaImagemNaoEnviada,
+  type ImagemPendente,
+} from '@/features/products/imagemPendente'
+import {
+  destinoDaLista,
+  rotaDoProduto,
+  type EstadoParaLista,
+  type EstadoParaProduto,
+} from '@/features/products/navegacaoProdutos'
 import {
   CAMPOS_DA_EMBALAGEM,
   CAMPOS_POR_SECAO,
@@ -68,9 +80,11 @@ import {
   atualizarProduto,
   buscarProduto,
   cadastrarProduto,
+  enviarImagemDoProduto,
   excluirProduto,
   inativarProduto,
   reativarProduto,
+  removerImagemDoProduto,
 } from '@/services/produtoService'
 import { listarUnidades } from '@/services/unidadeService'
 import type { Categoria, Marca, UnidadeMedida, UnidadeResumo } from '@/types/catalogo'
@@ -83,6 +97,48 @@ function chaveDoProduto(id: string) {
 
 /** O que fazer depois de salvar com sucesso. */
 type AcaoAposSalvar = 'voltar' | 'cadastrarOutro'
+
+/** O que o Salvar envia: os dados do produto e a mudanca da imagem. */
+interface EnvioDoProduto {
+  valores: ProdutoFormValues
+  acao: AcaoAposSalvar
+  imagem: ImagemPendente
+  /** O produto ja esta salvo e so falta a imagem (o envio dela falhou antes e os campos nao mudaram). */
+  soImagem: boolean
+}
+
+/** Resultado do Salvar: o produto gravado e se a mudanca da imagem tambem foi (ou nao havia mudanca). */
+interface ProdutoSalvo {
+  salvo: Produto
+  imagemGravada: boolean
+}
+
+/**
+ * Grava a mudanca da imagem depois do produto (spec Fase F §5.1): PUT da nova
+ * ou DELETE da removida. O 404 no DELETE e a imagem que ja tinha saido.
+ * Devolve o produto com a imagem atualizada, ou null se a imagem falhou.
+ */
+async function gravarImagem(salvo: Produto, imagem: ImagemPendente): Promise<Produto | null> {
+  try {
+    if (imagem.tipo === 'nova') {
+      const gravada = await enviarImagemDoProduto(salvo.id, imagem.preparada.grande, imagem.preparada.miniatura)
+      return { ...salvo, imagem: gravada }
+    }
+    if (imagem.tipo === 'remover') {
+      try {
+        await removerImagemDoProduto(salvo.id)
+      } catch (erro) {
+        if (!(erro instanceof HttpError && erro.status === 404)) {
+          throw erro
+        }
+      }
+      return { ...salvo, imagem: null }
+    }
+    return salvo
+  } catch {
+    return null
+  }
+}
 
 /** Mensagem amigavel (pt-BR) para falhas ao salvar, sem vazar detalhe interno. */
 function mensagemErroSalvar(erro: unknown): string {
@@ -326,6 +382,8 @@ export function ProdutoPage() {
   const { usuario } = useAuth()
   const somenteLeitura = usuario?.perfil !== 'ADMIN'
   const voltarPara = destinoDaLista(location.state)
+  // Cadastro novo salvo sem a imagem: a edicao abre com ela pendente (spec Fase F §5.1).
+  const imagemNaoEnviada = imagemNaoEnviadaDaNavegacao(location.state)
 
   if (id === undefined) {
     if (somenteLeitura) {
@@ -337,7 +395,15 @@ export function ProdutoPage() {
     }
     return <FormularioProduto key="novo" produto={null} voltarPara={voltarPara} somenteLeitura={false} />
   }
-  return <CarregamentoProduto key={id} id={id} voltarPara={voltarPara} somenteLeitura={somenteLeitura} />
+  return (
+    <CarregamentoProduto
+      key={id}
+      id={id}
+      voltarPara={voltarPara}
+      somenteLeitura={somenteLeitura}
+      imagemNaoEnviada={imagemNaoEnviada}
+    />
+  )
 }
 
 interface EstruturaPaginaProps {
@@ -392,6 +458,7 @@ interface CarregamentoProdutoProps {
   id: string
   voltarPara: string
   somenteLeitura: boolean
+  imagemNaoEnviada: EstadoDaImagemNaoEnviada | null
 }
 
 /**
@@ -401,7 +468,7 @@ interface CarregamentoProdutoProps {
  * - O formulario so monta com dados buscados nesta abertura: os valores
  *   iniciais sao lidos uma vez, e o cache pode ter uma versao antiga.
  */
-function CarregamentoProduto({ id, voltarPara, somenteLeitura }: CarregamentoProdutoProps) {
+function CarregamentoProduto({ id, voltarPara, somenteLeitura, imagemNaoEnviada }: CarregamentoProdutoProps) {
   const produtoQuery = useQuery<Produto>({
     queryKey: chaveDoProduto(id),
     queryFn: () => buscarProduto(id),
@@ -442,7 +509,14 @@ function CarregamentoProduto({ id, voltarPara, somenteLeitura }: CarregamentoPro
     )
   }
 
-  return <FormularioProduto produto={produtoQuery.data} voltarPara={voltarPara} somenteLeitura={somenteLeitura} />
+  return (
+    <FormularioProduto
+      produto={produtoQuery.data}
+      voltarPara={voltarPara}
+      somenteLeitura={somenteLeitura}
+      imagemNaoEnviada={somenteLeitura ? null : imagemNaoEnviada}
+    />
+  )
 }
 
 interface FormularioProdutoProps {
@@ -450,9 +524,11 @@ interface FormularioProdutoProps {
   produto: Produto | null
   voltarPara: string
   somenteLeitura: boolean
+  /** Imagem que nao subiu no cadastro novo, para tentar de novo na edicao. */
+  imagemNaoEnviada?: EstadoDaImagemNaoEnviada | null
 }
 
-function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioProdutoProps) {
+function FormularioProduto({ produto, voltarPara, somenteLeitura, imagemNaoEnviada = null }: FormularioProdutoProps) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const modoNovo = produto === null
@@ -464,11 +540,24 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   const [campoParaFocar, setCampoParaFocar] = useState<string | null>(modoNovo ? 'nome' : null)
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null)
   const [erroGeral, setErroGeral] = useState<string | null>(null)
-  const [erroSalvar, setErroSalvar] = useState<ErroAoSalvar | null>(null)
+  const [erroSalvar, setErroSalvar] = useState<ErroAoSalvar | null>(
+    imagemNaoEnviada ? { mensagem: MENSAGEM_IMAGEM_NAO_ENVIADA, campos: [] } : null,
+  )
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false)
   const [erroExcluir, setErroExcluir] = useState<string | null>(null)
   /** Saida apos salvar/excluir: navega no render seguinte, com o aviso de alteracoes ja desligado. */
-  const [saida, setSaida] = useState<{ para: string; estado: EstadoParaLista } | null>(null)
+  const [saida, setSaida] = useState<{
+    para: string
+    estado: EstadoParaLista | (EstadoParaProduto & EstadoDaImagemNaoEnviada)
+  } | null>(null)
+
+  // Imagem do produto (Fase F): a mudanca pendente segue o Salvar da tela.
+  const imagem = useImagemDoProduto(produto?.imagem ?? null, imagemNaoEnviada?.imagemPendente)
+  /** O produto foi salvo e a imagem nao: o aviso conta no atalho Geral ate o proximo Salvar. */
+  const [falhaNaImagem, setFalhaNaImagem] = useState(imagemNaoEnviada !== null)
+  /** Depois da falha, sem mudar os campos, o proximo Salvar so envia a imagem. */
+  const [soFaltaAImagem, setSoFaltaAImagem] = useState(imagemNaoEnviada !== null)
+  const [enviandoImagem, setEnviandoImagem] = useState(false)
 
   const unidadesQuery = useQuery<UnidadeMedida[]>({
     queryKey: TODAS_UNIDADES_QUERY_KEY,
@@ -519,7 +608,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   } = form
 
   const { dialogo } = useAvisoAlteracoesNaoSalvas(
-    isDirty && saida === null && !somenteLeitura,
+    (isDirty || imagem.alterada) && saida === null && !somenteLeitura,
     'Você alterou este produto e ainda não salvou. Se sair agora, as alterações serão perdidas.',
   )
 
@@ -685,21 +774,55 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
    */
   const enviandoRef = useRef(false)
 
-  const salvarMutation = useMutation<Produto, unknown, { valores: ProdutoFormValues; acao: AcaoAposSalvar }>({
-    mutationFn: ({ valores }) => {
-      // Na edicao, os fornecedores so vao se mudaram na tela: ausentes, o backend mantem os gravados
-      // (uma compra registrada em outra aba nao e desfeita por um salvamento que nao mexeu neles).
-      const fornecedoresAlterados =
-        getFieldState('fornecedores').isDirty || getFieldState('fornecedorUltimaCompraId').isDirty
-      const request = montarRequest(valores, { novo: !produto, incluirFornecedores: !produto || fornecedoresAlterados })
-      return produto ? atualizarProduto(produto.id, request) : cadastrarProduto(request)
+  const salvarMutation = useMutation<ProdutoSalvo, unknown, EnvioDoProduto>({
+    mutationFn: async ({ valores, imagem: mudancaDaImagem, soImagem }) => {
+      let salvo: Produto
+      if (produto && soImagem) {
+        salvo = produto
+      } else {
+        // Na edicao, os fornecedores so vao se mudaram na tela: ausentes, o backend mantem os gravados
+        // (uma compra registrada em outra aba nao e desfeita por um salvamento que nao mexeu neles).
+        const fornecedoresAlterados =
+          getFieldState('fornecedores').isDirty || getFieldState('fornecedorUltimaCompraId').isDirty
+        const request = montarRequest(valores, { novo: !produto, incluirFornecedores: !produto || fornecedoresAlterados })
+        salvo = produto ? await atualizarProduto(produto.id, request) : await cadastrarProduto(request)
+      }
+      if (mudancaDaImagem.tipo === 'nenhuma') {
+        return { salvo, imagemGravada: true }
+      }
+      // A imagem so sobe depois do produto: a falha dela nao desfaz o produto salvo.
+      setEnviandoImagem(true)
+      try {
+        const comImagem = await gravarImagem(salvo, mudancaDaImagem)
+        return comImagem ? { salvo: comImagem, imagemGravada: true } : { salvo, imagemGravada: false }
+      } finally {
+        setEnviandoImagem(false)
+      }
     },
-    onSuccess: (salvo, { valores, acao }) => {
+    onSuccess: ({ salvo, imagemGravada }, { valores, acao, imagem: mudancaDaImagem }) => {
       queryClient.setQueryData(chaveDoProduto(salvo.id), salvo)
       // Listas ficam desatualizadas e recarregam ao montar; nada a refazer nesta pagina.
       // O prefixo cobre tambem o historico de precos do produto (o save pode ter gravado linhas novas).
       void queryClient.invalidateQueries({ queryKey: PRODUTOS_QUERY_KEY, refetchType: 'none' })
       setErroSalvar(null)
+      if (!imagemGravada) {
+        if (mudancaDaImagem.tipo === 'nova' && !produto) {
+          // Cadastro novo: vai para a edicao do produto criado, com a imagem pendente para tentar de novo.
+          setSaida({
+            para: rotaDoProduto(salvo.id),
+            estado: { voltarPara, imagemPendente: mudancaDaImagem, imagemNaoEnviada: true },
+          })
+          return
+        }
+        // Edicao: o que foi gravado vira o ponto de partida; a imagem continua pendente no quadro.
+        reset(valores)
+        setFalhaNaImagem(true)
+        setSoFaltaAImagem(true)
+        setErroSalvar({ mensagem: MENSAGEM_IMAGEM_NAO_ENVIADA, campos: [] })
+        return
+      }
+      imagem.descartar()
+      setSoFaltaAImagem(false)
       if (acao === 'cadastrarOutro') {
         reset(valoresParaCadastrarOutro(valores))
         setMensagemSucesso(mensagemCadastradoOutro(salvo))
@@ -876,9 +999,11 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   }
 
   const salvando = salvarMutation.isPending || saida !== null
+  // Comprimindo a imagem: o Salvar espera as versoes prontas.
+  const salvarOcupado = salvando || imagem.processando
 
   const enviar = (acao: AcaoAposSalvar) => {
-    if (enviandoRef.current || salvando || somenteLeitura || !incorporarCodigoPendente()) {
+    if (enviandoRef.current || salvarOcupado || somenteLeitura || !incorporarCodigoPendente()) {
       return
     }
     enviandoRef.current = true
@@ -906,7 +1031,13 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
         }
         setErroSalvar(null)
         setMensagemSucesso(null)
-        salvarMutation.mutate({ valores, acao })
+        setFalhaNaImagem(false)
+        salvarMutation.mutate({
+          valores,
+          acao,
+          imagem: imagem.pendente,
+          soImagem: soFaltaAImagem && !form.formState.isDirty && imagem.alterada,
+        })
       },
       (erros) => {
         enviandoRef.current = false
@@ -951,7 +1082,9 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     }
     const comErro = CAMPOS_POR_SECAO[secao].filter((campo) => errors[campo] !== undefined)
     const codigoDeBarrasEmDobro = comErro.includes('codigoPendente') && comErro.includes('codigosBarras')
-    return comErro.length - (codigoDeBarrasEmDobro ? 1 : 0)
+    // A imagem (arquivo recusado ou envio que falhou) conta como um erro da Geral.
+    const erroDaImagem = secao === 'geral' && (imagem.erro !== null || falhaNaImagem) ? 1 : 0
+    return comErro.length - (codigoDeBarrasEmDobro ? 1 : 0) + erroDaImagem
   }
 
   const podeExcluir = produto !== null && !somenteLeitura && produto.podeExcluir
@@ -1057,6 +1190,8 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
               desabilitado={desabilitado}
               somenteLeitura={somenteLeitura}
               aoAlterarCampo={aoAlterarCampo}
+              imagem={imagem}
+              enviandoImagem={enviandoImagem}
             />
           </SecaoDaPagina>
           <SecaoDaPagina secao="codigos">
@@ -1133,14 +1268,14 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
                   type="button"
                   variant="outline"
                   onClick={() => enviar('cadastrarOutro')}
-                  disabled={salvando}
+                  disabled={salvarOcupado}
                   aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter"
                 >
                   {acaoEmAndamento === 'cadastrarOutro' && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                   Salvar e cadastrar outro
                 </Button>
               )}
-              <Button type="submit" disabled={salvando} aria-keyshortcuts="Control+Enter Meta+Enter">
+              <Button type="submit" disabled={salvarOcupado} aria-keyshortcuts="Control+Enter Meta+Enter">
                 {acaoEmAndamento === 'voltar' && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 {acaoEmAndamento === 'voltar' ? 'Salvando...' : 'Salvar'}
               </Button>
