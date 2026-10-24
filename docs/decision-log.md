@@ -979,5 +979,5 @@ A DEC-030 previu a Fase F (imagem do produto no PostgreSQL, comprimida no navega
 
 **Observações futuras:**
 - O PDV usa a mesma `miniaturaUrl`.
-- Armazenamento externo (S3) quando o volume justificar.
+- Armazenamento externo (S3) quando o volume justificar: acompanhar `pg_total_relation_size('produto_imagens')` e avaliar acima de 5 GB. Backups em `pg_dump -Fc`.
 - Encerra as 6 fases da DEC-030.

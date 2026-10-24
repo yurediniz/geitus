@@ -1,6 +1,6 @@
 # Produtos: Imagem do produto (Fase F)
 
-> **Status:** spec final, desenho aprovado em conversa em 2026-10-24. Última fase da DEC-030, depois da Fase B5 ([fornecedores-e-marcas.md](fornecedores-e-marcas.md)). Decisões na **DEC-040**.
+> **Status:** **implementada** em 2026-10-24 (migration V15; ajustes no §9). Desenho aprovado em conversa no mesmo dia. Última fase da DEC-030, depois da Fase B5 ([fornecedores-e-marcas.md](fornecedores-e-marcas.md)). Decisões na **DEC-040**.
 
 ## 1. Motivação e escopo
 - **Para que serve:** reconhecer o produto de relance na lista e, no futuro, na busca do PDV.
@@ -194,3 +194,30 @@ Aditiva sobre a V14, que não é editada.
     - ícone sem imagem;
     - erro de carregamento volta ao ícone;
     - tabela sem rolagem lateral a 1024 px.
+
+## 9. Ajustes na implementação
+- **Assinatura e leitura:**
+  - a mensagem assinada leva o rótulo de uso: `imagem-produto|v1|produtoUuid|versao|tamanho|expira`;
+  - `expira` não numérico, ou sem `expira`/`assinatura` → 403 sem corpo; `tamanho` desconhecido → 404;
+  - os outros métodos em `/api/imagens/**` são negados;
+  - além dos cabeçalhos de §4.2, a resposta leva `Content-Security-Policy: default-src 'none'; sandbox` e `Cross-Origin-Resource-Policy: same-site`;
+  - o frontend só busca blobs de URLs que começam com `/api/imagens/`.
+- **Segredo:** além de ter 32 bytes ou mais, ele não pode ser igual ao `JWT_SECRET` nem ao valor de exemplo do `.env.example`; senão a aplicação não sobe.
+- **Banco:** as colunas bytea usam `STORAGE EXTERNAL`, porque os bytes já chegam comprimidos.
+- **Erros:**
+  - remover sem imagem → 404 "Imagem não encontrada.";
+  - pedido que não é multipart → 400 "Envie a imagem grande e a miniatura.";
+  - caminho inexistente → 404 e método não suportado → 405, em vez de 500;
+  - envio e remoção ficam registrados em log (usuário, empresa, produto e versão).
+- **Compressão no navegador:**
+  - o suporte a WebP é detectado uma vez;
+  - a miniatura sai da versão grande já girada;
+  - se o navegador não aceitar a orientação automática, tenta sem ela e, por último, com `<img>`.
+- **Tela:**
+  - **dica:** "Foto em JPG, PNG ou WebP, até 15 MB." e, só com mouse, "Ou arraste a foto até o quadro.";
+  - **durante o envio do Salvar:** "Enviando imagem…";
+  - **imagem gravada que não carrega:** "Não foi possível mostrar a imagem.";
+  - **avisos de pendência no quadro:** "Imagem nova. Ela será gravada quando você salvar.", "A imagem será removida quando você salvar." e, depois de uma falha, "Esta imagem ainda não foi enviada. Toque em Salvar para tentar de novo.";
+  - **girar uma imagem já gravada:** baixa a versão grande pela URL assinada; se falhar, mostra "Não foi possível carregar a imagem gravada. Tente de novo.";
+  - **atalho Geral:** a imagem pendente liga o aviso de alterações não salvas; o atalho conta só **erros** (arquivo recusado ou envio que falhou);
+  - **falha no cadastro novo:** a imagem pendente vai para a edição em memória, e não no histórico do navegador; Voltar e F5 não a trazem de volta.

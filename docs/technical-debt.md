@@ -545,6 +545,36 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Impacto:** Refinamentos de UX e de organizacao; nenhum risco imediato de integridade.
 - **Quando revisar:** Na proxima rodada de UX do catalogo; a mascara de CPF com os perfis.
 
+## DT-038 — Pendencias da Fase F (imagem do produto)
+
+- **ID:** DT-038
+- **Modulo:** Backend/Frontend (Catalogo — imagem)
+- **Origem:** Revisoes da Fase F (dados, seguranca, backend e frontend)
+- **Prioridade:** baixa (media para o segredo de exemplo do JWT)
+- **Status:** aberto
+- **Descricao:**
+  - **Seguranca:**
+    - o `JwtSecretValidator` aceita o `JWT_SECRET` de exemplo do `.env.example`; aplicar a mesma regra do segredo das imagens;
+    - quota de armazenamento de imagens por empresa;
+    - limite de requisicoes na rota publica com URL valida;
+    - logs de acesso do proxy com as URLs assinadas nao devem ser publicos.
+  - **Backend:**
+    - a troca carrega a linha antiga com os bytes (sem bytecode enhancement); avaliar upsert nativo se o volume crescer;
+    - 304 com `If-None-Match`;
+    - WebP animado e aceito (inofensivo; recusar se preciso);
+    - o `application.yml` de teste substitui o principal (OSIV ligado e propriedades ausentes nos testes).
+  - **Frontend/UX:**
+    - quadro vazio tocavel no celular;
+    - foto esmaecida durante o giro;
+    - tamanho do quadro no celular empurrando os campos essenciais;
+    - "Salvar e cadastrar outro" com falha da imagem perde a mensagem de cadastro;
+    - mensagem 400 do servidor na imagem;
+    - URL absoluta quando `VITE_API_BASE_URL` apontar para outra origem.
+  - **Operacao:** monitorar `pg_total_relation_size('produto_imagens')`; avaliar S3 acima de 5 GB; backups com `pg_dump -Fc`.
+  - **Teste em aparelho real:** iPhone com Safari (caminho JPEG e EXIF) e Android com Chrome.
+- **Impacto:** Refinamentos e operacao; nenhum risco imediato de integridade.
+- **Quando revisar:** Antes do primeiro deploy (segredo de exemplo do JWT) e quando o volume de imagens crescer.
+
 ## DT-026 — Teto de profundidade e de quantidade na arvore de categorias
 
 - **ID:** DT-026
