@@ -25,6 +25,7 @@ import {
   SECOES_PRODUTO,
   avaliarNovoCodigo,
   caminhosComErroNasEmbalagens,
+  localizarCodigoForaDaLista,
   campoDaChaveDoServidor,
   erroCodigoNaEtiqueta,
   erroFracaoAtacado,
@@ -103,7 +104,7 @@ function mensagemErroSalvar(erro: unknown): string {
       return 'Somente administradores podem cadastrar ou alterar produtos.'
     }
     if (erro.status === 404) {
-      return 'O produto, a unidade ou a categoria escolhida não existe mais. Atualize a tela e tente novamente.'
+      return 'O produto, a unidade, a categoria ou uma embalagem escolhida não existe mais. Atualize a tela e tente novamente.'
     }
   }
   return 'Não foi possível salvar o produto. Tente novamente.'
@@ -543,8 +544,10 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
         }
       }
       // Os erros das embalagens comparam embalagens entre si e com a unidade de venda e o preco
-      // minimo: com algum na tela, a lista inteira e revalidada quando um desses muda.
+      // minimo: com algum na tela, a lista inteira e revalidada quando um desses muda ou quando
+      // uma embalagem entra ou sai (o erro de um indice nao fica na embalagem que passa para ele).
       const afetaEmbalagens =
+        name === 'embalagens' ||
         name === 'unidadeId' ||
         name === 'precoMinimo' ||
         (name !== undefined && /^embalagens\.\d+\.(unidadeId|quantidade|deCompra)$/.test(name))
@@ -766,11 +769,8 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     }
   }
 
-  /** Codigos de barras de todas as listas do produto, menos a `excluida` (-1 = a da unidade). */
-  const codigosForaDaLista = (excluida: number): string[] => [
-    ...(excluida === -1 ? [] : getValues('codigosBarras')),
-    ...getValues('embalagens').flatMap((embalagem, indice) => (indice === excluida ? [] : embalagem.codigosBarras)),
-  ]
+  /** Onde um codigo esta fora da lista em edicao ('unidade' ou o indice da embalagem), com os valores de agora. */
+  const localizadorFora = (lista: 'unidade' | number) => localizarCodigoForaDaLista(getValues(), lista, siglaPorId)
 
   /**
    * Codigo digitado e nao adicionado (na unidade ou numa embalagem): ao salvar,
@@ -791,7 +791,13 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
       return false
     }
     const pendente = getValues('codigoPendente')
-    const resultado = avaliarNovoCodigo(pendente, getValues('codigosBarras'), formatosGravados, undefined, codigosForaDaLista(-1))
+    const resultado = avaliarNovoCodigo(
+      pendente,
+      getValues('codigosBarras'),
+      formatosGravados,
+      undefined,
+      localizadorFora('unidade'),
+    )
     if (resultado.tipo === 'bloqueado') {
       return barrar('codigoPendente', 'codigos', resultado.motivo, ['codigoPendente', 'codigosBarras'])
     }
@@ -809,7 +815,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
         embalagens[indice].codigosBarras,
         formatosGravados,
         MAXIMO_CODIGOS_POR_EMBALAGEM,
-        codigosForaDaLista(indice),
+        localizadorFora(indice),
       )
       if (daEmbalagem.tipo === 'bloqueado') {
         return barrar(`embalagens.${indice}.codigoPendente`, 'embalagens', daEmbalagem.motivo, ['embalagens'])
@@ -1014,6 +1020,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
               somenteLeitura={somenteLeitura}
               aoAlterarCampo={aoAlterarCampo}
               aoIrParaEmbalagens={() => irParaSecao('embalagens')}
+              siglaPorId={siglaPorId}
             />
           </SecaoDaPagina>
           <SecaoDaPagina secao="precos">

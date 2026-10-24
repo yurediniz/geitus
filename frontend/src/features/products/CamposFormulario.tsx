@@ -157,6 +157,8 @@ interface CampoMoedaFormularioProps {
   custo?: string
   /** Chamado a cada mudanca do valor (limpa feedbacks da pagina). */
   aoAlterar?: () => void
+  /** Texto do campo vazio (padrao "0,00"; na embalagem, o preco calculado). */
+  placeholder?: string
 }
 
 /** Campo de dinheiro ligado ao formulario (RHF), com label, ajuda e erro iguais aos do `CampoTexto`. */
@@ -169,6 +171,7 @@ export function CampoMoedaFormulario({
   disabled,
   custo,
   aoAlterar,
+  placeholder,
 }: CampoMoedaFormularioProps) {
   const { control } = useFormContext<ProdutoFormValues>()
   const valor = useWatch({ control, name: id })
@@ -197,6 +200,7 @@ export function CampoMoedaFormulario({
               }}
               onBlur={field.onBlur}
               disabled={disabled}
+              placeholder={placeholder}
               aria-invalid={erro ? true : undefined}
               aria-describedby={ariaDescribedby}
             />

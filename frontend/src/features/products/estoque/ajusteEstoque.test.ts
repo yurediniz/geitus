@@ -283,12 +283,20 @@ describe('ajusteEstoque', () => {
     it('prévia em embalagens: "2 CX c/ 18 UN = +36 UN · saldo 10 → 46"', () => {
       const previa = calcularPrevia('ENTRADA', 36, 10, 'UN')
       expect(textoDaPrevia('ENTRADA', 10, previa, 'UN', { quantidade: 2, rotulo: 'CX c/ 18 UN' })).toBe(
-        '2 CX c/ 18 UN = +36 UN · saldo 10 → 46',
+        '2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN',
       )
       const saida = calcularPrevia('SAIDA', 54, 54, 'UN')
       expect(textoDaPrevia('SAIDA', 54, saida, 'UN', { quantidade: 3, rotulo: 'CX c/ 18 UN' })).toBe(
-        '3 CX c/ 18 UN = −54 UN · saldo 54 → 0',
+        '3 CX c/ 18 UN = −54 UN · Saldo: 54 UN → 0 UN',
       )
+    })
+
+    it('o botão de confirmar em embalagens diz o total em unidades', () => {
+      expect(rotuloConfirmar('ENTRADA', calcularPrevia('ENTRADA', 36, 10, 'UN'), 'UN', 36)).toBe(
+        'Registrar entrada de 36 UN',
+      )
+      expect(rotuloConfirmar('SAIDA', calcularPrevia('SAIDA', 36, 54, 'UN'), 'UN', 36)).toBe('Registrar saída de 36 UN')
+      expect(rotuloConfirmar('ENTRADA', null, 'UN')).toBe('Registrar entrada')
     })
 
     it('a mensagem de sucesso diz as embalagens', () => {

@@ -711,8 +711,46 @@ function embalagemDoRequest(embalagem: EmbalagemFormValues): EmbalagemRequest {
 export const TAMANHO_MAXIMO_CODIGO = 50
 
 export const MENSAGEM_CODIGO_REPETIDO = 'Este código já está na lista.'
-/** Codigo que ja esta na lista da unidade ou de outra embalagem do mesmo produto. */
-export const MENSAGEM_CODIGO_EM_OUTRA_LISTA = 'Este código já está em outra lista deste produto.'
+/** Codigo que ja esta em outra lista do mesmo produto: "Este código já está na embalagem CX c/ 3 UN.". */
+export function mensagemCodigoEmOutraLista(onde: string): string {
+  return `Este código já está ${onde}.`
+}
+
+/** Diz onde esta um codigo fora da lista em edicao ("na embalagem CX c/ 3 UN"); null se nao esta. */
+export type LocalizadorDeCodigo = (codigo: string) => string | null
+
+/**
+ * Localizador dos codigos das outras listas do produto (spec B3 §2.2: um codigo
+ * pertence a uma lista so), lido dos valores na hora de adicionar: a lista da
+ * unidade ("na unidade (UN) deste produto") e as das embalagens ("na embalagem
+ * CX c/ 3 UN", ou "na embalagem 2 (nova)" enquanto falta o rotulo). `lista` e a
+ * lista em edicao: 'unidade' ou o indice da embalagem.
+ */
+export function localizarCodigoForaDaLista(
+  valores: Pick<ProdutoFormValues, 'unidadeId' | 'codigosBarras' | 'embalagens'>,
+  lista: 'unidade' | number,
+  siglaPorId: ReadonlyMap<string, string>,
+): LocalizadorDeCodigo {
+  const siglaDeVenda = siglaPorId.get(valores.unidadeId)
+  return (codigo) => {
+    if (lista !== 'unidade' && valores.codigosBarras.includes(codigo)) {
+      return siglaDeVenda ? `na unidade (${siglaDeVenda}) deste produto` : 'na unidade de venda deste produto'
+    }
+    const indice = valores.embalagens.findIndex(
+      (embalagem, outra) => outra !== lista && embalagem.codigosBarras.includes(codigo),
+    )
+    if (indice === -1) {
+      return null
+    }
+    const embalagem = valores.embalagens[indice]
+    const sigla = siglaPorId.get(embalagem.unidadeId)
+    const rotulo =
+      sigla && siglaDeVenda && interpretarQuantidade(embalagem.quantidade) !== null
+        ? rotuloDaEmbalagem(sigla, embalagem.quantidade, siglaDeVenda)
+        : `${indice + 1} (nova)`
+    return `na embalagem ${rotulo}`
+  }
+}
 export const MENSAGEM_DIGITO_INVALIDO =
   'Este código não confere (o último dígito não bate). Leia de novo ou confira os números.'
 /** Codigo barrado pelo limite da lista ("Limite de 20 códigos de barras atingido."). */
@@ -745,8 +783,8 @@ export type ResultadoNovoCodigo =
 
 /**
  * Regras para adicionar um codigo (as mesmas do backend): normaliza o texto,
- * barra repetido (na lista ou em `outrasListas` do mesmo produto: a unidade e
- * as embalagens), mais que o `limite` (20 na unidade, 5 na embalagem), mais de
+ * barra repetido (na lista ou, pelo `localizador`, noutra lista do mesmo
+ * produto), mais que o `limite` (20 na unidade, 5 na embalagem), mais de
  * 50 caracteres e codigo novo com digito verificador invalido. Um codigo ja
  * gravado (ex.: `OUTRO` migrado com digito invalido) volta sem bloqueio.
  */
@@ -755,7 +793,7 @@ export function avaliarNovoCodigo(
   lista: readonly string[],
   formatosGravados: FormatosGravados,
   limite: number = MAXIMO_CODIGOS_BARRAS,
-  outrasListas: readonly string[] = [],
+  localizador: LocalizadorDeCodigo = () => null,
 ): ResultadoNovoCodigo {
   const codigo = normalizarCodigo(entrada)
   if (codigo === '') {
@@ -764,8 +802,9 @@ export function avaliarNovoCodigo(
   if (lista.includes(codigo)) {
     return { tipo: 'bloqueado', motivo: MENSAGEM_CODIGO_REPETIDO }
   }
-  if (outrasListas.includes(codigo)) {
-    return { tipo: 'bloqueado', motivo: MENSAGEM_CODIGO_EM_OUTRA_LISTA }
+  const onde = localizador(codigo)
+  if (onde !== null) {
+    return { tipo: 'bloqueado', motivo: mensagemCodigoEmOutraLista(onde) }
   }
   if (lista.length >= limite) {
     return { tipo: 'bloqueado', motivo: mensagemLimiteCodigos(limite) }

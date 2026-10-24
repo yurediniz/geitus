@@ -31,25 +31,27 @@ const MOVIMENTO: MovimentoEstoque = {
 
 const CHAVE_DO_PRODUTO = [...PRODUTOS_QUERY_KEY, 'detalhe', ID_ARROZ]
 
+/** Props do modal aberto; os callbacks sao recriados a cada `renderModal`. */
+const PROPS_PADRAO: ModalAjusteEstoqueProps = {
+  aberto: true,
+  produtoId: ID_ARROZ,
+  saldo: 12,
+  sigla: 'UN',
+  fracionada: false,
+  aoFechar: () => {},
+  aoConcluir: () => {},
+}
+
 function renderModal(props: Partial<ModalAjusteEstoqueProps> = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   const aoConcluir = vi.fn()
   const aoFechar = vi.fn()
-  render(
+  const { rerender } = render(
     <QueryClientProvider client={queryClient}>
-      <ModalAjusteEstoque
-        aberto
-        produtoId={ID_ARROZ}
-        saldo={12}
-        sigla="UN"
-        fracionada={false}
-        aoFechar={aoFechar}
-        aoConcluir={aoConcluir}
-        {...props}
-      />
+      <ModalAjusteEstoque {...PROPS_PADRAO} aoFechar={aoFechar} aoConcluir={aoConcluir} {...props} />
     </QueryClientProvider>,
   )
-  return { aoConcluir, aoFechar, queryClient }
+  return { aoConcluir, aoFechar, queryClient, rerender }
 }
 
 function dialogo(): HTMLElement {
@@ -518,7 +520,7 @@ describe('ModalAjusteEstoque', () => {
     const EMBALAGENS = [FARDO, CAIXA]
 
     function seletorEm(): HTMLElement {
-      return within(dialogo()).getByRole('combobox', { name: /^em$/i })
+      return within(dialogo()).getByRole('combobox', { name: 'Em (unidade ou embalagem)' })
     }
 
     it('o seletor "Em" aparece na Entrada e na Saída, com a sigla de venda e os rótulos; não na Contagem', () => {
@@ -528,13 +530,13 @@ describe('ModalAjusteEstoque', () => {
       escolherTipo('Saída')
       expect(seletorEm()).toBeInTheDocument()
       escolherTipo('Contagem')
-      expect(within(dialogo()).queryByRole('combobox', { name: /^em$/i })).not.toBeInTheDocument()
+      expect(within(dialogo()).queryByRole('combobox', { name: 'Em (unidade ou embalagem)' })).not.toBeInTheDocument()
       expect(campoQuantidade()).toHaveAccessibleName('Saldo contado (UN)')
     })
 
     it('sem embalagens, não há seletor', () => {
       renderModal()
-      expect(within(dialogo()).queryByRole('combobox', { name: /^em$/i })).not.toBeInTheDocument()
+      expect(within(dialogo()).queryByRole('combobox', { name: 'Em (unidade ou embalagem)' })).not.toBeInTheDocument()
     })
 
     it('na Entrada com Compra, o padrão é a embalagem de compra; com outro motivo ou na Saída, a unidade de venda', () => {
@@ -549,21 +551,39 @@ describe('ModalAjusteEstoque', () => {
       expect(seletorEm()).toHaveValue('')
     })
 
-    it('a escolha do usuário fica ao trocar o motivo', () => {
+    it('a escolha do usuário fica ao trocar o motivo e o tipo', () => {
       renderModal({ saldo: 10, embalagens: EMBALAGENS })
 
       fireEvent.change(seletorEm(), { target: { value: 'emb-fd6' } })
       fireEvent.change(campoMotivo(), { target: { value: 'DEVOLUCAO_CLIENTE' } })
-
+      expect(seletorEm()).toHaveValue('emb-fd6')
+      fireEvent.change(campoMotivo(), { target: { value: 'COMPRA' } })
+      expect(seletorEm()).toHaveValue('emb-fd6')
+      escolherTipo('Saída')
       expect(seletorEm()).toHaveValue('emb-fd6')
     })
 
-    it('mostra a prévia em embalagens', () => {
+    it('mostra a prévia em embalagens logo abaixo da quantidade, e o botão diz o total', () => {
       renderModal({ saldo: 10, embalagens: EMBALAGENS })
 
       fireEvent.change(campoQuantidade(), { target: { value: '2' } })
 
-      expect(regiaoDaPrevia()).toHaveTextContent('2 CX c/ 18 UN = +36 UN · saldo 10 → 46')
+      expect(regiaoDaPrevia()).toHaveTextContent('2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN')
+      expect(botaoConfirmar()).toHaveTextContent('Registrar entrada de 36 UN')
+      // A previa fica entre a linha Quantidade/Em e o motivo.
+      expect(regiaoDaPrevia().compareDocumentPosition(campoMotivo()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(seletorEm().compareDocumentPosition(regiaoDaPrevia()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+      escolherTipo('Saída')
+      expect(botaoConfirmar()).toHaveTextContent('Registrar saída')
+    })
+
+    it('na unidade de venda, o botão continua sem o total', () => {
+      renderModal({ saldo: 10, embalagens: EMBALAGENS })
+      fireEvent.change(seletorEm(), { target: { value: '' } })
+      fireEvent.change(campoQuantidade(), { target: { value: '2' } })
+
+      expect(botaoConfirmar()).toHaveTextContent(/^Registrar entrada$/)
     })
 
     it('a saída em embalagens respeita o saldo em unidades', () => {
@@ -617,16 +637,40 @@ describe('ModalAjusteEstoque', () => {
       expect(ajustarEstoqueMock.mock.calls[0][1]).not.toHaveProperty('embalagemId')
     })
 
-    it('404 com embalagem: a embalagem saiu do produto (texto fixo)', async () => {
+    it('404 com embalagem: avisa, e a recarga sem ela volta o seletor à sigla, limpa a quantidade e foca o seletor', async () => {
       ajustarEstoqueMock.mockRejectedValue(new HttpError(404, 'Embalagem não encontrada.'))
-      renderModal({ saldo: 10, embalagens: EMBALAGENS })
+      const { rerender, queryClient } = renderModal({ saldo: 10, embalagens: EMBALAGENS })
       fireEvent.change(campoQuantidade(), { target: { value: '2' } })
 
       confirmar()
 
       expect(
-        await within(dialogo()).findByText('A embalagem escolhida não existe mais. Atualize a tela e tente de novo.'),
+        await within(dialogo()).findByText('A embalagem escolhida foi removida. Confira a quantidade e tente de novo.'),
       ).toBeInTheDocument()
+      expect(seletorEm()).toHaveValue('emb-cx18')
+
+      // O produto recarregado ja nao tem a caixa.
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <ModalAjusteEstoque {...PROPS_PADRAO} saldo={10} embalagens={[FARDO]} />
+        </QueryClientProvider>,
+      )
+
+      await waitFor(() => expect(seletorEm()).toHaveValue(''))
+      expect(campoQuantidade()).toHaveValue('')
+      await waitFor(() => expect(seletorEm()).toHaveFocus())
+      expect(rotulosDe(seletorEm())).toEqual(['UN', 'FD c/ 6 UN'])
+    })
+
+    it('404 sem embalagem continua sendo do produto', async () => {
+      ajustarEstoqueMock.mockRejectedValue(new HttpError(404, 'Produto não encontrado.'))
+      renderModal({ saldo: 10, embalagens: EMBALAGENS })
+      fireEvent.change(seletorEm(), { target: { value: '' } })
+      fireEvent.change(campoQuantidade(), { target: { value: '2' } })
+
+      confirmar()
+
+      expect(await within(dialogo()).findByText('Este produto não existe mais. Atualize a tela.')).toBeInTheDocument()
     })
   })
 })

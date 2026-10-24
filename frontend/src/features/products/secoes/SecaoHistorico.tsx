@@ -66,7 +66,8 @@ export function SecaoHistorico({ produtoId, sigla, controlaEstoque }: SecaoHisto
           erroCarga: 'Não foi possível carregar o histórico de preços.',
           erroMais: 'Não foi possível carregar mais alterações. Tente de novo.',
           vazioTitulo: 'Nenhuma alteração de preço ou custo registrada ainda.',
-          vazioDescricao: 'As próximas mudanças de custo e preço de venda aparecem aqui, com data e quem alterou.',
+          vazioDescricao:
+            'As próximas mudanças de custo e de preço (inclusive das embalagens) aparecem aqui, com data e quem alterou.',
           rotuloLista: 'Alterações de preço e custo',
         }}
         // Sem id publico na linha: a chave e a posicao (as paginas carregadas nao mudam de lugar; o

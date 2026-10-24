@@ -28,6 +28,8 @@ export interface SecaoCodigosProps {
   aoAlterarCampo: () => void
   /** Link da linha "ficam em Embalagens": rola ate a secao e foca o titulo. */
   aoIrParaEmbalagens: () => void
+  /** Sigla por id de unidade, para dizer em que embalagem um codigo repetido esta. */
+  siglaPorId: ReadonlyMap<string, string>
 }
 
 const AJUDA_CODIGO = 'O código que você digita no PDV e programa na balança. Até 6 dígitos; zeros à esquerda são ignorados.'
@@ -54,6 +56,7 @@ export function SecaoCodigos({
   somenteLeitura,
   aoAlterarCampo,
   aoIrParaEmbalagens,
+  siglaPorId,
 }: SecaoCodigosProps) {
   const {
     control,
@@ -64,7 +67,9 @@ export function SecaoCodigos({
     formState: { errors, isSubmitted },
   } = useFormContext<ProdutoFormValues>()
   const [anuncioSku, setAnuncioSku] = useState('')
-  const [codigo, vendidoBalanca, embalagens] = useWatch({ control, name: ['codigo', 'vendidoBalanca', 'embalagens'] })
+  const [codigo, vendidoBalanca] = useWatch({ control, name: ['codigo', 'vendidoBalanca'] })
+  // So se ha embalagem: digitar na quantidade ou no preco de uma embalagem nao renderiza esta secao.
+  const temEmbalagem = useWatch({ control, name: 'embalagens', compute: (lista) => lista.length > 0 })
   const digitosNaEtiqueta = useConfiguracaoEtiqueta().data?.digitosCodigo ?? null
   // Atalho so na edicao: no cadastro o numero ainda nao existe (spec B2 §2).
   const pedeNumero = vendidoBalanca && codigo.trim() === '' && produto !== null && !somenteLeitura
@@ -102,8 +107,13 @@ export function SecaoCodigos({
         <h3 id="codigosBarras-titulo" className="text-sm font-medium">
           Códigos de barras
         </h3>
-        <CodigosBarrasDoProduto produto={produto} desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
-        {embalagens.length > 0 && (
+        <CodigosBarrasDoProduto
+          produto={produto}
+          desabilitado={desabilitado}
+          siglaPorId={siglaPorId}
+          aoAlterarCampo={aoAlterarCampo}
+        />
+        {temEmbalagem && (
           <p className="text-sm text-muted-foreground">
             Os códigos de barras das embalagens ficam em{' '}
             <a

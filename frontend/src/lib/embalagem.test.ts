@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 
 import {
   conversaoDoSaldo,
+  conversaoEmEmbalagens,
   embalagemPrincipal,
   precoCalculadoDaEmbalagem,
   precoVigenteDaUnidade,
   rotuloDaEmbalagem,
+  valorPorUnidade,
   valorPorUnidadeAbaixoDoMinimo,
 } from '@/lib/embalagem'
 
@@ -88,6 +90,28 @@ describe('valorPorUnidadeAbaixoDoMinimo', () => {
     expect(valorPorUnidadeAbaixoDoMinimo('', '3', '70')).toBeNull()
     expect(valorPorUnidadeAbaixoDoMinimo('100', '3', '')).toBeNull()
     expect(valorPorUnidadeAbaixoDoMinimo('100', '', '70')).toBeNull()
+  })
+})
+
+describe('valorPorUnidade', () => {
+  it('preco / quantidade, em centavos com meio para cima', () => {
+    expect(valorPorUnidade('209.90', '3')).toBe('69.97')
+    expect(valorPorUnidade('100.00', '3')).toBe('33.33')
+    expect(valorPorUnidade('331.25', '25,5')).toBe('12.99')
+  })
+
+  it('null sem preco ou sem quantidade > 0', () => {
+    expect(valorPorUnidade('', '3')).toBeNull()
+    expect(valorPorUnidade('10', '0')).toBeNull()
+    expect(valorPorUnidade('10', 'abc')).toBeNull()
+  })
+})
+
+describe('conversaoEmEmbalagens', () => {
+  it('so a parte das embalagens, para mostrar menor ao lado do saldo', () => {
+    expect(conversaoEmEmbalagens(55, { sigla: 'CX', quantidade: 3 }, 'UN', false)).toBe('18 CX + 1 UN')
+    expect(conversaoEmEmbalagens(54, { sigla: 'CX', quantidade: 3 }, 'UN', false)).toBe('18 CX')
+    expect(conversaoEmEmbalagens(2, { sigla: 'CX', quantidade: 3 }, 'UN', false)).toBeNull()
   })
 })
 

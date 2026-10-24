@@ -34,6 +34,7 @@ import {
   primeiroCampoComErro,
   produtoSchema,
   produtoSchemaCom,
+  localizarCodigoForaDaLista,
   secaoDoCampo,
   valoresDoProduto,
   valoresIniciais,
@@ -863,6 +864,38 @@ describe('produtoFormulario', () => {
       })
       expect(gravados.get('X-1')).toBe('OUTRO')
       expect(gravados.get('7891000315507')).toBe('EAN13')
+    })
+
+    it('codigo de outra lista do produto e barrado dizendo onde ele esta', () => {
+      expect(avaliarNovoCodigo('X1', [], new Map(), 5, () => 'na embalagem CX c/ 3 UN')).toEqual({
+        tipo: 'bloqueado',
+        motivo: 'Este código já está na embalagem CX c/ 3 UN.',
+      })
+      expect(avaliarNovoCodigo('X1', [], new Map(), 5, () => null)).toMatchObject({ tipo: 'aceito' })
+    })
+
+    it('localizarCodigoForaDaLista: a unidade e as outras embalagens, com o rotulo ou a posicao', () => {
+      const valores = {
+        unidadeId: 'un',
+        codigosBarras: ['A'],
+        embalagens: [
+          { ...caixa, codigosBarras: ['B'] },
+          { ...novaEmbalagem(), codigosBarras: ['C'] },
+        ],
+      }
+      const siglas = new Map([
+        ['un', 'UN'],
+        ['cx', 'CX'],
+      ])
+      const daUnidade = localizarCodigoForaDaLista(valores, 'unidade', siglas)
+      expect(daUnidade('A')).toBeNull()
+      expect(daUnidade('B')).toBe('na embalagem CX c/ 3 UN')
+      expect(daUnidade('C')).toBe('na embalagem 2 (nova)')
+      expect(daUnidade('Z')).toBeNull()
+      const daCaixa = localizarCodigoForaDaLista(valores, 0, siglas)
+      expect(daCaixa('A')).toBe('na unidade (UN) deste produto')
+      expect(daCaixa('B')).toBeNull()
+      expect(localizarCodigoForaDaLista(valores, 0, new Map())('A')).toBe('na unidade de venda deste produto')
     })
 
     it('o limite do "Adicionar código" e por parametro (5 nas embalagens)', () => {

@@ -2233,7 +2233,7 @@ describe('ProdutoPage', () => {
       const unidadeSelect = within(novo).getByLabelText(/^unidade/i)
       await waitFor(() => expect(unidadeSelect).toBeEnabled())
       fireEvent.change(unidadeSelect, { target: { value: 'cx' } })
-      fireEvent.change(within(novo).getByLabelText(/^com/i), { target: { value: quantidade } })
+      fireEvent.change(within(novo).getByLabelText(/^contém/i), { target: { value: quantidade } })
       return novo
     }
 
@@ -2244,7 +2244,7 @@ describe('ProdutoPage', () => {
 
       expect(
         within(secaoEmbalagens()).getByText(
-          'Outras formas de vender ou comprar este produto, como a caixa com 3. O estoque continua em UN.',
+          'Outras formas de vender ou comprar este produto, como a caixa com 3, cada uma com seu código de barras e preço. O estoque continua em UN.',
         ),
       ).toBeInTheDocument()
       expect(botaoAdicionarEmbalagem()).toBeInTheDocument()
@@ -2271,7 +2271,31 @@ describe('ProdutoPage', () => {
       const caixa = await adicionarCaixa()
 
       expect(within(secaoEmbalagens()).getByRole('group', { name: 'CX c/ 3 UN' })).toBe(caixa)
-      expect(within(caixa).getByText('3 × R$ 89,90 = R$ 269,70')).toBeInTheDocument()
+      const preco = within(caixa).getByLabelText(/^preço/i)
+      expect(preco).toHaveAccessibleDescription(/^Vazio, vende por 3 × R\$\s89,90 = R\$\s269,70\.$/)
+      // O calculado tambem aparece no campo vazio.
+      expect(preco).toHaveAttribute('placeholder', '269,70')
+    })
+
+    it('sem a quantidade, a dica explica a conta', async () => {
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo('Nexgard Combo', '89,90')
+
+      fireEvent.click(botaoAdicionarEmbalagem())
+
+      expect(within(bloco('Nova embalagem')).getByLabelText(/^preço/i)).toHaveAccessibleDescription(
+        'Vazio, vende pela quantidade × o preço de venda.',
+      )
+    })
+
+    it('com preço próprio, mostra quanto sai por unidade e o preço avulso', async () => {
+      renderEdicao({ ...NEXGARD, embalagens: [CAIXA_COM_3] })
+      await esperarFormulario()
+
+      expect(within(bloco('CX c/ 3 UN')).getByLabelText(/^preço/i)).toHaveAccessibleDescription(
+        /^Sai a R\$\s69,97 por UN \(avulso: R\$\s269,70\)\.$/,
+      )
     })
 
     it('com a promoção vigente hoje, a dica usa o preço promocional', async () => {
@@ -2286,7 +2310,9 @@ describe('ProdutoPage', () => {
 
       const caixa = await adicionarCaixa()
 
-      expect(within(caixa).getByText('3 × R$ 79,90 (promoção) = R$ 239,70')).toBeInTheDocument()
+      expect(within(caixa).getByLabelText(/^preço/i)).toHaveAccessibleDescription(
+        /^Vazio, vende por 3 × R\$\s79,90 \(promoção\) = R\$\s239,70\.$/,
+      )
     })
 
     it('margem e markup do preço efetivo sobre o custo da embalagem, e o aviso abaixo do custo', async () => {
@@ -2300,7 +2326,10 @@ describe('ProdutoPage', () => {
       expect(within(caixa).getByLabelText(/^preço/i)).toHaveValue('209,90')
 
       fireEvent.change(within(caixa).getByLabelText(/^preço/i), { target: { value: '100,00' } })
-      expect(within(caixa).getByText('Preço abaixo do custo da embalagem (R$ 150,00).')).toBeInTheDocument()
+      // O aviso fica na ajuda do campo, como nos precos da secao Precos.
+      expect(within(caixa).getByLabelText(/^preço/i)).toHaveAccessibleDescription(
+        /Preço abaixo do custo da embalagem \(R\$\s150,00\)\.$/,
+      )
     })
 
     it('sem custo, margem e markup ficam "—"', async () => {
@@ -2336,7 +2365,27 @@ describe('ProdutoPage', () => {
       fireEvent.change(entrada, { target: { value: '7891000315507' } })
       fireEvent.keyDown(entrada, { key: 'Enter' })
 
-      expect(within(bloco('CX c/ 3 UN')).getByText('Este código já está em outra lista deste produto.')).toBeInTheDocument()
+      expect(within(bloco('CX c/ 3 UN')).getByText('Este código já está na unidade (UN) deste produto.')).toBeInTheDocument()
+    })
+
+    it('um código de uma embalagem não entra na unidade, e a mensagem diz qual embalagem', async () => {
+      renderEdicao({ ...NEXGARD, embalagens: [CAIXA_COM_3] })
+      await esperarFormulario()
+
+      const entrada = within(secao(/^códigos$/i)).getByLabelText('Adicionar código')
+      fireEvent.change(entrada, { target: { value: '7891000100103' } })
+      fireEvent.keyDown(entrada, { key: 'Enter' })
+
+      expect(within(secao(/^códigos$/i)).getByText('Este código já está na embalagem CX c/ 3 UN.')).toBeInTheDocument()
+    })
+
+    it('na lista de códigos da embalagem não há o selo "Principal"', async () => {
+      const comDois = { ...CAIXA_COM_3, codigosBarras: [...CAIXA_COM_3.codigosBarras, { codigo: 'CX-2', formato: 'OUTRO' as const }] }
+      renderEdicao({ ...NEXGARD, embalagens: [comDois] })
+      await esperarFormulario()
+
+      expect(within(bloco('CX c/ 3 UN')).getByText('CX-2')).toBeInTheDocument()
+      expect(within(bloco('CX c/ 3 UN')).queryByText('Principal')).not.toBeInTheDocument()
     })
 
     it('ligar "Embalagem de compra" numa embalagem desliga na outra', async () => {
@@ -2428,7 +2477,7 @@ describe('ProdutoPage', () => {
 
       fireEvent.click(botaoSalvar())
 
-      const quantidade = within(caixa).getByLabelText(/^com/i)
+      const quantidade = within(caixa).getByLabelText(/^contém/i)
       await waitFor(() => expect(quantidade).toHaveFocus())
       expect(rolados()).toEqual([quantidade])
       expect(quantidade).toHaveAccessibleDescription('A embalagem precisa conter mais de 1 UN.')
@@ -2446,7 +2495,7 @@ describe('ProdutoPage', () => {
       fireEvent.click(botaoSalvar())
 
       await waitFor(() =>
-        expect(within(caixa).getByLabelText(/^com/i)).toHaveAccessibleDescription(
+        expect(within(caixa).getByLabelText(/^contém/i)).toHaveAccessibleDescription(
           'UN não aceita quantidade fracionada. Informe um número inteiro.',
         ),
       )
@@ -2488,7 +2537,9 @@ describe('ProdutoPage', () => {
       await esperarFormulario()
 
       const saldo = screen.getByRole('group', { name: 'Saldo atual' })
-      expect(within(saldo).getByText('55 UN (3 CX + 1 UN)')).toBeInTheDocument()
+      // O saldo grande; as embalagens menores, em tom mais claro.
+      expect(within(saldo).getByText('(3 CX + 1 UN)')).toHaveClass('text-muted-foreground')
+      expect(within(saldo).getByText('(3 CX + 1 UN)').closest('p')).toHaveTextContent('55 UN (3 CX + 1 UN)')
       expect(within(secao(/^estoque$/i)).queryByRole('heading', { name: 'Unidade e embalagem' })).not.toBeInTheDocument()
     })
 
@@ -2525,7 +2576,7 @@ describe('ProdutoPage', () => {
 
       const caixa = bloco('CX c/ 3 UN')
       expect(within(caixa).getByLabelText(/^unidade/i)).toBeDisabled()
-      expect(within(caixa).getByLabelText(/^com/i)).toBeDisabled()
+      expect(within(caixa).getByLabelText(/^contém/i)).toBeDisabled()
       expect(within(caixa).getByLabelText(/^preço/i)).toBeDisabled()
       expect(within(caixa).getByRole('switch', { name: 'Embalagem de compra' })).toBeDisabled()
       expect(within(caixa).getByLabelText('Adicionar código')).toBeDisabled()
@@ -2537,8 +2588,255 @@ describe('ProdutoPage', () => {
       definirPerfil('OPERADOR')
       renderEdicao(NEXGARD)
       await esperarFormulario()
-      expect(within(secaoEmbalagens()).getByText('Nenhuma embalagem cadastrada.')).toBeInTheDocument()
+      const vazio = within(secaoEmbalagens()).getByText('Nenhuma embalagem cadastrada.')
+      const ajuda = within(secaoEmbalagens()).getByText(/^Outras formas de vender/)
+      expect(vazio.compareDocumentPosition(ajuda) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       expect(within(secaoEmbalagens()).queryByRole('button')).not.toBeInTheDocument()
+    })
+
+    it('"Embalagem de compra" fica logo abaixo da unidade e da quantidade, com a ajuda ligada', async () => {
+      renderEdicao({ ...NEXGARD, embalagens: [CAIXA_COM_3] })
+      await esperarFormulario()
+
+      const caixa = bloco('CX c/ 3 UN')
+      const chave = within(caixa).getByRole('switch', { name: 'Embalagem de compra' })
+      expect(chave).toHaveAccessibleDescription(
+        'Como o produto chega do fornecedor. Já vem escolhida ao registrar entrada por compra. Só uma por produto.',
+      )
+      const quantidade = within(caixa).getByLabelText(/^contém/i)
+      const preco = within(caixa).getByLabelText(/^preço/i)
+      expect(quantidade.compareDocumentPosition(chave) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(chave.compareDocumentPosition(preco) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('a embalagem de compra tem o selo "De compra" no título; o bloco é um grupo com borda dentro do item', async () => {
+      const deCompra = { ...CAIXA_COM_3, deCompra: true }
+      renderEdicao({ ...NEXGARD, embalagens: [deCompra] })
+      await esperarFormulario()
+
+      const caixa = bloco('CX c/ 3 UN')
+      expect(within(caixa).getByText('De compra')).toBeInTheDocument()
+      expect(caixa.tagName).toBe('DIV')
+      expect(caixa.parentElement?.tagName).toBe('LI')
+      expect(caixa).toHaveClass('border', 'bg-card')
+    })
+
+    it('sem o selo "De compra" nas outras', async () => {
+      renderEdicao({ ...NEXGARD, embalagens: [CAIXA_COM_3] })
+      await esperarFormulario()
+      expect(within(bloco('CX c/ 3 UN')).queryByText('De compra')).not.toBeInTheDocument()
+    })
+
+    it('a embalagem nova sem rótulo tem o botão "Remover embalagem 2 (nova)"', async () => {
+      renderEdicao({ ...NEXGARD, embalagens: [CAIXA_COM_3] })
+      await esperarFormulario()
+
+      fireEvent.click(botaoAdicionarEmbalagem())
+
+      expect(within(bloco('Nova embalagem')).getByRole('button', { name: 'Remover embalagem 2 (nova)' })).toBeInTheDocument()
+    })
+
+    it('remover uma das repetidas tira o erro e a contagem (Review: erro antigo no índice novo)', async () => {
+      const outraCaixa = { ...CAIXA_COM_3, id: 'emb-cx3b', codigosBarras: [] }
+      renderEdicao({ ...NEXGARD, embalagens: [CAIXA_COM_3, outraCaixa] })
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+      await waitFor(() => expect(atalho(/embalagens/i)).toHaveAccessibleName('Embalagens (1 erro)'))
+      expect(within(secaoEmbalagens()).getByText('Já existe a embalagem CX c/ 3 UN neste produto.')).toBeInTheDocument()
+
+      fireEvent.click(within(secaoEmbalagens()).getAllByRole('button', { name: 'Remover embalagem CX c/ 3 UN' })[0])
+
+      await waitFor(() => expect(atalho(/embalagens/i)).toHaveAccessibleName('Embalagens'))
+      expect(within(secaoEmbalagens()).queryByText('Já existe a embalagem CX c/ 3 UN neste produto.')).not.toBeInTheDocument()
+    })
+
+    it('remover uma das duas de compra tira o erro "Só uma…"', async () => {
+      const fardo = embalagemDaApi({ id: 'emb-kg12', unidade: resumo(KG), quantidade: 12, preco: null, deCompra: true })
+      renderEdicao({ ...NEXGARD, embalagens: [{ ...CAIXA_COM_3, deCompra: true }, fardo] })
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+      expect(await within(secaoEmbalagens()).findByText('Só uma embalagem pode ser a de compra.')).toBeInTheDocument()
+
+      fireEvent.click(within(secaoEmbalagens()).getByRole('button', { name: 'Remover embalagem CX c/ 3 UN' }))
+
+      await waitFor(() =>
+        expect(within(secaoEmbalagens()).queryByText('Só uma embalagem pode ser a de compra.')).not.toBeInTheDocument(),
+      )
+      expect(atalho(/embalagens/i)).toHaveAccessibleName('Embalagens')
+    })
+
+    it('remover a do meio de 3 mantém valores, códigos, erros e a ordem do request', async () => {
+      atualizarProdutoMock.mockResolvedValue(NEXGARD)
+      const fardo = embalagemDaApi({ id: 'emb-kg12', unidade: resumo(KG), quantidade: 12, preco: 950, codigos: ['FD-12'] })
+      const caixa6 = embalagemDaApi({ id: 'emb-cx6', unidade: resumo(CX), quantidade: 6, preco: 499, codigos: ['CX-6'] })
+      renderEdicao({ ...NEXGARD, embalagens: [CAIXA_COM_3, fardo, caixa6] })
+      await esperarFormulario()
+      // Um erro na terceira, para ver que ele acompanha a embalagem.
+      fireEvent.change(within(bloco('CX c/ 6 UN')).getByLabelText(/^contém/i), { target: { value: '1' } })
+      fireEvent.click(botaoSalvar())
+      const terceira = bloco('CX c/ 1 UN')
+      await waitFor(() =>
+        expect(within(terceira).getByLabelText(/^contém/i)).toHaveAccessibleDescription('A embalagem precisa conter mais de 1 UN.'),
+      )
+
+      fireEvent.click(within(secaoEmbalagens()).getByRole('button', { name: 'Remover embalagem KG c/ 12 UN' }))
+
+      const blocos = within(secaoEmbalagens()).getAllByRole('group').filter((grupo) => grupo.getAttribute('aria-labelledby'))
+      expect(blocos.map((grupo) => within(grupo).getByRole('heading', { level: 3 }).textContent)).toEqual([
+        'CX c/ 3 UN',
+        'CX c/ 1 UN',
+      ])
+      const segunda = bloco('CX c/ 1 UN')
+      expect(within(segunda).getByLabelText(/^preço/i)).toHaveValue('499,00')
+      expect(within(segunda).getByText('CX-6')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(within(segunda).getByLabelText(/^contém/i)).toHaveAccessibleDescription('A embalagem precisa conter mais de 1 UN.'),
+      )
+      expect(atalho(/embalagens/i)).toHaveAccessibleName('Embalagens (1 erro)')
+
+      fireEvent.change(within(segunda).getByLabelText(/^contém/i), { target: { value: '6' } })
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(
+          ID_ARROZ,
+          expect.objectContaining({
+            embalagens: [
+              expect.objectContaining({ id: 'emb-cx3', quantidade: 3, codigosBarras: ['7891000100103'] }),
+              expect.objectContaining({ id: 'emb-cx6', quantidade: 6, preco: 499, codigosBarras: ['CX-6'] }),
+            ],
+          }),
+        ),
+      )
+    })
+
+    it('código pendente da embalagem barrado ao salvar: erro no campo, contagem, foco e resumo', async () => {
+      renderEdicao({ ...NEXGARD, embalagens: [CAIXA_COM_3] })
+      await esperarFormulario()
+      const entrada = within(bloco('CX c/ 3 UN')).getByLabelText('Adicionar código')
+      fireEvent.change(entrada, { target: { value: '7891000315507' } })
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(entrada).toHaveFocus())
+      expect(within(bloco('CX c/ 3 UN')).getByText('Este código já está na unidade (UN) deste produto.')).toBeInTheDocument()
+      expect(atalho(/embalagens/i)).toHaveAccessibleName('Embalagens (1 erro)')
+      expect(screen.getByText('O produto não foi salvo. Confira o erro na seção Embalagens.')).toBeInTheDocument()
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('erro da API com índice fora da lista vai para a lista inteira', async () => {
+      const mensagem = 'Embalagem não encontrada.'
+      atualizarProdutoMock.mockRejectedValue(new HttpError(400, 'Dados inválidos.', { 'embalagens[5].preco': mensagem }))
+      renderEdicao({ ...NEXGARD, embalagens: [CAIXA_COM_3] })
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(await within(secaoEmbalagens()).findByText(mensagem)).toBeInTheDocument()
+      expect(atalho(/embalagens/i)).toHaveAccessibleName('Embalagens (1 erro)')
+    })
+
+    it('a embalagem com unidade inativa gravada aparece "(inativa)" e é mantida', async () => {
+      atualizarProdutoMock.mockResolvedValue(NEXGARD)
+      const pacote = embalagemDaApi({ id: 'emb-pct', unidade: resumo(PCT_INATIVA), quantidade: 6, preco: null })
+      renderEdicao({ ...NEXGARD, embalagens: [pacote] })
+      await esperarFormulario()
+
+      const unidadeSelect = within(bloco('PCT c/ 6 UN')).getByLabelText(/^unidade/i)
+      await waitFor(() => expect(unidadeSelect).toBeEnabled())
+      expect(rotulosDasOpcoes(unidadeSelect)).toEqual([
+        'Selecione a unidade',
+        'CX — Caixa',
+        'KG — Quilograma',
+        'PCT — Pacote (inativa)',
+      ])
+      expect(unidadeSelect).toHaveValue('pct')
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(
+          ID_ARROZ,
+          expect.objectContaining({ embalagens: [expect.objectContaining({ id: 'emb-pct', unidadeId: 'pct' })] }),
+        ),
+      )
+    })
+
+    it('trocar a unidade de venda para CX com embalagem CX: o erro fica na unidade da embalagem', async () => {
+      renderEdicao({ ...NEXGARD, embalagens: [CAIXA_COM_3] })
+      await esperarFormulario()
+      await selecionarUnidadeVenda('cx')
+
+      fireEvent.click(botaoSalvar())
+
+      const unidadeDaCaixa = within(secaoEmbalagens()).getByRole('combobox', { name: /^unidade/i })
+      await waitFor(() =>
+        expect(unidadeDaCaixa).toHaveAccessibleDescription(
+          'A embalagem precisa de uma unidade diferente da unidade de venda (CX).',
+        ),
+      )
+      expect(unidadeDaCaixa).toHaveValue('cx')
+      expect(atualizarProdutoMock).not.toHaveBeenCalled()
+    })
+
+    it('o erro da API em embalagens[0].unidadeId fica no seletor da embalagem', async () => {
+      const mensagem = 'A embalagem precisa de uma unidade diferente da unidade de venda (CX).'
+      atualizarProdutoMock.mockRejectedValue(
+        new HttpError(400, 'Dados inválidos.', { 'embalagens[0].unidadeId': mensagem }),
+      )
+      renderEdicao({ ...NEXGARD, embalagens: [CAIXA_COM_3] })
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+
+      const unidadeDaCaixa = within(bloco('CX c/ 3 UN')).getByLabelText(/^unidade/i)
+      await waitFor(() => expect(unidadeDaCaixa).toHaveFocus())
+      expect(unidadeDaCaixa).toHaveAccessibleDescription(mensagem)
+    })
+
+    it('Estoque: mudança não salva nas embalagens bloqueia o ajuste; só o preço, não', async () => {
+      renderEdicao({ ...NEXGARD, embalagens: [CAIXA_COM_3] })
+      await esperarFormulario()
+      const ajustar = () => screen.getByRole('button', { name: 'Ajustar estoque' })
+
+      fireEvent.change(within(bloco('CX c/ 3 UN')).getByLabelText(/^preço/i), { target: { value: '199,90' } })
+      expect(ajustar()).not.toHaveAttribute('aria-disabled')
+
+      fireEvent.change(within(bloco('CX c/ 3 UN')).getByLabelText(/^contém/i), { target: { value: '4' } })
+      expect(ajustar()).toHaveAttribute('aria-disabled', 'true')
+      expect(ajustar()).toHaveAccessibleDescription(
+        'Salve as mudanças de controle, unidade ou embalagens antes de ajustar o estoque.',
+      )
+      fireEvent.change(within(bloco('CX c/ 4 UN')).getByLabelText(/^contém/i), { target: { value: '3' } })
+      expect(ajustar()).not.toHaveAttribute('aria-disabled')
+
+      fireEvent.click(botaoAdicionarEmbalagem())
+      expect(ajustar()).toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('Estoque: remover a embalagem gravada também bloqueia o ajuste', async () => {
+      renderEdicao({ ...NEXGARD, embalagens: [CAIXA_COM_3] })
+      await esperarFormulario()
+
+      fireEvent.click(within(secaoEmbalagens()).getByRole('button', { name: 'Remover embalagem CX c/ 3 UN' }))
+
+      expect(screen.getByRole('button', { name: 'Ajustar estoque' })).toHaveAttribute('aria-disabled', 'true')
+    })
+
+    it('404 ao salvar cita também a embalagem', async () => {
+      atualizarProdutoMock.mockRejectedValue(new HttpError(404, 'Embalagem não encontrada.'))
+      renderEdicao({ ...NEXGARD, embalagens: [CAIXA_COM_3] })
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+
+      expect(
+        await screen.findByText(
+          'O produto, a unidade, a categoria ou uma embalagem escolhida não existe mais. Atualize a tela e tente novamente.',
+        ),
+      ).toBeInTheDocument()
     })
 
     it('a unidade SC fracionada de venda aceita 25,5 e o rótulo usa vírgula', async () => {
@@ -2551,10 +2849,12 @@ describe('ProdutoPage', () => {
       fireEvent.click(botaoAdicionarEmbalagem())
       const novo = bloco('Nova embalagem')
       fireEvent.change(within(novo).getByLabelText(/^unidade/i), { target: { value: 'sc' } })
-      fireEvent.change(within(novo).getByLabelText(/^com/i), { target: { value: '25,5' } })
+      fireEvent.change(within(novo).getByLabelText(/^contém/i), { target: { value: '25,5' } })
 
       const saco = bloco('SC c/ 25,5 KGF')
-      expect(within(saco).getByText('25,5 × R$ 12,99 = R$ 331,25')).toBeInTheDocument()
+      expect(within(saco).getByLabelText(/^preço/i)).toHaveAccessibleDescription(
+        /^Vazio, vende por 25,5 × R\$\s12,99 = R\$\s331,25\.$/,
+      )
     })
   })
 
@@ -3186,7 +3486,9 @@ describe('ProdutoPage', () => {
 
       expect(await screen.findByText('Nenhuma alteração de preço ou custo registrada ainda.')).toBeInTheDocument()
       expect(
-        screen.getByText('As próximas mudanças de custo e preço de venda aparecem aqui, com data e quem alterou.'),
+        screen.getByText(
+          'As próximas mudanças de custo e de preço (inclusive das embalagens) aparecem aqui, com data e quem alterou.',
+        ),
       ).toBeInTheDocument()
     })
 
@@ -3811,7 +4113,7 @@ describe('ProdutoPage', () => {
       fireEvent.click(screen.getByRole('button', { name: /ajustar estoque/i }))
 
       const dialogo = await screen.findByRole('dialog', { name: 'Ajustar estoque' })
-      expect(within(dialogo).getByRole('combobox', { name: /^em$/i })).toHaveValue('emb-cx18')
+      expect(within(dialogo).getByRole('combobox', { name: 'Em (unidade ou embalagem)' })).toHaveValue('emb-cx18')
     })
     it('ADMIN vê "Ajustar estoque" no produto salvo com controle ligado', async () => {
       await abrirEstoqueDaEdicao()
@@ -3855,7 +4157,7 @@ describe('ProdutoPage', () => {
       expect(botaoAjustar()).toHaveAttribute('aria-disabled', 'true')
       expect(botaoAjustar()).toBeEnabled()
       expect(botaoAjustar()).toHaveAccessibleDescription(
-        'Salve a mudança de controle ou de unidade antes de ajustar o estoque.',
+        'Salve as mudanças de controle, unidade ou embalagens antes de ajustar o estoque.',
       )
       fireEvent.click(botaoAjustar())
       expect(screen.queryByRole('dialog', { name: 'Ajustar estoque' })).not.toBeInTheDocument()
@@ -3869,7 +4171,7 @@ describe('ProdutoPage', () => {
       expect(screen.getByRole('group', { name: 'Saldo atual' })).toHaveTextContent('12 UN')
       expect(botaoAjustar()).toHaveAttribute('aria-disabled', 'true')
       expect(botaoAjustar()).toHaveAccessibleDescription(
-        'Salve a mudança de controle ou de unidade antes de ajustar o estoque.',
+        'Salve as mudanças de controle, unidade ou embalagens antes de ajustar o estoque.',
       )
     })
 

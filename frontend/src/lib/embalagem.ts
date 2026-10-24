@@ -76,6 +76,21 @@ export function precoVigenteDaUnidade(
 }
 
 /**
+ * Preco por unidade de venda de um preco de embalagem, em centavos com meio
+ * para cima ("209.90" e "3" -> "69.97"). Null sem preco ou sem quantidade > 0.
+ */
+export function valorPorUnidade(preco: string, quantidade: string): string | null {
+  const valorPreco = centavos(preco)
+  const qtd = milesimos(quantidade)
+  if (valorPreco === null || qtd === null) {
+    return null
+  }
+  const divisor = BigInt(qtd)
+  // (preco x 1000) / qtd com meio para cima, em inteiros: (2a + b) / 2b.
+  return digitosParaValor(((2n * valorPreco * 1000n + divisor) / (2n * divisor)).toString())
+}
+
+/**
  * Preco proprio abaixo do minimo da unidade (spec §3.3): compara preco < minimo
  * x quantidade, sem divisao. Abaixo, devolve o valor por unidade truncado a
  * centavos (nunca mostra um valor igual ao minimo: 209,99 / 3 -> "69.99");
@@ -97,11 +112,11 @@ export function valorPorUnidadeAbaixoDoMinimo(preco: string, quantidade: string,
 }
 
 /**
- * Saldo com a conversao pela embalagem (spec §5.2): "55 UN (18 CX + 1 UN)" ou
- * "54 UN (18 CX)". Usa a parte inteira de embalagens e o resto (com ate 3 casas
- * na unidade fracionada). Null com saldo <= 0 ou menor que 1 embalagem.
+ * O saldo em embalagens (spec §5.2): "18 CX + 1 UN" ou "18 CX", com a parte
+ * inteira de embalagens e o resto (com ate 3 casas na unidade fracionada).
+ * Null com saldo <= 0 ou menor que 1 embalagem.
  */
-export function conversaoDoSaldo(
+export function conversaoEmEmbalagens(
   saldo: number,
   embalagem: { sigla: string; quantidade: number },
   siglaDeVenda: string,
@@ -115,9 +130,21 @@ export function conversaoDoSaldo(
   const inteiras = Math.floor(total / porEmbalagem)
   const restoMilesimos = total - inteiras * porEmbalagem
   const resto = fracionada ? restoMilesimos / 1000 : Math.round(restoMilesimos / 1000)
-  const saldoTexto = `${saldo.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${siglaDeVenda}`
   const restoTexto = resto > 0 ? ` + ${resto.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${siglaDeVenda}` : ''
-  return `${saldoTexto} (${inteiras.toLocaleString('pt-BR')} ${embalagem.sigla}${restoTexto})`
+  return `${inteiras.toLocaleString('pt-BR')} ${embalagem.sigla}${restoTexto}`
+}
+
+/** Saldo com a conversao pela embalagem: "55 UN (18 CX + 1 UN)" ou "54 UN (18 CX)"; null como `conversaoEmEmbalagens`. */
+export function conversaoDoSaldo(
+  saldo: number,
+  embalagem: { sigla: string; quantidade: number },
+  siglaDeVenda: string,
+  fracionada: boolean,
+): string | null {
+  const emEmbalagens = conversaoEmEmbalagens(saldo, embalagem, siglaDeVenda, fracionada)
+  return emEmbalagens === null
+    ? null
+    : `${saldo.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${siglaDeVenda} (${emEmbalagens})`
 }
 
 /** Embalagem principal (spec §2.2): a de compra, se houver; senao, a primeira da lista. */

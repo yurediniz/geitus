@@ -121,25 +121,32 @@ export function textoDaPrevia(
   if (previa.saldoNovo === null || previa.variacao === null) {
     return null
   }
+  const texto = `Saldo: ${formatarQuantidade(saldo, sigla)} → ${formatarQuantidade(previa.saldoNovo, sigla)}`
   if (emEmbalagem) {
     const variacao = formatarVariacaoQuantidade(previa.variacao, sigla)
-    return `${numero(emEmbalagem.quantidade)} ${emEmbalagem.rotulo} = ${variacao} · saldo ${numero(saldo)} → ${numero(previa.saldoNovo)}`
+    return `${numero(emEmbalagem.quantidade)} ${emEmbalagem.rotulo} = ${variacao} · ${texto}`
   }
-  const texto = `Saldo: ${formatarQuantidade(saldo, sigla)} → ${formatarQuantidade(previa.saldoNovo, sigla)}`
   return tipo === 'AJUSTE' ? `${texto} (${formatarVariacaoQuantidade(previa.variacao, sigla)})` : texto
 }
 
 /**
  * Rotulo do botao de confirmar, com a acao: "Registrar entrada", "Registrar
  * saída", "Ajustar para 10 UN", "Zerar estoque" ou, com a contagem conferindo,
- * "Fechar" (nao ha o que gravar).
+ * "Fechar" (nao ha o que gravar). Informado em embalagens, a entrada e a saida
+ * dizem o total em unidades (`totalEmEmbalagens`): "Registrar entrada de 36 UN".
  */
-export function rotuloConfirmar(tipo: TipoMovimento, previa: PreviaSaldo | null, sigla: string): string {
+export function rotuloConfirmar(
+  tipo: TipoMovimento,
+  previa: PreviaSaldo | null,
+  sigla: string,
+  totalEmEmbalagens?: number,
+): string {
+  const total = totalEmEmbalagens === undefined ? '' : ` de ${formatarQuantidade(totalEmEmbalagens, sigla)}`
   if (tipo === 'ENTRADA') {
-    return 'Registrar entrada'
+    return `Registrar entrada${total}`
   }
   if (tipo === 'SAIDA') {
-    return 'Registrar saída'
+    return `Registrar saída${total}`
   }
   if (previa?.confere) {
     return 'Fechar'

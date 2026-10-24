@@ -109,7 +109,7 @@ function primeiroCampoComErro(erros: Partial<Record<CampoAjuste, string>>): Camp
 }
 
 const MENSAGEM_FALHA = 'Não foi possível registrar o ajuste. Confira a conexão e tente de novo.'
-const MENSAGEM_EMBALAGEM_REMOVIDA = 'A embalagem escolhida não existe mais. Atualize a tela e tente de novo.'
+const MENSAGEM_EMBALAGEM_REMOVIDA = 'A embalagem escolhida foi removida. Confira a quantidade e tente de novo.'
 const MENSAGEM_CONFLITO =
   'Um ajuste deste produto já foi registrado agora há pouco. Confira o saldo atual antes de confirmar de novo.'
 
@@ -162,7 +162,7 @@ function ConteudoAjuste({
       atualizarProdutos()
       aoConcluir(movimento)
     },
-    onError: (erro) => {
+    onError: (erro, ajuste) => {
       // Em qualquer falha o saldo e recarregado: o envio pode ter chegado ao
       // servidor (rede, 5xx) ou o saldo pode ter mudado (400, 409). A previa e
       // a nova tentativa partem do saldo real.
@@ -196,7 +196,7 @@ function ConteudoAjuste({
         setErroGeral('Somente administradores podem ajustar o estoque.')
       } else if (erro instanceof HttpError && erro.status === 404) {
         // Com embalagem, o 404 e dela (removida com o modal aberto); sem, do produto.
-        setErroGeral(mutation.variables?.embalagemId ? MENSAGEM_EMBALAGEM_REMOVIDA : 'Este produto não existe mais. Atualize a tela.')
+        setErroGeral(ajuste.embalagemId ? MENSAGEM_EMBALAGEM_REMOVIDA : 'Este produto não existe mais. Atualize a tela.')
       } else {
         setErroGeral(MENSAGEM_FALHA)
       }
@@ -207,6 +207,19 @@ function ConteudoAjuste({
     },
   })
   const enviando = mutation.isPending
+
+  // A embalagem escolhida saiu do produto (ex.: 404 e a recarga sem ela): o seletor volta a
+  // unidade de venda e a quantidade, que estava em embalagens, fica para ser informada de novo.
+  const embalagemSumiu =
+    Boolean(dados.embalagemId) && !embalagens.some((embalagem) => embalagem.id === dados.embalagemId)
+  useEffect(() => {
+    if (!embalagemSumiu) {
+      return
+    }
+    setDados((atuais) => ({ ...atuais, embalagemId: '', quantidade: '' }))
+    setEmbalagemEscolhida(false)
+    setFocoPendente(embalagens.length > 0 ? 'embalagemId' : 'quantidade')
+  }, [embalagemSumiu, embalagens.length])
 
   // O foco do erro so pode ir ao campo depois que o envio termina e os campos voltam a ficar habilitados.
   useEffect(() => {
@@ -302,6 +315,8 @@ function ConteudoAjuste({
   const emEmbalagem =
     embalagem && quantidadeDigitada !== null ? { quantidade: quantidadeDigitada, rotulo: embalagem.rotulo } : undefined
   const textoPrevia = previa && quantidadeAceita ? textoDaPrevia(dados.tipo, saldo, previa, sigla, emEmbalagem) : null
+  // Em embalagens, o botao diz o total em unidades ("Registrar entrada de 36 UN").
+  const totalEmEmbalagens = emEmbalagem && quantidadeAceita ? (quantidadeEmUnidades(dados, contexto) ?? undefined) : undefined
   const erroDaPrevia = errosEnvio.quantidade ? null : (previa?.erro ?? null)
   const erroQuantidade = errosEnvio.quantidade
   const quantidadeInvalida = Boolean(erroQuantidade || erroDaPrevia)
@@ -411,8 +426,10 @@ function ConteudoAjuste({
               <label htmlFor={ID_CAMPO.embalagemId} className="text-sm font-medium">
                 Em
               </label>
+              {/* O nome falado diz o que se escolhe; o visivel fica curto, ao lado da quantidade. */}
               <NativeSelect
                 id={ID_CAMPO.embalagemId}
+                aria-label="Em (unidade ou embalagem)"
                 value={dados.embalagemId ?? ''}
                 onChange={(event) => escolherEmbalagem(event.target.value)}
                 disabled={enviando}
@@ -429,6 +446,13 @@ function ConteudoAjuste({
               <ErroDoCampo id={`${ID_CAMPO.embalagemId}-erro`} mensagem={errosEnvio.embalagemId} />
             </div>
           )}
+        </div>
+
+        {/* Regiao viva, logo abaixo da quantidade: a previa, o erro de saldo (antes do envio) ou a contagem que confere. */}
+        <div id={ID_PREVIA} aria-live="polite" className="min-h-5 text-sm tabular-nums">
+          {erroDaPrevia && <p className="font-medium text-destructive">{erroDaPrevia}</p>}
+          {previa?.confere && <p className="text-muted-foreground">{previa.confere}</p>}
+          {textoPrevia && !erroQuantidade && <p className="font-medium">{textoPrevia}</p>}
         </div>
 
         <div className="space-y-1.5">
@@ -470,13 +494,6 @@ function ConteudoAjuste({
           <ErroDoCampo id={`${ID_CAMPO.observacao}-erro`} mensagem={errosEnvio.observacao} />
         </div>
 
-        {/* Regiao viva: a previa, o erro de saldo (antes do envio) ou a contagem que confere. */}
-        <div id={ID_PREVIA} aria-live="polite" className="min-h-5 text-sm tabular-nums">
-          {erroDaPrevia && <p className="font-medium text-destructive">{erroDaPrevia}</p>}
-          {previa?.confere && <p className="text-muted-foreground">{previa.confere}</p>}
-          {textoPrevia && !erroQuantidade && <p className="font-medium">{textoPrevia}</p>}
-        </div>
-
         <DialogFooter>
           {saldo > 0 && !zerado && (
             <Button
@@ -494,7 +511,7 @@ function ConteudoAjuste({
           </Button>
           <Button type="submit" className="min-h-11" disabled={enviando}>
             {enviando && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-            {rotuloConfirmar(dados.tipo, previa, sigla)}
+            {rotuloConfirmar(dados.tipo, previa, sigla, totalEmEmbalagens)}
           </Button>
         </DialogFooter>
       </form>

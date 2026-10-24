@@ -10,7 +10,8 @@ import { SeloSituacaoEstoque } from '@/features/products/estoque/SeloSituacaoEst
 import { mensagemDeSucesso } from '@/features/products/estoque/ajusteEstoque'
 import { formatarQuantidade } from '@/features/products/formatacaoProduto'
 import type { ProdutoFormValues } from '@/features/products/produtoFormulario'
-import { conversaoDoSaldo, embalagemPrincipal } from '@/lib/embalagem'
+import { conversaoEmEmbalagens, embalagemPrincipal } from '@/lib/embalagem'
+import { interpretarQuantidade } from '@/lib/quantidade'
 import type { Produto } from '@/types/produto'
 
 export interface SecaoEstoqueProps {
@@ -33,7 +34,25 @@ const NIVEIS = [
   { id: 'estoqueMaximo', nome: 'Estoque máximo' },
 ] as const
 
-const DICA_AJUSTE_BLOQUEADO = 'Salve a mudança de controle ou de unidade antes de ajustar o estoque.'
+const DICA_AJUSTE_BLOQUEADO = 'Salve as mudanças de controle, unidade ou embalagens antes de ajustar o estoque.'
+
+/**
+ * Embalagens do formulario no que muda o ajuste (lista, unidade e quantidade;
+ * o preco nao conta), comparadas com as gravadas: o modal so conhece as salvas.
+ */
+function embalagensMudaram(atuais: ProdutoFormValues['embalagens'], gravadas: Produto['embalagens']): boolean {
+  return (
+    atuais.length !== gravadas.length ||
+    atuais.some((atual, indice) => {
+      const gravada = gravadas[indice]
+      return (
+        atual.id !== gravada.id ||
+        atual.unidadeId !== gravada.unidade.id ||
+        interpretarQuantidade(atual.quantidade) !== gravada.quantidade
+      )
+    })
+  )
+}
 
 /**
  * Secao Estoque: o interruptor "Controlar estoque", o saldo atual (so leitura,
@@ -71,14 +90,20 @@ export function SecaoEstoque({
   }
   const mostrarNiveis = controla || erroNosNiveis || manterNiveis
   // So o que muda o sentido do saldo bloqueia o ajuste; nome, preco etc. continuam no formulario.
-  const ajusteBloqueado = Boolean(dirtyFields.controlaEstoque || dirtyFields.unidadeId)
+  // So o resultado da comparacao e observado: digitar um preco de embalagem nao renderiza a secao.
+  const embalagensAlteradas = useWatch({
+    control,
+    name: 'embalagens',
+    compute: (atuais) => produto !== null && embalagensMudaram(atuais, produto.embalagens),
+  })
+  const ajusteBloqueado = Boolean(dirtyFields.controlaEstoque || dirtyFields.unidadeId || embalagensAlteradas)
   // O saldo e da unidade gravada (produto com movimento nao troca de unidade).
   const saldoTexto = produto ? formatarQuantidade(produto.estoqueAtual, produto.unidade.sigla) : null
   // Com embalagem gravada, o saldo tambem em embalagens: "55 UN (18 CX + 1 UN)" (spec B3 §5.2).
   const principal = produto ? embalagemPrincipal(produto.embalagens) : undefined
-  const saldoConvertido =
+  const saldoEmEmbalagens =
     produto && principal
-      ? conversaoDoSaldo(
+      ? conversaoEmEmbalagens(
           produto.estoqueAtual,
           { sigla: principal.unidade.sigla, quantidade: principal.quantidade },
           produto.unidade.sigla,
@@ -135,7 +160,15 @@ export function SecaoEstoque({
               Saldo atual
             </p>
             <div className="flex flex-wrap items-center gap-3">
-              <p className="text-2xl font-semibold tabular-nums">{saldoConvertido ?? saldoTexto}</p>
+              <p className="text-2xl font-semibold tabular-nums">
+                {saldoTexto}
+                {saldoEmEmbalagens && (
+                  <>
+                    {' '}
+                    <span className="text-base font-medium text-muted-foreground">{`(${saldoEmEmbalagens})`}</span>
+                  </>
+                )}
+              </p>
               <SeloSituacaoEstoque situacao={produto.situacaoEstoque} />
             </div>
             {!somenteLeitura && (

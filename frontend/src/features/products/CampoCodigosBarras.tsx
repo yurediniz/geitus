@@ -7,6 +7,7 @@ import {
   MAXIMO_CODIGOS_BARRAS,
   avaliarNovoCodigo,
   type FormatosGravados,
+  type LocalizadorDeCodigo,
 } from '@/features/products/produtoFormulario'
 import { detectarFormato } from '@/lib/codigoBarras'
 import { pareceEtiqueta } from '@/lib/etiquetaBalanca'
@@ -59,8 +60,13 @@ export interface CampoCodigosBarrasProps {
   ajuda?: string
   /** Nome acessivel da lista de codigos. */
   rotuloLista?: string
-  /** Codigos das outras listas do mesmo produto (unidade e embalagens): nao podem entrar nesta. */
-  outrasListas?: readonly string[]
+  /**
+   * Diz se o codigo ja esta noutra lista do mesmo produto (unidade ou outra
+   * embalagem) e onde: ai ele nao entra nesta. Lido na hora de adicionar.
+   */
+  localizador?: LocalizadorDeCodigo
+  /** Selo "Principal" no primeiro codigo (o exibido na lista de produtos); so na lista da unidade. */
+  mostrarPrincipal?: boolean
 }
 
 /** Elemento que recebe o foco depois de reordenar ou remover. */
@@ -90,7 +96,8 @@ export function CampoCodigosBarras({
   limite = MAXIMO_CODIGOS_BARRAS,
   ajuda = `Até ${limite} códigos. O primeiro é o exibido na lista de produtos.`,
   rotuloLista = 'Códigos de barras do produto',
-  outrasListas = [],
+  localizador,
+  mostrarPrincipal = true,
 }: CampoCodigosBarrasProps) {
   const [anuncio, setAnuncio] = useState('')
   const [focoPendente, setFocoPendente] = useState<FocoPendente | null>(null)
@@ -128,7 +135,7 @@ export function CampoCodigosBarras({
     !formatosGravados.has(codigo) && pareceEtiqueta(codigo, configuracaoEtiqueta)
 
   const adicionar = () => {
-    const resultado = avaliarNovoCodigo(entrada, valor, formatosGravados, limite, outrasListas)
+    const resultado = avaliarNovoCodigo(entrada, valor, formatosGravados, limite, localizador)
     if (resultado.tipo === 'vazio') {
       onEntradaChange('')
       return
@@ -258,7 +265,7 @@ export function CampoCodigosBarras({
                     {outro && <AlertTriangle className="h-3 w-3" aria-hidden="true" />}
                     {ROTULO_FORMATO[formato]}
                   </span>
-                  {indice === 0 && podeReordenar && <span className="text-xs text-muted-foreground">Principal</span>}
+                  {mostrarPrincipal && indice === 0 && podeReordenar && <span className="text-xs text-muted-foreground">Principal</span>}
                   <div className="flex items-center">
                     {podeReordenar && (
                       <>
