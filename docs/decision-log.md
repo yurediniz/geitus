@@ -899,7 +899,7 @@ A entrada de estoque por compra gravava só a quantidade, e o custo do produto e
 - **Origem no produto:** o produto guarda a origem do custo atual (`ENTRADA_COMPRA` ou `EDICAO`) e a data. A tela mostra "Último custo de entrada …" ou "Custo editado manualmente em …".
 - **Histórico de preços:** as linhas de custo ganham a origem e, na compra, a ligação com o movimento.
 - **Campo vazio:** o custo começa vazio no modal, com a dica do último custo, para obrigar a conferência com a nota.
-- **Migration V13:** a obrigação "compra exige custo" fica na aplicação, porque os movimentos antigos não têm custo e são imutáveis.
+- **Migration V13:** a obrigação "compra exige custo" fica na aplicação e numa CHECK `NOT VALID` no banco (vale para os movimentos novos; os antigos, sem custo, não são conferidos). O histórico aponta para o movimento do mesmo produto.
 
 **Motivo:**
 Decisões do usuário em conversa: o custo é o último preço de entrada e, em embalagem, digita-se o custo da caixa.

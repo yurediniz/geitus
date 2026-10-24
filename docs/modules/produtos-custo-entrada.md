@@ -55,10 +55,10 @@
   - **edição que não mexe no custo:** nada muda.
 - **Produtos existentes:** ficam com origem nula, porque a origem é desconhecida, e não mostram nota.
 - **Na tela** (seção Preços, abaixo do campo Custo):
-  - origem `ENTRADA_COMPRA`: "Último custo de entrada: R$ 10,00 em 24/10/2026 (2 CX c/ 18 UN).", com a embalagem só quando a entrada foi em embalagem;
+  - origem `ENTRADA_COMPRA`: "Último custo de entrada: R$ 10,00 por UN, em 24/10/2026 (compra de 2 CX c/ 18 UN).", com a embalagem só quando a entrada foi em embalagem (sem ela: "… por UN, em 24/10/2026.");
   - origem `EDICAO`: "Custo editado manualmente em 24/10/2026.";
   - origem nula: nenhuma nota.
-- **Response do produto:** ganha `custoOrigem: { tipo, em, quantidade, embalagemRotulo } | null`.
+- **Response do produto:** ganha `custoOrigem: { tipo, em, quantidade, quantidadeDeEmbalagens, embalagemRotulo } | null`. Na listagem, só `tipo` e `em`, sem consulta a mais.
   - `quantidade` (em unidades) e `embalagemRotulo` vêm só na entrada por compra, do último movimento de compra.
   - `embalagemRotulo` é nulo quando a entrada foi em unidades.
 
@@ -69,7 +69,7 @@ Aditiva sobre a V12, que não é editada.
   - `custo_unitario NUMERIC(14,4) NULL`: o custo por unidade de venda;
   - CHECK: os dois nulos ou os dois preenchidos e `> 0`;
   - CHECK: preenchidos **só** com `tipo = 'ENTRADA' AND motivo = 'COMPRA' AND origem = 'AJUSTE_MANUAL'`.
-    - A obrigação inversa (compra nova exige custo) fica na aplicação. Os movimentos de compra já gravados não têm custo e são imutáveis, então uma CHECK nos dois sentidos falharia neles.
+    - A obrigação inversa (compra nova exige custo) é uma CHECK `NOT VALID` (`ck_movimento_estoque_compra_exige_custo`): vale para todo INSERT e UPDATE, sem conferir as compras antigas, que não têm custo. Não se roda `VALIDATE CONSTRAINT` nela.
   - CHECK: com retrato de embalagem, `custo_unitario = round(custo_informado / embalagem_quantidade, 4)`; sem retrato, `custo_unitario = custo_informado`.
 - **`produtos`:**
   - `custo_origem VARCHAR(20) NULL` com CHECK `IN ('ENTRADA_COMPRA','EDICAO')`;
@@ -79,8 +79,8 @@ Aditiva sobre a V12, que não é editada.
 - **`produto_historico_precos`:**
   - `origem VARCHAR(20) NULL` com CHECK `IN ('EDICAO','ENTRADA_COMPRA')`;
   - CHECK: `(campo = 'CUSTO') = (origem IS NOT NULL)`, aplicada depois de preencher as linhas antigas;
-  - `movimento_id BIGINT NULL`, com FK composta `(empresa_id, movimento_id) → movimentos_estoque (empresa_id, id)` (RESTRICT, porque o movimento é imutável). Ligação preenchida só em `ENTRADA_COMPRA`, com CHECK de coerência.
-  - A V13 cria `UNIQUE (empresa_id, id)` em `movimentos_estoque`, alvo da FK (a V9 não tem).
+  - `movimento_id BIGINT NULL`, com FK composta `(empresa_id, produto_id, movimento_id) → movimentos_estoque (empresa_id, produto_id, id)` (RESTRICT, porque o movimento é imutável), que garante que o movimento é do mesmo produto. Ligação preenchida se e somente se `origem = ENTRADA_COMPRA`, e essa linha sempre tem `valor_novo`.
+  - A V13 cria `UNIQUE (empresa_id, produto_id, id)` em `movimentos_estoque`, alvo da FK.
 - **Preenchimento das linhas existentes:** `origem = 'EDICAO'` nas linhas de `CUSTO`.
 
 ## 6. API
@@ -90,7 +90,7 @@ Aditiva sobre a V12, que não é editada.
   - a resposta do movimento ganha `custoInformado` e `custoUnitario`.
 - **Idempotência:** a chave repetida com outro `custo` dá 409 "Esta operação já foi registrada com outros dados.". Com o mesmo custo, devolve o movimento gravado.
 - **`GET /api/produtos/{id}`:** ganha `custoOrigem` (§4).
-- **`GET /api/produtos/{id}/historico-precos`:** as linhas ganham `origem` e, em `ENTRADA_COMPRA`, `entrada: { quantidade, embalagemRotulo }`.
+- **`GET /api/produtos/{id}/historico-precos`:** as linhas ganham `origem` e, em `ENTRADA_COMPRA`, `entrada: { quantidade, quantidadeDeEmbalagens, embalagemRotulo }`.
 - **`GET /api/produtos/{id}/estoque/movimentos`:** os movimentos de compra trazem `custoInformado` e `custoUnitario`.
 - **Perfil:** o ajuste continua só ADMIN.
 
@@ -99,11 +99,11 @@ Aditiva sobre a V12, que não é editada.
 ### 7.1 Modal "Ajustar estoque"
 - **Campo "Custo":** aparece só em **Entrada** com motivo **Compra/recebimento**, logo abaixo da linha Quantidade/Em.
   - É o campo de dinheiro da Fase C (preenche da direita para a esquerda), obrigatório.
-  - **Rótulo:** "Custo por UN" na unidade de venda, ou "Custo da CX c/ 18 UN" em embalagem.
-  - **Começa vazio**, com a dica "Último custo: R$ 9,50 por UN.". Sem custo no produto, a dica não aparece.
+  - **Rótulo:** "Custo por UN" na unidade de venda, ou "Custo de 1 CX c/ 18 UN" em embalagem.
+  - **Começa vazio**, com a dica "Último custo: R$ 9,50 por UN." (em embalagem: "Último custo: R$ 9,50 por UN (R$ 171,00 a CX c/ 18 UN)."). Sem custo no produto, a dica não aparece.
   - **Em embalagem**, mostra "= R$ 10,00 por UN" ao digitar (o custo por unidade arredondado a centavos, como no produto).
 - **Prévia:** inclui o custo, por exemplo "2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN · Custo: R$ 9,50 → R$ 10,00 por UN". Com o custo igual ao atual, mostra "Custo: R$ 10,00 por UN (sem mudança)".
-- **Trocar de motivo ou de tipo:** o campo some e o valor digitado é descartado.
+- **Trocar de motivo, de tipo ou de "Em":** o valor digitado é descartado (em motivo e tipo, o campo também some). A embalagem removida com o modal aberto também limpa o custo.
 - **Aviso de sucesso:** "Entrada de 36 UN (2 CX c/ 18 UN) registrada. Saldo: 46 UN. Custo atualizado para R$ 10,00."
 
 ### 7.2 Tela do produto
@@ -154,3 +154,10 @@ Aditiva sobre a V12, que não é editada.
     - o envio de `custo`.
   - **Preços:** as três formas da nota de origem.
   - **Histórico:** "Entrada de compra (2 CX c/ 18 UN)", "Editado" e o custo no movimento.
+
+## 10. Ajustes na implementação
+- **Data da origem:** `ENTRADA_COMPRA` usa a data e a hora do próprio movimento.
+- **Custo zero:** um custo por unidade que arredonde a R$ 0,00 no produto (ex.: R$ 0,10 por CX c/ 1000) dá 400 "O custo deve ser maior que zero.".
+- **Banco:** o custo da compra nova é exigido também por uma CHECK `NOT VALID`, e o histórico aponta para um movimento do mesmo produto por FK de três colunas (§5).
+- **Prévia:** a linha do custo fica num parágrafo próprio, abaixo do saldo, fora da região anunciada a cada dígito.
+- **Formulário do produto:** depois de uma compra feita na própria página, o campo Custo é atualizado com o custo novo, se o usuário não o tinha alterado. Se tinha, o valor fica e aparece "A entrada de compra mudou o custo para R$ 10,00. Ao salvar, vale o valor deste campo.". Com o campo diferente do gravado, Preços avisa "Ao salvar, o custo passa a contar como editado manualmente.".
