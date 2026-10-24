@@ -10,7 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Gera o numero de registro sequencial por empresa (1, 2, 3...) de produtos,
- * clientes e fornecedores (Fase B5, V14) (docs/modules/produtos-codigo-e-balanca.md, 2.2; DEC-036).
+ * clientes, fornecedores (Fase B5, V14) e vendas (PDV, V17) (docs/modules/produtos-codigo-e-balanca.md, 2.2; DEC-036).
  *
  * <p>O incremento e um {@code UPDATE ... RETURNING} na tabela
  * {@code numeracoes}, que trava a linha da empresa e do tipo ate o fim da

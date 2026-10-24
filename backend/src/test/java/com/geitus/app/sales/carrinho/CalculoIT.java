@@ -183,8 +183,4 @@ class CalculoIT extends IntegracaoDoPdv {
         calcular(empresa.operadora(), "{\"itens\":[],\"pagamentos\":[{\"forma\":\"VALE\",\"valor\":1}]}")
                 .andExpect(status().isBadRequest());
     }
-
-    private static String item(UUID produto, String quantidade) {
-        return "{\"produtoId\":\"" + produto + "\",\"quantidade\":" + quantidade + "}";
-    }
 }
