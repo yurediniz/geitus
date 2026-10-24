@@ -23,6 +23,9 @@ import com.geitus.app.iam.CredenciaisInvalidasException;
 import com.geitus.app.iam.ConflitoDeUsuarioException;
 import com.geitus.app.iam.DadosUsuarioInvalidosException;
 import com.geitus.app.iam.UsuarioNaoEncontradoException;
+import com.geitus.app.cashier.CaixaConflitoException;
+import com.geitus.app.cashier.CaixaNaoEncontradoException;
+import com.geitus.app.cashier.DadosDoCaixaInvalidosException;
 import com.geitus.app.catalog.CatalogoConflitoException;
 import com.geitus.app.catalog.CatalogoNaoEncontradoException;
 import com.geitus.app.catalog.ProdutoConflitoException;
@@ -451,6 +454,38 @@ public class GlobalExceptionHandler {
             HttpServletRequest request) {
         ApiError corpo = erroComCampoOpcional(HttpStatus.CONFLICT, ex.getMessage(), request, ex.campo());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(corpo);
+    }
+
+    /**
+     * Ponto ou sessao de caixa nao encontrado na empresa do usuario, inclusive
+     * o de outra empresa e, para o OPERADOR, a sessao de outra pessoa: resposta
+     * identica (DEC-016; docs/modules/caixa.md, 5.2). Mensagem fixa.
+     */
+    @ExceptionHandler(CaixaNaoEncontradoException.class)
+    public ResponseEntity<ApiError> tratarCaixaNaoEncontrado(CaixaNaoEncontradoException ex,
+            HttpServletRequest request) {
+        ApiError corpo = ApiError.de(
+                HttpStatus.NOT_FOUND.value(),
+                HttpStatus.NOT_FOUND.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(corpo);
+    }
+
+    /** Conflito com o estado do caixa (409), com o campo quando houver. */
+    @ExceptionHandler(CaixaConflitoException.class)
+    public ResponseEntity<ApiError> tratarConflitoDeCaixa(CaixaConflitoException ex, HttpServletRequest request) {
+        ApiError corpo = erroComCampoOpcional(HttpStatus.CONFLICT, ex.getMessage(), request, ex.campo());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(corpo);
+    }
+
+    /** Dado invalido no caixa verificado no service (400), com o campo quando houver. */
+    @ExceptionHandler(DadosDoCaixaInvalidosException.class)
+    public ResponseEntity<ApiError> tratarDadosDoCaixaInvalidos(DadosDoCaixaInvalidosException ex,
+            HttpServletRequest request) {
+        ApiError corpo = erroComCampoOpcional(HttpStatus.BAD_REQUEST, ex.getMessage(), request, ex.campo());
+        return ResponseEntity.badRequest().body(corpo);
     }
 
     /**
