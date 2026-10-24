@@ -32,20 +32,22 @@ public interface SessaoDeCaixaRepository extends Repository<SessaoDeCaixa, Long>
     @Query("SELECT s FROM SessaoDeCaixa s WHERE s.empresaId = :empresaId AND s.uuid = :uuid")
     Optional<SessaoDeCaixa> travarPorUuid(@Param("empresaId") Long empresaId, @Param("uuid") UUID uuid);
 
-    /** A sessao ABERTA ou EM_CONFERENCIA aberta pelo usuario (no maximo uma, indice parcial da V16). */
+    /** A sessao ABERTA ou EM_CONFERENCIA aberta pelo usuario (no maximo uma; o mesmo predicado do indice parcial da V16). */
     @Query("""
             SELECT s FROM SessaoDeCaixa s
             WHERE s.empresaId = :empresaId AND s.abertaPor = :usuarioId
-              AND s.status <> com.geitus.app.cashier.sessao.StatusDaSessao.FECHADA
+              AND s.status IN (com.geitus.app.cashier.sessao.StatusDaSessao.ABERTA,
+                               com.geitus.app.cashier.sessao.StatusDaSessao.EM_CONFERENCIA)
             """)
     Optional<SessaoDeCaixa> emAndamentoDoUsuario(@Param("empresaId") Long empresaId,
             @Param("usuarioId") Long usuarioId);
 
-    /** A sessao ABERTA ou EM_CONFERENCIA do ponto (no maximo uma, indice parcial da V16). */
+    /** A sessao ABERTA ou EM_CONFERENCIA do ponto (no maximo uma; o mesmo predicado do indice parcial da V16). */
     @Query("""
             SELECT s FROM SessaoDeCaixa s
             WHERE s.empresaId = :empresaId AND s.ponto.id = :pontoId
-              AND s.status <> com.geitus.app.cashier.sessao.StatusDaSessao.FECHADA
+              AND s.status IN (com.geitus.app.cashier.sessao.StatusDaSessao.ABERTA,
+                               com.geitus.app.cashier.sessao.StatusDaSessao.EM_CONFERENCIA)
             """)
     Optional<SessaoDeCaixa> emAndamentoDoPonto(@Param("empresaId") Long empresaId, @Param("pontoId") Long pontoId);
 }

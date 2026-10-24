@@ -3,6 +3,7 @@ package com.geitus.app.cashier.ponto;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -213,6 +214,6 @@ public class PontosDeCaixaService {
     }
 
     private OffsetDateTime agora() {
-        return OffsetDateTime.now(relogio);
+        return OffsetDateTime.now(relogio).truncatedTo(ChronoUnit.MICROS);
     }
 }

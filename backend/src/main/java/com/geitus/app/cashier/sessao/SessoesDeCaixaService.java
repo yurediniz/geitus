@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
@@ -426,6 +427,6 @@ public class SessoesDeCaixaService {
     }
 
     private OffsetDateTime agora() {
-        return OffsetDateTime.now(relogio);
+        return OffsetDateTime.now(relogio).truncatedTo(ChronoUnit.MICROS);
     }
 }

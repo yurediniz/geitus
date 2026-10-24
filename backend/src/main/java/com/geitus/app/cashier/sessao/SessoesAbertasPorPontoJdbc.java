@@ -29,11 +29,17 @@ class SessoesAbertasPorPontoJdbc implements SessoesAbertasPorPonto {
             WHERE s.empresa_id = ? AND s.status IN ('ABERTA', 'EM_CONFERENCIA')
             """;
 
+    /** Por ponto, a abertura mais recente: um passo no indice {@code ix_sessao_caixa_ponto} por ponto. */
     private static final String ULTIMOS_FUNDOS = """
-            SELECT DISTINCT ON (s.ponto_caixa_id) s.ponto_caixa_id, s.fundo_troco
-            FROM sessoes_caixa s
-            WHERE s.empresa_id = ?
-            ORDER BY s.ponto_caixa_id, s.aberta_em DESC, s.id DESC
+            SELECT p.id AS ponto_caixa_id, ultima.fundo_troco
+            FROM pontos_caixa p
+            CROSS JOIN LATERAL (
+                SELECT s.fundo_troco
+                FROM sessoes_caixa s
+                WHERE s.empresa_id = p.empresa_id AND s.ponto_caixa_id = p.id
+                ORDER BY s.aberta_em DESC, s.id DESC
+                LIMIT 1) ultima
+            WHERE p.empresa_id = ?
             """;
 
     private static final String TEM_SESSAO_ABERTA = """

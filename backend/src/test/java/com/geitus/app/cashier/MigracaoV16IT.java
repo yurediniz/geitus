@@ -277,6 +277,84 @@ class MigracaoV16IT {
         jdbc.update(inserirMovimentoSql(sessao, "ABERTURA", "0.00", null, UUID.randomUUID()));
     }
 
+    // ---------- Movimento so em sessao aberta (D1) ----------
+
+    @Test
+    void recusaMovimentoEmSessaoEmConferencia() {
+        long sessao = inserirSessaoEmConferencia(caixa1(empresaA), usuarioA);
+
+        assertViolacao(inserirMovimentoSql(sessao, "SUPRIMENTO", "10.00", "'Troco'", UUID.randomUUID()),
+                "sessão aberta");
+    }
+
+    @Test
+    void recusaMovimentoEmSessaoFechada() {
+        long sessao = inserirSessaoAberta(caixa1(empresaA), usuarioA);
+        fecharSemDiferenca(sessao);
+
+        assertViolacao(inserirMovimentoSql(sessao, "SANGRIA", "10.00", "'Cofre'", UUID.randomUUID()),
+                "sessão aberta");
+    }
+
+    @Test
+    void recusaMovimentoComSessaoDeOutraEmpresa() {
+        long sessaoDaA = inserirSessaoAberta(caixa1(empresaA), usuarioA);
+        long usuarioB = jdbc.queryForObject("SELECT id FROM usuario WHERE empresa_id = ?", Long.class, empresaB);
+
+        assertViolacao("INSERT INTO movimentos_caixa (uuid, empresa_id, sessao_caixa_id, tipo, valor, motivo,"
+                + " usuario_id, chave_idempotencia, criado_em) VALUES (gen_random_uuid(), " + empresaB + ", "
+                + sessaoDaA + ", 'SUPRIMENTO', 10.00, 'Troco', " + usuarioB + ", gen_random_uuid(), now())",
+                "fk_movimento_caixa_sessao");
+    }
+
+    // ---------- Regras do gatilho da sessao (D3) ----------
+
+    @Test
+    void recusaSessaoQueNaoNasceAberta() {
+        assertViolacao("INSERT INTO sessoes_caixa (uuid, empresa_id, ponto_caixa_id, status, aberta_por, aberta_em,"
+                + " fundo_troco, fechamento_cego, valor_esperado, valor_contado, diferenca, contada_por, contada_em,"
+                + " fechada_por, fechada_em) VALUES (gen_random_uuid(), " + empresaA + ", " + caixa1(empresaA)
+                + ", 'FECHADA', " + usuarioA + ", now(), 0, false, 0, 0, 0, " + usuarioA + ", now(), " + usuarioA
+                + ", now())", "nasce aberta");
+    }
+
+    @Test
+    void recusaFecharDiretoComDiferencaNoModoCego() {
+        long sessao = inserirSessaoAberta(caixa1(empresaA), usuarioA);
+
+        assertViolacao("UPDATE sessoes_caixa SET status = 'FECHADA', fechamento_cego = true, valor_esperado = 100,"
+                + " valor_contado = 99, diferenca = -1, contada_por = " + usuarioA + ", contada_em = now(),"
+                + " justificativa = 'Falta', fechada_por = " + usuarioA + ", fechada_em = now() WHERE id = "
+                + sessao, "conferência");
+    }
+
+    @Test
+    void permiteFecharDiretoComDiferencaForaDoModoCego() {
+        long sessao = inserirSessaoAberta(caixa1(empresaA), usuarioA);
+
+        jdbc.update(fecharSql(sessao, "100.00", "99.00", "-1.00", "'Falta'"));
+
+        assertThat(contar("SELECT count(*) FROM sessoes_caixa WHERE status = 'FECHADA'")).isEqualTo(1);
+    }
+
+    // ---------- Integridade entre empresas e unicidade (D6) ----------
+
+    @Test
+    void recusaConfiguracaoComUsuarioDeOutraEmpresa() {
+        long usuarioB = jdbc.queryForObject("SELECT id FROM usuario WHERE empresa_id = ?", Long.class, empresaB);
+
+        assertViolacao("INSERT INTO configuracoes_caixa (empresa_id, fechamento_cego, atualizado_por, atualizado_em)"
+                + " VALUES (" + empresaA + ", true, " + usuarioB + ", now())", "fk_configuracao_caixa_usuario");
+    }
+
+    @Test
+    void recusaSegundaAberturaDoUsuarioComAPrimeiraEmConferencia() {
+        long ponto2 = inserirPonto(empresaA, "Caixa 2");
+        inserirSessaoEmConferencia(caixa1(empresaA), usuarioA);
+
+        assertViolacao(inserirSessaoAbertaSql(ponto2, usuarioA), "uq_sessao_caixa_usuario_aberta");
+    }
+
     // ---------- Fuso ----------
 
     @Test

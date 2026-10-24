@@ -2,6 +2,7 @@ package com.geitus.app.cashier.configuracao;
 
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,7 +50,7 @@ public class ConfiguracaoDoCaixaService {
     @Transactional
     public ConfiguracaoDoCaixaResponse salvarParaUsuario(Long idUsuario, ConfiguracaoDoCaixaRequest request) {
         UsuarioAutenticado usuario = resolvedor.resolver(idUsuario);
-        OffsetDateTime agora = OffsetDateTime.now(relogio);
+        OffsetDateTime agora = OffsetDateTime.now(relogio).truncatedTo(ChronoUnit.MICROS);
         boolean fechamentoCego = request.fechamentoCego();
         configuracaoRepository.gravar(usuario.empresaId(), fechamentoCego, usuario.usuarioId(), agora);
         return new ConfiguracaoDoCaixaResponse(fechamentoCego, usuario.nome(), HorarioDoCaixa.noFuso(relogio, agora));

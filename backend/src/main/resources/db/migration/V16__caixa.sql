@@ -133,11 +133,12 @@ CREATE UNIQUE INDEX uq_sessao_caixa_usuario_aberta
     ON sessoes_caixa (empresa_id, aberta_por)
     WHERE status IN ('ABERTA', 'EM_CONFERENCIA');
 
--- Historico das sessoes da empresa, da mais recente.
-CREATE INDEX ix_sessao_caixa_historico ON sessoes_caixa (empresa_id, aberta_em DESC);
+-- Historico das sessoes da empresa, da mais recente (desempate por id, a
+-- mesma ordem das consultas).
+CREATE INDEX ix_sessao_caixa_historico ON sessoes_caixa (empresa_id, aberta_em DESC, id DESC);
 
--- Ultimo fundo de troco do ponto e a FK RESTRICT do ponto.
-CREATE INDEX ix_sessao_caixa_ponto ON sessoes_caixa (empresa_id, ponto_caixa_id, aberta_em DESC);
+-- Ultimo fundo de troco do ponto (LATERAL ... LIMIT 1) e a FK RESTRICT do ponto.
+CREATE INDEX ix_sessao_caixa_ponto ON sessoes_caixa (empresa_id, ponto_caixa_id, aberta_em DESC, id DESC);
 
 -- =====================================================================
 -- Passo 4: movimentos de caixa (so recebem insercoes).
@@ -193,12 +194,50 @@ CREATE TRIGGER tg_movimento_caixa_imutavel
     BEFORE UPDATE OR DELETE ON movimentos_caixa
     FOR EACH ROW EXECUTE FUNCTION fn_movimento_caixa_imutavel();
 
--- Sessao: nunca excluida; fechada nao muda; a abertura nao muda; a contagem
--- gravada nao muda; so as transicoes ABERTA -> EM_CONFERENCIA,
--- ABERTA -> FECHADA e EM_CONFERENCIA -> FECHADA.
+-- Movimento so entra em sessao ABERTA: depois da contagem o esperado e uma
+-- fotografia e nao pode mudar. O FOR SHARE espera um fechamento em andamento
+-- na mesma sessao terminar. A aplicacao ja trava a sessao (FOR UPDATE) antes
+-- de inserir; o PDV, ao gravar os recebimentos da venda, deve fazer o mesmo:
+-- travar a sessao antes de inserir o movimento. Sessao inexistente na empresa
+-- fica para a FK fk_movimento_caixa_sessao recusar.
+CREATE FUNCTION fn_movimento_caixa_em_sessao_aberta() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+DECLARE
+    situacao VARCHAR(15);
+BEGIN
+    SELECT status INTO situacao
+    FROM sessoes_caixa
+    WHERE empresa_id = NEW.empresa_id AND id = NEW.sessao_caixa_id
+    FOR SHARE;
+
+    IF FOUND AND situacao <> 'ABERTA' THEN
+        RAISE EXCEPTION 'Movimento de caixa só entra em sessão aberta.'
+            USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER tg_movimento_caixa_em_sessao_aberta
+    BEFORE INSERT ON movimentos_caixa
+    FOR EACH ROW EXECUTE FUNCTION fn_movimento_caixa_em_sessao_aberta();
+
+-- Sessao: nasce ABERTA; nunca excluida; fechada nao muda; a abertura nao
+-- muda; a contagem gravada nao muda; so as transicoes ABERTA -> EM_CONFERENCIA,
+-- ABERTA -> FECHADA e EM_CONFERENCIA -> FECHADA; no modo cego, contagem com
+-- diferenca passa pela conferencia (nunca ABERTA -> FECHADA direto).
 CREATE FUNCTION fn_sessao_caixa_protegida() RETURNS trigger
     LANGUAGE plpgsql AS $$
 BEGIN
+    IF TG_OP = 'INSERT' THEN
+        IF NEW.status <> 'ABERTA' THEN
+            RAISE EXCEPTION 'Sessão de caixa nasce aberta.'
+                USING ERRCODE = 'integrity_constraint_violation';
+        END IF;
+        RETURN NEW;
+    END IF;
+
     IF TG_OP = 'DELETE' THEN
         RAISE EXCEPTION 'Sessão de caixa não pode ser excluída.'
             USING ERRCODE = 'integrity_constraint_violation';
@@ -237,10 +276,15 @@ BEGIN
             USING ERRCODE = 'integrity_constraint_violation';
     END IF;
 
+    IF OLD.status = 'ABERTA' AND NEW.status = 'FECHADA' AND NEW.fechamento_cego AND NEW.diferenca <> 0 THEN
+        RAISE EXCEPTION 'No fechamento cego, a contagem com diferença passa pela conferência.'
+            USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+
     RETURN NEW;
 END;
 $$;
 
 CREATE TRIGGER tg_sessao_caixa_protegida
-    BEFORE UPDATE OR DELETE ON sessoes_caixa
+    BEFORE INSERT OR UPDATE OR DELETE ON sessoes_caixa
     FOR EACH ROW EXECUTE FUNCTION fn_sessao_caixa_protegida();
