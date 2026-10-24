@@ -1025,3 +1025,39 @@ O Caixa é a etapa 10 do MVP e a base do PDV: a venda só será finalizada com c
 - O PDV acrescenta o tipo `RECEBIMENTO` com forma de pagamento e a conferência por forma.
 - Impressão do fechamento, relatório de caixa e integração da sangria com o Financeiro ficam para os módulos próprios.
 - As tabelas antigas continuam na DT-030.
+
+## DEC-042 — PDV: carrinho no navegador, venda atômica no servidor e caixa conferido por forma (etapa 11)
+
+**Data:** 2026-10-24
+**Status:** Aceita
+**Contexto:**
+O PDV é a etapa 11 do MVP e depende do Caixa (DEC-041), das embalagens (DEC-037), da etiqueta de balança (DEC-036), dos preços (DEC-033) e do estoque (DEC-034). O `CLAUDE.md` pede rapidez, scanner, teclado, total sempre visível, venda ligada a um caixa aberto e nada fiscal. Ele também pede atenção ao isolamento das regras de venda para um possível PDV local ou offline no futuro.
+
+**Decisão:**
+- **Abordagem B (decisão do usuário):** o carrinho vive no navegador. Cada leitura só consulta o servidor, e a venda é gravada inteira, de forma atômica e idempotente, ao finalizar.
+  - O servidor recalcula tudo (`CalculadoraDaVenda`, a mesma do `POST /api/pdv/calculo`). Se o total mudou, responde 409 para o operador confirmar.
+- **Escopo desta entrega (decisão do usuário):** venda básica com desconto, cancelamento, pagamento dividido (Dinheiro, Débito, Crédito, PIX, com troco só do dinheiro) e venda em espera (até 5, no navegador).
+- **Estoque insuficiente:** configurável em Configurações › PDV ("Vender sem estoque", ligado). O saldo pode ficar negativo só por movimento de venda.
+- **Desconto:** limite percentual do OPERADOR (padrão 10%) e preço mínimo do produto para todos.
+- **Cancelamento:** só com o caixa da venda aberto. O OPERADOR cancela as do próprio caixa, e o ADMIN as de qualquer caixa. Gera estorno no estoque e no caixa.
+- **Caixa conferido por forma (decisão do usuário):** movimentos `RECEBIMENTO` e `ESTORNO` com forma, e esperado, contagem e diferença por forma, com justificativa única.
+- **Modo cego com recebimentos:** a tela do caixa esconde os valores, e a lista de vendas mostra os totais (limitação aceita; resolve a DT-039).
+- **Item da venda:** guarda a fotografia (nome, código lido, unidade, rótulo da embalagem sem FK, preço, origem, descontos, custo).
+- **Produto vendido** não é excluído (FK `RESTRICT`).
+
+**Motivo:**
+- **Abordagem B:** o bipe fica instantâneo, o servidor só conhece vendas concluídas e as regras ficam num lugar só, prontas para um PDV offline.
+- **Recálculo no servidor:** impede preço ou valor manipulado no navegador.
+- **Cancelamento só com o caixa aberto:** o estorno sai da mesma gaveta, e a conferência continua certa.
+
+**Impacto:**
+- Domínio novo `sales` e migration `V17__pdv.sql`.
+- Mudanças no `cashier`: forma, recebimento, estorno e contagem por forma; o contrato da contagem muda.
+- Mudanças no `inventory`: motivo `CANCELAMENTO_VENDA`, ligação com o item e saldo negativo só por venda.
+- Rotas `/api/pdv/**` e `/api/configuracoes/pdv`; tela `/pdv` e a seção PDV em Configurações.
+- Spec: `docs/modules/pdv.md`.
+- Revisores obrigatórios: `data-reviewer` e `security-reviewer`.
+
+**Observações futuras:**
+- Impressão do recibo, TEF, devolução depois do fechamento, parcelas, crediário, autorização do ADMIN no balcão e a sugestão "Montar 1 CX + 1 UN".
+- PDV offline usando a mesma calculadora.
