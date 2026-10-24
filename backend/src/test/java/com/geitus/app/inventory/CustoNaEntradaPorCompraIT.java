@@ -315,20 +315,25 @@ class CustoNaEntradaPorCompraIT {
         assertThat(linhasDeCusto(produto)).isEqualTo(1);
     }
 
+    /** Limites do {@code @Digits} (10 inteiros e 2 casas): mais casas ou 11 inteiros respondem 400 no campo. */
     @Test
-    void custoComMaisDeDuasCasasPelaApi400() throws Exception {
+    void custoForaDosLimitesPelaApi400() throws Exception {
         CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
         UUID arroz = cenario.novoProduto(empresa, "UN", "Arroz");
 
-        mockMvc.perform(post("/api/produtos/" + arroz + "/estoque/ajustes")
-                        .header("Authorization", cenario.token(empresa.admin()))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                { "tipo": "ENTRADA", "quantidade": 2, "motivo": "COMPRA", "chave": "%s",
-                                  "custo": 10.005 }
-                                """.formatted(UUID.randomUUID())))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.campos[0].campo").value(CAMPO_CUSTO));
+        for (String custo : List.of("10.005", "12345678901.00")) {
+            mockMvc.perform(post("/api/produtos/" + arroz + "/estoque/ajustes")
+                            .header("Authorization", cenario.token(empresa.admin()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    { "tipo": "ENTRADA", "quantidade": 2, "motivo": "COMPRA", "chave": "%s",
+                                      "custo": %s }
+                                    """.formatted(UUID.randomUUID(), custo)))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.campos[0].campo").value(CAMPO_CUSTO))
+                    .andExpect(jsonPath("$.campos[0].mensagem")
+                            .value("O custo deve ter no máximo 10 dígitos inteiros e 2 casas decimais."));
+        }
         assertThat(cenario.contarMovimentos(arroz)).isZero();
     }
 
@@ -389,6 +394,31 @@ class CustoNaEntradaPorCompraIT {
         assertThat(repetido.movimento()).isEqualTo(primeiro.movimento());
         assertThat(cenario.contarMovimentos(arroz)).isEqualTo(1);
         assertThat(linhasDeCusto(arroz)).isEqualTo(1);
+    }
+
+    /**
+     * A chave repetida depois de uma edicao do custo devolve o movimento
+     * original e nao reaplica o custo da compra: a edicao continua valendo.
+     */
+    @Test
+    void chaveRepetidaDepoisDeEditarOCustoNaoReaplicaACompra() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        UUID arroz = cenario.novoProduto(empresa, "UN", "Arroz");
+        UUID chave = UUID.randomUUID();
+        ResultadoAjuste original = estoqueService.ajustarParaUsuario(empresa.admin(), arroz,
+                compra("5", "10.00", null, chave));
+        cenario.editarProduto(empresa, arroz, "Arroz", "12.00");
+
+        ResultadoAjuste repetido = estoqueService.ajustarParaUsuario(empresa.admin(), arroz,
+                compra("5", "10.00", null, chave));
+
+        assertThat(repetido.criado()).isFalse();
+        assertThat(repetido.movimento()).isEqualTo(original.movimento());
+        ProdutoResponse produto = produto(empresa, arroz);
+        assertThat(produto.custo()).isEqualByComparingTo("12.00");
+        assertThat(produto.custoOrigem().tipo()).isEqualTo(OrigemDoCusto.EDICAO);
+        assertThat(linhasDeCusto(arroz)).isEqualTo(2);
+        assertThat(cenario.contarMovimentos(arroz)).isEqualTo(1);
     }
 
     @Test
@@ -656,8 +686,8 @@ class CustoNaEntradaPorCompraIT {
     }
 
     /**
-     * A ultima entrada de compra e a mais recente, mesmo entre outros
-     * movimentos. A compra antiga (sem custo, anterior a V13) fica fora: o
+     * A ultima entrada de compra e a mais recente, mesmo com uma entrada por
+     * devolucao e uma saida depois dela. A compra antiga (sem custo, anterior a V13) fica fora: o
      * cenario esta no {@code MigracaoV13IT}, porque a V13 recusa compra nova
      * sem custo.
      */
@@ -667,6 +697,9 @@ class CustoNaEntradaPorCompraIT {
         ProdutoResponse sache = cenario.novoProdutoComCaixa(empresa, "Sachê", "18");
         ajustar(empresa, sache.id(), compra("5", "10.00"));
         ajustar(empresa, sache.id(), compra("2", "180.00", caixa(sache), UUID.randomUUID()));
+        // Entrada mais recente, mas sem ser compra: fica fora da ultima compra.
+        ajustar(empresa, sache.id(),
+                ajuste(TipoMovimento.ENTRADA, "3", MotivoMovimento.DEVOLUCAO_CLIENTE, null, null, UUID.randomUUID()));
         ajustar(empresa, sache.id(),
                 ajuste(TipoMovimento.SAIDA, "1", MotivoMovimento.PERDA_AVARIA, null, null, UUID.randomUUID()));
 

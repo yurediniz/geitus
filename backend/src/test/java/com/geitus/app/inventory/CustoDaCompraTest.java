@@ -6,6 +6,8 @@ import java.math.BigDecimal;
 
 import org.junit.jupiter.api.Test;
 
+import com.geitus.app.catalog.CustoDeEntrada;
+
 /**
  * Conta do custo da compra (Fase B4, docs/modules/produtos-custo-entrada.md,
  * 2.1): o por unidade e o digitado em unidades, ou a divisao pela embalagem
@@ -33,6 +35,24 @@ class CustoDaCompraTest {
                 .isEqualTo(new BigDecimal("33.3333"));
         assertThat(CustoDaCompra.de(new BigDecimal("200.00"), caixaCom("3")).porUnidade())
                 .isEqualTo(new BigDecimal("66.6667"));
+    }
+
+    /** Unidade fracionada: SC c/ 25,5 KG a R$ 127,50 = R$ 5,0000 por KG. */
+    @Test
+    void sacoDeVinteECincoEMeio() {
+        RetratoDaEmbalagem saco = new RetratoDaEmbalagem("SC c/ 25,5 KG", new BigDecimal("25.5"), 1);
+
+        assertThat(CustoDaCompra.de(new BigDecimal("127.50"), saco).porUnidade()).isEqualTo(new BigDecimal("5.0000"));
+    }
+
+    /** CX c/ 101 a R$ 0,50 = 0,00495 -> 0,0050 no movimento e 0,01 no produto (meio para cima, duas vezes). */
+    @Test
+    void centavoArredondadoParaCimaNoProduto() {
+        CustoDaCompra custo = CustoDaCompra.de(new BigDecimal("0.50"), caixaCom("101"));
+
+        assertThat(custo.porUnidade()).isEqualTo(new BigDecimal("0.0050"));
+        assertThat(CustoDeEntrada.custoDoProduto(custo.porUnidade())).isEqualTo(new BigDecimal("0.01"));
+        assertThat(custo.positivo()).isTrue();
     }
 
     @Test
