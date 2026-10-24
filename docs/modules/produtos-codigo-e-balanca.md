@@ -1,6 +1,6 @@
 # Produtos: Número, código do produto, etiqueta de balança e formulário em tela única (Fase B2)
 
-> **Status:** spec final aprovada em conversa em 2026-10-23, com execução autorizada ("Podemos continuar com as implementações"). Fase intermediária da DEC-030, antes da Fase B3 ([produtos-embalagens.md](produtos-embalagens.md)) e da Fase F (imagem). Decisões na **DEC-036**.
+> **Status:** **implementada** em 2026-10-23 (migration V11; ajustes da implementação no §11). Spec aprovada em conversa no mesmo dia. Fase intermediária da DEC-030, antes da Fase B3 ([produtos-embalagens.md](produtos-embalagens.md)) e da Fase F (imagem). Decisões na **DEC-036**.
 
 ## 1. Motivação
 - **Produtos a granel:** a loja vende produtos a granel (KG) e itens por unidade (UN) pesados na balança **Toledo Prix 4**, que imprime uma **etiqueta com código de barras variável**. A etiqueta traz o **código do produto** programado na balança e o **valor total**, não o código de barras do fabricante.
@@ -57,7 +57,7 @@ Tabela `configuracoes_etiqueta_balanca`, **uma por empresa**:
 
 ### 3.2 Leitor (regra de domínio, para o PDV)
 - **Assinatura:** `LeitorEtiquetaBalanca.ler(String codigoLido, ConfiguracaoEtiqueta config) → Optional<LeituraEtiqueta(int codigoProduto, TipoInformacao tipo, BigDecimal quantidadeOuValor)>`.
-- **Quando a leitura acontece:** só com exatamente 13 dígitos, começando pelo prefixo. Com dígito verificador, o EAN-13 tem de ser válido.
+- **Quando a leitura acontece:** só com exatamente 13 dígitos, começando pelo prefixo, com os dígitos de preenchimento iguais a zero e código diferente de 000000. Com dígito verificador, o EAN-13 tem de ser válido.
 - **Como cada campo é lido:** o código é lido sem zeros (000542 → 542). A informação é dividida por 10^casas (010000 com 3 casas → 10.000).
 - **Exemplo real do usuário:** `2000542010000` → produto **542**, valor **R$ 10,00**.
 
@@ -67,7 +67,7 @@ Tabela `configuracoes_etiqueta_balanca`, **uma por empresa**:
 - **Modelos prontos:**
   - "Toledo, código 6 + valor 6 (3 casas), sem DV" (o padrão);
   - "Toledo, código 4 + 0 + valor 6 (2 casas) + DV";
-  - "Toledo, código 5 + valor 5 (2 casas) + DV";
+  - "Toledo, código 5 + 0 + valor 5 (2 casas) + DV" (um zero de preenchimento para somar 13);
   - "Peso, código 6 + peso 5 (3 casas) + DV".
 - **Campo "Testar etiqueta":**
   - colar um número mostra "Produto 542 · Açúcar a granel · R$ 10,00", ou "Produto 542 não cadastrado", ou "Este número não é uma etiqueta neste formato.";
@@ -86,7 +86,7 @@ Substitui as abas da Fase B (`produtos-identificacao-e-formulario.md` §6.2).
   - usa `aria-current` no atalho ativo.
 - **Seções, nesta ordem:**
   1. **Geral:** **Nº do Produto** (só leitura, na edição; no cadastro aparece "Será gerado ao salvar"), nome, nome curto, unidade de venda, preço de venda, categoria, marca, fornecedor e descrição. **Sem o campo de código de barras.**
-  2. **Códigos:** código do produto, "Vendido na balança" (com o atalho do §2), SKU com "Gerar automaticamente" e a lista de códigos de barras com "Adicionar código" (Enter para o leitor e o aviso do §3.4).
+  2. **Códigos** (ordem decidida pelo usuário na implementação): primeiro a lista de códigos de barras com "Adicionar código" (Enter para o leitor e o aviso do §3.4), depois o código do produto com "Vendido na balança" (com o atalho do §2 e o link "Configurar etiqueta") e por último o SKU com "Gerar automaticamente".
   3. **Preços:** §5.
   4. **Estoque:** controle, saldo e "Ajustar estoque", níveis, estoque inicial (só no cadastro) e o bloco **"Unidade e embalagem"**, movido da Geral.
   5. **Histórico:** só na edição; a consulta só roda quando a seção se aproxima da tela.
@@ -209,3 +209,22 @@ Aditiva sobre a V10, que não é editada.
   - o SKU não entra na venda;
   - número da venda pelo `Numerador`;
   - bloquear a troca do código de produto já vendido.
+
+## 11. Ajustes na implementação
+- **Seção Códigos:** os códigos de barras vêm primeiro, depois o código do produto e a balança, e por último o SKU (decisão do usuário).
+- **Etiqueta:**
+  - os dígitos de preenchimento precisam ser zeros e o código 000000 não é lido (no backend e no frontend);
+  - o modelo "Toledo · código 5, valor 5" usa um zero de preenchimento para somar 13 dígitos;
+  - o código e os dígitos da configuração recusam número com casas decimais (`542.9` → 400); `"000542"` é aceito;
+  - a configuração é registrada em log (INFO) ao ser salva.
+- **Código repetido na corrida:** dois cadastros simultâneos com o mesmo código dão 409 com o campo `codigo`, lido pelo nome da constraint no erro do PostgreSQL.
+- **Tela Balança:**
+  - o resultado do teste some quando o formato muda;
+  - "Salvar" só fica ativo com alteração;
+  - sair da tela com alteração pede confirmação ("Descartar alterações?").
+- **Tela única:**
+  - a barra fixa reúne os atalhos e os avisos (sucesso e erro ao salvar);
+  - o scroll-spy considera a margem de rolagem da seção, então a seção levada pelo atalho continua ativa ao fim da rolagem; no fim da página, a última seção fica ativa;
+  - Ctrl+Shift+Enter salva e abre outro cadastro;
+  - "Usar o número do produto" só aparece quando o número cabe no código e na etiqueta.
+- **Conferido no navegador** (2026-10-23): ordem da seção Códigos, atalho "Usar o número do produto", rolagem até o campo com erro e a contagem no atalho, calculadora pelo markup, margem e markup na promoção e no atacado, "Unidade e embalagem" no Estoque, tela Balança (padrão, prévia, teste e aviso de saída), Nº na lista e em Clientes, e celular sem rolagem lateral.

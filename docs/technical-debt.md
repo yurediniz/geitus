@@ -451,6 +451,26 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Impacto:** Desempenho em catalogos grandes e refinamentos de UX; nenhum risco imediato.
 - **Quando revisar:** Quando um cliente tiver catalogo grande ou na proxima rodada de UX da lista.
 
+## DT-034 — Pendencias e regras futuras da Fase B2 (numero, codigo e balanca)
+
+- **ID:** DT-034
+- **Modulo:** Backend/Frontend (Catalogo — identificacao e etiqueta de balanca)
+- **Origem:** Revisoes e verificacao no navegador da Fase B2
+- **Prioridade:** baixa (media para os itens do PDV, na etapa 11)
+- **Status:** aberto
+- **Descricao:**
+  - **Backend:**
+    - extrair colaboradores do `ProdutoService` (codigos, precos, estoque inicial) no inicio da Fase B3, recomendacao do back-end-reviewer;
+    - `numeracoes` so fica coerente se toda criacao passar pelo `Numerador`; carga direta no banco exige o SQL de ressincronizacao do Javadoc;
+    - bloquear a troca do codigo do produto ja vendido (quando o PDV existir).
+  - **Frontend:**
+    - o scroll-spy e testado com geometria simulada (jsdom nao tem layout); um teste de navegador (e2e) cobriria a rolagem real.
+  - **Produto:**
+    - exportar os produtos para o software da balanca (MGV da Toledo);
+    - historico de alteracao da configuracao da etiqueta (hoje so o log INFO).
+- **Impacto:** Nenhum risco imediato; organizacao do codigo e itens que dependem do PDV.
+- **Quando revisar:** No inicio da Fase B3 (ProdutoService) e na especificacao do PDV.
+
 ## DT-026 — Teto de profundidade e de quantidade na arvore de categorias
 
 - **ID:** DT-026

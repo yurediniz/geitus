@@ -14,7 +14,7 @@ Conforme o escopo definido no [CLAUDE.md](../../CLAUDE.md):
 - Layout principal
 - [Empresa](empresa.md) ✔
 - [Usuários](usuarios.md) ✔
-- [Produtos](produtos.md) ✔ — em evolução (DEC-030): [Categorias e Unidades](categorias-e-unidades.md) (Fase A ✔), [Identificação e formulário](produtos-identificacao-e-formulario.md) (Fase B ✔), [Preços](produtos-precos.md) (Fase C ✔), [Estoque básico](produtos-estoque.md) (Fase D ✔), [Listagem](produtos-listagem.md) (Fase E ✔)
+- [Produtos](produtos.md) ✔ — em evolução (DEC-030): [Categorias e Unidades](categorias-e-unidades.md) (Fase A ✔), [Identificação e formulário](produtos-identificacao-e-formulario.md) (Fase B ✔), [Preços](produtos-precos.md) (Fase C ✔), [Estoque básico](produtos-estoque.md) (Fase D ✔), [Listagem](produtos-listagem.md) (Fase E ✔), [Número, código e balança](produtos-codigo-e-balanca.md) (Fase B2 ✔), [Embalagens de venda](produtos-embalagens.md) (Fase B3, proposta)
 - [Clientes](clientes.md) ✔
 - PDV
 - Caixa

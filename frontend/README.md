@@ -29,22 +29,21 @@ Frontend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Co
 - **Autenticação**: tela de login, estado de sessão e proteção de rotas (ver seção "Autenticação" abaixo).
 - **Empresa** (`/empresa`): cadastro da empresa do usuário autenticado (representante legal, "Já possui CNPJ?", endereço com autofill por CEP); edição apenas para ADMIN, leitura para os demais. Nome da empresa visível na sidebar.
 - **Usuários** (`/usuarios`, apenas ADMIN via `AdminRoute`): listagem, criação, edição, inativação/reativação e redefinição de senha; qualquer usuário pode trocar a própria senha.
-- **Produtos** (`/produtos`): listagem paginada (25 por página) com busca enquanto se digita, filtros (status, categoria, estoque, promoção) e ordenação, tudo guardado na URL; tabela a partir de 1.024 px e cards no celular e no tablet. Cadastro e edição em **página própria** (`/produtos/novo`, `/produtos/:id`) com abas Geral, Preços, Estoque e Códigos:
-  - cadastro mínimo inteiro na aba Geral (nome, unidade, preço e código de barras);
-  - vários códigos de barras, com validação EAN/UPC;
-  - SKU gerado automaticamente;
+- **Produtos** (`/produtos`): listagem paginada (25 por página) com busca enquanto se digita, filtros (status, categoria, estoque, promoção) e ordenação, tudo guardado na URL; tabela a partir de 1.024 px e cards no celular e no tablet. Cadastro e edição em **página própria** (`/produtos/novo`, `/produtos/:id`), em **tela única** com atalhos fixos (Geral · Códigos · Preços · Estoque · Histórico) que rolam até a seção, destacam a seção visível e mostram a quantidade de erros:
+  - Geral com o **Nº do produto** (gerado ao salvar), nome, unidade, preço e dados complementares;
+  - Códigos: vários códigos de barras (validação EAN/UPC), código do produto (até 6 dígitos, zeros à esquerda ignorados) com "Vendido na balança" e "Usar o número do produto", e SKU gerado automaticamente;
   - autocomplete de marca e fornecedor;
   - nome curto com prévia do cupom;
-  - "Salvar e cadastrar outro";
-  - aviso de alterações não salvas;
+  - "Salvar e cadastrar outro" (Ctrl+Shift+Enter);
+  - aviso de alterações não salvas (`hooks/useAvisoAlteracoesNaoSalvas.tsx`);
   - excluir, inativar e reativar no cabeçalho;
   - modo leitura para OPERADOR;
-  - aba Preços com preço pela margem, aviso de preço abaixo do custo, preço promocional por datas e preço de atacado;
-  - aba Histórico (custo e preço de venda) na edição;
+  - Preços com margem e markup em todos os preços, calculadora pela margem ou pelo markup (com a explicação dos dois), aviso de preço abaixo do custo, preço promocional por datas e preço de atacado;
   - campos de dinheiro com máscara que preenche da direita para a esquerda (`components/ui/campo-moeda.tsx`, lógica em `lib/moeda.ts`);
-  - selo "Promoção" na listagem;
-  - aba Estoque com "Controlar estoque", saldo, estoque inicial no cadastro e o modal "Ajustar estoque" (Entrada, Saída, Contagem e "Zerar estoque"), também acessível pelo card da lista;
-  - seção Estoque na aba Histórico e selos "Estoque baixo" e "Sem estoque" na listagem.
+  - selo "Promoção" na listagem e "Nº · Cód. · SKU" abaixo do nome;
+  - Estoque com "Controlar estoque", saldo, estoque inicial no cadastro, o modal "Ajustar estoque" (Entrada, Saída, Contagem e "Zerar estoque"), também acessível pela lista, e o bloco "Unidade e embalagem";
+  - Histórico (movimentações de estoque, custo e preço de venda) na edição, carregado quando a seção se aproxima; selos "Estoque baixo" e "Sem estoque" na listagem.
+- **Etiqueta de balança** (`/produtos/balanca`): formato da etiqueta por empresa, com modelos prontos, prévia, exemplo e "Testar etiqueta"; leitura em `lib/etiquetaBalanca.ts` (igual à do backend). Salvar só ADMIN.
 - **Categorias** (`/produtos/categorias`) e **Unidades** (`/produtos/unidades`), em abas dentro de Produtos: árvore de categorias (subcategorias, mover, inativar, excluir) e cadastro de unidades com fracionamento. No formulário de produto: unidade de venda (select), categoria (seletor com busca pelo caminho e "+ Nova") e unidade de compra + fator.
 - **Clientes** (`/clientes`): cadastro rápido (nome, telefone com "Este número é WhatsApp", CPF e observações), busca por nome/CPF/telefone e filtro de status; qualquer perfil cadastra e edita, inativar/reativar só ADMIN. Máscaras e validações de CPF/telefone compartilhadas em `lib/documentos.ts`.
 - Cartão de **status do backend** consumindo `GET /api/health`, com tratamento de **carregando**, **sucesso** e **erro**.
