@@ -847,3 +847,41 @@ Decisões do usuário em conversa (várias versões do modelo dos códigos até 
 - A Fase B3 (embalagens de venda) vem em seguida.
 - O PDV usa o leitor da etiqueta, o `código*quantidade` e o `Numerador` da venda.
 - Códigos do fornecedor ficam para Compras.
+
+## DEC-037 — Embalagens de venda: um produto, estoque único e lista de embalagens (Fase B3)
+
+**Data:** 2026-10-24
+**Status:** Aceita
+**Contexto:**
+A loja vende o mesmo produto em formas diferentes, cada uma com o seu código de barras e o seu preço (Nexgard Combo: caixa com 3 a R$ 209,90 e unidade a R$ 89,90). O Geitus só tinha a unidade de compra com fator, usada apenas para exibir a conversão. O usuário propôs dois produtos vinculados com estoques sincronizados.
+
+**Decisão:**
+- **Um produto, estoque único na unidade de venda, e uma lista de até 10 embalagens.**
+  - Cada embalagem tem unidade diferente da de venda, quantidade > 1 (decimal só em unidade de venda fracionada), preço opcional, marca "de compra" (no máximo uma) e até 5 códigos de barras.
+- **Unidade de compra vira embalagem:** a unidade de compra + fator deixa de existir e vira a embalagem "de compra" (migração na V12, que para com erro em vez de descartar dado inconvertível).
+- **Códigos de barras das embalagens** em `produto_codigos_barras`, com `embalagem_id`. Assim, a unicidade por empresa vale entre unidade e embalagens sem trigger.
+- **Preço efetivo:**
+  - o preço próprio, que não é afetado pela promoção da unidade;
+  - sem preço próprio, quantidade × preço vigente da unidade (com a promoção, se houver);
+  - o atacado fica para o PDV.
+- **Margem e markup** sobre quantidade × custo; o preço mínimo é conferido por unidade.
+- **Histórico:** a alteração do preço próprio entra no histórico de preços (`PRECO_EMBALAGEM`, com o rótulo).
+- **Tela:** nova seção "Embalagens" entre Preços e Estoque; o bloco "Unidade e embalagem" sai do Estoque.
+- **Ajuste de estoque** em Entrada e Saída pode ser informado em embalagens, com o movimento gravado em unidades e o retrato da embalagem no próprio movimento.
+- **Sem código numérico próprio** da embalagem: no PDV, o código do produto lança a unidade e o PDV oferece escolher a embalagem.
+- **Migration V12.**
+
+**Motivo:**
+Dois produtos sincronizados gerariam estoque fracionado, dois saldos e relatórios divididos. O preço de atacado não resolve o caso, porque baratearia cada unidade. As demais escolhas (seção própria, preço que segue a promoção, ajuste por embalagem, sem código próprio) são decisões do usuário em conversa.
+
+**Impacto:**
+- O contrato do produto ganha `embalagens` e perde `unidadeCompraId`, `fatorConversao`, `unidadeCompra` e `conversaoTexto`.
+- O ajuste de estoque ganha `embalagemId`.
+- Muda o formulário do produto.
+- Spec: `docs/modules/produtos-embalagens.md`.
+- Revisor obrigatório: `data-reviewer` (V12, migração da unidade de compra, FK composta dos códigos).
+
+**Observações futuras:**
+- O PDV lança a embalagem pelo código de barras, aceita linhas de embalagens diferentes na mesma venda e guarda o retrato da embalagem no item.
+- A regra para remover uma embalagem já vendida é decidida no PDV.
+- Promoção e atacado próprios da embalagem e embalagem inativa ficam para depois.
