@@ -64,6 +64,7 @@ O caixa controla o dinheiro da gaveta durante um período de trabalho: quanto en
 - **Quem:** quem abriu a sessão ou um ADMIN. OPERADOR em sessão de outra pessoa → 404.
 - **Só em sessão `ABERTA`.** Em conferência → 409 "O caixa está em conferência. Termine o fechamento."; fechada → 409 "Este caixa já foi fechado.".
 - **Valor:** > 0, até 2 casas, no máximo 9.999.999.999,99.
+- **Limite do caixa:** um suprimento que deixaria o esperado acima de 9.999.999.999,99 → 400 "O valor passa do limite do caixa." (campo `valor`).
 - **Motivo:** obrigatório, aparado, até 200 caracteres.
 - **Sangria não passa do dinheiro na gaveta:** se o valor for maior que o esperado → 409.
   - ADMIN ou modo não cego: "A sangria passa do dinheiro na gaveta (R$ 50,00).";
