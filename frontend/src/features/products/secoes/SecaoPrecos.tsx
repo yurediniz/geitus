@@ -316,7 +316,12 @@ export function SecaoPrecos({ siglaPorId, desabilitado, aoAlterarCampo }: SecaoP
         <ExplicacaoMargemMarkup />
       </GrupoCampos>
 
-      <CalculadoraDePreco custo={custo} desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
+      <CalculadoraDePreco
+        custo={custo}
+        precoVenda={precoVenda}
+        desabilitado={desabilitado}
+        aoAlterarCampo={aoAlterarCampo}
+      />
 
       <BlocoComInterruptor
         id="promocaoAtiva"
@@ -438,7 +443,7 @@ const REGRA_DA_BASE: Readonly<
     rotulo: 'Margem desejada (%)',
     opcao: 'Pela margem',
     vazio: 'Informe a margem desejada.',
-    invalido: 'Use uma margem entre 0 e 99,99% (até 2 casas decimais).',
+    invalido: 'A margem vai até 99,99%: 100% significaria custo zero.',
     valido: margemDesejadaValida,
     calcular: calcularPrecoPelaMargem,
   },
@@ -446,7 +451,7 @@ const REGRA_DA_BASE: Readonly<
     rotulo: 'Markup desejado (%)',
     opcao: 'Pelo markup',
     vazio: 'Informe o markup desejado.',
-    invalido: 'Use um markup entre 0 e 9.999,99% (até 2 casas decimais).',
+    invalido: 'Informe um markup de 0% a 9.999,99%, com até 2 casas (ex.: 45,5).',
     valido: markupDesejadoValido,
     calcular: calcularPrecoPeloMarkup,
   },
@@ -454,6 +459,8 @@ const REGRA_DA_BASE: Readonly<
 
 interface CalculadoraDePrecoProps {
   custo: string
+  /** Preco de venda atual: editado a mao, a confirmacao do calculo sai da tela. */
+  precoVenda: string
   desabilitado: boolean
   aoAlterarCampo: () => void
 }
@@ -479,12 +486,12 @@ function motivoSemCalculo(base: BaseDoCalculo, custo: string, percentual: string
  * contar como alterado. Fica no estado da secao (e um auxilio de calculo, nao
  * um dado do produto).
  */
-function CalculadoraDePreco({ custo, desabilitado, aoAlterarCampo }: CalculadoraDePrecoProps) {
+function CalculadoraDePreco({ custo, precoVenda, desabilitado, aoAlterarCampo }: CalculadoraDePrecoProps) {
   const { setValue } = useFormContext<ProdutoFormValues>()
   const [base, setBase] = useState<BaseDoCalculo>('margem')
   const [percentual, setPercentual] = useState('')
-  // A confirmacao guarda o custo usado: mudar o custo a esconde (o preco ja nao corresponde).
-  const [confirmacao, setConfirmacao] = useState<{ texto: string; custo: string } | null>(null)
+  // A confirmacao guarda o custo usado e o preco gerado: mudar o custo ou editar o preco a mao a esconde.
+  const [confirmacao, setConfirmacao] = useState<{ texto: string; custo: string; preco: string } | null>(null)
   const regra = REGRA_DA_BASE[base]
   const preco = regra.calcular(custo, percentual)
   const motivo = motivoSemCalculo(base, custo, percentual)
@@ -500,6 +507,7 @@ function CalculadoraDePreco({ custo, desabilitado, aoAlterarCampo }: Calculadora
     setConfirmacao({
       texto: `Preço de venda atualizado para ${formatarMoeda(Number(preco))} (${base} de ${percentualTexto}%).`,
       custo,
+      preco,
     })
   }
 
@@ -577,7 +585,7 @@ function CalculadoraDePreco({ custo, desabilitado, aoAlterarCampo }: Calculadora
         </p>
       )}
       <p role="status" className="text-sm">
-        {confirmacao && confirmacao.custo === custo && (
+        {confirmacao && confirmacao.custo === custo && confirmacao.preco === precoVenda && (
           <span className="inline-flex items-center gap-1.5 text-success-soft-foreground">
             <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
             {confirmacao.texto}

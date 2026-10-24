@@ -43,18 +43,19 @@ export function SecaoHistorico({ produtoId, sigla, controlaEstoque }: SecaoHisto
       <SecaoMovimentosEstoque produtoId={produtoId} sigla={sigla} controlaEstoque={controlaEstoque} />
       <ListaHistorico<HistoricoPreco>
         id="historico-precos"
-        titulo="Alterações de preço"
+        titulo="Alterações de preço e custo"
         chave={chaveDoHistoricoDePrecos(produtoId)}
         buscar={(pagina) => listarHistoricoDePrecos(produtoId, pagina)}
         textos={{
           carregando: 'Carregando histórico de preços...',
           erroCarga: 'Não foi possível carregar o histórico de preços.',
           erroMais: 'Não foi possível carregar mais alterações. Tente de novo.',
-          vazioTitulo: 'Nenhuma alteração de preço registrada ainda.',
+          vazioTitulo: 'Nenhuma alteração de preço ou custo registrada ainda.',
           vazioDescricao: 'As próximas mudanças de custo e preço de venda aparecem aqui, com data e quem alterou.',
-          rotuloLista: 'Alterações de preço',
+          rotuloLista: 'Alterações de preço e custo',
         }}
-        // Sem id publico na linha: a posicao e estavel (a lista so cresce no fim).
+        // Sem id publico na linha: a chave e a posicao (as paginas carregadas nao mudam de lugar; o
+        // historico e recarregado do zero quando o produto e salvo).
         chaveDoItem={(_, indice) => indice}
         renderizarItem={(item) => <LinhaHistorico item={item} />}
       />

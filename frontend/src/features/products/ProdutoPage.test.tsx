@@ -37,7 +37,11 @@ import {
   resumo,
   unidade,
 } from '@/test/fixturesProduto'
-import { instalarIntersectionObserverFalso, simularInterseccao } from '@/test/intersectionObserver'
+import {
+  elementosObservados,
+  instalarIntersectionObserverFalso,
+  simularInterseccao,
+} from '@/test/intersectionObserver'
 import type { Categoria } from '@/types/catalogo'
 import type { MovimentoEstoque } from '@/types/estoque'
 import type { HistoricoPreco, PaginaResponse, Produto, ProdutoRequest } from '@/types/produto'
@@ -177,10 +181,33 @@ function secao(nome: RegExp): HTMLElement {
  * avisa o elemento observado (as listas so montam depois disso).
  */
 function mostrarHistorico() {
+  // So o elemento que a secao observa para carregar (a propria secao e observada pelo scroll-spy).
   const regiao = secao(/^histórico$/i)
-  for (const elemento of [regiao, ...regiao.querySelectorAll('*')]) {
-    simularInterseccao(elemento, true)
+  const observado = elementosObservados().find((elemento) => elemento !== regiao && regiao.contains(elemento))
+  expect(observado).toBeDefined()
+  simularInterseccao(observado as Element, true)
+}
+
+/**
+ * Posicoes de mentira para o scroll-spy (o jsdom nao tem layout): o topo de
+ * cada secao, a base da barra fixa e se a pagina chegou ao fim.
+ */
+function posicionar(topos: Partial<Record<string, number>>, { fimDaPagina = false } = {}) {
+  const retangulo = (topo: number) => ({ top: topo, bottom: topo + 300 }) as DOMRect
+  for (const [nome, topo] of Object.entries(topos)) {
+    const elemento = document.getElementById(`secao-${nome}`)
+    if (elemento && topo !== undefined) {
+      vi.spyOn(elemento, 'getBoundingClientRect').mockReturnValue(retangulo(topo))
+    }
   }
+  const barra = document.getElementById('produto-barra-fixa')
+  if (barra) {
+    vi.spyOn(barra, 'getBoundingClientRect').mockReturnValue({ top: 0, bottom: 50 } as DOMRect)
+  }
+  Object.defineProperty(document.documentElement, 'scrollHeight', {
+    configurable: true,
+    value: fimDaPagina ? window.innerHeight : 10 * window.innerHeight,
+  })
 }
 
 /** Elementos em que o `scrollIntoView` foi chamado (o mock guarda o `this`). */
@@ -280,6 +307,7 @@ describe('ProdutoPage', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    Reflect.deleteProperty(document.documentElement, 'scrollHeight')
   })
 
   describe('tela única com atalhos (Fase B2)', () => {
@@ -327,26 +355,54 @@ describe('ProdutoPage', () => {
 
       fireEvent.click(atalho(/estoque/i))
 
+      // Rola a secao (o scroll-margin dela deixa o titulo abaixo da barra fixa) e foca o titulo.
       const titulo = screen.getByRole('heading', { level: 2, name: 'Estoque' })
-      expect(rolados()).toEqual([titulo])
+      expect(rolados()).toEqual([secao(/^estoque$/i)])
+      expect(secao(/^estoque$/i)).toHaveClass('scroll-mt-32')
       expect(scrollIntoViewMock).toHaveBeenCalledWith(expect.objectContaining({ block: 'start' }))
       expect(titulo).toHaveFocus()
       expect(atalho(/estoque/i)).toHaveAttribute('aria-current', 'true')
       expect(atalho(/geral/i)).not.toHaveAttribute('aria-current')
     })
 
-    it('o atalho ativo acompanha a seção visível na rolagem', async () => {
+    it('o atalho ativo é a última seção cujo topo passou da linha abaixo da barra', async () => {
       renderNovo()
       await esperarFormulario()
 
-      simularInterseccao(secao(/^geral$/i), false)
+      posicionar({ geral: -900, codigos: -300, precos: 40, estoque: 600 })
       simularInterseccao(secao(/^preços$/i), true)
       expect(atalho(/preços/i)).toHaveAttribute('aria-current', 'true')
 
-      // Duas na faixa: vale a primeira na ordem da tela.
-      simularInterseccao(secao(/^códigos$/i), true)
-      expect(atalho(/códigos/i)).toHaveAttribute('aria-current', 'true')
+      posicionar({ geral: -1400, codigos: -800, precos: -400, estoque: 58 })
+      simularInterseccao(secao(/^estoque$/i), true)
+      expect(atalho(/estoque/i)).toHaveAttribute('aria-current', 'true')
       expect(atalho(/preços/i)).not.toHaveAttribute('aria-current')
+    })
+
+    it('no fim da página, a última seção visível fica ativa (mesmo sem passar da linha)', async () => {
+      renderNovo()
+      await esperarFormulario()
+
+      posicionar({ geral: -900, codigos: -300, precos: 100, estoque: 500 }, { fimDaPagina: true })
+      fireEvent.scroll(window)
+      simularInterseccao(secao(/^estoque$/i), true)
+
+      expect(atalho(/estoque/i)).toHaveAttribute('aria-current', 'true')
+    })
+
+    it('o clique no último atalho continua ativo durante a rolagem e o spy volta no scrollend', async () => {
+      renderNovo()
+      await esperarFormulario()
+      posicionar({ geral: -900, codigos: -300, precos: 40, estoque: 600 })
+
+      fireEvent.click(atalho(/estoque/i))
+      // A rolagem suave passa por Precos: o spy esta travado.
+      simularInterseccao(secao(/^preços$/i), true)
+      expect(atalho(/estoque/i)).toHaveAttribute('aria-current', 'true')
+
+      fireEvent(window, new Event('scrollend'))
+      simularInterseccao(secao(/^preços$/i), true)
+      expect(atalho(/preços/i)).toHaveAttribute('aria-current', 'true')
     })
 
     it('distribui os campos pelas seções: Geral sem código de barras e Unidade e embalagem no Estoque', async () => {
@@ -383,20 +439,21 @@ describe('ProdutoPage', () => {
       expect(within(estoque).getByLabelText(/unidade de compra/i)).toBeInTheDocument()
     })
 
-    it('a Geral mostra "Será gerado ao salvar" no cadastro e o Nº na edição', async () => {
-      renderNovo()
-      await esperarFormulario()
-      expect(within(secao(/^geral$/i)).getByText('Nº do Produto')).toBeInTheDocument()
-      expect(within(secao(/^geral$/i)).getByText('Será gerado ao salvar')).toBeInTheDocument()
-    })
-
-    it('a Geral mostra o número do produto em edição', async () => {
+    it('o Nº do produto fica na linha do título Geral, só na edição', async () => {
       renderEdicao({ ...produtoAtivo, numero: 15 })
       await esperarFormulario()
 
-      const termo = within(secao(/^geral$/i)).getByText('Nº do Produto')
-      expect(termo.nextElementSibling).toHaveTextContent('15')
-      expect(screen.queryByText('Será gerado ao salvar')).not.toBeInTheDocument()
+      const numero = within(secao(/^geral$/i)).getByText('Nº 15')
+      expect(numero.closest('p')).toHaveTextContent('Número do produto: Nº 15')
+      expect(numero.closest('p')?.parentElement).toContainElement(
+        screen.getByRole('heading', { level: 2, name: 'Geral' }),
+      )
+    })
+
+    it('no cadastro novo não há Nº (ainda não existe)', async () => {
+      renderNovo()
+      await esperarFormulario()
+      expect(within(secao(/^geral$/i)).queryByText(/^Nº /)).not.toBeInTheDocument()
     })
 
     it('mostra margem e markup derivados do preço (Geral) e do custo', async () => {
@@ -589,7 +646,7 @@ describe('ProdutoPage', () => {
       fireEvent.keyDown(campoCodigoBarras(), { key: 'Enter' })
 
       expect(
-        await screen.findByText('Este código tem o formato da etiqueta de balança configurada.'),
+        await screen.findByText(/^Parece uma etiqueta da balança\./),
       ).toBeInTheDocument()
       fireEvent.click(botaoSalvar())
       await waitFor(() =>
@@ -605,6 +662,231 @@ describe('ProdutoPage', () => {
       expect(campoCodigoProduto()).toBeDisabled()
       expect(interruptorBalanca()).toBeDisabled()
       expect(screen.queryByRole('button', { name: /usar o número do produto/i })).not.toBeInTheDocument()
+    })
+  })
+
+  describe('revisão da Fase B2', () => {
+    function antes(a: HTMLElement, b: HTMLElement): boolean {
+      return Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+    }
+
+    it('a seção Códigos traz os códigos de barras, depois o código do produto com a balança e o SKU por último', async () => {
+      renderNovo()
+      await esperarFormulario()
+
+      const codigos = secao(/^códigos$/i)
+      const barras = within(codigos).getByLabelText('Adicionar código')
+      const codigo = within(codigos).getByRole('textbox', { name: /^código do produto/i })
+      const balanca = within(codigos).getByRole('switch', { name: /vendido na balança/i })
+      const sku = within(codigos).getByLabelText(/^sku/i)
+      expect(antes(barras, codigo)).toBe(true)
+      expect(antes(codigo, balanca)).toBe(true)
+      expect(antes(balanca, sku)).toBe(true)
+    })
+
+    it('ajudas da seção Códigos e o link para configurar a etiqueta', async () => {
+      renderNovo()
+      await esperarFormulario()
+
+      expect(campoCodigoProduto()).toHaveAccessibleDescription(
+        'O código que você digita no PDV e programa na balança. Até 6 dígitos; zeros à esquerda são ignorados.',
+      )
+      expect(screen.getByLabelText(/^sku/i)).toHaveAccessibleDescription(
+        'Referência para seu controle (ex.: a do fornecedor). Não é usado na venda.',
+      )
+      expect(interruptorBalanca()).toHaveAccessibleDescription(
+        'Ligue para produtos pesados na balança. O PDV lê o código e o valor da etiqueta.',
+      )
+      expect(screen.getByRole('link', { name: 'Configurar etiqueta' })).toHaveAttribute('href', '/produtos/balanca')
+    })
+
+    it('erros em código de barras e no código: vai primeiro ao de barras, com a contagem da seção', async () => {
+      cadastrarProdutoMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', {
+          codigosBarras: 'Código de barras inválido.',
+          codigo: 'O código do produto deve ter de 1 a 6 dígitos.',
+        }),
+      )
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(campoCodigoBarras()).toHaveFocus())
+      expect(atalho(/códigos/i)).toHaveAccessibleName('Códigos (2 erros)')
+    })
+
+    it('o código de barras pendente barrado e o erro na lista contam como um erro só no atalho', async () => {
+      cadastrarProdutoMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { codigosBarras: 'Informe no máximo 20 códigos de barras.' }),
+      )
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      fireEvent.click(botaoSalvar())
+      expect(await screen.findByText('Informe no máximo 20 códigos de barras.')).toBeInTheDocument()
+
+      fireEvent.change(campoCodigoBarras(), { target: { value: '7891000315508' } })
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(campoCodigoBarras()).toHaveFocus())
+      expect(atalho(/códigos/i)).toHaveAccessibleName('Códigos (1 erro)')
+      // Selecionado: o proximo bip do leitor substitui o codigo barrado.
+      const campo = campoCodigoBarras() as HTMLInputElement
+      expect(campo.selectionStart).toBe(0)
+      expect(campo.selectionEnd).toBe(13)
+    })
+
+    it('erro sem campo (500) aparece no contêiner fixo, visível com a página rolada', async () => {
+      cadastrarProdutoMock.mockRejectedValue(new HttpError(500, 'NullPointerException'))
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+
+      fireEvent.click(botaoSalvar())
+
+      const alerta = await screen.findByText('Não foi possível salvar o produto. Tente novamente.')
+      expect(document.getElementById('produto-barra-fixa')).toContainElement(alerta)
+      expect(document.getElementById('produto-barra-fixa')).toHaveClass('sticky', 'top-0')
+      expect(screen.queryByText(/NullPointer/)).not.toBeInTheDocument()
+    })
+
+    it('a mensagem de sucesso também fica no contêiner fixo (ex.: cadastrar outro)', async () => {
+      cadastrarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Açúcar a granel', numero: 16, codigo: null })
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo('Açúcar a granel')
+
+      fireEvent.click(screen.getByRole('button', { name: /salvar e cadastrar outro/i }))
+
+      const sucesso = await screen.findByText('Produto "Açúcar a granel" cadastrado (Nº 16).')
+      expect(document.getElementById('produto-barra-fixa')).toContainElement(sucesso)
+    })
+
+    it('Ctrl+Shift+Enter no cadastro novo salva e abre outro', async () => {
+      cadastrarProdutoMock.mockResolvedValue({ ...produtoAtivo, nome: 'Café 500g' })
+      const router = renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+
+      fireEvent.keyDown(screen.getByLabelText(/preço de venda/i), { key: 'Enter', ctrlKey: true, shiftKey: true })
+
+      expect(await screen.findByText('Produto "Café 500g" cadastrado (Nº 15 · Cód. 542).')).toBeInTheDocument()
+      expect(router.state.location.pathname).toBe('/produtos/novo')
+      expect(campoNome()).toHaveValue('')
+    })
+
+    it('na edição, Ctrl+Shift+Enter só salva', async () => {
+      atualizarProdutoMock.mockResolvedValue(produtoAtivo)
+      const router = renderEdicao()
+      await esperarFormulario()
+
+      fireEvent.keyDown(campoNome(), { key: 'Enter', ctrlKey: true, shiftKey: true })
+
+      await waitFor(() => expect(router.state.location.pathname).toBe('/produtos'))
+    })
+
+    it('ligar "Vendido na balança" depois de um envio com erro mostra a exigência do código na hora', async () => {
+      renderNovo()
+      await esperarFormulario()
+      await preencherMinimo()
+      fireEvent.change(screen.getByLabelText(/^sku/i), { target: { value: 'A'.repeat(51) } })
+      fireEvent.click(botaoSalvar())
+      expect(await screen.findByText(/sku deve ter no máximo 50 caracteres/i)).toBeInTheDocument()
+
+      fireEvent.click(interruptorBalanca())
+
+      expect(await screen.findByText('Informe o código do produto para vendê-lo na balança.')).toBeInTheDocument()
+    })
+
+    it('a confirmação da calculadora some quando o preço de venda é editado à mão', async () => {
+      renderNovo()
+      await esperarFormulario()
+      fireEvent.change(screen.getByLabelText(/^custo/i), { target: { value: '10,00' } })
+      fireEvent.change(screen.getByLabelText('Margem desejada (%)'), { target: { value: '50' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Calcular preço' }))
+      expect(screen.getByText(/preço de venda atualizado para/i)).toBeInTheDocument()
+
+      fireEvent.change(screen.getByLabelText(/preço de venda/i), { target: { value: '21,00' } })
+
+      expect(screen.queryByText(/preço de venda atualizado para/i)).not.toBeInTheDocument()
+    })
+
+    describe('tamanho do código na etiqueta configurada', () => {
+      beforeEach(() => {
+        buscarConfiguracaoEtiquetaMock.mockResolvedValue({
+          ...CONFIGURACAO_ETIQUETA_PADRAO,
+          digitosCodigo: 4,
+          digitosPreenchimento: 1,
+          digitosInformacao: 6,
+          casasDecimais: 2,
+          digitoVerificador: true,
+          padrao: false,
+        })
+      })
+
+      it('com a balança, a ajuda diz quantos dígitos a etiqueta comporta e o envio barra o código maior', async () => {
+        renderNovo()
+        await esperarFormulario()
+        await preencherMinimo()
+        fireEvent.click(interruptorBalanca())
+        await waitFor(() =>
+          expect(campoCodigoProduto()).toHaveAccessibleDescription(/A etiqueta da balança comporta até 4 dígitos\.$/),
+        )
+
+        fireEvent.change(campoCodigoProduto(), { target: { value: '12345' } })
+        fireEvent.click(botaoSalvar())
+
+        expect(
+          await screen.findByText('Este código tem mais dígitos do que a etiqueta da balança comporta (4).'),
+        ).toBeInTheDocument()
+        await waitFor(() => expect(campoCodigoProduto()).toHaveFocus())
+        expect(cadastrarProdutoMock).not.toHaveBeenCalled()
+      })
+
+      it('"Usar o número do produto" só aparece se o número couber; senão, diz o motivo', async () => {
+        renderEdicao({ ...produtoAtivo, numero: 12345, codigo: null })
+        await esperarFormulario()
+        await waitFor(() => expect(buscarConfiguracaoEtiquetaMock).toHaveBeenCalled())
+
+        fireEvent.click(interruptorBalanca())
+
+        expect(
+          await screen.findByText('O Nº 12345 tem mais dígitos do que a etiqueta da balança comporta (4).'),
+        ).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /usar o número do produto/i })).not.toBeInTheDocument()
+      })
+    })
+
+    it('erro do servidor em estoqueInicial na edição (campo fora da tela) foca o título Estoque', async () => {
+      atualizarProdutoMock.mockRejectedValue(
+        new HttpError(400, 'Dados invalidos.', { estoqueInicial: 'O estoque inicial só vale no cadastro.' }),
+      )
+      renderEdicao()
+      await esperarFormulario()
+      scrollIntoViewMock.mockClear()
+
+      fireEvent.click(botaoSalvar())
+
+      const titulo = screen.getByRole('heading', { level: 2, name: 'Estoque' })
+      await waitFor(() => expect(titulo).toHaveFocus())
+      expect(rolados()).toContain(secao(/^estoque$/i))
+      expect(atalho(/estoque/i)).toHaveAccessibleName('Estoque (1 erro)')
+    })
+
+    it('400 de código grande demais para a etiqueta leva à seção Códigos e foca o código', async () => {
+      const mensagem = 'Este código tem mais dígitos do que a etiqueta da balança comporta (4).'
+      atualizarProdutoMock.mockRejectedValue(new HttpError(400, 'Dados invalidos.', { codigo: mensagem }))
+      renderEdicao({ ...produtoAtivo, codigo: 12345, vendidoBalanca: true })
+      await esperarFormulario()
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() => expect(campoCodigoProduto()).toHaveFocus())
+      expect(campoCodigoProduto()).toHaveAccessibleDescription(new RegExp(`${mensagem.replace(/[().]/g, '\\$&')}$`))
+      expect(atalho(/códigos/i)).toHaveAccessibleName('Códigos (1 erro)')
+      expect(atalho(/códigos/i)).toHaveAttribute('aria-current', 'true')
     })
   })
 
@@ -764,7 +1046,7 @@ describe('ProdutoPage', () => {
           expect.objectContaining({ nome: 'Sachê frango', unidadeId: 'kg', categoriaId: 'sache' }),
         ),
       )
-      expect(await screen.findByText('Produto "Sachê frango" cadastrado com sucesso.')).toBeInTheDocument()
+      expect(await screen.findByText('Produto "Sachê frango" cadastrado (Nº 15 · Cód. 542).')).toBeInTheDocument()
       // O proximo produto comeca pelo Nome, no topo da tela (spec B2 §4).
       await waitFor(() => expect(campoNome()).toHaveFocus())
       expect(rolados()).toContain(campoNome())
@@ -918,7 +1200,7 @@ describe('ProdutoPage', () => {
       fireEvent.click(botao)
       fireEvent.click(botao)
 
-      expect(await screen.findByText('Produto "Café 500g" cadastrado com sucesso.')).toBeInTheDocument()
+      expect(await screen.findByText('Produto "Café 500g" cadastrado (Nº 15 · Cód. 542).')).toBeInTheDocument()
       expect(cadastrarProdutoMock).toHaveBeenCalledTimes(1)
     })
 
@@ -1783,7 +2065,13 @@ describe('ProdutoPage', () => {
 
       renderNovo()
       await esperarFormulario()
-      expect(screen.getByText(/salva$/)).toHaveTextContent('Ctrl + Enter salva')
+      expect(screen.getByText(/salva e abre outro$/)).toHaveTextContent(
+        'Ctrl + Enter salva · Ctrl + Shift + Enter salva e abre outro',
+      )
+      expect(screen.getByRole('button', { name: /salvar e cadastrar outro/i })).toHaveAttribute(
+        'aria-keyshortcuts',
+        'Control+Shift+Enter Meta+Shift+Enter',
+      )
       expect(botaoSalvar()).toHaveAttribute('aria-keyshortcuts', 'Control+Enter Meta+Enter')
       await preencherMinimo()
 
@@ -2272,7 +2560,7 @@ describe('ProdutoPage', () => {
 
         fireEvent.change(screen.getByLabelText('Markup desejado (%)'), { target: { value: '10000' } })
         expect(botao).toBeDisabled()
-        expect(botao).toHaveAccessibleDescription('Use um markup entre 0 e 9.999,99% (até 2 casas decimais).')
+        expect(botao).toHaveAccessibleDescription('Informe um markup de 0% a 9.999,99%, com até 2 casas (ex.: 45,5).')
 
         fireEvent.change(screen.getByLabelText('Markup desejado (%)'), { target: { value: '150' } })
         fireEvent.click(botao)
@@ -2342,7 +2630,7 @@ describe('ProdutoPage', () => {
       expect(botao).toHaveAccessibleDescription('Informe a margem desejada.')
       fireEvent.change(screen.getByLabelText('Margem desejada (%)'), { target: { value: '100' } })
       expect(botao).toBeDisabled()
-      expect(botao).toHaveAccessibleDescription('Use uma margem entre 0 e 99,99% (até 2 casas decimais).')
+      expect(botao).toHaveAccessibleDescription('A margem vai até 99,99%: 100% significaria custo zero.')
       expect(screen.getByLabelText('Margem desejada (%)')).toHaveAttribute('aria-invalid', 'true')
       fireEvent.change(screen.getByLabelText('Margem desejada (%)'), { target: { value: '50' } })
       expect(screen.getByLabelText('Margem desejada (%)')).not.toHaveAttribute('aria-invalid')
@@ -2550,7 +2838,7 @@ describe('ProdutoPage', () => {
     }
 
     function linhas(): HTMLElement[] {
-      return within(screen.getByRole('list', { name: 'Alterações de preço' })).getAllByRole('listitem')
+      return within(screen.getByRole('list', { name: 'Alterações de preço e custo' })).getAllByRole('listitem')
     }
 
     it('não existe no cadastro de produto novo', async () => {
@@ -2622,7 +2910,7 @@ describe('ProdutoPage', () => {
       expect(screen.getByText('Carregando histórico de preços...')).toBeInTheDocument()
       await act(async () => responder(pagina([], 0, 0)))
 
-      expect(await screen.findByText('Nenhuma alteração de preço registrada ainda.')).toBeInTheDocument()
+      expect(await screen.findByText('Nenhuma alteração de preço ou custo registrada ainda.')).toBeInTheDocument()
       expect(
         screen.getByText('As próximas mudanças de custo e preço de venda aparecem aqui, com data e quem alterou.'),
       ).toBeInTheDocument()
@@ -3380,7 +3668,7 @@ describe('ProdutoPage', () => {
       return within(screen.getByRole('list', { name: 'Movimentações de estoque' })).getAllByRole('listitem')
     }
 
-    /** Lista do Historico pelo titulo ("Movimentações de estoque" ou "Alterações de preço"). */
+    /** Lista do Historico pelo titulo ("Movimentações de estoque" ou "Alterações de preço e custo"). */
     function blocoDoHistorico(nome: string): HTMLElement {
       return screen.getByRole('region', { name: nome })
     }
@@ -3400,10 +3688,10 @@ describe('ProdutoPage', () => {
       const titulos = within(secao(/^histórico$/i))
         .getAllByRole('heading', { level: 3 })
         .map((titulo) => titulo.textContent)
-      expect(titulos).toEqual(['Movimentações de estoque', 'Alterações de preço'])
+      expect(titulos).toEqual(['Movimentações de estoque', 'Alterações de preço e custo'])
       expect(listarMovimentosDeEstoqueMock).toHaveBeenCalledWith(ID_ARROZ, 0)
       expect(listarHistoricoDePrecosMock).toHaveBeenCalledWith(ID_ARROZ, 0)
-      expect(within(blocoDoHistorico('Alterações de preço')).getByText('Nenhuma alteração de preço registrada ainda.')).toBeInTheDocument()
+      expect(within(blocoDoHistorico('Alterações de preço e custo')).getByText('Nenhuma alteração de preço ou custo registrada ainda.')).toBeInTheDocument()
     })
 
     it('a linha mostra tipo e motivo, a quantidade com sinal e sigla, os saldos, a observação, quem e quando', async () => {
@@ -3470,7 +3758,7 @@ describe('ProdutoPage', () => {
         await within(blocoDoHistorico('Movimentações de estoque')).findByText('Não foi possível carregar as movimentações de estoque.'),
       ).toBeInTheDocument()
       expect(screen.queryByText(/SQLException/)).not.toBeInTheDocument()
-      expect(within(blocoDoHistorico('Alterações de preço')).queryByRole('button', { name: 'Tentar de novo' })).not.toBeInTheDocument()
+      expect(within(blocoDoHistorico('Alterações de preço e custo')).queryByRole('button', { name: 'Tentar de novo' })).not.toBeInTheDocument()
 
       fireEvent.click(within(blocoDoHistorico('Movimentações de estoque')).getByRole('button', { name: 'Tentar de novo' }))
 

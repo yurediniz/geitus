@@ -10,6 +10,7 @@ import {
   calcularMargemMarkup,
   calcularPrecoPelaMargem,
   calcularPrecoPeloMarkup,
+  erroCodigoNaEtiqueta,
   markupDesejadoValido,
   campoDaChaveDoServidor,
   dataHojeSaoPaulo,
@@ -60,8 +61,20 @@ describe('produtoFormulario', () => {
     expect(CAMPOS_POR_SECAO.precos).not.toContain('precoVenda')
   })
 
-  it('a secao Codigos tem o codigo do produto, a balanca, o SKU e os codigos de barras', () => {
-    expect(CAMPOS_POR_SECAO.codigos).toEqual(['codigo', 'vendidoBalanca', 'sku', 'codigoPendente', 'codigosBarras'])
+  it('a secao Codigos tem os codigos de barras primeiro, depois o codigo do produto com a balanca e o SKU', () => {
+    expect(CAMPOS_POR_SECAO.codigos).toEqual(['codigoPendente', 'codigosBarras', 'codigo', 'vendidoBalanca', 'sku'])
+  })
+
+  it('codigo com balanca maior que a etiqueta e barrado no envio, com a mensagem da API', () => {
+    const balanca = { codigo: '12345', vendidoBalanca: true }
+    expect(erroCodigoNaEtiqueta(balanca, 4)).toBe(
+      'Este código tem mais dígitos do que a etiqueta da balança comporta (4).',
+    )
+    expect(erroCodigoNaEtiqueta({ ...balanca, codigo: '0001234' }, 4)).toBeNull()
+    expect(erroCodigoNaEtiqueta(balanca, 5)).toBeNull()
+    expect(erroCodigoNaEtiqueta({ ...balanca, vendidoBalanca: false }, 4)).toBeNull()
+    // Sem a configuracao carregada, o backend decide.
+    expect(erroCodigoNaEtiqueta(balanca, null)).toBeNull()
   })
 
   it('primeiroCampoComErro segue a ordem das secoes e dos campos', () => {

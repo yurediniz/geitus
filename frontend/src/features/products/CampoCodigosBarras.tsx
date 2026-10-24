@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { AlertTriangle, ArrowDown, ArrowUp, Plus, Scale, ScanBarcode, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -17,7 +17,8 @@ import type { FormatoCodigoBarras } from '@/types/produto'
 const AVISO_FORMATO_OUTRO =
   'Formato não reconhecido (não é EAN-8, EAN-13 nem UPC-A). Confira antes de salvar.'
 /** Aviso (nao bloqueia) do codigo com cara de etiqueta de balanca: alguns fabricantes usam o prefixo 2 (spec B2 §3.4). */
-const AVISO_FORMATO_ETIQUETA = 'Este código tem o formato da etiqueta de balança configurada.'
+const AVISO_FORMATO_ETIQUETA =
+  'Parece uma etiqueta da balança. Se você leu a etiqueta de um produto pesado, use o código do produto em vez dela. Se é o código do fabricante, pode manter.'
 
 const ROTULO_FORMATO: Readonly<Record<FormatoCodigoBarras, string>> = {
   EAN13: 'EAN-13',
@@ -78,6 +79,7 @@ export function CampoCodigosBarras({
 }: CampoCodigosBarrasProps) {
   const [anuncio, setAnuncio] = useState('')
   const [focoPendente, setFocoPendente] = useState<FocoPendente | null>(null)
+  const entradaRef = useRef<HTMLInputElement>(null)
 
   // Foco depois do render que reordenou/removeu: o botao da seta fica
   // desabilitado nas pontas, entao cai na outra seta do mesmo codigo.
@@ -115,8 +117,9 @@ export function CampoCodigosBarras({
       return
     }
     if (resultado.tipo === 'bloqueado') {
-      // Mantem o texto para o usuario conferir a leitura.
+      // Mantem o texto para o usuario conferir a leitura, selecionado: o proximo bip o substitui.
       onErroEntradaChange(resultado.motivo)
+      entradaRef.current?.select()
       return
     }
     onChange(resultado.lista)
@@ -177,6 +180,7 @@ export function CampoCodigosBarras({
               aria-hidden="true"
             />
             <Input
+              ref={entradaRef}
               id={ID_ENTRADA}
               value={entrada}
               onChange={(event) => {

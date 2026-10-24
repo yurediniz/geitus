@@ -62,23 +62,8 @@ function AjudaNomeCurto({ nome, nomeCurto }: { nome: string; nomeCurto: string }
 }
 
 /**
- * Numero de registro do produto (so leitura): gerado pelo backend ao salvar e
- * imutavel; no cadastro ainda nao existe.
- */
-function NumeroDoProduto({ numero }: { numero: number | null }) {
-  return (
-    <dl className="space-y-0.5">
-      <dt className="text-sm text-muted-foreground">Nº do Produto</dt>
-      <dd className={numero === null ? 'text-sm text-muted-foreground' : 'text-base font-semibold tabular-nums'}>
-        {numero === null ? 'Será gerado ao salvar' : numero}
-      </dd>
-    </dl>
-  )
-}
-
-/**
- * Secao Geral: o Nº do produto e o cadastro rapido (nome, unidade e preco de
- * venda, os essenciais para vender) primeiro; depois identificacao e descricao.
+ * Secao Geral (o Nº do produto fica na linha do titulo, na pagina): o cadastro
+ * rapido (nome, unidade e preco de venda, os essenciais para vender) primeiro; depois identificacao e descricao.
  * Os codigos ficam na secao Codigos e a unidade e embalagem, na Estoque. O
  * status fica no cabecalho da pagina.
  */
@@ -125,7 +110,6 @@ export function SecaoGeral({
 
   return (
     <div className="space-y-6">
-      <NumeroDoProduto numero={produto?.numero ?? null} />
       <div className="grid gap-4 md:grid-cols-2">
         <CampoTexto
           id="nome"

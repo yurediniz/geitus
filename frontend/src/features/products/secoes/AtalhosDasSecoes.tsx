@@ -15,16 +15,14 @@ export interface AtalhosDasSecoesProps {
 }
 
 /**
- * Barra de atalhos fixa no topo da tela unica do produto (spec B2 §4): leva a
- * cada secao, destaca a visivel (`aria-current`) e mostra os erros de cada uma
- * (numero + texto para leitor de tela, nunca so a cor). No celular, rola para o lado.
+ * Barra de atalhos da tela unica do produto (spec B2 §4), dentro do contêiner
+ * fixo no topo da pagina: leva a cada secao, destaca a visivel (`aria-current`)
+ * e mostra os erros de cada uma (numero + texto para leitor de tela, nunca so
+ * a cor). No celular, rola para o lado.
  */
 export function AtalhosDasSecoes({ secoes, ativa, errosDaSecao, aoEscolher }: AtalhosDasSecoesProps) {
   return (
-    <nav
-      aria-label="Seções do produto"
-      className="sticky top-0 z-20 -mx-1 border-b bg-background/95 px-1 backdrop-blur supports-[backdrop-filter]:bg-background/80"
-    >
+    <nav aria-label="Seções do produto" className="border-b">
       <ul className="-mb-px flex gap-1 overflow-x-auto">
         {secoes.map((secao) => {
           const erros = errosDaSecao(secao)
@@ -66,22 +64,33 @@ export function AtalhosDasSecoes({ secoes, ativa, errosDaSecao, aoEscolher }: At
   )
 }
 
+interface SecaoDaPaginaProps {
+  secao: SecaoProduto
+  /** Informacao na linha do titulo, alinhada a direita (ex.: o Nº do produto). */
+  acessorio?: ReactNode
+  children: ReactNode
+}
+
 /**
  * Uma secao da tela unica: cartao com o titulo (h2, focavel pelo atalho) e o
- * conteudo. `scroll-mt` deixa o titulo abaixo da barra de atalhos ao rolar.
+ * conteudo. O `scroll-mt` (maior que a barra fixa com um aviso) deixa o titulo
+ * abaixo dela ao rolar ate a secao.
  */
-export function SecaoDaPagina({ secao, children }: { secao: SecaoProduto; children: ReactNode }) {
+export function SecaoDaPagina({ secao, acessorio, children }: SecaoDaPaginaProps) {
   return (
-    <section id={idDaSecao(secao)} aria-labelledby={idDoTituloDaSecao(secao)} className="scroll-mt-14">
+    <section id={idDaSecao(secao)} aria-labelledby={idDoTituloDaSecao(secao)} className="scroll-mt-32">
       <Card>
         <CardContent className="space-y-6">
-          <h2
-            id={idDoTituloDaSecao(secao)}
-            tabIndex={-1}
-            className="font-brand text-lg font-semibold tracking-tight outline-none"
-          >
-            {ROTULO_SECAO[secao]}
-          </h2>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2
+              id={idDoTituloDaSecao(secao)}
+              tabIndex={-1}
+              className="font-brand text-lg font-semibold tracking-tight outline-none"
+            >
+              {ROTULO_SECAO[secao]}
+            </h2>
+            {acessorio}
+          </div>
           {children}
         </CardContent>
       </Card>

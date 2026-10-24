@@ -1,27 +1,65 @@
-import { useEffect, useState, type Dispatch, type RefObject, type SetStateAction } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 
 import type { SecaoProduto } from '@/features/products/produtoFormulario'
-import { idDaSecao } from '@/features/products/secoes/rolagem'
+import { ID_BARRA_FIXA, idDaSecao } from '@/features/products/secoes/rolagem'
 
 function temIntersectionObserver(): boolean {
   return typeof IntersectionObserver !== 'undefined'
 }
 
-/**
- * Faixa da tela que define a secao "ativa": abaixo da barra de atalhos fixa e
- * acima da metade de baixo. A primeira secao (na ordem) que cruza essa faixa e a ativa.
- */
-const FAIXA_DA_SECAO_ATIVA = '-80px 0px -55% 0px'
+/** Folga abaixo da barra fixa: o titulo que acabou de passar por baixo dela ja conta. */
+const FOLGA_DA_LINHA = 8
+
+/** Tempo maximo da trava do spy depois de uma rolagem programatica, se o `scrollend` nao vier. */
+const TEMPO_MAXIMO_DA_TRAVA = 1200
+
+/** Altura que a barra fixa (atalhos e avisos) cobre no topo da tela. */
+function linhaAbaixoDaBarra(): number {
+  const barra = document.getElementById(ID_BARRA_FIXA)
+  return (barra ? barra.getBoundingClientRect().bottom : 0) + FOLGA_DA_LINHA
+}
+
+/** Se a pagina chegou ao fim (as ultimas secoes podem nunca passar pela linha). */
+function noFimDaPagina(): boolean {
+  return window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
+}
 
 /**
- * Scroll-spy da tela unica: a secao visivel, pelo `IntersectionObserver`. O
- * setter deixa marcar a secao na hora (ex.: clique no atalho), antes de a
- * rolagem suave terminar. Sem `IntersectionObserver`, fica na primeira secao.
+ * A secao ativa pela posicao na tela: a ultima cujo topo ja passou da linha
+ * abaixo da barra fixa; no fim da pagina, a ultima secao visivel. Antes da
+ * primeira passar da linha, a primeira.
  */
-export function useSecaoAtiva(
-  secoes: readonly SecaoProduto[],
-): [SecaoProduto, Dispatch<SetStateAction<SecaoProduto>>] {
+function calcularSecaoAtiva(ordem: readonly SecaoProduto[]): SecaoProduto | null {
+  const topos = ordem
+    .map((secao) => ({ secao, elemento: document.getElementById(idDaSecao(secao)) }))
+    .filter((item): item is { secao: SecaoProduto; elemento: HTMLElement } => item.elemento !== null)
+    .map(({ secao, elemento }) => ({ secao, topo: elemento.getBoundingClientRect().top }))
+  if (topos.length === 0) {
+    return null
+  }
+  if (noFimDaPagina()) {
+    const visiveis = topos.filter(({ topo }) => topo < window.innerHeight)
+    return visiveis[visiveis.length - 1]?.secao ?? topos[topos.length - 1].secao
+  }
+  const linha = linhaAbaixoDaBarra()
+  const acima = topos.filter(({ topo }) => topo <= linha)
+  return acima[acima.length - 1]?.secao ?? topos[0].secao
+}
+
+/**
+ * Scroll-spy da tela unica (spec B2 §4). O `IntersectionObserver` avisa quando
+ * uma secao entra ou sai da tela, e a rolagem avisa o fim da pagina; nos dois
+ * casos a secao ativa e recalculada pela posicao (`calcularSecaoAtiva`).
+ *
+ * `marcar` destaca a secao na hora (clique no atalho, ir ate um erro) e trava o
+ * spy ate a rolagem programatica terminar (`scrollend`, com um tempo maximo de
+ * reserva), para a rolagem suave nao "passar" pelos atalhos do caminho. Sem
+ * `IntersectionObserver`, fica na primeira secao ate ser marcada.
+ */
+export function useSecaoAtiva(secoes: readonly SecaoProduto[]): [SecaoProduto, (secao: SecaoProduto) => void] {
   const [ativa, setAtiva] = useState<SecaoProduto>(secoes[0] ?? 'geral')
+  const travadoRef = useRef(false)
+  const liberarRef = useRef<(() => void) | null>(null)
   // A lista muda de identidade a cada render; a chave so muda com as secoes.
   const chave = secoes.join(',')
 
@@ -30,39 +68,55 @@ export function useSecaoAtiva(
       return
     }
     const ordem = chave.split(',') as SecaoProduto[]
-    const naFaixa = new Set<SecaoProduto>()
-    const secaoDoElemento = new Map<Element, SecaoProduto>()
-    const observador = new IntersectionObserver(
-      (entradas) => {
-        for (const entrada of entradas) {
-          const secao = secaoDoElemento.get(entrada.target)
-          if (secao === undefined) {
-            continue
-          }
-          if (entrada.isIntersecting) {
-            naFaixa.add(secao)
-          } else {
-            naFaixa.delete(secao)
-          }
-        }
-        const primeira = ordem.find((secao) => naFaixa.has(secao))
-        if (primeira) {
-          setAtiva(primeira)
-        }
-      },
-      { rootMargin: FAIXA_DA_SECAO_ATIVA },
-    )
+    let quadro = 0
+    const recalcular = () => {
+      if (travadoRef.current) {
+        return
+      }
+      const secao = calcularSecaoAtiva(ordem)
+      if (secao) {
+        setAtiva(secao)
+      }
+    }
+    const observador = new IntersectionObserver(recalcular, { threshold: [0, 1] })
     for (const secao of ordem) {
       const elemento = document.getElementById(idDaSecao(secao))
       if (elemento) {
-        secaoDoElemento.set(elemento, secao)
         observador.observe(elemento)
       }
     }
-    return () => observador.disconnect()
+    // O fim da pagina nao cruza nenhuma secao: a rolagem tambem recalcula (um por quadro).
+    const aoRolar = () => {
+      cancelAnimationFrame(quadro)
+      quadro = requestAnimationFrame(recalcular)
+    }
+    window.addEventListener('scroll', aoRolar, { passive: true })
+    return () => {
+      observador.disconnect()
+      window.removeEventListener('scroll', aoRolar)
+      cancelAnimationFrame(quadro)
+    }
   }, [chave])
 
-  return [ativa, setAtiva]
+  useEffect(() => () => liberarRef.current?.(), [])
+
+  const marcar = useCallback((secao: SecaoProduto) => {
+    setAtiva(secao)
+    liberarRef.current?.()
+    travadoRef.current = true
+    let timer = 0
+    const liberar = () => {
+      travadoRef.current = false
+      window.clearTimeout(timer)
+      window.removeEventListener('scrollend', liberar)
+      liberarRef.current = null
+    }
+    timer = window.setTimeout(liberar, TEMPO_MAXIMO_DA_TRAVA)
+    window.addEventListener('scrollend', liberar)
+    liberarRef.current = liberar
+  }, [])
+
+  return [ativa, marcar]
 }
 
 /**

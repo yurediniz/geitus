@@ -3,18 +3,20 @@ import { AlertCircle, CheckCircle2, Lock } from 'lucide-react'
 interface FeedbackCatalogoProps {
   sucesso: string | null
   erro: string | null
+  /** false quando ja fica dentro de um contêiner fixo (ex.: a barra da pagina do produto). */
+  fixo?: boolean
 }
 
 /**
  * Feedback fixo no topo (sem toast), no padrao da tela de Clientes: continua
  * visivel ao agir sobre um item no fim da lista.
  */
-export function FeedbackCatalogo({ sucesso, erro }: FeedbackCatalogoProps) {
+export function FeedbackCatalogo({ sucesso, erro, fixo = true }: FeedbackCatalogoProps) {
   if (!sucesso && !erro) {
     return null
   }
   return (
-    <div className="sticky top-0 z-10 space-y-2 bg-background py-2">
+    <div className={fixo ? 'sticky top-0 z-10 space-y-2 bg-background py-2' : 'space-y-2'}>
       {sucesso && (
         <div
           role="status"

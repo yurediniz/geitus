@@ -23,6 +23,7 @@ import {
   SECOES_PRODUTO,
   avaliarNovoCodigo,
   campoDaChaveDoServidor,
+  erroCodigoNaEtiqueta,
   erroFracaoAtacado,
   erroFracaoEstoqueInicial,
   formatosDoProduto,
@@ -41,13 +42,14 @@ import {
 } from '@/features/products/produtoFormulario'
 import { SeloStatus } from '@/features/products/SeloStatus'
 import { AtalhosDasSecoes, SecaoDaPagina } from '@/features/products/secoes/AtalhosDasSecoes'
-import { idDoTituloDaSecao, rolarEFocar } from '@/features/products/secoes/rolagem'
+import { ID_BARRA_FIXA, rolarAteASecao, rolarEFocarCampo } from '@/features/products/secoes/rolagem'
 import { SecaoCodigos } from '@/features/products/secoes/SecaoCodigos'
 import { SecaoEstoque } from '@/features/products/secoes/SecaoEstoque'
 import { SecaoGeral } from '@/features/products/secoes/SecaoGeral'
 import { SecaoHistorico } from '@/features/products/secoes/SecaoHistorico'
 import { SecaoPrecos } from '@/features/products/secoes/SecaoPrecos'
 import { useSecaoAtiva } from '@/features/products/secoes/useSecaoVisivel'
+import { useConfiguracaoEtiqueta } from '@/features/catalog/useConfiguracaoEtiqueta'
 import { useAuth } from '@/hooks/useAuth'
 import { useAvisoAlteracoesNaoSalvas } from '@/hooks/useAvisoAlteracoesNaoSalvas'
 import { listarCategorias } from '@/services/categoriaService'
@@ -128,6 +130,11 @@ function focoAoFecharDialogo(origem: HTMLElement | null): HTMLElement | null {
 /** Tecla do atalho de salvar mostrada na barra de acoes (Cmd no Mac, Ctrl nos demais). */
 const TECLA_ATALHO = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.userAgent) ? '⌘' : 'Ctrl'
 
+/** Tecla na dica de atalhos do rodape. */
+function Tecla({ children }: { children: ReactNode }) {
+  return <kbd className="rounded border bg-muted px-1 font-sans">{children}</kbd>
+}
+
 /** Erro do backend levado a um campo do formulario. */
 interface ErroDeCampoDoServidor {
   campo: keyof ProdutoFormValues
@@ -143,8 +150,17 @@ function ehCampoComErroDoServidor(campo: string): campo is keyof ProdutoFormValu
   return CAMPOS_COM_ERRO_DO_SERVIDOR.has(campo)
 }
 
-/** Campos com a regra de fracao pela unidade de venda (checada no envio). */
+/** Campos com regras checadas no envio: fracao pela unidade de venda e o tamanho do codigo na etiqueta. */
+const CAMPOS_COM_ERRO_NO_ENVIO = ['quantidadeMinimaAtacado', 'estoqueInicial', 'codigo'] as const
+
+/** Campos que trocar a unidade de venda reavalia (o erro de fracao sai e e checado de novo no envio). */
 const CAMPOS_COM_ERRO_DE_FRACAO = ['quantidadeMinimaAtacado', 'estoqueInicial'] as const
+
+/** "Produto "Acucar" cadastrado (Nº 16 · Cód. 542)." (o codigo so se houver). */
+function mensagemCadastradoOutro(salvo: Produto): string {
+  const codigo = salvo.codigo !== null ? ` · Cód. ${salvo.codigo}` : ''
+  return `Produto "${salvo.nome}" cadastrado (Nº ${salvo.numero}${codigo}).`
+}
 
 /** Inicio fixo das mensagens do backend sobre um codigo de barras (409 de outro produto, 400 de digito). */
 const INICIO_MENSAGEM_CODIGO_DE_BARRAS = 'O código de barras '
@@ -386,7 +402,8 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   const modoNovo = produto === null
 
   const secoesVisiveis = modoNovo ? SECOES_DO_CADASTRO : SECOES_PRODUTO
-  const [secaoAtiva, setSecaoAtiva] = useSecaoAtiva(secoesVisiveis)
+  const [secaoAtiva, marcarSecao] = useSecaoAtiva(secoesVisiveis)
+  const digitosCodigoNaEtiqueta = useConfiguracaoEtiqueta().data?.digitosCodigo ?? null
   // O cadastro novo comeca pelo Nome.
   const [campoParaFocar, setCampoParaFocar] = useState<keyof ProdutoFormValues | null>(modoNovo ? 'nome' : null)
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null)
@@ -505,29 +522,27 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
       return
     }
     const timer = window.setTimeout(() => {
-      const alvo =
-        document.getElementById(idDoCampo(campoParaFocar)) ??
-        document.getElementById(idDoTituloDaSecao(secaoDoCampo(campoParaFocar)))
-      if (alvo) {
-        rolarEFocar(alvo, 'centro')
+      const campo = document.getElementById(idDoCampo(campoParaFocar))
+      if (campo) {
+        // O codigo de barras barrado fica selecionado: o proximo bip o substitui.
+        rolarEFocarCampo(campo, { selecionar: campoParaFocar === 'codigoPendente' })
+      } else {
+        rolarAteASecao(secaoDoCampo(campoParaFocar))
       }
       setCampoParaFocar(null)
     }, 0)
     return () => window.clearTimeout(timer)
   }, [campoParaFocar])
 
-  /** Atalho: rola ate a secao e foca o titulo dela. */
+  /** Atalho: rola ate a secao e foca o titulo dela (o spy fica travado ate a rolagem terminar). */
   const irParaSecao = (secao: SecaoProduto) => {
-    setSecaoAtiva(secao)
-    const titulo = document.getElementById(idDoTituloDaSecao(secao))
-    if (titulo) {
-      rolarEFocar(titulo, 'inicio')
-    }
+    marcarSecao(secao)
+    rolarAteASecao(secao)
   }
 
   /** Leva ao campo com erro: marca a secao dele no atalho e pede o foco. */
   const irParaCampo = (destino: { secao: SecaoProduto; campo: keyof ProdutoFormValues }) => {
-    setSecaoAtiva(destino.secao)
+    marcarSecao(destino.secao)
     setCampoParaFocar(destino.campo)
   }
 
@@ -575,7 +590,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
       setErroSalvar(null)
       if (acao === 'cadastrarOutro') {
         reset(valoresParaCadastrarOutro(valores))
-        setMensagemSucesso(`Produto "${salvo.nome}" cadastrado com sucesso.`)
+        setMensagemSucesso(mensagemCadastradoOutro(salvo))
         // O proximo produto comeca pelo Nome, no topo da tela (spec B2 §4).
         irParaCampo({ secao: 'geral', campo: 'nome' })
         return
@@ -710,25 +725,24 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     enviandoRef.current = true
     void handleSubmit(
       (valores) => {
-        // Fracao no atacado e no estoque inicial depende da unidade escolhida: checada aqui, com a lista carregada.
-        const errosFracao: FieldErrors<ProdutoFormValues> = {}
-        const fracaoAtacado = erroFracaoAtacado(valores, unidadesConhecidas)
-        const fracaoInicial = erroFracaoEstoqueInicial(valores, unidadesConhecidas)
-        if (fracaoAtacado) {
-          errosFracao.quantidadeMinimaAtacado = { type: 'manual', message: fracaoAtacado }
+        // Regras que dependem de outros cadastros, checadas aqui com eles carregados: fracao no atacado
+        // e no estoque inicial (unidade escolhida) e o tamanho do codigo na etiqueta da balanca.
+        const errosNoEnvio: FieldErrors<ProdutoFormValues> = {}
+        const mensagens: Record<(typeof CAMPOS_COM_ERRO_NO_ENVIO)[number], string | null> = {
+          quantidadeMinimaAtacado: erroFracaoAtacado(valores, unidadesConhecidas),
+          estoqueInicial: erroFracaoEstoqueInicial(valores, unidadesConhecidas),
+          codigo: erroCodigoNaEtiqueta(valores, digitosCodigoNaEtiqueta),
         }
-        if (fracaoInicial) {
-          errosFracao.estoqueInicial = { type: 'manual', message: fracaoInicial }
-        }
-        if (fracaoAtacado || fracaoInicial) {
-          enviandoRef.current = false
-          for (const campo of CAMPOS_COM_ERRO_DE_FRACAO) {
-            const erro = errosFracao[campo]
-            if (erro?.message) {
-              setError(campo, { type: 'manual', message: erro.message })
-            }
+        for (const campo of CAMPOS_COM_ERRO_NO_ENVIO) {
+          const mensagem = mensagens[campo]
+          if (mensagem) {
+            errosNoEnvio[campo] = { type: 'manual', message: mensagem }
+            setError(campo, { type: 'manual', message: mensagem })
           }
-          aoInvalidar(errosFracao)
+        }
+        if (Object.keys(errosNoEnvio).length > 0) {
+          enviandoRef.current = false
+          aoInvalidar(errosNoEnvio)
           return
         }
         setErroSalvar(null)
@@ -743,10 +757,11 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   }
 
   /**
-   * Ctrl+Enter (Cmd+Enter no Mac) salva de qualquer campo. No cadastro novo,
-   * Enter sozinho num campo de texto nao envia (so o botao): o leitor de
-   * codigo de barras termina com Enter e o cadastro em sequencia nao pode
-   * sair antes da hora. Na edicao, Enter segue o padrao do navegador.
+   * Ctrl+Enter (Cmd+Enter no Mac) salva de qualquer campo; no cadastro novo,
+   * Ctrl+Shift+Enter salva e abre outro. No cadastro novo, Enter sozinho num
+   * campo de texto nao envia (so o botao): o leitor de codigo de barras termina
+   * com Enter e o cadastro em sequencia nao pode sair antes da hora. Na edicao,
+   * Enter segue o padrao do navegador.
    */
   const aoTeclarNoFormulario = (event: KeyboardEvent<HTMLFormElement>) => {
     const alvo = event.target
@@ -756,7 +771,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     }
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault()
-      enviar('voltar')
+      enviar(event.shiftKey && modoNovo ? 'cadastrarOutro' : 'voltar')
       return
     }
     if (modoNovo && alvo instanceof HTMLInputElement) {
@@ -767,8 +782,12 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
   const acaoEmAndamento = salvarMutation.isPending ? salvarMutation.variables?.acao : undefined
   const desabilitado = salvando || somenteLeitura
 
-  const errosDaSecao = (secao: SecaoProduto) =>
-    CAMPOS_POR_SECAO[secao].filter((campo) => errors[campo] !== undefined).length
+  /** Campos com erro na secao; o texto pendente e a lista de codigos de barras contam como um so. */
+  const errosDaSecao = (secao: SecaoProduto) => {
+    const comErro = CAMPOS_POR_SECAO[secao].filter((campo) => errors[campo] !== undefined)
+    const codigoDeBarrasEmDobro = comErro.includes('codigoPendente') && comErro.includes('codigosBarras')
+    return comErro.length - (codigoDeBarrasEmDobro ? 1 : 0)
+  }
 
   const podeExcluir = produto !== null && !somenteLeitura && produto.podeExcluir
   // 409: o produto teve movimentacao; inativar e a saida que a mensagem indica.
@@ -820,8 +839,6 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
       {somenteLeitura && (
         <AvisoSomenteLeitura texto="Somente administradores podem alterar produtos. Você está no modo leitura." />
       )}
-      <FeedbackCatalogo sucesso={mensagemSucesso} erro={erroGeral} />
-
       <FormProvider {...form}>
         <form
           onSubmit={(event) => {
@@ -833,7 +850,6 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
           aria-label={produto ? `Editar ${produto.nome}` : 'Novo produto'}
           className="max-w-4xl space-y-4"
         >
-          {erroSalvar && <ErroInline mensagem={erroSalvar.mensagem} />}
           {!somenteLeitura && (
             <p className="text-sm text-muted-foreground">
               Campos com <span aria-hidden="true">*</span>
@@ -841,14 +857,32 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
             </p>
           )}
 
-          <AtalhosDasSecoes
-            secoes={secoesVisiveis}
-            ativa={secaoAtiva}
-            errosDaSecao={errosDaSecao}
-            aoEscolher={irParaSecao}
-          />
+          {/* Contêiner fixo: os atalhos e os avisos (sucesso, erro ao salvar) ficam visiveis com a pagina rolada. */}
+          <div
+            id={ID_BARRA_FIXA}
+            className="sticky top-0 z-20 -mx-1 space-y-2 bg-background/95 px-1 pb-2 backdrop-blur supports-[backdrop-filter]:bg-background/85"
+          >
+            <AtalhosDasSecoes
+              secoes={secoesVisiveis}
+              ativa={secaoAtiva}
+              errosDaSecao={errosDaSecao}
+              aoEscolher={irParaSecao}
+            />
+            <FeedbackCatalogo sucesso={mensagemSucesso} erro={erroGeral} fixo={false} />
+            {erroSalvar && <ErroInline mensagem={erroSalvar.mensagem} />}
+          </div>
 
-          <SecaoDaPagina secao="geral">
+          <SecaoDaPagina
+            secao="geral"
+            acessorio={
+              produto && (
+                <p className="text-sm font-medium text-muted-foreground tabular-nums">
+                  <span className="sr-only">Número do produto: </span>
+                  {`Nº ${produto.numero}`}
+                </p>
+              )
+            }
+          >
             <SecaoGeral
               produto={produto}
               unidadesQuery={unidadesQuery}
@@ -897,15 +931,25 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
           {!somenteLeitura && (
             <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t bg-background py-3 sm:flex-row sm:items-center sm:justify-end">
               <p className="hidden text-xs text-muted-foreground sm:mr-auto sm:block">
-                <kbd className="rounded border bg-muted px-1 font-sans">{TECLA_ATALHO}</kbd>
-                {' + '}
-                <kbd className="rounded border bg-muted px-1 font-sans">Enter</kbd> salva
+                <Tecla>{TECLA_ATALHO}</Tecla> + <Tecla>Enter</Tecla> salva
+                {modoNovo && (
+                  <>
+                    {' · '}
+                    <Tecla>{TECLA_ATALHO}</Tecla> + <Tecla>Shift</Tecla> + <Tecla>Enter</Tecla> salva e abre outro
+                  </>
+                )}
               </p>
               <Button asChild variant="outline">
                 <Link to={voltarPara}>Cancelar</Link>
               </Button>
               {modoNovo && (
-                <Button type="button" variant="outline" onClick={() => enviar('cadastrarOutro')} disabled={salvando}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => enviar('cadastrarOutro')}
+                  disabled={salvando}
+                  aria-keyshortcuts="Control+Shift+Enter Meta+Shift+Enter"
+                >
                   {acaoEmAndamento === 'cadastrarOutro' && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                   Salvar e cadastrar outro
                 </Button>

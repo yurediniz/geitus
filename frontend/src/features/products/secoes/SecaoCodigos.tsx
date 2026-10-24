@@ -1,13 +1,20 @@
 import { useState } from 'react'
 import { Controller, useFormContext, useWatch } from 'react-hook-form'
+import { Link } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { Loader2, Scale, Sparkles } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { useConfiguracaoEtiqueta } from '@/features/catalog/useConfiguracaoEtiqueta'
 import { CampoTexto } from '@/features/products/CamposFormulario'
 import { CodigosBarrasDoProduto } from '@/features/products/CodigosBarrasDoProduto'
-import { MENSAGEM_BALANCA_SEM_CODIGO, type ProdutoFormValues } from '@/features/products/produtoFormulario'
+import {
+  MENSAGEM_BALANCA_SEM_CODIGO,
+  textoTamanhoNaEtiqueta,
+  type ProdutoFormValues,
+} from '@/features/products/produtoFormulario'
+import { CODIGO_PRODUTO_MAXIMO } from '@/lib/codigoProduto'
 import { sugerirSku } from '@/services/produtoService'
 import type { Produto } from '@/types/produto'
 
@@ -20,10 +27,23 @@ export interface SecaoCodigosProps {
   aoAlterarCampo: () => void
 }
 
+const AJUDA_CODIGO = 'O código que você digita no PDV e programa na balança. Até 6 dígitos; zeros à esquerda são ignorados.'
+
+/** O atalho "Usar o número do produto" so faz sentido se o numero couber no codigo (e na etiqueta). */
+function motivoNumeroNaoCabe(numero: number, digitosNaEtiqueta: number | null): string | null {
+  if (numero > CODIGO_PRODUTO_MAXIMO) {
+    return `O Nº ${numero} tem mais de 6 dígitos e não serve como código do produto.`
+  }
+  if (digitosNaEtiqueta !== null && String(numero).length > digitosNaEtiqueta) {
+    return `O Nº ${numero} tem mais dígitos do que a etiqueta da balança comporta (${digitosNaEtiqueta}).`
+  }
+  return null
+}
+
 /**
- * Secao Codigos: o codigo do produto (o da balanca e da digitacao rapida) com
- * "Vendido na balança", o SKU (com sugestao automatica) e a lista completa de
- * codigos de barras (com reordenar).
+ * Secao Codigos: a lista de codigos de barras (com reordenar) primeiro; depois
+ * o codigo do produto (o da balanca e da digitacao no PDV) com "Vendido na
+ * balança" e, por ultimo, o SKU (com sugestao automatica).
  */
 export function SecaoCodigos({ produto, desabilitado, somenteLeitura, aoAlterarCampo }: SecaoCodigosProps) {
   const {
@@ -31,12 +51,19 @@ export function SecaoCodigos({ produto, desabilitado, somenteLeitura, aoAlterarC
     register,
     setValue,
     clearErrors,
-    formState: { errors },
+    trigger,
+    formState: { errors, isSubmitted },
   } = useFormContext<ProdutoFormValues>()
   const [anuncioSku, setAnuncioSku] = useState('')
   const [codigo, vendidoBalanca] = useWatch({ control, name: ['codigo', 'vendidoBalanca'] })
+  const digitosNaEtiqueta = useConfiguracaoEtiqueta().data?.digitosCodigo ?? null
   // Atalho so na edicao: no cadastro o numero ainda nao existe (spec B2 §2).
-  const oferecerNumero = vendidoBalanca && codigo.trim() === '' && produto !== null && !somenteLeitura
+  const pedeNumero = vendidoBalanca && codigo.trim() === '' && produto !== null && !somenteLeitura
+  const numeroNaoCabe = pedeNumero ? motivoNumeroNaoCabe(produto.numero, digitosNaEtiqueta) : null
+  const ajudaCodigo =
+    vendidoBalanca && digitosNaEtiqueta !== null
+      ? `${AJUDA_CODIGO} ${textoTamanhoNaEtiqueta(digitosNaEtiqueta)}`
+      : AJUDA_CODIGO
 
   const gerarSkuMutation = useMutation<string>({
     mutationFn: () => sugerirSku(),
@@ -62,13 +89,20 @@ export function SecaoCodigos({ produto, desabilitado, somenteLeitura, aoAlterarC
 
   return (
     <div className="space-y-6">
+      <section aria-labelledby="codigosBarras-titulo" className="space-y-2">
+        <h3 id="codigosBarras-titulo" className="text-sm font-medium">
+          Códigos de barras
+        </h3>
+        <CodigosBarrasDoProduto produto={produto} desabilitado={desabilitado} aoAlterarCampo={aoAlterarCampo} />
+      </section>
+
       <div className="grid gap-4 md:grid-cols-2">
         <CampoTexto
           id="codigo"
           label={vendidoBalanca ? 'Código do produto' : 'Código do produto (opcional)'}
           obrigatorio={vendidoBalanca}
           erro={errors.codigo?.message}
-          ajuda="De 1 a 6 dígitos, único na empresa. Zeros à esquerda são ignorados."
+          ajuda={ajudaCodigo}
           inputProps={register('codigo', { onChange: aoAlterarCampo })}
           disabled={desabilitado}
           inputMode="numeric"
@@ -88,8 +122,11 @@ export function SecaoCodigos({ produto, desabilitado, somenteLeitura, aoAlterarC
                   checked={field.value}
                   onCheckedChange={(valor) => {
                     field.onChange(valor)
-                    // Desligar tira a exigencia do codigo (o erro dela some junto).
-                    if (!valor && errors.codigo?.message === MENSAGEM_BALANCA_SEM_CODIGO) {
+                    if (valor && isSubmitted) {
+                      // Depois de um envio com erro, a exigencia do codigo aparece na hora.
+                      void trigger('codigo')
+                    } else if (!valor && errors.codigo?.message === MENSAGEM_BALANCA_SEM_CODIGO) {
+                      // Desligar tira a exigencia do codigo (o erro dela some junto).
                       clearErrors('codigo')
                     }
                     aoAlterarCampo()
@@ -109,9 +146,15 @@ export function SecaoCodigos({ produto, desabilitado, somenteLeitura, aoAlterarC
             </label>
           </div>
           <p id="vendidoBalanca-ajuda" className="text-xs text-muted-foreground">
-            A etiqueta da balança traz o código do produto e o valor (ou o peso).
+            Ligue para produtos pesados na balança. O PDV lê o código e o valor da etiqueta.
           </p>
-          {oferecerNumero && (
+          <Link
+            to="/produtos/balanca"
+            className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4"
+          >
+            Configurar etiqueta
+          </Link>
+          {pedeNumero && numeroNaoCabe === null && (
             <Button
               type="button"
               variant="outline"
@@ -123,13 +166,17 @@ export function SecaoCodigos({ produto, desabilitado, somenteLeitura, aoAlterarC
               {`Usar o número do produto (${produto.numero})`}
             </Button>
           )}
+          {numeroNaoCabe && <p className="text-xs text-muted-foreground">{numeroNaoCabe}</p>}
         </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <CampoTexto
             id="sku"
             label="SKU (opcional)"
             erro={errors.sku?.message}
-            ajuda="Código interno do produto, único na empresa."
+            ajuda="Referência para seu controle (ex.: a do fornecedor). Não é usado na venda."
             inputProps={register('sku', { onChange: aoAlterarCampo })}
             disabled={desabilitado}
             maxLength={50}
@@ -162,17 +209,6 @@ export function SecaoCodigos({ produto, desabilitado, somenteLeitura, aoAlterarC
           )}
         </div>
       </div>
-
-      <section aria-labelledby="codigosBarras-titulo" className="space-y-2">
-        <h3 id="codigosBarras-titulo" className="text-sm font-medium">
-          Códigos de barras
-        </h3>
-        <CodigosBarrasDoProduto
-          produto={produto}
-          desabilitado={desabilitado}
-          aoAlterarCampo={aoAlterarCampo}
-        />
-      </section>
     </div>
   )
 }

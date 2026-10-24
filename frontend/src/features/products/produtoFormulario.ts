@@ -178,6 +178,29 @@ function validarCodigoProduto(valores: { codigo: string; vendidoBalanca: boolean
   }
 }
 
+/** Ajuda do codigo com "Vendido na balança": quantos digitos a etiqueta configurada comporta. */
+export function textoTamanhoNaEtiqueta(digitosCodigo: number): string {
+  return `A etiqueta da balança comporta até ${digitosCodigo} dígitos.`
+}
+
+/**
+ * Codigo com "Vendido na balança" maior que a etiqueta configurada (a mensagem
+ * do backend, spec B2 §2). Checado no envio, com a configuracao ja buscada;
+ * sem ela (null), o backend decide.
+ */
+export function erroCodigoNaEtiqueta(
+  valores: Pick<ProdutoFormValues, 'codigo' | 'vendidoBalanca'>,
+  digitosCodigo: number | null,
+): string | null {
+  const codigo = interpretarCodigoProduto(valores.codigo)
+  if (!valores.vendidoBalanca || digitosCodigo === null || typeof codigo !== 'number') {
+    return null
+  }
+  return String(codigo).length > digitosCodigo
+    ? `Este código tem mais dígitos do que a etiqueta da balança comporta (${digitosCodigo}).`
+    : null
+}
+
 function validarAtacado(valores: ValoresPrecoEspecial, ctx: z.RefinementCtx) {
   if (!valores.atacadoAtivo) {
     return
@@ -307,7 +330,7 @@ export const ROTULO_SECAO: Readonly<Record<SecaoProduto, string>> = {
  */
 export const CAMPOS_POR_SECAO: Readonly<Record<SecaoProduto, readonly (keyof ProdutoFormValues)[]>> = {
   geral: ['nome', 'nomeCurto', 'unidadeId', 'precoVenda', 'categoriaId', 'marca', 'fornecedor', 'descricao'],
-  codigos: ['codigo', 'vendidoBalanca', 'sku', 'codigoPendente', 'codigosBarras'],
+  codigos: ['codigoPendente', 'codigosBarras', 'codigo', 'vendidoBalanca', 'sku'],
   precos: [
     'custo',
     'precoMinimo',

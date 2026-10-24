@@ -50,6 +50,11 @@ export function instalarIntersectionObserverFalso() {
   vi.stubGlobal('IntersectionObserver', IntersectionObserverFalso)
 }
 
+/** Elementos observados agora, por qualquer observador. */
+export function elementosObservados(): Element[] {
+  return [...observadores].flatMap((observador) => [...observador.elementos])
+}
+
 /** Avisa os observadores do elemento que ele entrou (ou saiu) da area observada. */
 export function simularInterseccao(elemento: Element, visivel: boolean) {
   const entrada = {

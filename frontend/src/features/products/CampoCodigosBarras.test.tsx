@@ -237,8 +237,20 @@ describe('CampoCodigosBarras', () => {
     expect(campoAdicionar()).toHaveValue('7891000315507')
   })
 
+  it('codigo barrado fica selecionado para o proximo bip substituir', () => {
+    render(<CampoComEstado />)
+
+    lerCodigo('7891000315508')
+
+    const campo = campoAdicionar() as HTMLInputElement
+    expect(campo).toHaveValue('7891000315508')
+    expect(campo.selectionStart).toBe(0)
+    expect(campo.selectionEnd).toBe(13)
+  })
+
   describe('codigo com formato de etiqueta de balanca (Fase B2)', () => {
-    const AVISO = 'Este código tem o formato da etiqueta de balança configurada.'
+    const AVISO =
+      'Parece uma etiqueta da balança. Se você leu a etiqueta de um produto pesado, use o código do produto em vez dela. Se é o código do fabricante, pode manter.'
 
     it('avisa, sem bloquear, quando o codigo novo parece uma etiqueta da configuracao', () => {
       render(<CampoComEstado configuracaoEtiqueta={CONFIGURACAO_ETIQUETA_PADRAO} />)
