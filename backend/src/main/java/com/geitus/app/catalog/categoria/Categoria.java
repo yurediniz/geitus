@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.geitus.app.catalog.arvore.NoDaArvore;
 import com.geitus.app.company.Empresa;
 
 import jakarta.persistence.Column;
@@ -32,7 +33,7 @@ import jakarta.persistence.Table;
  */
 @Entity
 @Table(name = "categorias")
-public class Categoria {
+public class Categoria implements NoDaArvore {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -113,10 +114,12 @@ public class Categoria {
         this.ativo = true;
     }
 
+    @Override
     public Long getId() {
         return id;
     }
 
+    @Override
     public UUID getUuid() {
         return uuid;
     }
@@ -131,6 +134,7 @@ public class Categoria {
     }
 
     /** Id interno do pai, ou {@code null} se for raiz. */
+    @Override
     public Long getPaiId() {
         return pai == null ? null : pai.getId();
     }
@@ -140,10 +144,12 @@ public class Categoria {
         return pai == null ? null : pai.getUuid();
     }
 
+    @Override
     public String getNome() {
         return nome;
     }
 
+    @Override
     public boolean isAtivo() {
         return ativo;
     }
