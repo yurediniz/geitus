@@ -56,6 +56,8 @@ export interface ProdutoDaEtiqueta {
   id: string
   numero: number
   nome: string
+  /** Sigla da unidade de venda (ex.: "KG"). */
+  unidade: string
 }
 
 /**

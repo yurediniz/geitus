@@ -11,17 +11,23 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
+/** Texto padrao do dialogo; cada tela pode dizer o que foi alterado. */
+const DESCRICAO_PADRAO = 'Você fez alterações e ainda não salvou. Se sair agora, as alterações serão perdidas.'
+
 /**
  * Protege alteracoes nao salvas enquanto `ativo`:
  * - navegacao dentro do app (lista, Categorias/Unidades, sidebar) abre o
  *   dialogo "Descartar alteracoes?" via `useBlocker` (exige data router);
  * - fechar ou recarregar a aba usa o aviso nativo (`beforeunload`).
  *
- * So bloqueia troca de caminho: usar os atalhos das secoes da pagina ou mudar
- * so a query/hash nao conta. Para sair logo apos salvar, a pagina desativa o aviso
+ * So bloqueia troca de caminho: rolar ou usar atalhos dentro da pagina, ou mudar
+ * so a query/hash, nao conta. Para sair logo apos salvar, a pagina desativa o aviso
  * e navega no render seguinte (o bloqueio e lido do ultimo render).
  */
-export function useAvisoAlteracoesNaoSalvas(ativo: boolean): { dialogo: ReactNode } {
+export function useAvisoAlteracoesNaoSalvas(
+  ativo: boolean,
+  descricao: string = DESCRICAO_PADRAO,
+): { dialogo: ReactNode } {
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) => ativo && currentLocation.pathname !== nextLocation.pathname,
   )
@@ -53,9 +59,7 @@ export function useAvisoAlteracoesNaoSalvas(ativo: boolean): { dialogo: ReactNod
       <DialogContent showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>Descartar alterações?</DialogTitle>
-          <DialogDescription>
-            Você alterou este produto e ainda não salvou. Se sair agora, as alterações serão perdidas.
-          </DialogDescription>
+          <DialogDescription>{descricao}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
           {/* Primeiro botao recebe o foco ao abrir: a acao segura e a padrao. */}

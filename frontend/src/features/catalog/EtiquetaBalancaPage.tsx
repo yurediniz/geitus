@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, CheckCircle2, Info, Loader2, ScanBarcode, TriangleAlert } from 'lucide-react'
@@ -13,10 +13,13 @@ import { AvisoSomenteLeitura, ErroInline, FeedbackCatalogo } from '@/features/ca
 import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { rotaDoProduto } from '@/features/products/navegacaoProdutos'
 import { useAuth } from '@/hooks/useAuth'
+import { useAvisoAlteracoesNaoSalvas } from '@/hooks/useAvisoAlteracoesNaoSalvas'
 import {
   MODELOS_DE_ETIQUETA,
   TAMANHO_ETIQUETA,
   descreverFormatoEtiqueta,
+  exemploDeEtiqueta,
+  mesmaConfiguracao,
   modeloDaConfiguracao,
   totalDigitosEtiqueta,
 } from '@/lib/etiquetaBalanca'
@@ -125,6 +128,8 @@ interface FormularioEtiquetaProps {
 function FormularioEtiqueta({ inicial, podeAlterar }: FormularioEtiquetaProps) {
   const queryClient = useQueryClient()
   const [config, setConfig] = useState<ConfiguracaoEtiqueta>(() => semPadrao(inicial))
+  // A configuracao gravada (ou o padrao): comparada com a da tela para saber se ha alteracao.
+  const [salva, setSalva] = useState<ConfiguracaoEtiqueta>(() => semPadrao(inicial))
   const [padrao, setPadrao] = useState(inicial.padrao)
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null)
   const [afetados, setAfetados] = useState<ProdutoComCodigoGrandeDemais[]>([])
@@ -138,6 +143,7 @@ function FormularioEtiqueta({ inicial, podeAlterar }: FormularioEtiquetaProps) {
     },
     onSuccess: (resposta) => {
       queryClient.setQueryData(ETIQUETA_BALANCA_QUERY_KEY, resposta.configuracao)
+      setSalva(semPadrao(resposta.configuracao))
       setPadrao(resposta.configuracao.padrao)
       setAfetados(resposta.produtosComCodigoGrandeDemais)
       setMensagemSucesso('Configuração da etiqueta salva.')
@@ -154,6 +160,12 @@ function FormularioEtiqueta({ inicial, podeAlterar }: FormularioEtiquetaProps) {
   const problema = problemaDoFormato(config)
   const total = totalDigitosEtiqueta(config)
   const nomeInformacao = config.tipoInformacao === 'VALOR' ? 'valor' : 'peso'
+  const alterada = !mesmaConfiguracao(config, salva)
+  const exemplo = exemploDeEtiqueta(config)
+  const { dialogo } = useAvisoAlteracoesNaoSalvas(
+    podeAlterar && alterada && !salvarMutation.isPending,
+    'Você alterou a etiqueta da balança e ainda não salvou. Se sair agora, as alterações serão perdidas.',
+  )
   const erroSalvar = salvarMutation.isError
     ? mensagemErroCatalogo(salvarMutation.error, {
         padrao: 'Não foi possível salvar a configuração. Tente novamente.',
@@ -222,7 +234,7 @@ function FormularioEtiqueta({ inicial, podeAlterar }: FormularioEtiquetaProps) {
                 aria-describedby="prefixo-ajuda"
               />
               <p id="prefixo-ajuda" className="text-xs text-muted-foreground">
-                1 ou 2 dígitos no início da etiqueta.
+                Primeiro dígito da etiqueta. Na Toledo, normalmente 2.
               </p>
             </div>
             <CampoNumerico
@@ -236,7 +248,7 @@ function FormularioEtiqueta({ inicial, podeAlterar }: FormularioEtiquetaProps) {
             <CampoNumerico
               id="digitosPreenchimento"
               rotulo="Zeros de preenchimento"
-              ajuda="Zeros entre o código e o valor, usados em alguns modelos."
+              ajuda={`Zeros entre o código e o ${nomeInformacao}, usados em alguns modelos.`}
               valor={config.digitosPreenchimento}
               opcoes={OPCOES_PREENCHIMENTO}
               desabilitado={desabilitado}
@@ -272,6 +284,7 @@ function FormularioEtiqueta({ inicial, podeAlterar }: FormularioEtiquetaProps) {
             <CampoNumerico
               id="casasDecimais"
               rotulo="Casas decimais"
+              ajuda="Com 3 casas, 010000 vira R$ 10,00."
               valor={config.casasDecimais}
               opcoes={OPCOES_CASAS}
               desabilitado={desabilitado}
@@ -292,10 +305,12 @@ function FormularioEtiqueta({ inicial, podeAlterar }: FormularioEtiquetaProps) {
             </label>
           </div>
 
-          {/* Previa: o formato em letras e o total, para conferir com a etiqueta impressa. */}
-          <div className="space-y-1 rounded-md bg-muted/40 p-4">
+          {/* Previa: o formato em letras, um exemplo e o total, para conferir com a etiqueta impressa. */}
+          {/* Regiao viva: quem usa leitor de tela ouve a previa e a soma mudarem. */}
+          <div role="status" aria-live="polite" className="space-y-2 rounded-md bg-muted/40 p-4">
             <p className="text-sm text-muted-foreground">Prévia do formato</p>
             <p className="font-medium tabular-nums break-words">{descreverFormatoEtiqueta(config)}</p>
+            {exemplo && <ExemploMontado exemplo={exemplo} />}
             <p className={cn('text-sm tabular-nums', problema ? 'text-destructive' : 'text-muted-foreground')}>
               {`${total} de ${TAMANHO_ETIQUETA} dígitos`}
             </p>
@@ -308,12 +323,17 @@ function FormularioEtiqueta({ inicial, podeAlterar }: FormularioEtiquetaProps) {
           </div>
 
           {podeAlterar && (
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {alterada && (
+                <p id="etiqueta-alterada" className="text-sm text-muted-foreground">
+                  Alterações não salvas
+                </p>
+              )}
               <Button
                 type="button"
                 onClick={() => salvarMutation.mutate(config)}
-                disabled={problema !== null || salvarMutation.isPending}
-                aria-describedby={problema ? 'formato-problema' : undefined}
+                disabled={!alterada || problema !== null || salvarMutation.isPending}
+                aria-describedby={problema ? 'formato-problema' : alterada ? 'etiqueta-alterada' : undefined}
               >
                 {salvarMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 Salvar configuração
@@ -323,7 +343,33 @@ function FormularioEtiqueta({ inicial, podeAlterar }: FormularioEtiquetaProps) {
         </CardContent>
       </Card>
 
-      <TesteDeEtiqueta config={config} formatoValido={problema === null} />
+      <TesteDeEtiqueta config={config} formatoValido={problema === null} naoSalva={alterada} />
+      {dialogo}
+    </div>
+  )
+}
+
+/**
+ * Exemplo montado com a configuracao: os grupos de digitos com a legenda sob
+ * cada um e o que a etiqueta significa ("produto 542, R$ 10,00").
+ */
+function ExemploMontado({ exemplo }: { exemplo: NonNullable<ReturnType<typeof exemploDeEtiqueta>> }) {
+  const numero = exemplo.grupos.map((grupo) => grupo.digitos).join('')
+  return (
+    <div className="space-y-1">
+      <p className="text-sm">
+        <span className="text-muted-foreground">Exemplo: </span>
+        <span className="sr-only">{`${numero} é o ${exemplo.significado}.`}</span>
+      </p>
+      <div aria-hidden="true" className="flex flex-wrap items-start gap-x-2 gap-y-1">
+        {exemplo.grupos.map((grupo, indice) => (
+          <span key={indice} className="flex flex-col items-center">
+            <span className="font-semibold tabular-nums tracking-wider">{grupo.digitos}</span>
+            <span className="text-xs text-muted-foreground">{grupo.legenda}</span>
+          </span>
+        ))}
+        <span className="font-medium">{`→ ${exemplo.significado}`}</span>
+      </div>
     </div>
   )
 }
@@ -400,6 +446,8 @@ interface TesteDeEtiquetaProps {
   /** Configuracao da tela (ainda nao salva). */
   config: ConfiguracaoEtiqueta
   formatoValido: boolean
+  /** A configuracao da tela tem alteracoes que ainda nao foram salvas. */
+  naoSalva: boolean
 }
 
 /** Classe do resultado: produto encontrado, codigo sem produto ou numero fora do formato. */
@@ -414,10 +462,13 @@ function classeDoResultado(resultado: TesteEtiquetaResponse): string {
  * "Testar etiqueta": le um numero com a configuracao da tela e mostra o
  * produto encontrado pelo codigo (a mensagem vem pronta do backend).
  */
-function TesteDeEtiqueta({ config, formatoValido }: TesteDeEtiquetaProps) {
+function TesteDeEtiqueta({ config, formatoValido, naoSalva }: TesteDeEtiquetaProps) {
   const [numero, setNumero] = useState('')
+  const campoRef = useRef<HTMLInputElement>(null)
   const testeMutation = useMutation<TesteEtiquetaResponse, unknown, { codigo: string; configuracao: ConfiguracaoEtiqueta }>({
     mutationFn: ({ codigo, configuracao }) => testarEtiqueta(codigo, configuracao),
+    // O proximo bip do leitor substitui o numero em vez de somar a ele.
+    onSettled: () => campoRef.current?.select(),
   })
   const codigo = numero.trim()
   const podeTestar = codigo !== '' && formatoValido && !testeMutation.isPending
@@ -428,7 +479,10 @@ function TesteDeEtiqueta({ config, formatoValido }: TesteDeEtiquetaProps) {
     }
   }
 
-  const resultado = testeMutation.data
+  // O resultado so vale para o formato com que foi lido: mudar o formato o tira da tela.
+  const formatoDoTeste = testeMutation.variables?.configuracao
+  const resultadoAtual = formatoDoTeste !== undefined && mesmaConfiguracao(formatoDoTeste, config)
+  const resultado = resultadoAtual ? testeMutation.data : undefined
   return (
     <Card>
       <CardHeader>
@@ -447,6 +501,7 @@ function TesteDeEtiqueta({ config, formatoValido }: TesteDeEtiquetaProps) {
                 aria-hidden="true"
               />
               <Input
+                ref={campoRef}
                 id="numeroEtiqueta"
                 value={numero}
                 onChange={(event) => {
@@ -473,7 +528,7 @@ function TesteDeEtiqueta({ config, formatoValido }: TesteDeEtiquetaProps) {
           </Button>
         </div>
         {!formatoValido && <p className="text-xs text-muted-foreground">Corrija o formato para testar.</p>}
-        <div role="status" aria-live="polite">
+        <div role="status" aria-live="polite" className="space-y-1">
           {resultado && (
             <p className={cn('flex items-start gap-2 rounded-md px-3 py-2 text-sm font-medium', classeDoResultado(resultado))}>
               {resultado.produto ? (
@@ -484,8 +539,13 @@ function TesteDeEtiqueta({ config, formatoValido }: TesteDeEtiquetaProps) {
               {resultado.mensagem}
             </p>
           )}
+          {resultado && naoSalva && (
+            <p className="text-xs text-muted-foreground">Lido com o formato desta tela, que ainda não foi salvo.</p>
+          )}
         </div>
-        {testeMutation.isError && <ErroInline mensagem="Não foi possível testar a etiqueta. Tente novamente." />}
+        {testeMutation.isError && resultadoAtual && (
+          <ErroInline mensagem="Não foi possível testar a etiqueta. Tente novamente." />
+        )}
       </CardContent>
     </Card>
   )

@@ -48,8 +48,8 @@ import { SecaoGeral } from '@/features/products/secoes/SecaoGeral'
 import { SecaoHistorico } from '@/features/products/secoes/SecaoHistorico'
 import { SecaoPrecos } from '@/features/products/secoes/SecaoPrecos'
 import { useSecaoAtiva } from '@/features/products/secoes/useSecaoVisivel'
-import { useAvisoAlteracoesNaoSalvas } from '@/features/products/useAvisoAlteracoesNaoSalvas'
 import { useAuth } from '@/hooks/useAuth'
+import { useAvisoAlteracoesNaoSalvas } from '@/hooks/useAvisoAlteracoesNaoSalvas'
 import { listarCategorias } from '@/services/categoriaService'
 import { HttpError } from '@/services/httpClient'
 import {
@@ -426,7 +426,10 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     formState: { errors, isDirty, isSubmitted },
   } = form
 
-  const { dialogo } = useAvisoAlteracoesNaoSalvas(isDirty && saida === null && !somenteLeitura)
+  const { dialogo } = useAvisoAlteracoesNaoSalvas(
+    isDirty && saida === null && !somenteLeitura,
+    'Você alterou este produto e ainda não salvou. Se sair agora, as alterações serão perdidas.',
+  )
 
   useEffect(() => {
     if (saida) {

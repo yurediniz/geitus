@@ -4,6 +4,7 @@ import {
   CONFIGURACAO_ETIQUETA_PADRAO,
   MODELOS_DE_ETIQUETA,
   descreverFormatoEtiqueta,
+  exemploDeEtiqueta,
   lerEtiqueta,
   modeloDaConfiguracao,
   pareceEtiqueta,
@@ -69,6 +70,52 @@ describe('lerEtiqueta', () => {
     expect(lerEtiqueta('2054200010009', modelo('toledo-4-0-6-dv'))).toBeNull()
   })
 
+  it('codigo 000000 nao e um codigo de produto', () => {
+    expect(lerEtiqueta('2000000010000', CONFIGURACAO_ETIQUETA_PADRAO)).toBeNull()
+  })
+
+  it('o preenchimento tem de ser zeros', () => {
+    const comDoisDePreenchimento: ConfiguracaoEtiqueta = {
+      ...CONFIGURACAO_ETIQUETA_PADRAO,
+      digitosCodigo: 4,
+      digitosPreenchimento: 2,
+      casasDecimais: 2,
+    }
+    expect(lerEtiqueta('2054200001000', comDoisDePreenchimento)).toEqual({ codigoProduto: 542, tipo: 'VALOR', valor: 10 })
+    expect(lerEtiqueta('2054250001000', comDoisDePreenchimento)).toBeNull()
+    expect(lerEtiqueta('2054205001000', comDoisDePreenchimento)).toBeNull()
+  })
+
+  it('valor zero e lido', () => {
+    expect(lerEtiqueta('2000542000000', CONFIGURACAO_ETIQUETA_PADRAO)).toEqual({ codigoProduto: 542, tipo: 'VALOR', valor: 0 })
+  })
+
+  it('valor com a escala certa, sem erro de ponto flutuante', () => {
+    // 0,29 e 1,13 nao saem exatos de uma divisao por 100 em ponto flutuante.
+    expect(lerEtiqueta('2005420000294', modelo('toledo-5-0-5-dv'))?.valor).toBe(0.29)
+    expect(lerEtiqueta('2000542001130', CONFIGURACAO_ETIQUETA_PADRAO)?.valor).toBe(1.13)
+  })
+
+  it('DV invalido no modelo de peso nao e etiqueta', () => {
+    expect(lerEtiqueta('2000542007504', modelo('peso-6-5-dv'))).toBeNull()
+  })
+
+  it.each(['200054201000a', '2000542 10000', '-200054201000', ' 2000542010000', ''])(
+    '"%s" (espaco, sinal ou letra) nao e etiqueta',
+    (codigo) => {
+      expect(lerEtiqueta(codigo, CONFIGURACAO_ETIQUETA_PADRAO)).toBeNull()
+    },
+  )
+
+  it('codigo maximo 999999 e 9999 no modelo de 4', () => {
+    expect(lerEtiqueta('2999999010000', CONFIGURACAO_ETIQUETA_PADRAO)?.codigoProduto).toBe(999999)
+    expect(lerEtiqueta('2999900010005', modelo('toledo-4-0-6-dv'))).toEqual({
+      codigoProduto: 9999,
+      tipo: 'VALOR',
+      valor: 10,
+    })
+  })
+
   it('prefixo de 2 digitos', () => {
     const config: ConfiguracaoEtiqueta = { ...CONFIGURACAO_ETIQUETA_PADRAO, prefixo: '20', digitosInformacao: 5 }
     expect(lerEtiqueta('2000054201000', config)).toEqual({ codigoProduto: 542, tipo: 'VALOR', valor: 1 })
@@ -118,5 +165,48 @@ describe('pareceEtiqueta', () => {
     expect(pareceEtiqueta('7891000315507', CONFIGURACAO_ETIQUETA_PADRAO)).toBe(false)
     expect(pareceEtiqueta('20005420100', CONFIGURACAO_ETIQUETA_PADRAO)).toBe(false)
     expect(pareceEtiqueta('2000542010000', null)).toBe(false)
+  })
+})
+
+describe('exemploDeEtiqueta', () => {
+  const digitos = (config: ConfiguracaoEtiqueta) => exemploDeEtiqueta(config)?.grupos.map((grupo) => grupo.digitos)
+
+  it('monta o exemplo do padrao: 2 000542 010000 -> produto 542, R$ 10,00', () => {
+    const exemplo = exemploDeEtiqueta(CONFIGURACAO_ETIQUETA_PADRAO)
+    expect(exemplo?.grupos).toEqual([
+      { digitos: '2', legenda: 'início' },
+      { digitos: '000542', legenda: 'código do produto' },
+      { digitos: '010000', legenda: 'valor' },
+    ])
+    expect(exemplo?.significado).toMatch(/^produto 542, R\$\s10,00$/)
+  })
+
+  it('com preenchimento e DV, os zeros e o verificador aparecem (e o exemplo e uma etiqueta valida)', () => {
+    const config = modelo('toledo-4-0-6-dv')
+    expect(exemploDeEtiqueta(config)?.grupos.map((grupo) => grupo.legenda)).toEqual([
+      'início',
+      'código do produto',
+      'zeros',
+      'valor',
+      'verificador',
+    ])
+    expect(digitos(config)?.join('')).toBe('2054200010008')
+    expect(lerEtiqueta('2054200010008', config)).toEqual({ codigoProduto: 542, tipo: 'VALOR', valor: 10 })
+  })
+
+  it('peso mostra kg e, sem caber o maior valor, usa um menor', () => {
+    expect(exemploDeEtiqueta(modelo('peso-6-5-dv'))?.significado).toBe('produto 542, 0,750 kg')
+    const valor4Digitos3Casas: ConfiguracaoEtiqueta = {
+      ...CONFIGURACAO_ETIQUETA_PADRAO,
+      digitosInformacao: 4,
+      digitosPreenchimento: 2,
+    }
+    expect(digitos(valor4Digitos3Casas)).toEqual(['2', '000542', '00', '1000'])
+    expect(exemploDeEtiqueta(valor4Digitos3Casas)?.significado).toMatch(/R\$\s1,00$/)
+  })
+
+  it('formato invalido nao tem exemplo', () => {
+    expect(exemploDeEtiqueta({ ...CONFIGURACAO_ETIQUETA_PADRAO, digitosCodigo: 5 })).toBeNull()
+    expect(exemploDeEtiqueta({ ...CONFIGURACAO_ETIQUETA_PADRAO, prefixo: '' })).toBeNull()
   })
 })
