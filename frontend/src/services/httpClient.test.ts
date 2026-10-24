@@ -420,6 +420,25 @@ describe('httpClient', () => {
       vi.mocked(globalThis.fetch).mockRejectedValueOnce(new TypeError('network error'))
       await expect(apiGetBlob('/api/imagens/x')).rejects.toMatchObject({ status: 0 })
     })
+
+    it('recusa, antes do fetch, URL fora de /api/imagens/ (absoluta, de outra rota ou que sai dela com ..)', async () => {
+      for (const url of [
+        'https://outro.site/api/imagens/produtos/p/v/grande',
+        '//outro.site/api/imagens/produtos/p/v/grande',
+        'http://localhost:3000/api/imagens/produtos/p/v/grande',
+        '/api/produtos/abc',
+        '/api/imagens',
+        'api/imagens/produtos/p/v/grande',
+        '/api/imagens/../produtos/abc',
+        '/api/imagens/%2e%2e/produtos/abc',
+        '/api/imagens/..\\produtos\\abc',
+        'javascript:alert(1)',
+        '',
+      ]) {
+        await expect(apiGetBlob(url), url).rejects.toThrow('URL de imagem não permitida.')
+      }
+      expect(globalThis.fetch).not.toHaveBeenCalled()
+    })
   })
 
   describe('apiPutMultipart', () => {

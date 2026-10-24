@@ -8,6 +8,7 @@ import {
   type RotacaoDaImagem,
 } from '@/lib/imagemDoProduto'
 import { baixarImagemDoProduto } from '@/services/produtoService'
+import { aoEncerrarSessao } from '@/services/tokenStorage'
 import type { ImagemDoProduto } from '@/types/produto'
 
 /**
@@ -47,6 +48,9 @@ export interface EstadoDaImagemNaoEnviada {
 
 /** Imagens que nao subiram no cadastro novo, por id do produto, ate a edicao as ler. */
 const imagensNaoEnviadas = new Map<string, ImagemNova>()
+
+// A foto de um usuario nao fica na memoria para o proximo login na mesma aba.
+aoEncerrarSessao(() => imagensNaoEnviadas.clear())
 
 export function guardarImagemNaoEnviada(produtoId: string, imagem: ImagemNova): void {
   imagensNaoEnviadas.set(produtoId, imagem)

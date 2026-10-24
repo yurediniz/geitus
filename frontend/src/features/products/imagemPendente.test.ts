@@ -12,6 +12,7 @@ import {
   type ImagemNova,
 } from '@/features/products/imagemPendente'
 import { prepararImagem, type ImagemPreparada } from '@/lib/imagemDoProduto'
+import { clearStoredToken } from '@/services/tokenStorage'
 
 vi.mock('@/lib/imagemDoProduto', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/imagemDoProduto')>()
@@ -76,6 +77,14 @@ describe('imagem nao enviada (cadastro novo -> edicao)', () => {
   })
 
   it('com a marca mas sem a imagem na memoria (recarregou a pagina), nao ha pendencia', () => {
+    expect(imagemNaoEnviadaDaNavegacao({ imagemNaoEnviada: true }, ID)).toBeNull()
+  })
+
+  it('o fim da sessao (logout ou 401) apaga as imagens guardadas', () => {
+    guardarImagemNaoEnviada(ID, imagemNova())
+
+    clearStoredToken()
+
     expect(imagemNaoEnviadaDaNavegacao({ imagemNaoEnviada: true }, ID)).toBeNull()
   })
 

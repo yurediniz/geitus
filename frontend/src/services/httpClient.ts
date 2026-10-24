@@ -290,12 +290,36 @@ export function apiPut<T>(path: string, corpo: unknown, opcoes: { autenticada?: 
   return enviarComCorpo<T>('PUT', path, corpo, opcoes)
 }
 
+/** Unico caminho que o `apiGetBlob` busca: a leitura assinada das imagens. */
+const PREFIXO_DAS_IMAGENS = '/api/imagens/'
+
 /**
- * Baixa um arquivo (ex.: a imagem do produto) por uma URL ja pronta, recebida
- * da API: as URLs assinadas da imagem ja vem com `/api` e dispensam o token
- * (a assinatura e a autorizacao). Por isso nao prefixa a base nem autentica.
+ * Se a URL e um caminho da propria origem sob `/api/imagens/`, conferido no
+ * texto e depois de normalizada (um `..`, mesmo codificado, que saia da rota
+ * e recusado). URLs absolutas, de outra origem ou de outra rota sao recusadas.
+ */
+function ehUrlDeImagemPermitida(url: string): boolean {
+  if (!url.startsWith(PREFIXO_DAS_IMAGENS) || url.includes('\\')) {
+    return false
+  }
+  try {
+    const resolvida = new URL(url, window.location.origin)
+    return resolvida.origin === window.location.origin && resolvida.pathname.startsWith(PREFIXO_DAS_IMAGENS)
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Baixa a imagem do produto por uma URL ja pronta, recebida da API: as URLs
+ * assinadas ja vem com `/api` e dispensam o token (a assinatura e a
+ * autorizacao). Por isso nao prefixa a base nem autentica, e so aceita
+ * caminhos sob `/api/imagens/`: qualquer outra URL e recusada antes do fetch.
  */
 export async function apiGetBlob(url: string): Promise<Blob> {
+  if (!ehUrlDeImagemPermitida(url)) {
+    throw new Error('URL de imagem não permitida.')
+  }
   let resposta: Response
   try {
     resposta = await fetch(url)
