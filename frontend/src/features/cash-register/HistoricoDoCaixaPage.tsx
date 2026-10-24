@@ -232,13 +232,17 @@ function Vazio({ mensagem, aoLimpar }: { mensagem: string; aoLimpar?: () => void
   )
 }
 
-/** Quem e quando, em duas linhas (o nome em destaque). */
-function QuemEQuando({ nome, quando }: { nome: string; quando: string }) {
+/**
+ * Uma linha da coluna "Abertura / fechamento": "Abriu: Ana Souza 24/10/2026 às 08:02".
+ * O nome pode quebrar; a data fica inteira (sem quebra no meio).
+ */
+function QuemEQuando({ acao, nome, quando }: { acao: 'Abriu' | 'Fechou'; nome: string; quando: string }) {
   return (
-    <>
-      <span className="block">{nome}</span>
-      <span className="block text-xs text-muted-foreground">{formatarDataHoraCaixa(quando)}</span>
-    </>
+    <p className="leading-snug">
+      <span className="text-muted-foreground">{`${acao}: `}</span>
+      <span>{nome}</span>{' '}
+      <span className="whitespace-nowrap text-xs text-muted-foreground">{formatarDataHoraCaixa(quando)}</span>
+    </p>
   )
 }
 
@@ -268,26 +272,25 @@ function TabelaDoHistorico({
   aoAbrir: (sessao: SessaoDeCaixaResumo) => void
 }) {
   return (
+    // Abertura e fechamento numa coluna so: em 1024 px (sidebar aberta) todas as colunas cabem,
+    // com a Diferenca inteira. Abaixo de 36rem a tabela rola na horizontal.
     <div className="overflow-x-auto">
-      <table aria-labelledby={idTitulo} className="w-full min-w-[44rem] text-sm">
+      <table aria-labelledby={idTitulo} className="w-full min-w-[36rem] text-sm">
         <thead>
           <tr className="text-left text-xs font-medium text-muted-foreground">
             <th scope="col" className="py-2 pr-3 font-medium">
               Ponto
             </th>
             <th scope="col" className="py-2 pr-3 font-medium">
-              Aberto por
+              Abertura / fechamento
             </th>
-            <th scope="col" className="py-2 pr-3 font-medium">
-              Fechado por
-            </th>
-            <th scope="col" className="py-2 pr-3 text-right font-medium">
+            <th scope="col" className="whitespace-nowrap py-2 pr-3 text-right font-medium">
               Esperado
             </th>
-            <th scope="col" className="py-2 pr-3 text-right font-medium">
+            <th scope="col" className="whitespace-nowrap py-2 pr-3 text-right font-medium">
               Contado
             </th>
-            <th scope="col" className="py-2 text-right font-medium">
+            <th scope="col" className="whitespace-nowrap py-2 text-right font-medium">
               Diferença
             </th>
           </tr>
@@ -313,27 +316,25 @@ function TabelaDoHistorico({
                   <span className="sr-only">{`, aberto em ${formatarDataHoraCaixa(sessao.abertaEm)}`}</span>
                 </button>
               </td>
-              <td className="py-2.5 pr-3">
-                <QuemEQuando nome={sessao.abertaPorNome} quando={sessao.abertaEm} />
-              </td>
-              <td className="py-2.5 pr-3">
+              <td className="space-y-1 py-2.5 pr-3">
+                <QuemEQuando acao="Abriu" nome={sessao.abertaPorNome} quando={sessao.abertaEm} />
                 {sessao.status === 'FECHADA' && sessao.fechadaPorNome && sessao.fechadaEm ? (
-                  <QuemEQuando nome={sessao.fechadaPorNome} quando={sessao.fechadaEm} />
+                  <QuemEQuando acao="Fechou" nome={sessao.fechadaPorNome} quando={sessao.fechadaEm} />
                 ) : (
                   <SeloDaSituacao status={sessao.status} />
                 )}
               </td>
-              <td className="py-2.5 pr-3 text-right tabular-nums">
+              <td className="whitespace-nowrap py-2.5 pr-3 text-right tabular-nums">
                 {sessao.valorEsperado === null ? SEM_VALOR : formatarReais(sessao.valorEsperado)}
               </td>
-              <td className="py-2.5 pr-3 text-right tabular-nums">
+              <td className="whitespace-nowrap py-2.5 pr-3 text-right tabular-nums">
                 {sessao.valorContado === null ? SEM_VALOR : formatarReais(sessao.valorContado)}
               </td>
-              <td className="py-2.5 text-right">
+              <td className="whitespace-nowrap py-2.5 text-right">
                 {sessao.diferenca === null ? (
                   <span className="text-muted-foreground">{SEM_VALOR}</span>
                 ) : (
-                  <TextoDaDiferenca valor={sessao.diferenca} className="justify-end" />
+                  <TextoDaDiferenca valor={sessao.diferenca} className="justify-end whitespace-nowrap" />
                 )}
               </td>
             </tr>

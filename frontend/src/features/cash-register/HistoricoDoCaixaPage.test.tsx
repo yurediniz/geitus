@@ -134,7 +134,7 @@ describe('HistoricoDoCaixaPage', () => {
     const cabecalhos = within(tabela)
       .getAllByRole('columnheader')
       .map((celula) => celula.textContent)
-    expect(cabecalhos).toEqual(['Ponto', 'Aberto por', 'Fechado por', 'Esperado', 'Contado', 'Diferença'])
+    expect(cabecalhos).toEqual(['Ponto', 'Abertura / fechamento', 'Esperado', 'Contado', 'Diferença'])
 
     const [, confere, falta] = within(tabela).getAllByRole('row')
     expect(confere).toHaveTextContent('Caixa 1')
@@ -146,6 +146,28 @@ describe('HistoricoDoCaixaPage', () => {
     expect(falta).toHaveTextContent('Caixa 2')
     expect(falta).toHaveTextContent('Carlos Lima')
     expect(within(falta).getByText('Falta de R$ 2,00')).toHaveClass('text-warning-soft-foreground')
+  })
+
+  it('abertura e fechamento numa coluna só, com os dois nomes e as datas inteiras; valores sem quebra', async () => {
+    renderPagina()
+
+    const tabela = await screen.findByRole('table', { name: 'Sessões de caixa' })
+    // A tabela cabe no conteudo de 1024 px com a sidebar aberta (~655 px); abaixo disso, rola.
+    expect(tabela).toHaveClass('min-w-[36rem]')
+    const [, , falta, aberta] = within(tabela).getAllByRole('row')
+    const [, abertura, esperado, contado, diferenca] = within(falta).getAllByRole('cell')
+    expect(abertura).toHaveTextContent('Abriu: Beto Lima 24/10/2026 às 08:02')
+    expect(abertura).toHaveTextContent('Fechou: Carlos Lima 24/10/2026 às 19:00')
+    expect(within(abertura).getByText('24/10/2026 às 08:02')).toHaveClass('whitespace-nowrap')
+    for (const celula of [esperado, contado, diferenca]) {
+      expect(celula).toHaveClass('whitespace-nowrap')
+    }
+    expect(within(diferenca).getByText('Falta de R$ 2,00')).toHaveClass('whitespace-nowrap')
+    // Sessao nao fechada: a segunda linha e a situacao.
+    const [, aberturaDaAberta] = within(aberta).getAllByRole('cell')
+    expect(aberturaDaAberta).toHaveTextContent('Abriu: Ana Souza')
+    expect(within(aberturaDaAberta).getByText('Aberto')).toBeInTheDocument()
+    expect(aberturaDaAberta).not.toHaveTextContent('Fechou')
   })
 
   it('sessões não fechadas mostram "Aberto" ou "Em conferência"', async () => {
