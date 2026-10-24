@@ -362,6 +362,21 @@ describe('ajusteEstoque', () => {
       })
     })
 
+    it('na embalagem, o custo que zera por unidade é barrado: CX c/ 1000 a R$ 0,10 dá R$ 0,00 por UN', () => {
+      const comCaixaGrande = {
+        ...contexto,
+        embalagens: [{ id: 'cx1000', rotulo: 'CX c/ 1000 UN', quantidade: 1000, deCompra: true }],
+      }
+      const naCaixa: DadosAjuste = { ...compra, quantidade: '1', embalagemId: 'cx1000', custo: '0.10' }
+      expect(validarAjuste(naCaixa, comCaixaGrande).erros).toEqual({ custo: 'O custo deve ser maior que zero.' })
+      // 0,50 / 101 = 0,01 por UN: passa.
+      const caixa101 = {
+        ...contexto,
+        embalagens: [{ id: 'cx101', rotulo: 'CX c/ 101 UN', quantidade: 101, deCompra: true }],
+      }
+      expect(validarAjuste({ ...naCaixa, embalagemId: 'cx101', custo: '0.50' }, caixa101).erros).toEqual({})
+    })
+
     it('fora da compra, o custo não é validado', () => {
       expect(validarAjuste({ ...compra, motivo: 'DEVOLUCAO_CLIENTE', custo: '' }, contexto).erros).toEqual({})
       const saida: DadosAjuste = { ...compra, tipo: 'SAIDA', motivo: 'PERDA_AVARIA', quantidade: '2', custo: '' }
@@ -378,6 +393,8 @@ describe('ajusteEstoque', () => {
       expect(custoPorUnidade('1.34', 4)).toBe('0.34')
       // 0,03 / 7 = 0,0042857 -> 0,0043 -> 0,00 (a mesma conta, mesmo quando zera).
       expect(custoPorUnidade('0.03', 7)).toBe('0.00')
+      // 0,50 / 101 = 0,0049505 -> 0,0050 -> 0,01 (direto a centavos daria 0,00).
+      expect(custoPorUnidade('0.50', 101)).toBe('0.01')
       // Embalagem fracionada (SC c/ 25,5 KG): 127,50 / 25,5 = 5,00.
       expect(custoPorUnidade('127.50', 25.5)).toBe('5.00')
       expect(custoPorUnidade('', 18)).toBeNull()

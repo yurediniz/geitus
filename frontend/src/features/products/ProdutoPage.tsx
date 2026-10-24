@@ -588,7 +588,11 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura }: FormularioPr
     }
     custoSincronizadoRef.current = { custo: custoGravado, em: custoGravadoEm }
     if (getFieldState('custo').isDirty) {
-      setCustoDaCompraNaoAplicado(custoDaCompra)
+      // "A entrada de compra mudou o custo" so quando o valor mudou; a compra ao mesmo custo so
+      // muda a origem, e o aviso continua o de "editado manualmente".
+      if (custoGravado !== sincronizado.custo) {
+        setCustoDaCompraNaoAplicado(custoDaCompra)
+      }
     } else {
       resetField('custo', { defaultValue: numeroParaTexto(custoGravado) })
       setCustoDaCompraNaoAplicado(null)

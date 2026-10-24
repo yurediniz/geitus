@@ -313,6 +313,13 @@ export function validarAjuste(dados: DadosAjuste, contexto: ContextoAjuste): Res
       erros.custo = MENSAGEM_CUSTO_OBRIGATORIO
     } else if (!(Number(custo) > 0)) {
       erros.custo = MENSAGEM_CUSTO_POSITIVO
+    } else {
+      // Na embalagem, o custo por unidade (o que o produto recebe) tambem precisa passar de zero:
+      // CX c/ 1000 a R$ 0,10 da R$ 0,0001, que vira R$ 0,00 no produto.
+      const embalagem = embalagemDoAjuste(dados, contexto)
+      if (embalagem && custoPorUnidade(custo, embalagem.quantidade) === '0.00') {
+        erros.custo = MENSAGEM_CUSTO_POSITIVO
+      }
     }
   }
   if (dados.motivo === '' || !MOTIVOS_POR_TIPO[dados.tipo].includes(dados.motivo)) {

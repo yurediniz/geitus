@@ -834,6 +834,20 @@ describe('ModalAjusteEstoque', () => {
       expect(campoCusto()).toHaveAccessibleDescription(/^Último custo: R\$\s9,50 por UN\.$/)
     })
 
+    it('CX c/ 1000 a R$ 0,10 zera o custo por unidade: erro no campo, foco nele, sem enviar', async () => {
+      const CAIXA_1000 = { id: 'emb-cx1000', rotulo: 'CX c/ 1000 UN', quantidade: 1000, deCompra: true }
+      renderModal({ saldo: 10, embalagens: [CAIXA_1000] })
+      fireEvent.change(campoQuantidade(), { target: { value: '1' } })
+      preencherCusto('0,10')
+
+      confirmar()
+
+      expect(await screen.findByText('O custo deve ser maior que zero.')).toBeInTheDocument()
+      await waitFor(() => expect(campoCusto()).toHaveFocus())
+      expect(campoCusto()).toHaveAccessibleDescription(/O custo deve ser maior que zero\./)
+      expect(ajustarEstoqueMock).not.toHaveBeenCalled()
+    })
+
     it('trocar o "Em" descarta o custo digitado e o erro dele', async () => {
       renderModal({ saldo: 10, embalagens: [CAIXA_18] })
       fireEvent.change(campoQuantidade(), { target: { value: '2' } })

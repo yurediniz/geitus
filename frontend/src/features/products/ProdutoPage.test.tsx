@@ -3681,6 +3681,7 @@ describe('ProdutoPage', () => {
     it('com o Custo alterado na tela, a compra mantém o valor digitado e avisa', async () => {
       const produto: Produto = { ...produtoAtivo, custo: 9.5 }
       ajustarEstoqueMock.mockResolvedValue(compraADez(produto.estoqueAtual))
+      atualizarProdutoMock.mockResolvedValue(depoisDaCompra(produto))
       renderEdicao(produto)
       await esperarFormulario()
       fireEvent.change(campoCusto(), { target: { value: '12,00' } })
@@ -3699,6 +3700,61 @@ describe('ProdutoPage', () => {
       // Com o valor igual ao gravado, nao ha o que avisar.
       fireEvent.change(campoCusto(), { target: { value: '10,00' } })
       expect(screen.queryByText(/A entrada de compra mudou o custo/)).not.toBeInTheDocument()
+
+      // Salvar depois do aviso grava o valor do campo.
+      fireEvent.change(campoCusto(), { target: { value: '12,00' } })
+      expect(screen.getByText(/A entrada de compra mudou o custo/)).toBeInTheDocument()
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(ID_ARROZ, expect.objectContaining({ custo: 12 })),
+      )
+    })
+
+    it('compra ao mesmo custo com o Custo alterado na tela: o aviso é o de "editado", não o da compra', async () => {
+      const produto: Produto = { ...produtoAtivo, custo: 10 }
+      ajustarEstoqueMock.mockResolvedValue(compraADez(produto.estoqueAtual))
+      renderEdicao(produto)
+      await esperarFormulario()
+      fireEvent.change(campoCusto(), { target: { value: '12,00' } })
+
+      const modal = comprarCincoADez()
+      buscarProdutoMock.mockResolvedValue(depoisDaCompra(produto))
+      confirmarModal(modal)
+
+      // A origem muda (a nota passa a ser a da compra), mas o custo continua R$ 10,00.
+      await waitFor(() =>
+        expect(campoCusto()).toHaveAccessibleDescription(
+          /^Último custo de entrada: R\$\s10,00 por UN, em 24\/10\/2026\.\s*Ao salvar, o custo passa a contar como editado manualmente\.$/,
+        ),
+      )
+      expect(screen.queryByText(/A entrada de compra mudou o custo/)).not.toBeInTheDocument()
+      expect(campoCusto()).toHaveValue('12,00')
+    })
+
+    it('com outro campo alterado, a compra atualiza o Custo e mantém o resto; o PATCH leva os dois', async () => {
+      const produto: Produto = { ...produtoAtivo, custo: 9.5 }
+      ajustarEstoqueMock.mockResolvedValue(compraADez(produto.estoqueAtual))
+      atualizarProdutoMock.mockResolvedValue(depoisDaCompra(produto))
+      renderEdicao(produto)
+      await esperarFormulario()
+      fireEvent.change(campoNome(), { target: { value: 'Arroz Tio João 5kg' } })
+
+      const modal = comprarCincoADez()
+      buscarProdutoMock.mockResolvedValue(depoisDaCompra(produto))
+      confirmarModal(modal)
+
+      await waitFor(() => expect(campoCusto()).toHaveValue('10,00'))
+      expect(campoNome()).toHaveValue('Arroz Tio João 5kg')
+
+      fireEvent.click(botaoSalvar())
+
+      await waitFor(() =>
+        expect(atualizarProdutoMock).toHaveBeenCalledWith(
+          ID_ARROZ,
+          expect.objectContaining({ nome: 'Arroz Tio João 5kg', custo: 10 }),
+        ),
+      )
     })
 
     it('Preços: o custo alterado (diferente do gravado) avisa que passa a contar como editado', async () => {
