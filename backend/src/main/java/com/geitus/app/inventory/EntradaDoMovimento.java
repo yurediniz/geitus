@@ -1,7 +1,6 @@
 package com.geitus.app.inventory;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 import com.geitus.app.catalog.EntradaDeCompra;
 
@@ -11,9 +10,9 @@ import com.geitus.app.catalog.EntradaDeCompra;
  * da {@link EntradaDeCompra}.
  */
 public record EntradaDoMovimento(Long movimentoId, BigDecimal quantidade, Integer quantidadeDeEmbalagens,
-        String embalagemRotulo, LocalDateTime em) {
+        String embalagemRotulo) {
 
     EntradaDeCompra entrada() {
-        return new EntradaDeCompra(quantidade, quantidadeDeEmbalagens, embalagemRotulo, em);
+        return new EntradaDeCompra(quantidade, quantidadeDeEmbalagens, embalagemRotulo);
     }
 }

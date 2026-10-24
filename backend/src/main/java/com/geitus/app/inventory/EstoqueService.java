@@ -15,6 +15,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import com.geitus.app.catalog.CatalogoNaoEncontradoException;
+import com.geitus.app.catalog.CompraComCusto;
 import com.geitus.app.catalog.CustoDeEntrada;
 import com.geitus.app.catalog.Paginacao;
 import com.geitus.app.catalog.Produto;
@@ -218,7 +219,9 @@ public class EstoqueService {
                 OrigemMovimento.AJUSTE_MANUAL, valores, normalizarOuNulo(request.observacao()),
                 usuario.getId(), request.chave());
         if (valores.custo() != null) {
-            custoDeEntrada.registrar(produto, valores.custo().porUnidade(), movimento.getId(), usuario.getId());
+            // IDENTITY: o save ja inseriu o movimento (@PrePersist rodou), entao o id e o criadoEm existem.
+            custoDeEntrada.registrar(produto, new CompraComCusto(movimento.getId(), valores.custo().porUnidade(),
+                    movimento.getCriadoEm()), usuario.getId());
         }
         return new ResultadoAjuste(MovimentoEstoqueResponse.de(movimento, usuario.getNome()), true);
     }
@@ -277,7 +280,8 @@ public class EstoqueService {
     /**
      * Custo da compra (spec 2.1 e 2.3), nesta ordem: so na entrada por compra
      * (400 nos demais), obrigatorio nela (400) e maior que zero, no digitado e
-     * no por unidade (400). {@code null} fora da entrada por compra.
+     * no custo que o produto recebe, em centavos (400). {@code null} fora da
+     * entrada por compra.
      */
     private static CustoDaCompra custoDaCompra(AjusteEstoqueRequest request, RetratoDaEmbalagem embalagem) {
         boolean entradaPorCompra = request.tipo() == TipoMovimento.ENTRADA

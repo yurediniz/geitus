@@ -134,7 +134,7 @@ public class Produto {
     /**
      * Fase B4 (V13): de onde veio o custo atual e quando; os dois nulos sem
      * custo ou com a origem desconhecida (produtos anteriores a V13). Mudam so
-     * por {@link #registrarCustoDeEntrada} e {@link #marcarCustoEditado}.
+     * por {@link #registrarCustoDeEntrada} e {@link #atualizarDadosBasicos}.
      */
     @Enumerated(EnumType.STRING)
     @Column(name = "custo_origem", length = 20)
@@ -224,14 +224,15 @@ public class Produto {
      * Cria um produto ja com os dados do cadastro, o {@code numero} de registro
      * reservado pelo {@code Numerador} na mesma transacao e um {@code uuid}
      * novo. O service e responsavel por validar as regras de negocio antes de
-     * instanciar.
+     * instanciar. {@code agora} e o momento do cadastro: com custo, a origem
+     * dele e {@code EDICAO} (Fase B4).
      */
-    public Produto(Empresa empresa, long numero, DadosProduto dados) {
+    public Produto(Empresa empresa, long numero, DadosProduto dados, LocalDateTime agora) {
         this.empresa = empresa;
         this.numero = numero;
         this.uuid = UUID.randomUUID();
         this.ativo = true;
-        atualizarDadosBasicos(dados);
+        atualizarDadosBasicos(dados, agora);
     }
 
     @PrePersist
@@ -254,8 +255,12 @@ public class Produto {
      * regra de negocio (nome, preco, unicidade de SKU, unidade/categoria da
      * empresa, promocao e atacado) ja terem
      * sido feitas. Promocao ou atacado ausente grava nulo nos campos do bloco.
+     *
+     * <p>Fase B4: a origem do custo acompanha o custo aqui mesmo, com
+     * {@code agora} (ver {@link #acompanharOrigemDoCusto}).
      */
-    public void atualizarDadosBasicos(DadosProduto dados) {
+    public void atualizarDadosBasicos(DadosProduto dados, LocalDateTime agora) {
+        BigDecimal custoAnterior = this.custo;
         this.nome = dados.nome();
         this.nomeCurto = dados.nomeCurto();
         this.marca = dados.marca();
@@ -279,6 +284,25 @@ public class Produto {
         this.codigo = dados.codigo();
         this.vendidoBalanca = dados.vendidoBalanca();
         recalcularTextosDeBusca();
+        acompanharOrigemDoCusto(custoAnterior, agora);
+    }
+
+    /**
+     * Invariante da origem do custo (spec 4; V13): sem custo, sem origem; o
+     * custo que mudou pelo cadastro (inclusive vazio -> valor) vira
+     * {@code EDICAO} em {@code agora}; o mesmo custo (10 = 10,00) mantem a
+     * origem e a data, mesmo a de uma entrada por compra (Review Focus 2).
+     */
+    private void acompanharOrigemDoCusto(BigDecimal custoAnterior, LocalDateTime agora) {
+        if (custo == null) {
+            this.custoOrigem = null;
+            this.custoOrigemEm = null;
+            return;
+        }
+        if (!HistoricoDePrecos.mesmoValor(custoAnterior, custo)) {
+            this.custoOrigem = OrigemDoCusto.EDICAO;
+            this.custoOrigemEm = agora;
+        }
     }
 
     /** Colunas da busca (V10) sempre coerentes com o nome, o nome curto, o SKU e a marca gravados. */
@@ -376,28 +400,13 @@ public class Produto {
 
     /**
      * Custo vindo de uma entrada por compra (docs/modules/produtos-custo-entrada.md,
-     * 2.2): o custo por unidade ja arredondado a centavos pelo chamador, a
-     * origem {@code ENTRADA_COMPRA} e o momento, mesmo que o valor nao mude.
+     * 2.2): o custo do produto ja arredondado a centavos pelo
+     * {@link CustoDeEntrada}, a origem {@code ENTRADA_COMPRA} e a data do
+     * movimento, mesmo que o valor nao mude.
      */
-    public void registrarCustoDeEntrada(BigDecimal custoPorUnidade, LocalDateTime em) {
-        this.custo = custoPorUnidade;
+    void registrarCustoDeEntrada(BigDecimal custoDoProduto, LocalDateTime em) {
+        this.custo = custoDoProduto;
         this.custoOrigem = OrigemDoCusto.ENTRADA_COMPRA;
-        this.custoOrigemEm = em;
-    }
-
-    /**
-     * O custo mudou pelo cadastro ou pela edicao (spec 4): origem
-     * {@code EDICAO} com o momento; sem custo, origem e momento ficam nulos
-     * (V13, {@code ck_produto_custo_origem_com_custo}). Chamado pelo service so
-     * quando o custo mudou de fato.
-     */
-    public void marcarCustoEditado(LocalDateTime em) {
-        if (custo == null) {
-            this.custoOrigem = null;
-            this.custoOrigemEm = null;
-            return;
-        }
-        this.custoOrigem = OrigemDoCusto.EDICAO;
         this.custoOrigemEm = em;
     }
 

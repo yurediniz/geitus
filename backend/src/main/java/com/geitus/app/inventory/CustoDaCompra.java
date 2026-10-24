@@ -3,6 +3,8 @@ package com.geitus.app.inventory;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
+import com.geitus.app.catalog.CustoDeEntrada;
+
 /**
  * Custo de uma entrada por compra (Fase B4, docs/modules/produtos-custo-entrada.md,
  * 2.1; V13): o valor digitado, em centavos, e o custo por unidade de venda com
@@ -32,10 +34,12 @@ record CustoDaCompra(BigDecimal informado, BigDecimal porUnidade) {
     }
 
     /**
-     * Maior que zero no digitado e no por unidade (V13). Um centavo dividido por
-     * uma embalagem grande arredonda a zero e e recusado como custo zero.
+     * Maior que zero no digitado, no por unidade (V13) e no custo que o
+     * produto recebe, em centavos ({@link CustoDeEntrada#custoDoProduto}): R$
+     * 0,10 por CX c/ 1000 da 0,0001 por UN, mas 0,00 no produto, e e recusado
+     * como custo zero.
      */
     boolean positivo() {
-        return informado.signum() > 0 && porUnidade.signum() > 0;
+        return informado.signum() > 0 && CustoDeEntrada.custoDoProduto(porUnidade).signum() > 0;
     }
 }

@@ -57,8 +57,7 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
      * indice {@code ix_movimento_estoque_produto}.
      */
     @Query("""
-            SELECT new com.geitus.app.catalog.EntradaDeCompra(
-                       m.quantidade, m.quantidadeEmbalagens, m.embalagemRotulo, m.criadoEm)
+            SELECT new com.geitus.app.catalog.EntradaDeCompra(m.quantidade, m.quantidadeEmbalagens, m.embalagemRotulo)
               FROM MovimentoEstoque m
              WHERE m.empresaId = :empresaId
                AND m.produto.id = :produtoId
@@ -68,10 +67,10 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
     List<EntradaDeCompra> entradasDeCompraDoProduto(@Param("empresaId") Long empresaId,
             @Param("produtoId") Long produtoId, Pageable pageable);
 
-    /** Quantidade, retrato e data dos movimentos informados que sao da empresa (DEC-016), em uma consulta. */
+    /** Quantidade e retrato dos movimentos informados que sao da empresa (DEC-016), em uma consulta. */
     @Query("""
             SELECT new com.geitus.app.inventory.EntradaDoMovimento(
-                       m.id, m.quantidade, m.quantidadeEmbalagens, m.embalagemRotulo, m.criadoEm)
+                       m.id, m.quantidade, m.quantidadeEmbalagens, m.embalagemRotulo)
               FROM MovimentoEstoque m
              WHERE m.empresaId = :empresaId
                AND m.id IN :movimentoIds

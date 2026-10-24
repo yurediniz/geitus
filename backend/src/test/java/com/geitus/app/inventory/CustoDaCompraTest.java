@@ -42,5 +42,9 @@ class CustoDaCompraTest {
         assertThat(CustoDaCompra.de(new BigDecimal("-1"), null).positivo()).isFalse();
         // R$ 0,01 numa embalagem de 1000 UN arredonda a 0,0000 por UN.
         assertThat(CustoDaCompra.de(new BigDecimal("0.01"), caixaCom("1000")).positivo()).isFalse();
+        // R$ 0,10 por CX c/ 1000 = 0,0001 por UN, mas 0,00 no custo do produto (centavos).
+        assertThat(CustoDaCompra.de(new BigDecimal("0.10"), caixaCom("1000")).positivo()).isFalse();
+        // R$ 5,00 por CX c/ 1000 = 0,005 -> 0,01 no produto (meio para cima).
+        assertThat(CustoDaCompra.de(new BigDecimal("5.00"), caixaCom("1000")).positivo()).isTrue();
     }
 }

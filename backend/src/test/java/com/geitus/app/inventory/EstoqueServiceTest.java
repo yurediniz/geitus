@@ -13,6 +13,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,6 +30,7 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import com.geitus.app.catalog.CatalogoNaoEncontradoException;
+import com.geitus.app.catalog.CompraComCusto;
 import com.geitus.app.catalog.CustoDeEntrada;
 import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ProdutoConflitoException;
@@ -403,9 +405,17 @@ class EstoqueServiceTest {
                 custo == null ? null : new BigDecimal(custo));
     }
 
+    /** Spec 4: a data da origem do custo e a do movimento (preenchida no persist, antes de aplicar o custo). */
     @Test
     void compraGravaOCustoNoMovimentoEOAplicaNoProdutoDepois() {
         Produto produto = produtoComSaldo(un, "0");
+        LocalDateTime criadoEm = LocalDateTime.of(2026, 10, 24, 9, 15);
+        when(movimentoRepository.save(any(MovimentoEstoque.class))).thenAnswer(invocacao -> {
+            MovimentoEstoque movimento = invocacao.getArgument(0);
+            ReflectionTestUtils.setField(movimento, "id", 77L);
+            ReflectionTestUtils.setField(movimento, "criadoEm", criadoEm);
+            return movimento;
+        });
 
         ResultadoAjuste resultado = ajustar(produto, comCusto(TipoMovimento.ENTRADA, "5", MotivoMovimento.COMPRA,
                 "10"));
@@ -414,7 +424,8 @@ class EstoqueServiceTest {
         assertThat(resultado.movimento().custoUnitario()).isEqualTo(new BigDecimal("10.0000"));
         InOrder ordem = inOrder(movimentoRepository, custoDeEntrada);
         ordem.verify(movimentoRepository).save(any(MovimentoEstoque.class));
-        ordem.verify(custoDeEntrada).registrar(produto, new BigDecimal("10.0000"), null, ID_USUARIO);
+        ordem.verify(custoDeEntrada).registrar(produto, new CompraComCusto(77L, new BigDecimal("10.0000"), criadoEm),
+                ID_USUARIO);
     }
 
     @Test
@@ -424,7 +435,7 @@ class EstoqueServiceTest {
         ajustar(produto, comCusto(TipoMovimento.SAIDA, "2", MotivoMovimento.PERDA_AVARIA, null));
         ajustar(produto, comCusto(TipoMovimento.ENTRADA, "2", MotivoMovimento.DEVOLUCAO_CLIENTE, null));
 
-        verify(custoDeEntrada, never()).registrar(any(), any(), any(), any());
+        verify(custoDeEntrada, never()).registrar(any(), any(), any());
     }
 
     @Test
@@ -433,7 +444,7 @@ class EstoqueServiceTest {
 
         assertRegra(() -> ajustar(produto, comCusto(TipoMovimento.ENTRADA, "2", MotivoMovimento.COMPRA, null)),
                 "Informe o custo da compra.", "custo");
-        verify(custoDeEntrada, never()).registrar(any(), any(), any(), any());
+        verify(custoDeEntrada, never()).registrar(any(), any(), any());
     }
 
     @Test
@@ -486,7 +497,7 @@ class EstoqueServiceTest {
         assertThatThrownBy(() -> ajustar(produto, new AjusteEstoqueRequest(TipoMovimento.ENTRADA,
                 new BigDecimal("5"), MotivoMovimento.COMPRA, null, chave, null, new BigDecimal("10.01"))))
                 .isInstanceOf(ProdutoConflitoException.class);
-        verify(custoDeEntrada, never()).registrar(any(), any(), any(), any());
+        verify(custoDeEntrada, never()).registrar(any(), any(), any());
     }
 
     // ---------- Em embalagens (Fase B3, docs/modules/produtos-embalagens.md, 6) ----------

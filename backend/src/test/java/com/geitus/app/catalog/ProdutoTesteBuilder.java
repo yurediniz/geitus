@@ -2,6 +2,7 @@ package com.geitus.app.catalog;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -24,6 +25,8 @@ import com.geitus.app.company.Empresa;
 final class ProdutoTesteBuilder {
 
     private static final AtomicLong PROXIMO_NUMERO = new AtomicLong();
+    /** Momento fixo do cadastro (Fase B4: a data da origem do custo, quando ha custo). */
+    static final LocalDateTime CADASTRADO_EM = LocalDateTime.of(2026, 1, 2, 8, 0);
 
     private final Empresa empresa;
     private final UnidadeMedida unidade;
@@ -203,7 +206,7 @@ final class ProdutoTesteBuilder {
     }
 
     Produto build() {
-        Produto produto = new Produto(empresa, numero, dados());
+        Produto produto = new Produto(empresa, numero, dados(), CADASTRADO_EM);
         produto.substituirCodigos(codigos);
         List<ProdutoEmbalagem> embalagensDoProduto = new ArrayList<>();
         for (int ordem = 0; ordem < embalagens.size(); ordem++) {

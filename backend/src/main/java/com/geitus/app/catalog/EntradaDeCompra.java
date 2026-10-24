@@ -1,7 +1,6 @@
 package com.geitus.app.catalog;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 /**
  * Uma entrada de estoque por compra com custo (Fase B4,
@@ -10,6 +9,5 @@ import java.time.LocalDateTime;
  * de embalagens e o rotulo do retrato ("2" e "CX c/ 18 UN"); os dois nulos na
  * compra em unidades. Vem do estoque pela {@link UsoDoProdutoNoEstoque}.
  */
-public record EntradaDeCompra(BigDecimal quantidade, Integer quantidadeDeEmbalagens, String embalagemRotulo,
-        LocalDateTime em) {
+public record EntradaDeCompra(BigDecimal quantidade, Integer quantidadeDeEmbalagens, String embalagemRotulo) {
 }

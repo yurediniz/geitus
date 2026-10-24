@@ -10,11 +10,11 @@
 --    em NUMERIC(14,4), porque a divisao pela embalagem (CX c/ 3 a R$ 100,00 =
 --    R$ 33,3333) nao cabe em centavos. O produto guarda o custo por unidade
 --    arredondado a centavos (aplicacao, HALF_UP).
---  * A obrigacao "compra nova exige custo" fica na aplicacao: os movimentos de
---    compra ja gravados nao tem custo e sao imutaveis, entao uma CHECK nos dois
---    sentidos falharia neles. Aqui ficam as regras da propria linha.
+--  * "Compra nova exige custo" e uma CHECK NOT VALID: vale para toda linha
+--    nova, mas os movimentos de compra ja gravados nao tem custo e sao
+--    imutaveis, entao ela nunca e validada contra eles (ver Passo 1).
 --  * Isolamento por empresa (DEC-016): a linha do historico so se liga a um
---    movimento da mesma empresa, garantido por FK COMPOSTA.
+--    movimento da mesma empresa e do mesmo produto, garantido por FK COMPOSTA.
 --  * As CHECKs que comparam colunas anulaveis sao escritas sem resultado NULL
 --    (IS NOT NULL / coalesce explicitos): uma CHECK com resultado NULL passa.
 
@@ -28,8 +28,9 @@ ALTER TABLE movimentos_estoque
     -- O custo por unidade de venda: o informado, ou o informado dividido pelas
     -- unidades da embalagem, com 4 casas.
     ADD COLUMN custo_unitario  NUMERIC(14,4),
-    -- Alvo da FK composta do historico de precos (a V9 nao tem).
-    ADD CONSTRAINT uq_movimento_estoque_empresa_id UNIQUE (empresa_id, id),
+    -- Alvo da FK composta do historico de precos (a V9 nao tem): o movimento
+    -- da linha e do mesmo produto e da mesma empresa.
+    ADD CONSTRAINT uq_movimento_estoque_empresa_produto_id UNIQUE (empresa_id, produto_id, id),
     -- Os dois nulos ou os dois preenchidos e maiores que zero.
     ADD CONSTRAINT ck_movimento_estoque_custo_completo CHECK (
         (custo_informado IS NULL AND custo_unitario IS NULL)
@@ -49,6 +50,16 @@ ALTER TABLE movimentos_estoque
         OR (embalagem_quantidade IS NULL AND custo_unitario = custo_informado)
         OR (embalagem_quantidade IS NOT NULL
             AND custo_unitario = round(custo_informado / embalagem_quantidade, 4)));
+
+-- Compra nova exige custo. NOT VALID: conferida em todo INSERT (e UPDATE) a
+-- partir daqui, mas nao contra as linhas existentes. NAO rodar
+-- "ALTER TABLE movimentos_estoque VALIDATE CONSTRAINT
+-- ck_movimento_estoque_compra_exige_custo": as compras gravadas antes da V13
+-- nao tem custo, sao imutaveis e a validacao falharia nelas.
+ALTER TABLE movimentos_estoque
+    ADD CONSTRAINT ck_movimento_estoque_compra_exige_custo CHECK (
+        NOT (tipo = 'ENTRADA' AND motivo = 'COMPRA' AND origem = 'AJUSTE_MANUAL')
+        OR custo_informado IS NOT NULL) NOT VALID;
 
 -- =====================================================================
 -- Passo 2: origem do custo atual no produto.
@@ -71,13 +82,16 @@ ALTER TABLE produto_historico_precos
     ADD COLUMN origem       VARCHAR(20),
     ADD COLUMN movimento_id BIGINT,
     ADD CONSTRAINT ck_historico_preco_origem_valida CHECK (origem IN ('EDICAO', 'ENTRADA_COMPRA')),
-    -- O movimento e imutavel: RESTRICT. MATCH SIMPLE: so conferida com o
-    -- movimento preenchido.
-    ADD CONSTRAINT fk_historico_preco_movimento FOREIGN KEY (empresa_id, movimento_id)
-        REFERENCES movimentos_estoque (empresa_id, id) ON DELETE RESTRICT,
+    -- O movimento e do mesmo produto (e empresa) da linha, e imutavel:
+    -- RESTRICT. MATCH SIMPLE: so conferida com o movimento preenchido.
+    ADD CONSTRAINT fk_historico_preco_movimento FOREIGN KEY (empresa_id, produto_id, movimento_id)
+        REFERENCES movimentos_estoque (empresa_id, produto_id, id) ON DELETE RESTRICT,
     -- O movimento vem so (e sempre) nas linhas de origem ENTRADA_COMPRA.
     ADD CONSTRAINT ck_historico_preco_movimento CHECK (
-        coalesce(origem = 'ENTRADA_COMPRA', false) = (movimento_id IS NOT NULL));
+        coalesce(origem = 'ENTRADA_COMPRA', false) = (movimento_id IS NOT NULL)),
+    -- A entrada por compra sempre traz um custo: so a edicao apaga o custo.
+    ADD CONSTRAINT ck_historico_preco_valor_da_compra CHECK (
+        origem IS DISTINCT FROM 'ENTRADA_COMPRA' OR valor_novo IS NOT NULL);
 
 -- Ate aqui so o cadastro do produto alterava o custo.
 UPDATE produto_historico_precos SET origem = 'EDICAO' WHERE campo = 'CUSTO';
@@ -90,5 +104,5 @@ ALTER TABLE produto_historico_precos
 -- exclusao de produto cadastrado por engano). So as linhas de compra tem
 -- movimento.
 CREATE INDEX idx_historico_preco_movimento
-    ON produto_historico_precos (empresa_id, movimento_id)
+    ON produto_historico_precos (empresa_id, produto_id, movimento_id)
     WHERE movimento_id IS NOT NULL;

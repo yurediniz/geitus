@@ -258,8 +258,7 @@ public class ProdutoService {
                 .orElseThrow(() -> new RegraDeNegocioException("Empresa informada não encontrada."));
 
         long numero = numerador.proximo(empresaId, TipoNumeracao.PRODUTO);
-        Produto produto = new Produto(empresa, numero, dadosDoProduto(request, vinculos, sku));
-        marcarCustoSeEditado(produto, null);
+        Produto produto = new Produto(empresa, numero, dadosDoProduto(request, vinculos, sku), agora());
         Produto gravado = gravar(produto, () -> aplicarCodigosEEmbalagens(produto, codigos, embalagens));
         registrarHistorico(gravado, idUsuario, null, null, embalagens);
         if (request.estoqueInicial() != null) {
@@ -302,8 +301,7 @@ public class ProdutoService {
 
         BigDecimal custoAnterior = produto.getCusto();
         BigDecimal precoAnterior = produto.getPrecoVenda();
-        produto.atualizarDadosBasicos(dadosDoProduto(request, vinculos, sku));
-        marcarCustoSeEditado(produto, custoAnterior);
+        produto.atualizarDadosBasicos(dadosDoProduto(request, vinculos, sku), agora());
         Produto gravado = gravar(produto, () -> aplicarCodigosEEmbalagens(produto, codigos.orElse(null),
                 embalagens));
         registrarHistorico(gravado, idUsuario, custoAnterior, precoAnterior, embalagens);
@@ -338,14 +336,11 @@ public class ProdutoService {
     }
 
     /**
-     * Fase B4 (spec 4): o custo que mudou no cadastro ou na edicao (inclusive
-     * vazio <-> valor) marca a origem {@code EDICAO}, ou a limpa sem custo;
-     * salvar com o mesmo custo mantem a origem atual (Review Focus 2).
+     * Momento do cadastro ou da edicao, que a entidade usa na origem do custo
+     * (Fase B4), na precisao do TIMESTAMP do PostgreSQL.
      */
-    private void marcarCustoSeEditado(Produto produto, BigDecimal custoAnterior) {
-        if (!HistoricoDePrecos.mesmoValor(custoAnterior, produto.getCusto())) {
-            produto.marcarCustoEditado(LocalDateTime.now(relogio).truncatedTo(ChronoUnit.MICROS));
-        }
+    private LocalDateTime agora() {
+        return LocalDateTime.now(relogio).truncatedTo(ChronoUnit.MICROS);
     }
 
     /** Custo e preco de venda (anteriores nulos no cadastro) e o preco proprio de cada embalagem. */

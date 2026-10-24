@@ -12,6 +12,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -35,9 +37,12 @@ import com.geitus.app.catalog.UsoDoProdutoNoEstoque;
 import com.geitus.app.catalog.dto.CustoOrigemResponse;
 import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
+import com.geitus.app.catalog.listagem.ParametrosDaListagem;
 import com.geitus.app.inventory.EstoqueService.ResultadoAjuste;
 import com.geitus.app.inventory.dto.AjusteEstoqueRequest;
 import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
+
+import jakarta.persistence.EntityManagerFactory;
 
 /**
  * Custo na entrada por compra (Fase B4, docs/modules/produtos-custo-entrada.md;
@@ -72,6 +77,7 @@ class CustoNaEntradaPorCompraIT {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "validate");
+        registry.add("spring.jpa.properties.hibernate.generate_statistics", () -> "true");
     }
 
     @Autowired
@@ -91,6 +97,9 @@ class CustoNaEntradaPorCompraIT {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
 
     // ---------- Fixtures ----------
 
@@ -150,7 +159,7 @@ class CustoNaEntradaPorCompraIT {
         assertThat(produto.custo()).isEqualByComparingTo("10.00");
         CustoOrigemResponse origem = produto.custoOrigem();
         assertThat(origem.tipo()).isEqualTo(OrigemDoCusto.ENTRADA_COMPRA);
-        assertThat(origem.em()).isNotNull();
+        assertThat(origem.em()).isEqualTo(movimento.criadoEm());
         assertThat(origem.quantidade()).isEqualByComparingTo("5");
         assertThat(origem.quantidadeDeEmbalagens()).isNull();
         assertThat(origem.embalagemRotulo()).isNull();
@@ -226,12 +235,12 @@ class CustoNaEntradaPorCompraIT {
         LocalDateTime antiga = LocalDateTime.of(2020, 1, 1, 10, 0);
         jdbcTemplate.update("UPDATE produtos SET custo_origem_em = ? WHERE uuid = ?", antiga, arroz);
 
-        ajustar(empresa, arroz, compra("3", "10"));
+        MovimentoEstoqueResponse segunda = ajustar(empresa, arroz, compra("3", "10"));
 
         assertThat(linhasDeCusto(arroz)).isEqualTo(1);
         ProdutoResponse produto = produto(empresa, arroz);
         assertThat(produto.custoOrigem().tipo()).isEqualTo(OrigemDoCusto.ENTRADA_COMPRA);
-        assertThat(produto.custoOrigem().em()).isAfter(antiga);
+        assertThat(produto.custoOrigem().em()).isAfter(antiga).isEqualTo(segunda.criadoEm());
         assertThat(produto.custoOrigem().quantidade()).isEqualByComparingTo("3");
     }
 
@@ -260,6 +269,21 @@ class CustoNaEntradaPorCompraIT {
     void custoZeroOuNegativo400() {
         assertRecusado(TipoMovimento.ENTRADA, MotivoMovimento.COMPRA, "0", "O custo deve ser maior que zero.");
         assertRecusado(TipoMovimento.ENTRADA, MotivoMovimento.COMPRA, "-1.00", "O custo deve ser maior que zero.");
+    }
+
+    /** O custo por UN arredondado a centavos daria R$ 0,00 no produto: R$ 0,10 por CX c/ 1000. */
+    @Test
+    void custoQueZeraNoProduto400() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        ProdutoResponse palito = cenario.novoProdutoComCaixa(empresa, "Palito", "1000");
+
+        assertThatThrownBy(() -> ajustar(empresa, palito.id(), compra("1", "0.10", caixa(palito),
+                UUID.randomUUID())))
+                .isInstanceOfSatisfying(RegraDeNegocioException.class,
+                        erro -> assertThat(erro.campo()).contains(CAMPO_CUSTO))
+                .hasMessage("O custo deve ser maior que zero.");
+        assertThat(cenario.contarMovimentos(palito.id())).isZero();
+        assertThat(produto(empresa, palito.id()).custo()).isNull();
     }
 
     @Test
@@ -522,6 +546,90 @@ class CustoNaEntradaPorCompraIT {
                 .andExpect(jsonPath("$.components.schemas.HistoricoPrecoResponse.properties.entrada").exists());
     }
 
+    // ---------- Numero de consultas ----------
+
+    /** Empresa com {@code quantidade} produtos; com {@code comprados}, cada um recebe uma compra com custo. */
+    private CenarioDeEstoque.EmpresaDeTeste empresaComProdutos(int quantidade, boolean comprados) {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        for (int indice = 1; indice <= quantidade; indice++) {
+            UUID produto = cenario.novoProduto(empresa, "UN", "Produto " + indice);
+            if (comprados) {
+                ajustar(empresa, produto, compra("5", "10.00"));
+            }
+        }
+        return empresa;
+    }
+
+    private Statistics estatisticasZeradas() {
+        Statistics estatisticas = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        estatisticas.clear();
+        return estatisticas;
+    }
+
+    private long comandosNaListagem(CenarioDeEstoque.EmpresaDeTeste empresa, int esperados) {
+        Statistics estatisticas = estatisticasZeradas();
+        List<ProdutoResponse> itens = produtoService.listarParaUsuario(empresa.admin(),
+                ParametrosDaListagem.daRequisicao(null, null, null, null, null, null, 0, 25)).itens();
+        assertThat(itens).hasSize(esperados);
+        return estatisticas.getPrepareStatementCount();
+    }
+
+    /**
+     * A listagem nao consulta a ultima compra: 1 ou 5 produtos comprados custam
+     * o mesmo que 5 sem compra, e a origem sai so com o tipo e a data.
+     */
+    @Test
+    void listagemSemConsultaAMaisPelaOrigemDoCusto() {
+        CenarioDeEstoque.EmpresaDeTeste umComprado = empresaComProdutos(1, true);
+        CenarioDeEstoque.EmpresaDeTeste cincoComprados = empresaComProdutos(5, true);
+        CenarioDeEstoque.EmpresaDeTeste cincoSemCompra = empresaComProdutos(5, false);
+
+        long comUm = comandosNaListagem(umComprado, 1);
+        long comCinco = comandosNaListagem(cincoComprados, 5);
+        long semCompra = comandosNaListagem(cincoSemCompra, 5);
+
+        assertThat(comCinco).isEqualTo(comUm).isEqualTo(semCompra);
+        List<ProdutoResponse> itens = produtoService.listarParaUsuario(cincoComprados.admin(),
+                ParametrosDaListagem.daRequisicao(null, null, null, null, null, null, 0, 25)).itens();
+        assertThat(itens).allSatisfy(item -> {
+            assertThat(item.custoOrigem().tipo()).isEqualTo(OrigemDoCusto.ENTRADA_COMPRA);
+            assertThat(item.custoOrigem().em()).isNotNull();
+            assertThat(item.custoOrigem().quantidade()).isNull();
+            assertThat(item.custoOrigem().quantidadeDeEmbalagens()).isNull();
+            assertThat(item.custoOrigem().embalagemRotulo()).isNull();
+        });
+    }
+
+    private long comandosNoHistorico(CenarioDeEstoque.EmpresaDeTeste empresa, UUID produto, int linhasDeCusto) {
+        Statistics estatisticas = estatisticasZeradas();
+        assertThat(historicoDeCusto(empresa, produto)).hasSize(linhasDeCusto);
+        return estatisticas.getPrepareStatementCount();
+    }
+
+    /**
+     * O historico le as entradas da pagina de uma vez: com 1 ou 5 compras,
+     * uma consulta a mais que sem compra nenhuma.
+     */
+    @Test
+    void historicoComUmaConsultaAMaisPorPagina() {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        UUID semCompra = produtoService.cadastrarParaUsuario(empresa.admin(),
+                CenarioDeEstoque.produtoComCusto(cenario.unidade(empresa, "UN"), "Editado", "9.00", true, null, null))
+                .id();
+        UUID umaCompra = cenario.novoProduto(empresa, "UN", "Uma compra");
+        ajustar(empresa, umaCompra, compra("5", "10.00"));
+        UUID cincoCompras = cenario.novoProduto(empresa, "UN", "Cinco compras");
+        for (int compra = 1; compra <= 5; compra++) {
+            ajustar(empresa, cincoCompras, compra("1", compra + ".00"));
+        }
+
+        long comandosSemCompra = comandosNoHistorico(empresa, semCompra, 1);
+        long comandosComUma = comandosNoHistorico(empresa, umaCompra, 1);
+        long comandosComCinco = comandosNoHistorico(empresa, cincoCompras, 5);
+
+        assertThat(comandosComCinco).isEqualTo(comandosComUma).isEqualTo(comandosSemCompra + 1);
+    }
+
     // ---------- Isolamento por empresa (DEC-016) ----------
 
     @Test
@@ -547,20 +655,26 @@ class CustoNaEntradaPorCompraIT {
         assertThat(produto(empresaA, daA).custo()).isEqualByComparingTo("10.00");
     }
 
-    /** As compras antigas (sem custo) nao contam como a ultima entrada de compra. */
+    /**
+     * A ultima entrada de compra e a mais recente, mesmo entre outros
+     * movimentos. A compra antiga (sem custo, anterior a V13) fica fora: o
+     * cenario esta no {@code MigracaoV13IT}, porque a V13 recusa compra nova
+     * sem custo.
+     */
     @Test
-    void ultimaEntradaDeCompraIgnoraACompraSemCusto() {
+    void ultimaEntradaDeCompraEAMaisRecente() {
         CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
-        UUID arroz = cenario.novoProduto(empresa, "UN", "Arroz");
-        ajustar(empresa, arroz, compra("5", "10.00"));
-        Long produtoId = cenario.idInterno(arroz);
-        jdbcTemplate.update("""
-                INSERT INTO movimentos_estoque (empresa_id, produto_id, tipo, motivo, origem, quantidade,
-                                                saldo_anterior, saldo_novo, usuario_id, criado_em)
-                VALUES (?, ?, 'ENTRADA', 'COMPRA', 'AJUSTE_MANUAL', 7, 5, 12, ?, now() + interval '1 hour')
-                """, empresa.empresa().getId(), produtoId, empresa.admin());
+        ProdutoResponse sache = cenario.novoProdutoComCaixa(empresa, "Sachê", "18");
+        ajustar(empresa, sache.id(), compra("5", "10.00"));
+        ajustar(empresa, sache.id(), compra("2", "180.00", caixa(sache), UUID.randomUUID()));
+        ajustar(empresa, sache.id(),
+                ajuste(TipoMovimento.SAIDA, "1", MotivoMovimento.PERDA_AVARIA, null, null, UUID.randomUUID()));
 
-        assertThat(usoNoEstoque.ultimaEntradaDeCompra(empresa.empresa().getId(), produtoId))
-                .hasValueSatisfying(entrada -> assertThat(entrada.quantidade()).isEqualByComparingTo("5"));
+        assertThat(usoNoEstoque.ultimaEntradaDeCompra(empresa.empresa().getId(), cenario.idInterno(sache.id())))
+                .hasValueSatisfying(entrada -> {
+                    assertThat(entrada.quantidade()).isEqualByComparingTo("36");
+                    assertThat(entrada.quantidadeDeEmbalagens()).isEqualTo(2);
+                    assertThat(entrada.embalagemRotulo()).isEqualTo("CX c/ 18 UN");
+                });
     }
 }

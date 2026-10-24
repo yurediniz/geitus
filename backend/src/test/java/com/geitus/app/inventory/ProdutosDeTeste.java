@@ -1,6 +1,7 @@
 package com.geitus.app.inventory;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 import org.springframework.beans.BeanUtils;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -38,7 +39,7 @@ final class ProdutosDeTeste {
                 new BigDecimal("10.00"), null, null, null, null, null, null, null, null, null, null, null,
                 controlaEstoque, null, false);
         // O numero de registro (V11) acompanha o id: unico entre os produtos do teste.
-        Produto produto = new Produto(empresa, id, dados);
+        Produto produto = new Produto(empresa, id, dados, LocalDateTime.of(2026, 1, 2, 8, 0));
         ReflectionTestUtils.setField(produto, "id", id);
         return produto;
     }

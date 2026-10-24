@@ -75,9 +75,13 @@ class MigracaoV13IT {
                 + " FROM produtos WHERE id = " + produto)).isEqualTo("nula/true");
     }
 
-    /** Os movimentos de compra ja gravados nao tem custo e continuam validos; a obrigacao e da aplicacao. */
+    /**
+     * As compras gravadas antes da V13 nao tem custo e continuam la; a CHECK
+     * "compra nova exige custo" e {@code NOT VALID}: vale so para as linhas
+     * novas e nunca e validada contra as antigas.
+     */
     @Test
-    void compraAntigaSemCustoContinuaValida() throws SQLException {
+    void compraAntigaSemCustoContinuaECompraNovaExigeCusto() throws SQLException {
         long empresa = inserirEmpresa("Empresa A");
         long produto = inserirProduto(empresa, "Arroz", null);
         long usuario = inserirUsuario(empresa);
@@ -88,8 +92,38 @@ class MigracaoV13IT {
 
         assertThat(texto("SELECT (custo_informado IS NULL) || '/' || (custo_unitario IS NULL)"
                 + " FROM movimentos_estoque WHERE id = " + antiga)).isEqualTo("true/true");
-        assertThatCode(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "5", SEM_RETRATO,
-                SEM_CUSTO, SEM_CUSTO)).doesNotThrowAnyException();
+        assertThat(texto("SELECT convalidated::text FROM pg_constraint"
+                + " WHERE conname = 'ck_movimento_estoque_compra_exige_custo'")).isEqualTo("false");
+        assertThatThrownBy(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "5", SEM_RETRATO,
+                SEM_CUSTO, SEM_CUSTO))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_compra_exige_custo"));
+        assertThatCode(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "DEVOLUCAO_CLIENTE", "5",
+                SEM_RETRATO, SEM_CUSTO, SEM_CUSTO)).doesNotThrowAnyException();
+    }
+
+    /**
+     * A compra antiga mais recente que a primeira compra com custo (relogio
+     * adiantado, importacao) fica fora da "ultima compra com custo": o filtro
+     * de {@code MovimentoEstoqueRepository.entradasDeCompraDoProduto} e
+     * {@code custo_informado IS NOT NULL}.
+     */
+    @Test
+    void ultimaCompraComCustoIgnoraACompraAntigaMaisRecente() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        long produto = inserirProduto(empresa, "Arroz", null);
+        long usuario = inserirUsuario(empresa);
+        long antiga = inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "7", SEM_RETRATO, SEM_CUSTO,
+                SEM_CUSTO);
+        executar("UPDATE movimentos_estoque SET criado_em = now() + interval '1 hour' WHERE id = " + antiga);
+
+        aplicarV13();
+        long nova = inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "5", SEM_RETRATO, "10.00",
+                "10.0000");
+
+        assertThat(texto("SELECT id::text FROM movimentos_estoque WHERE empresa_id = " + empresa
+                + " AND produto_id = " + produto + " AND custo_informado IS NOT NULL"
+                + " ORDER BY criado_em DESC, id DESC LIMIT 1")).isEqualTo(String.valueOf(nova));
+        assertThat(texto("SELECT count(*)::text FROM movimentos_estoque WHERE id = " + antiga)).isEqualTo("1");
     }
 
     // ---------- Custo no movimento ----------
@@ -112,6 +146,10 @@ class MigracaoV13IT {
         assertThatThrownBy(() -> inserirMovimento(empresa, produto, usuario, "AJUSTE", "CONTAGEM", "5", SEM_RETRATO,
                 "10.00", "10.0000"))
                 .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_custo_da_compra"));
+        // A compra do PDV (origem VENDA) nunca tem o custo do ajuste manual.
+        assertThatThrownBy(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "VENDA", "5",
+                SEM_RETRATO, "10.00", "10.0000"))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_custo_da_compra"));
     }
 
     @Test
@@ -124,9 +162,14 @@ class MigracaoV13IT {
         assertThatThrownBy(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "5", SEM_RETRATO,
                 "10.00", SEM_CUSTO))
                 .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_custo_completo"));
+        // So o unitario: fora da compra, para que so esta CHECK se aplique (na compra, a falta do informado cai
+        // antes na ck_movimento_estoque_compra_exige_custo).
+        assertThatThrownBy(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "DEVOLUCAO_CLIENTE", "5",
+                SEM_RETRATO, SEM_CUSTO, "10.0000"))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_custo_completo"));
         assertThatThrownBy(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "5", SEM_RETRATO,
                 SEM_CUSTO, "10.0000"))
-                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_custo_completo"));
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_compra_exige_custo"));
     }
 
     @Test
@@ -159,6 +202,12 @@ class MigracaoV13IT {
                 .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_custo_unitario"));
         assertThatCode(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "36", "18", "180.00",
                 "10.0000")).doesNotThrowAnyException();
+        // CX c/ 8 a R$ 0,01: 0,00125 arredonda a 0,0013 (meio para cima).
+        assertThatCode(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "8", "8", "0.01",
+                "0.0013")).doesNotThrowAnyException();
+        assertThatThrownBy(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "8", "8", "0.01",
+                "0.0012"))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_movimento_estoque_custo_unitario"));
         // Sem retrato, o custo unitario e o proprio informado.
         assertThatThrownBy(() -> inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "5", SEM_RETRATO,
                 "10.00", "9.0000"))
@@ -231,6 +280,50 @@ class MigracaoV13IT {
                 .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_historico_preco_movimento"));
         assertThatThrownBy(() -> inserirHistorico(empresa, produto, usuario, "PRECO_VENDA", null, compra))
                 .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_historico_preco_movimento"));
+    }
+
+    /** A entrada por compra sempre traz um custo: a linha dela nunca "apaga" o custo. */
+    @Test
+    void linhaDaEntradaDeCompraTemValorNovo() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        long produto = inserirProduto(empresa, "Arroz", null);
+        long usuario = inserirUsuario(empresa);
+        aplicarV13();
+        long compra = inserirMovimento(empresa, produto, usuario, "ENTRADA", "COMPRA", "5", SEM_RETRATO, "10.00",
+                "10.0000");
+
+        assertThatThrownBy(() -> inserirHistorico(empresa, produto, usuario, "CUSTO", "ENTRADA_COMPRA", compra,
+                "9.50", "NULL"))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_CHECK, "ck_historico_preco_valor_da_compra"));
+        // A edicao pode apagar o custo.
+        assertThatCode(() -> inserirHistorico(empresa, produto, usuario, "CUSTO", "EDICAO", null, "9.50", "NULL"))
+                .doesNotThrowAnyException();
+    }
+
+    /** A FK inclui o produto: a linha so se liga a um movimento do proprio produto. */
+    @Test
+    void movimentoDeOutroProdutoDaMesmaEmpresaViolaAFk() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        long arroz = inserirProduto(empresa, "Arroz", null);
+        long feijao = inserirProduto(empresa, "Feijão", null);
+        long usuario = inserirUsuario(empresa);
+        aplicarV13();
+        long compraDoFeijao = inserirMovimento(empresa, feijao, usuario, "ENTRADA", "COMPRA", "5", SEM_RETRATO,
+                "10.00", "10.0000");
+
+        assertThatThrownBy(() -> inserirHistorico(empresa, arroz, usuario, "CUSTO", "ENTRADA_COMPRA", compraDoFeijao))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_FK, "fk_historico_preco_movimento"));
+    }
+
+    @Test
+    void movimentoInexistenteViolaAFk() throws SQLException {
+        long empresa = inserirEmpresa("Empresa A");
+        long produto = inserirProduto(empresa, "Arroz", null);
+        long usuario = inserirUsuario(empresa);
+        aplicarV13();
+
+        assertThatThrownBy(() -> inserirHistorico(empresa, produto, usuario, "CUSTO", "ENTRADA_COMPRA", 999_999L))
+                .satisfies(erro -> violou(erro, VIOLACAO_DE_FK, "fk_historico_preco_movimento"));
     }
 
     /** DEC-016: a FK composta impede ligar o historico a um movimento de outra empresa. */
@@ -387,13 +480,19 @@ class MigracaoV13IT {
                 + ") RETURNING id");
     }
 
-    /** Linha de historico no schema da V13, com a origem e o movimento ({@code null} = sem). */
+    /** Linha de historico no schema da V13, com a origem e o movimento ({@code null} = sem), vazio -> 10,00. */
     private static void inserirHistorico(long empresaId, long produtoId, long usuarioId, String campo,
             String origem, Long movimentoId) throws SQLException {
+        inserirHistorico(empresaId, produtoId, usuarioId, campo, origem, movimentoId, "NULL", "10.00");
+    }
+
+    private static void inserirHistorico(long empresaId, long produtoId, long usuarioId, String campo,
+            String origem, Long movimentoId, String anterior, String novo) throws SQLException {
         executar("INSERT INTO produto_historico_precos (empresa_id, produto_id, campo, valor_anterior, valor_novo,"
                 + " usuario_id, origem, movimento_id) VALUES (" + empresaId + ", " + produtoId + ", '" + campo
-                + "', NULL, 10.00, " + usuarioId + ", " + (origem == null ? "NULL" : "'" + origem + "'") + ", "
-                + (movimentoId == null ? "NULL" : movimentoId) + ")");
+                + "', " + anterior + ", " + novo + ", " + usuarioId + ", "
+                + (origem == null ? "NULL" : "'" + origem + "'") + ", " + (movimentoId == null ? "NULL" : movimentoId)
+                + ")");
     }
 
     /**
@@ -404,6 +503,14 @@ class MigracaoV13IT {
      */
     private static long inserirMovimento(long empresaId, long produtoId, long usuarioId, String tipo, String motivo,
             String quantidade, String porEmbalagem, String custoInformado, String custoUnitario)
+            throws SQLException {
+        return inserirMovimento(empresaId, produtoId, usuarioId, tipo, motivo, "AJUSTE_MANUAL", quantidade,
+                porEmbalagem, custoInformado, custoUnitario);
+    }
+
+    /** Como o movimento manual, com a origem informada. */
+    private static long inserirMovimento(long empresaId, long produtoId, long usuarioId, String tipo, String motivo,
+            String origem, String quantidade, String porEmbalagem, String custoInformado, String custoUnitario)
             throws SQLException {
         String anterior = "greatest(0, -(" + quantidade + "))";
         String retrato = porEmbalagem == null
@@ -416,7 +523,7 @@ class MigracaoV13IT {
         return idRetornado("INSERT INTO movimentos_estoque (empresa_id, produto_id, tipo, motivo, origem, quantidade,"
                 + " saldo_anterior, saldo_novo, usuario_id, embalagem_rotulo, embalagem_quantidade,"
                 + " quantidade_embalagens" + colunasDeCusto + ") VALUES (" + empresaId + ", " + produtoId + ", '"
-                + tipo + "', '" + motivo + "', 'AJUSTE_MANUAL', " + quantidade + ", " + anterior + ", " + anterior
+                + tipo + "', '" + motivo + "', '" + origem + "', " + quantidade + ", " + anterior + ", " + anterior
                 + " + (" + quantidade + "), " + usuarioId + ", " + retrato + valoresDeCusto + ") RETURNING id");
     }
 
