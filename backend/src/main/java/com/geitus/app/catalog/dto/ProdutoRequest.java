@@ -25,8 +25,10 @@ import jakarta.validation.constraints.Size;
  * do produto e gerenciado apenas pelos endpoints dedicados de inativar e
  * reativar.
  *
- * <p>Unidade de venda e categoria sao referenciadas pelo UUID publico do cadastro correspondente (docs/modules/categorias-e-unidades.md,
- * 5.2); o service confirma que pertencem a empresa do usuario (404 se nao).
+ * <p>Unidade de venda, categoria e marca sao referenciadas pelo UUID publico do
+ * cadastro correspondente (docs/modules/categorias-e-unidades.md, 5.2, e
+ * fornecedores-e-marcas.md, 3.3); o service confirma que pertencem a empresa do
+ * usuario (404 se nao).
  *
  * <p>Os tamanhos maximos e a precisao numerica espelham as colunas das
  * migrations V3/V4/V6/V7 ({@code nome VARCHAR(150)}, {@code nome_curto VARCHAR(30)},
@@ -87,6 +89,9 @@ public record ProdutoRequest(
 
         @Schema(description = "UUID da categoria (opcional)")
         UUID categoriaId,
+
+        @Schema(description = "Fase B5: UUID da marca (opcional, qualquer nivel da arvore de marcas)")
+        UUID marcaId,
 
         @Schema(example = "25.90")
         @NotNull(message = "Preço de venda é obrigatório.")

@@ -63,6 +63,7 @@ import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
 import com.geitus.app.catalog.categoria.CategoriaService;
 import com.geitus.app.catalog.marca.Marca;
+import com.geitus.app.catalog.marca.MarcaService;
 import com.geitus.app.catalog.dto.CodigoBarrasResponse;
 import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
 import com.geitus.app.catalog.dto.PaginaResponse;
@@ -127,6 +128,9 @@ class ProdutoServiceTest {
     private CategoriaService categoriaService;
 
     @Mock
+    private MarcaService marcaService;
+
+    @Mock
     private HistoricoPrecoRepository historicoPrecoRepository;
 
     @Mock
@@ -153,7 +157,7 @@ class ProdutoServiceTest {
     @BeforeEach
     void setUp() {
         produtoService = new ProdutoService(produtoRepository, empresaRepository, usuarioRepository,
-                unidadeService, categoriaService, historicoPrecoRepository,
+                unidadeService, categoriaService, marcaService, historicoPrecoRepository,
                 new HistoricoDePrecos(historicoPrecoRepository), new ValidadorDeCodigosDeBarras(produtoRepository),
                 new EmbalagensDoProduto(unidadeService, new ValidadorDeCodigosDeBarras(produtoRepository)),
                 usoNoEstoque, registroDeEstoqueInicial,
@@ -843,10 +847,14 @@ class ProdutoServiceTest {
 
     @Test
     void editarNomeSkuOuNomeCurtoRecalculaComONomeDaMarca() {
-        produtoExistente(existente().nome("Arroz").sku("SKU-1").marca(new Marca(empresa, null, "Camil")));
+        Marca camil = new Marca(empresa, null, "Camil");
+        ReflectionTestUtils.setField(camil, "id", 50L);
+        produtoExistente(existente().nome("Arroz").sku("SKU-1").marca(camil));
         edicaoPermitida();
+        when(marcaService.buscarDaEmpresa(EMPRESA_ID, camil.getUuid())).thenReturn(camil);
 
-        Produto produto = atualizar(requestComUN().nome("Feijão Preto").nomeCurto("FEIJÃO").sku("SKU-2").build());
+        Produto produto = atualizar(requestComUN().nome("Feijão Preto").nomeCurto("FEIJÃO").sku("SKU-2")
+                .marcaId(camil.getUuid()).build());
 
         assertThat(produto.getNomeNormalizado()).isEqualTo("feijao preto");
         assertThat(produto.getBuscaNormalizada()).isEqualTo("feijao preto feijao sku-2 camil");

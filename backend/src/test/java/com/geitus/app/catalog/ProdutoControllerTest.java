@@ -37,11 +37,13 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.geitus.app.catalog.categoria.Categoria;
+import com.geitus.app.catalog.arvore.Arvore;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
 import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
 import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
+import com.geitus.app.catalog.dto.ReferenciasDoProduto;
 import com.geitus.app.catalog.listagem.EstoqueFiltro;
 import com.geitus.app.catalog.listagem.OrdemDeProdutos;
 import com.geitus.app.catalog.listagem.ParametrosDaListagem;
@@ -104,7 +106,7 @@ class ProdutoControllerTest {
     }
 
     private ProdutoResponse respostaComId(UUID id, String nome, String sku) {
-        return ProdutoResponse.de(produtoComId(id, nome, sku), CategoriaArvore.de(List.of()), true, HOJE,
+        return ProdutoResponse.de(produtoComId(id, nome, sku), ReferenciasDoProduto.vazias(), true, HOJE,
                 ResumoDeEstoque.VAZIO);
     }
 
@@ -644,7 +646,7 @@ class ProdutoControllerTest {
         Produto produto = ProdutoTesteBuilder.produto(empresa, un).id(5L).nome("Sachê").categoria(umida)
                 .precoVenda("3.50").build();
         when(produtoService.buscarPorIdParaUsuario(1L, produto.getUuid()))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of(racao, umida)), true, HOJE,
+                .thenReturn(ProdutoResponse.de(produto, new ReferenciasDoProduto(CategoriaArvore.de(List.of(racao, umida)), Arvore.de(List.of())), true, HOJE,
                         ResumoDeEstoque.VAZIO));
 
         String token = tokenParaUsuario(1L);
@@ -746,7 +748,7 @@ class ProdutoControllerTest {
         Produto produto = produtoComId(PRODUTO_ID, "Produto", null);
         produto.inativar();
         when(produtoService.inativarParaUsuario(1L, PRODUTO_ID))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE,
+                .thenReturn(ProdutoResponse.de(produto, ReferenciasDoProduto.vazias(), true, HOJE,
                 ResumoDeEstoque.VAZIO));
 
         String token = tokenParaUsuario(1L);
@@ -811,7 +813,7 @@ class ProdutoControllerTest {
                 .codigo("7891000315507").codigo("ABC-1").build();
         ReflectionTestUtils.setField(produto.getCodigosBarras().get(0), "id", 77L);
         when(produtoService.buscarPorIdParaUsuario(1L, produto.getUuid()))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE,
+                .thenReturn(ProdutoResponse.de(produto, ReferenciasDoProduto.vazias(), true, HOJE,
                 ResumoDeEstoque.VAZIO));
 
         String token = tokenParaUsuario(1L);
@@ -1055,7 +1057,7 @@ class ProdutoControllerTest {
                         new UnidadeMedida(new Empresa("Empresa 7"), "UN", "Unidade", false))
                 .promocao("8.90", LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 15)).atacado("4.20", "12").build();
         when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE,
+                .thenReturn(ProdutoResponse.de(produto, ReferenciasDoProduto.vazias(), true, HOJE,
                 ResumoDeEstoque.VAZIO));
 
         mockMvc.perform(post("/api/produtos")
@@ -1143,7 +1145,7 @@ class ProdutoControllerTest {
         Produto produto = ProdutoTesteBuilder.produto(empresa, new UnidadeMedida(empresa, "UN", "Unidade", false))
                 .pontoReposicao("15").build();
         when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE,
+                .thenReturn(ProdutoResponse.de(produto, ReferenciasDoProduto.vazias(), true, HOJE,
                         new ResumoDeEstoque(new BigDecimal("12.000"), 1, 0)));
 
         mockMvc.perform(post("/api/produtos")
@@ -1170,7 +1172,7 @@ class ProdutoControllerTest {
         Produto produto = ProdutoTesteBuilder.produto(empresa, new UnidadeMedida(empresa, "KG", "Quilo", true))
                 .numero(15).nome("Açúcar a granel").codigoDoProduto(542).vendidoBalanca().build();
         when(produtoService.buscarPorIdParaUsuario(1L, produto.getUuid()))
-                .thenReturn(ProdutoResponse.de(produto, CategoriaArvore.de(List.of()), true, HOJE,
+                .thenReturn(ProdutoResponse.de(produto, ReferenciasDoProduto.vazias(), true, HOJE,
                         ResumoDeEstoque.VAZIO));
 
         mockMvc.perform(get("/api/produtos/" + produto.getUuid())

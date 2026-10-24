@@ -13,7 +13,6 @@ import com.geitus.app.catalog.PrecoDeVenda;
 import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ResumoDeEstoque;
 import com.geitus.app.catalog.SituacaoEstoque;
-import com.geitus.app.catalog.categoria.CategoriaArvore;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -28,10 +27,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * ha necessidade de expor esse dado na resposta. A entidade JPA nunca deve ser
  * exposta diretamente na API (ver CLAUDE.md).
  *
- * <p>Unidade de venda e categoria saem como resumos com o
- * UUID publico ({@link UnidadeResumo}, {@link CategoriaResumo}); o caminho da
- * categoria vem da {@link CategoriaArvore} da empresa, montada uma vez por
- * requisicao pelo service (nao uma vez por produto).
+ * <p>Unidade de venda, categoria e marca saem como resumos com o UUID publico
+ * ({@link UnidadeResumo}, {@link CategoriaResumo}, {@link MarcaResumo}); os
+ * caminhos vem das arvores da empresa ({@link ReferenciasDoProduto}), montadas
+ * uma vez por requisicao pelo service (nao uma vez por produto).
  *
  * <p>{@code margem} e {@code markup} sao derivados (nao tem coluna): calculados
  * a partir de {@code precoVenda} e {@code custo}, alinhados ao principio
@@ -72,6 +71,8 @@ public record ProdutoResponse(
         String nomeCurtoEfetivo,
         @Schema(description = "Categoria com o caminho na arvore; null se sem categoria")
         CategoriaResumo categoria,
+        @Schema(description = "Fase B5: marca com o caminho na arvore de marcas; null se sem marca")
+        MarcaResumo marca,
         @Schema(description = "Unidade de venda")
         UnidadeResumo unidade,
         String descricao,
@@ -117,16 +118,17 @@ public record ProdutoResponse(
         LocalDateTime atualizadoEm) {
 
     /**
-     * Monta a resposta do produto. {@code arvore} e a arvore de categorias da
-     * empresa do produto (so e consultada quando o produto tem categoria);
+     * Monta a resposta do produto. {@code referencias} traz as arvores de
+     * categorias e de marcas da empresa do produto (so consultadas quando o
+     * produto tem categoria ou marca);
      * {@code podeExcluir} vem da regra centralizada no {@code ProdutoService};
      * {@code hoje} e a data do relogio da aplicacao (fuso de Sao Paulo), calculada
      * uma vez por requisicao, que decide a situacao da promocao; {@code estoque}
      * vem do pacote de estoque, em lote na listagem.
      */
-    public static ProdutoResponse de(Produto produto, CategoriaArvore arvore, boolean podeExcluir,
+    public static ProdutoResponse de(Produto produto, ReferenciasDoProduto referencias, boolean podeExcluir,
             LocalDate hoje, ResumoDeEstoque estoque) {
-        return de(produto, arvore, podeExcluir, hoje, estoque, null);
+        return de(produto, referencias, podeExcluir, hoje, estoque, null);
     }
 
     /**
@@ -134,7 +136,7 @@ public record ProdutoResponse(
      * produto (Fase B4) no detalhe da origem do custo ({@code null} = sem
      * detalhe, como na listagem).
      */
-    public static ProdutoResponse de(Produto produto, CategoriaArvore arvore, boolean podeExcluir,
+    public static ProdutoResponse de(Produto produto, ReferenciasDoProduto referencias, boolean podeExcluir,
             LocalDate hoje, ResumoDeEstoque estoque, EntradaDeCompra ultimaCompra) {
         BigDecimal preco = produto.getPrecoVenda();
         BigDecimal custo = produto.getCusto();
@@ -145,7 +147,8 @@ public record ProdutoResponse(
                 produto.getNome(),
                 produto.getNomeCurto(),
                 produto.nomeCurtoEfetivo(),
-                CategoriaResumo.deOuNulo(produto.getCategoria(), arvore),
+                CategoriaResumo.deOuNulo(produto.getCategoria(), referencias.categorias()),
+                MarcaResumo.deOuNulo(produto.getMarca(), referencias.marcas()),
                 UnidadeResumo.deOuNulo(produto.getUnidade()),
                 produto.getDescricao(),
                 preco,

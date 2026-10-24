@@ -33,6 +33,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import com.geitus.app.catalog.arvore.Arvore;
 import com.geitus.app.catalog.categoria.Categoria;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
 import com.geitus.app.catalog.categoria.CategoriaService;
@@ -41,12 +42,14 @@ import com.geitus.app.catalog.dto.HistoricoPrecoResponse;
 import com.geitus.app.catalog.dto.PaginaResponse;
 import com.geitus.app.catalog.dto.ProdutoRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
+import com.geitus.app.catalog.dto.ReferenciasDoProduto;
 import com.geitus.app.catalog.dto.PromocaoRequest;
 import com.geitus.app.catalog.listagem.ConsultaDeProdutos;
 import com.geitus.app.catalog.listagem.FiltroDeProdutos;
 import com.geitus.app.catalog.listagem.PaginaDeIds;
 import com.geitus.app.catalog.listagem.ParametrosDaListagem;
 import com.geitus.app.catalog.marca.Marca;
+import com.geitus.app.catalog.marca.MarcaService;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.company.Empresa;
@@ -69,8 +72,8 @@ import com.geitus.app.shared.numeracao.TipoNumeracao;
  * usado para isolar consultas e alteracoes por tenant (DEC-016): um produto de
  * outra empresa nunca deve ser encontrado, atualizado, excluido ou vazado —
  * inclusive pelo nome, na mensagem de codigo de barras duplicado. O mesmo vale
- * para a unidade e a categoria informadas: sao buscadas dentro da empresa e,
- * se forem de outra, respondem 404.
+ * para a unidade, a categoria e a marca informadas: sao buscadas dentro da
+ * empresa e, se forem de outra, respondem 404.
  *
  * <p>A API publica do service e composta apenas pelos metodos {@code *ParaUsuario},
  * que recebem {@code idUsuario} (o id extraido do JWT) e resolvem a empresa
@@ -128,6 +131,7 @@ public class ProdutoService {
             "O estoque máximo não pode ser menor que o ponto de reposição.";
     static final String MENSAGEM_UNIDADE_INATIVA = "Esta unidade está inativa. Escolha uma unidade ativa.";
     static final String MENSAGEM_CATEGORIA_INATIVA = "Esta categoria está inativa. Escolha uma categoria ativa.";
+    static final String MENSAGEM_MARCA_INATIVA = "Esta marca está inativa. Escolha uma marca ativa.";
     static final String MENSAGEM_SKU_DUPLICADO = "Já existe um produto com este SKU nesta empresa.";
 
     static final String MENSAGEM_CODIGO_DO_PRODUTO_FORA_DO_INTERVALO =
@@ -194,6 +198,7 @@ public class ProdutoService {
     private final UsuarioRepository usuarioRepository;
     private final UnidadeMedidaService unidadeService;
     private final CategoriaService categoriaService;
+    private final MarcaService marcaService;
     private final HistoricoPrecoRepository historicoPrecoRepository;
     private final HistoricoDePrecos historicoDePrecos;
     private final ValidadorDeCodigosDeBarras validadorDeCodigos;
@@ -207,7 +212,8 @@ public class ProdutoService {
 
     public ProdutoService(ProdutoRepository produtoRepository, EmpresaRepository empresaRepository,
             UsuarioRepository usuarioRepository, UnidadeMedidaService unidadeService,
-            CategoriaService categoriaService, HistoricoPrecoRepository historicoPrecoRepository,
+            CategoriaService categoriaService, MarcaService marcaService,
+            HistoricoPrecoRepository historicoPrecoRepository,
             HistoricoDePrecos historicoDePrecos, ValidadorDeCodigosDeBarras validadorDeCodigos,
             EmbalagensDoProduto embalagensDoProduto, UsoDoProdutoNoEstoque usoNoEstoque,
             RegistroDeEstoqueInicial registroDeEstoqueInicial,
@@ -218,6 +224,7 @@ public class ProdutoService {
         this.usuarioRepository = usuarioRepository;
         this.unidadeService = unidadeService;
         this.categoriaService = categoriaService;
+        this.marcaService = marcaService;
         this.historicoPrecoRepository = historicoPrecoRepository;
         this.historicoDePrecos = historicoDePrecos;
         this.validadorDeCodigos = validadorDeCodigos;
@@ -496,9 +503,10 @@ public class ProdutoService {
      * Listagem paginada (docs/modules/produtos-listagem.md, 4 e 5), em duas
      * etapas: a {@link ConsultaDeProdutos} filtra, ordena e recorta a pagina
      * no banco (ids e total); depois os produtos desses ids sao carregados com
-     * as relacoes e devolvidos NA MESMA ORDEM. A arvore de categorias (que
-     * tambem resolve o filtro de categoria) e montada uma vez e o estoque vem
-     * em lote: o numero de comandos SQL nao depende do tamanho da pagina.
+     * as relacoes e devolvidos NA MESMA ORDEM. As arvores de categorias (que
+     * tambem resolve o filtro de categoria) e de marcas sao montadas uma vez e
+     * o estoque vem em lote: o numero de comandos SQL nao depende do tamanho da
+     * pagina.
      * Pagina alem do fim devolve {@code itens} vazio com o total real.
      */
     @Transactional(readOnly = true)
@@ -508,7 +516,8 @@ public class ProdutoService {
         LocalDate hoje = SituacaoPromocao.hoje(relogio);
         PaginaDeIds pagina = consultaDeProdutos.buscar(filtroDaListagem(empresaId, parametros, arvore, hoje),
                 parametros.ordem(), parametros.pagina(), parametros.tamanho());
-        return new PaginaResponse<>(itensDaPagina(empresaId, pagina.ids(), arvore, hoje), parametros.pagina(),
+        ReferenciasDoProduto referencias = new ReferenciasDoProduto(arvore, marcaService.arvoreDaEmpresa(empresaId));
+        return new PaginaResponse<>(itensDaPagina(empresaId, pagina.ids(), referencias, hoje), parametros.pagina(),
                 parametros.tamanho(), pagina.total());
     }
 
@@ -544,7 +553,7 @@ public class ProdutoService {
      * Etapa 2: produtos dos ids com as relacoes, na ordem dos ids. Um id que
      * sumiu entre as etapas (produto excluido no meio) fica fora da pagina.
      */
-    private List<ProdutoResponse> itensDaPagina(Long empresaId, List<Long> ids, CategoriaArvore arvore,
+    private List<ProdutoResponse> itensDaPagina(Long empresaId, List<Long> ids, ReferenciasDoProduto referencias,
             LocalDate hoje) {
         if (ids.isEmpty()) {
             return List.of();
@@ -559,7 +568,7 @@ public class ProdutoService {
         return ids.stream()
                 .map(porId::get)
                 .filter(Objects::nonNull)
-                .map(produto -> responder(produto, arvore, hoje,
+                .map(produto -> responder(produto, referencias, hoje,
                         estoques.getOrDefault(produto.getId(), ResumoDeEstoque.VAZIO), null))
                 .toList();
     }
@@ -764,12 +773,17 @@ public class ProdutoService {
         Categoria categoria = buscarCategoriaOpcional(empresaId, request.categoriaId());
         exigirCategoriaSelecionavelOuAtual(empresaId, categoria,
                 produtoAtual == null ? null : produtoAtual.getCategoria());
-        // Fase B5: o texto da marca saiu do contrato; ate o marcaId existir, a marca atual e mantida.
-        return new Vinculos(unidade, categoria, produtoAtual == null ? null : produtoAtual.getMarca());
+        Marca marca = buscarMarcaOpcional(empresaId, request.marcaId());
+        exigirMarcaSelecionavelOuAtual(empresaId, marca, produtoAtual == null ? null : produtoAtual.getMarca());
+        return new Vinculos(unidade, categoria, marca);
     }
 
     private Categoria buscarCategoriaOpcional(Long empresaId, UUID categoriaId) {
         return categoriaId == null ? null : categoriaService.buscarDaEmpresa(empresaId, categoriaId);
+    }
+
+    private Marca buscarMarcaOpcional(Long empresaId, UUID marcaId) {
+        return marcaId == null ? null : marcaService.buscarDaEmpresa(empresaId, marcaId);
     }
 
     /**
@@ -792,6 +806,19 @@ public class ProdutoService {
         }
         if (!categoriaService.arvoreDaEmpresa(empresaId).selecionavel(escolhida.getId())) {
             throw new RegraDeNegocioException(MENSAGEM_CATEGORIA_INATIVA);
+        }
+    }
+
+    /**
+     * Fase B5 (spec 3.3): como a categoria, a marca nao selecionavel (inativa
+     * ou sob ancestral inativo) so e aceita se ja for a do produto.
+     */
+    private void exigirMarcaSelecionavelOuAtual(Long empresaId, Marca escolhida, Marca atual) {
+        if (escolhida == null || (atual != null && Objects.equals(atual.getId(), escolhida.getId()))) {
+            return;
+        }
+        if (!marcaService.arvoreDaEmpresa(empresaId).selecionavel(escolhida.getId())) {
+            throw new RegraDeNegocioException(MENSAGEM_MARCA_INATIVA);
         }
     }
 
@@ -957,16 +984,20 @@ public class ProdutoService {
     }
 
     /**
-     * Resposta de um produto; a arvore so e carregada se o produto tiver
-     * categoria, e a ultima compra (Fase B4) so com a origem do custo
+     * Resposta de um produto; cada arvore so e carregada se o produto tiver
+     * categoria ou marca, e a ultima compra (Fase B4) so com a origem do custo
      * {@code ENTRADA_COMPRA}.
      */
     private ProdutoResponse responder(Produto produto) {
-        CategoriaArvore arvore = produto.getCategoria() == null
+        Long empresaId = produto.getEmpresaId();
+        CategoriaArvore categorias = produto.getCategoria() == null
                 ? CategoriaArvore.de(List.of())
-                : categoriaService.arvoreDaEmpresa(produto.getEmpresaId());
-        return responder(produto, arvore, SituacaoPromocao.hoje(relogio), resumoDeEstoque(produto),
-                ultimaCompra(produto));
+                : categoriaService.arvoreDaEmpresa(empresaId);
+        Arvore<Marca> marcas = produto.getMarca() == null
+                ? Arvore.de(List.of())
+                : marcaService.arvoreDaEmpresa(empresaId);
+        return responder(produto, new ReferenciasDoProduto(categorias, marcas), SituacaoPromocao.hoje(relogio),
+                resumoDeEstoque(produto), ultimaCompra(produto));
     }
 
     private EntradaDeCompra ultimaCompra(Produto produto) {
@@ -976,9 +1007,9 @@ public class ProdutoService {
         return usoNoEstoque.ultimaEntradaDeCompra(produto.getEmpresaId(), produto.getId()).orElse(null);
     }
 
-    private static ProdutoResponse responder(Produto produto, CategoriaArvore arvore, LocalDate hoje,
+    private static ProdutoResponse responder(Produto produto, ReferenciasDoProduto referencias, LocalDate hoje,
             ResumoDeEstoque estoque, EntradaDeCompra ultimaCompra) {
-        return ProdutoResponse.de(produto, arvore, estoque.permiteExcluir(), hoje, estoque, ultimaCompra);
+        return ProdutoResponse.de(produto, referencias, estoque.permiteExcluir(), hoje, estoque, ultimaCompra);
     }
 
     /**

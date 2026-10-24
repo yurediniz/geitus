@@ -13,11 +13,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.geitus.app.catalog.categoria.Categoria;
+import com.geitus.app.catalog.arvore.Arvore;
 import com.geitus.app.catalog.categoria.CategoriaArvore;
 import com.geitus.app.catalog.dto.AtacadoResponse;
 import com.geitus.app.catalog.dto.CodigoBarrasResponse;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.catalog.dto.PromocaoResponse;
+import com.geitus.app.catalog.dto.ReferenciasDoProduto;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.company.Empresa;
 
@@ -31,7 +33,7 @@ import com.geitus.app.company.Empresa;
  */
 class ProdutoResponseTest {
 
-    private static final CategoriaArvore SEM_CATEGORIAS = CategoriaArvore.de(List.of());
+    private static final ReferenciasDoProduto SEM_CATEGORIAS = ReferenciasDoProduto.vazias();
     private static final LocalDate HOJE = LocalDate.of(2026, 11, 8);
 
     private final Empresa empresa = new Empresa("Empresa");
@@ -127,7 +129,8 @@ class ProdutoResponseTest {
         Produto produto = ProdutoTesteBuilder.produto(empresa, un).nome("Sachê de frango").categoria(sache)
                 .precoVenda("3.50").build();
 
-        ProdutoResponse response = ProdutoResponse.de(produto, CategoriaArvore.de(List.of(racao, umida, sache)), true,
+        ProdutoResponse response = ProdutoResponse.de(produto, new ReferenciasDoProduto(CategoriaArvore.de(List.of(racao, umida, sache)),
+                Arvore.de(List.of())), true,
                 HOJE, ResumoDeEstoque.VAZIO);
 
         assertThat(response.categoria().id()).isEqualTo(sache.getUuid());

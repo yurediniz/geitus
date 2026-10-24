@@ -24,6 +24,7 @@ final class ProdutoRequestBuilder {
     private String descricao;
     private UUID unidadeId;
     private UUID categoriaId;
+    private UUID marcaId;
     private BigDecimal precoVenda = new BigDecimal("10.00");
     private BigDecimal custo;
     private BigDecimal estoqueMinimo;
@@ -70,6 +71,11 @@ final class ProdutoRequestBuilder {
 
     ProdutoRequestBuilder categoriaId(UUID valor) {
         this.categoriaId = valor;
+        return this;
+    }
+
+    ProdutoRequestBuilder marcaId(UUID valor) {
+        this.marcaId = valor;
         return this;
     }
 
@@ -170,7 +176,7 @@ final class ProdutoRequestBuilder {
     }
 
     ProdutoRequest build() {
-        return new ProdutoRequest(nome, nomeCurto, descricao, unidadeId, categoriaId,
+        return new ProdutoRequest(nome, nomeCurto, descricao, unidadeId, categoriaId, marcaId,
                 precoVenda, custo, estoqueMinimo, estoqueMaximo, pontoReposicao,
                 precoMinimo, codigosBarras, embalagens, sku, codigo, vendidoBalanca, promocao, atacado, controlaEstoque,
                 estoqueInicial);

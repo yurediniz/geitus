@@ -51,12 +51,14 @@ public class SecurityConfig {
             "/v3/api-docs.yaml"
     };
 
-    /** Cadastros auxiliares do catalogo: unidades de medida e categorias (DEC-031). */
+    /** Cadastros auxiliares do catalogo: unidades de medida, categorias (DEC-031) e marcas (DEC-039). */
     private static final String[] CAMINHOS_CADASTROS_DO_CATALOGO = {
             "/api/unidades",
             "/api/unidades/**",
             "/api/categorias",
-            "/api/categorias/**"
+            "/api/categorias/**",
+            "/api/marcas",
+            "/api/marcas/**"
     };
 
     /** Configuracao e teste da etiqueta de balanca (DEC-036). */
@@ -116,7 +118,7 @@ public class SecurityConfig {
                         // vale para qualquer metodo HTTP nessas rotas.
                         .requestMatchers("/api/clientes/*/inativar", "/api/clientes/*/reativar").hasRole("ADMIN")
                         .requestMatchers("/api/clientes", "/api/clientes/**").authenticated()
-                        // Unidades de medida e categorias (DEC-031): leitura (GET) liberada a
+                        // Unidades de medida, categorias (DEC-031) e marcas (DEC-039): leitura (GET) liberada a
                         // qualquer autenticado (o formulario de produto e o PDV as consultam);
                         // qualquer outro metodo exige ADMIN. O matcher de ADMIN e SEM metodo,
                         // como em Clientes: cobre POST/PATCH/PUT/DELETE e /{id}/inativar|reativar.

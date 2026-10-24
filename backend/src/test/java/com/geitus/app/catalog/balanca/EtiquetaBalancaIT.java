@@ -290,7 +290,7 @@ class EtiquetaBalancaIT {
     }
 
     private static ProdutoRequest requestDoProduto(UUID unidade, String nome, Integer codigo, boolean balanca) {
-        return new ProdutoRequest(nome, null, null, unidade, null, new BigDecimal("10.00"),
+        return new ProdutoRequest(nome, null, null, unidade, null, null, new BigDecimal("10.00"),
                 null, null, null, null, null, List.of(), null, null, codigo, balanca, null, null, true, null);
     }
 
