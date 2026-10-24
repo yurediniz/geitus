@@ -32,7 +32,7 @@ Frontend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Co
 - **Produtos** (`/produtos`): listagem paginada (25 por página) com busca enquanto se digita, filtros (status, categoria, estoque, promoção) e ordenação, tudo guardado na URL; tabela a partir de 1.024 px e cards no celular e no tablet. Cadastro e edição em **página própria** (`/produtos/novo`, `/produtos/:id`), em **tela única** com atalhos fixos (Geral · Códigos · Preços · Embalagens · Estoque · Histórico) que rolam até a seção, destacam a seção visível e mostram a quantidade de erros:
   - Geral com o **Nº do produto** (gerado ao salvar), nome, unidade, preço e dados complementares;
   - Códigos: vários códigos de barras (validação EAN/UPC), código do produto (até 6 dígitos, zeros à esquerda ignorados) com "Vendido na balança" e "Usar o número do produto", e SKU gerado automaticamente;
-  - autocomplete de marca e fornecedor;
+  - marca escolhida na árvore "Fabricantes e marcas" (seletor com busca e "+ Nova") e fornecedores cadastrados com o "Fornecedor da última compra";
   - nome curto com prévia do cupom;
   - "Salvar e cadastrar outro" (Ctrl+Shift+Enter);
   - aviso de alterações não salvas (`hooks/useAvisoAlteracoesNaoSalvas.tsx`);
@@ -45,6 +45,8 @@ Frontend do **Geitus**, a plataforma SaaS de gestão para pequenos negócios. Co
   - Estoque com "Controlar estoque", saldo (com a conversão em embalagens), estoque inicial no cadastro e o modal "Ajustar estoque" (Entrada, Saída, Contagem e "Zerar estoque", com Entrada e Saída também em embalagens e o custo obrigatório na entrada por compra), acessível pela lista; a seção Preços mostra a origem do custo (último custo de entrada ou edição manual);
   - Histórico (movimentações de estoque, custo e preço de venda) na edição, carregado quando a seção se aproxima; selos "Estoque baixo" e "Sem estoque" na listagem.
 - **Etiqueta de balança** (`/produtos/balanca`): formato da etiqueta por empresa, com modelos prontos, prévia, exemplo e "Testar etiqueta"; leitura em `lib/etiquetaBalanca.ts` (igual à do backend). Salvar só ADMIN.
+- **Marcas** (`/produtos/marcas`, "Fabricantes e marcas"): mesma árvore de Categorias (`features/catalog/PaginaDaArvore.tsx`, configurada em `cadastrosEmArvore.ts`).
+- **Fornecedores** (`/produtos/fornecedores`, `features/suppliers/`): lista paginada com busca e status na URL; cadastro com dados da NF-e (só o nome obrigatório), busca de CEP, representantes com "+", marcas e produtos que vende.
 - **Categorias** (`/produtos/categorias`) e **Unidades** (`/produtos/unidades`), em abas dentro de Produtos: árvore de categorias (subcategorias, mover, inativar, excluir) e cadastro de unidades com fracionamento. No formulário de produto: unidade de venda (select), categoria (seletor com busca pelo caminho e "+ Nova") e unidade de compra + fator.
 - **Clientes** (`/clientes`): cadastro rápido (nome, telefone com "Este número é WhatsApp", CPF e observações), busca por nome/CPF/telefone e filtro de status; qualquer perfil cadastra e edita, inativar/reativar só ADMIN. Máscaras e validações de CPF/telefone compartilhadas em `lib/documentos.ts`.
 - Cartão de **status do backend** consumindo `GET /api/health`, com tratamento de **carregando**, **sucesso** e **erro**.

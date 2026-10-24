@@ -1,6 +1,6 @@
 # Fornecedores e Fabricantes/Marcas (Fase B5)
 
-> **Status:** spec final, desenho aprovado em conversa em 2026-10-24. Fase intermediária da DEC-030, depois da Fase B4 ([produtos-custo-entrada.md](produtos-custo-entrada.md)) e antes da Fase F (imagem). Decisões na **DEC-039**.
+> **Status:** **implementada** em 2026-10-24 (migration V14; ajustes no §11). Desenho aprovado em conversa no mesmo dia. Fase intermediária da DEC-030, depois da Fase B4 ([produtos-custo-entrada.md](produtos-custo-entrada.md)) e antes da Fase F (imagem). Decisões na **DEC-039**.
 
 ## 1. Motivação
 - **Hoje** a marca e o "Fornecedor principal" do produto são **texto livre** com autocomplete. Não há cadastro de fornecedor, nem como agrupar marcas por fabricante.

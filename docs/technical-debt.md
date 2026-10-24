@@ -514,6 +514,37 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Impacto:** Erros de digitacao do custo passam sem alerta; o resto e refinamento.
 - **Quando revisar:** O aviso de variacao na proxima rodada de estoque; o resto com Compras e o PDV.
 
+## DT-037 — Pendencias da Fase B5 (fornecedores e marcas)
+
+- **ID:** DT-037
+- **Modulo:** Backend/Frontend (Fornecedores; Catalogo — marcas)
+- **Origem:** Revisoes da Fase B5 (dados, seguranca, backend, frontend, UX e QA)
+- **Prioridade:** baixa (media para a mascara de CPF antes de perfis granulares)
+- **Status:** aberto
+- **Descricao:**
+  - **Dados pessoais:** o OPERADOR ve documento (inclusive CPF de fornecedor PF) e contatos; mascarar para o OPERADOR quando houver perfis granulares (DEC-039). A busca por documento fica na URL (historico do navegador e logs de acesso).
+  - **Backend:**
+    - tipos de paginacao (`PaginaResponse`, `Paginacao`, `StatusFiltro`) movidos de `catalog` para `shared`;
+    - arvore de marcas carregada duas vezes nas escritas do produto;
+    - corrida residual: ligar um produto a uma marca durante o renomear dela deixa a busca do produto com o nome antigo ate a proxima edicao;
+    - `GlobalExceptionHandler` sem log do 500 e metodo nao suportado respondendo 500 (em vez de 405);
+    - validacao de e-mail aceita caracteres de controle (erro pouco claro).
+  - **Frontend/UX:**
+    - atalhos de secao e endereco recolhido no cadastro do fornecedor;
+    - razao social antes do CNPJ;
+    - seletor de "Marcas que vende" com varias escolhas;
+    - adicionar produto ao fornecedor por scanner/Enter;
+    - criar fornecedor no proprio seletor do produto;
+    - reordenar o representante principal;
+    - busca de CEP sem apagar campos e com foco em "Numero";
+    - volta do produto para o fornecedor;
+    - modo leitura (OPERADOR) legivel;
+    - contagens da arvore de marcas com criterios diferentes (produtos na subarvore, fornecedores so diretos);
+    - abas do catalogo no celular sem indicio de rolagem;
+    - dica pos-migracao para agrupar as marcas antigas sob fabricantes.
+- **Impacto:** Refinamentos de UX e de organizacao; nenhum risco imediato de integridade.
+- **Quando revisar:** Na proxima rodada de UX do catalogo; a mascara de CPF com os perfis.
+
 ## DT-026 — Teto de profundidade e de quantidade na arvore de categorias
 
 - **ID:** DT-026
