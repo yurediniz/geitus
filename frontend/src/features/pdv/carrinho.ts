@@ -277,7 +277,8 @@ function ehLinha(valor: unknown): boolean {
   )
 }
 
-function ehCarrinho(valor: unknown): valor is Carrinho {
+/** Se o valor lido do navegador tem o formato do carrinho (cada linha, o desconto e o cliente). */
+export function ehCarrinho(valor: unknown): valor is Carrinho {
   return (
     ehObjeto(valor) &&
     Array.isArray(valor.linhas) &&

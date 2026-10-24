@@ -1,29 +1,47 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 
 import { acaoDoAtalho, type AcaoDoPdv } from '@/features/pdv/atalhosDoPdv'
 import { tocarBipeDeErro } from '@/features/pdv/bipeDeErro'
 import { CampoDeLeitura } from '@/features/pdv/CampoDeLeitura'
-import type { LinhaDoCarrinho } from '@/features/pdv/carrinho'
+import { CAIXA_QUERY_KEY, CHAVE_DA_SESSAO_ATUAL } from '@/features/cash-register/caixaQuery'
+import { formatarReais } from '@/features/cash-register/formatacaoCaixa'
+import type { Carrinho, LinhaDoCarrinho } from '@/features/pdv/carrinho'
 import { focarCampoDeLeitura, ID_CAMPO_DE_LEITURA } from '@/features/pdv/focoDoPdv'
 import { JanelaBusca } from '@/features/pdv/JanelaBusca'
 import { JanelaCliente } from '@/features/pdv/JanelaCliente'
 import { JanelaConfirmar, type Confirmacao } from '@/features/pdv/JanelaConfirmar'
 import { JanelaDesconto, type AlvoDoDesconto } from '@/features/pdv/JanelaDesconto'
+import { JanelaPagamento } from '@/features/pdv/JanelaPagamento'
+import { JanelaVendasDoCaixa } from '@/features/pdv/JanelaVendasDoCaixa'
+import { JanelaVendasEmEspera } from '@/features/pdv/JanelaVendasEmEspera'
 import { ListaDeLinhas } from '@/features/pdv/ListaDeLinhas'
 import { ehDoPagamento, separarMensagens } from '@/features/pdv/mensagensDoCalculo'
 import { PainelDoTotal, type AcaoDoPainel } from '@/features/pdv/PainelDoTotal'
+import { PDV_QUERY_KEY } from '@/features/pdv/pdvQuery'
 import { useCalculo } from '@/features/pdv/useCalculo'
 import { useCarrinho } from '@/features/pdv/useCarrinho'
+import { porEmEspera, tirarDaEspera, useVendasEmEspera } from '@/features/pdv/vendasEmEspera'
 import type { AvisosDaTela } from '@/hooks/useFeedbackDaTela'
+import { gerarUuid } from '@/lib/uuid'
 import type { Usuario } from '@/types/auth'
 import type { SessaoDeCaixa } from '@/types/caixa'
-import type { ConfiguracaoDoPdv, LinhaCalculada } from '@/types/pdv'
+import type { ConfiguracaoDoPdv, LinhaCalculada, MensagemDoCalculo, Venda } from '@/types/pdv'
 
 type Janela =
   | { tipo: 'BUSCA'; texto: string }
   | { tipo: 'CLIENTE' }
   | { tipo: 'DESCONTO'; desconto: AlvoDoDesconto }
   | { tipo: 'CONFIRMAR'; confirmacao: Confirmacao }
+  | { tipo: 'PAGAMENTO' }
+  | { tipo: 'ESPERA' }
+  | { tipo: 'VENDAS' }
+
+/** Erros da ultima tentativa de finalizar (Review Focus 2): valem enquanto o carrinho nao muda. */
+interface ErrosDaVenda {
+  carrinho: Carrinho
+  mensagens: MensagemDoCalculo[]
+}
 
 export interface TelaDeVendaProps {
   sessao: SessaoDeCaixa
@@ -37,12 +55,20 @@ const MENSAGEM_BLOQUEADO = 'Corrija os erros da venda antes de pagar.'
 const MENSAGEM_CALCULANDO = 'Aguarde o cálculo da venda.'
 const MENSAGEM_SEM_ITENS = 'Lance um item primeiro.'
 
+/** "Venda nº 128 concluída · Troco R$ 5,00" (sem troco, so o numero). */
+function mensagemDaVendaConcluida(venda: Venda): string {
+  return venda.troco > 0
+    ? `Venda nº ${venda.numero} concluída · Troco ${formatarReais(venda.troco)}`
+    : `Venda nº ${venda.numero} concluída`
+}
+
 /**
  * A venda com o caixa aberto (spec do PDV §6.2): a lista de linhas, o campo
  * "Código ou nome" no rodape (foco permanente) e a coluna do total. O
  * carrinho fica no navegador; o calculo exibido e sempre o do servidor.
  */
-export function TelaDeVenda({ sessao, usuario, configuracao }: TelaDeVendaProps) {
+export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVendaProps) {
+  const queryClient = useQueryClient()
   const venderSemEstoque = configuracao?.venderSemEstoque ?? true
   const opcoes = useMemo(() => ({ venderSemEstoque }), [venderSemEstoque])
   const carrinho = useCarrinho(usuario.empresa.id, usuario.id, opcoes)
@@ -51,6 +77,8 @@ export function TelaDeVenda({ sessao, usuario, configuracao }: TelaDeVendaProps)
   const [ultimaId, setUltimaId] = useState<string | null>(null)
   const [erroDaLeitura, setErroDaLeitura] = useState<string | null>(null)
   const [janela, setJanela] = useState<Janela | null>(null)
+  const [errosDaVenda, setErrosDaVenda] = useState<ErrosDaVenda | null>(null)
+  const espera = useVendasEmEspera(usuario.empresa.id, usuario.id)
 
   const { linhas } = carrinho
   const selecionada: LinhaDoCarrinho | undefined =
@@ -68,14 +96,21 @@ export function TelaDeVenda({ sessao, usuario, configuracao }: TelaDeVendaProps)
     const doCalculo = separarMensagens(calculo.calculo?.erros ?? [], calculo.idsDoCalculo)
     const dosDados = separarMensagens(calculo.errosDosDados, calculo.idsDosErros)
     const avisosDasLinhas = separarMensagens(calculo.calculo?.avisos ?? [], calculo.idsDoCalculo)
+    const daVenda =
+      errosDaVenda && errosDaVenda.carrinho === carrinho.carrinho
+        ? separarMensagens(
+            errosDaVenda.mensagens,
+            errosDaVenda.carrinho.linhas.map((linha) => linha.id),
+          )
+        : { porLinha: {}, outras: [] }
     return {
-      errosPorLinha: { ...doCalculo.porLinha, ...dosDados.porLinha },
+      errosPorLinha: { ...doCalculo.porLinha, ...dosDados.porLinha, ...daVenda.porLinha },
       avisosPorLinha: avisosDasLinhas.porLinha,
-      gerais: [...doCalculo.outras, ...dosDados.outras]
+      gerais: [...doCalculo.outras, ...dosDados.outras, ...daVenda.outras]
         .filter((mensagem) => !ehDoPagamento(mensagem))
         .map((mensagem) => mensagem.mensagem),
     }
-  }, [calculo.calculo, calculo.idsDoCalculo, calculo.errosDosDados, calculo.idsDosErros])
+  }, [calculo.calculo, calculo.idsDoCalculo, calculo.errosDosDados, calculo.idsDosErros, errosDaVenda, carrinho.carrinho])
 
   const temErro = mensagens.gerais.length > 0 || Object.keys(mensagens.errosPorLinha).length > 0
   const podePagar = linhas.length > 0 && calculo.atualizado && calculo.falhaDeRede === null && !temErro
@@ -175,11 +210,38 @@ export function TelaDeVenda({ sessao, usuario, configuracao }: TelaDeVendaProps)
           recusar(MENSAGEM_BLOQUEADO)
         } else if (!podePagar) {
           recusar(calculo.falhaDeRede ?? MENSAGEM_CALCULANDO)
+        } else {
+          setErroDaLeitura(null)
+          setJanela({ tipo: 'PAGAMENTO' })
         }
         return
-      case 'POR_EM_ESPERA':
+      case 'POR_EM_ESPERA': {
+        if (linhas.length === 0) {
+          recusar(MENSAGEM_SEM_ITENS)
+          return
+        }
+        const resultado = porEmEspera(
+          espera.vendas,
+          carrinho.carrinho,
+          calculo.calculo?.total ?? null,
+          new Date().toISOString(),
+          gerarUuid(),
+        )
+        if (!resultado.ok) {
+          recusar(resultado.erro)
+          return
+        }
+        espera.substituir(resultado.vendas)
+        carrinho.limpar()
+        setErroDaLeitura(null)
+        avisos.sucesso('Venda em espera.')
+        return
+      }
       case 'VENDAS_EM_ESPERA':
+        setJanela({ tipo: 'ESPERA' })
+        return
       case 'VENDAS_DO_CAIXA':
+        setJanela({ tipo: 'VENDAS' })
         return
     }
   }
@@ -233,8 +295,38 @@ export function TelaDeVenda({ sessao, usuario, configuracao }: TelaDeVendaProps)
       aoClicar: () => executar('DESCONTO_TOTAL'),
       desabilitado: linhas.length === 0,
     },
+    { atalho: 'F6', rotulo: 'Pôr em espera', aoClicar: () => executar('POR_EM_ESPERA'), desabilitado: linhas.length === 0 },
+    { atalho: 'F7', rotulo: `Em espera (${espera.vendas.length})`, aoClicar: () => executar('VENDAS_EM_ESPERA') },
+    { atalho: 'F8', rotulo: 'Vendas do caixa', aoClicar: () => executar('VENDAS_DO_CAIXA') },
     { atalho: 'F10', rotulo: 'Pagamento', aoClicar: () => executar('PAGAMENTO'), desabilitado: !podePagar, principal: true },
   ]
+
+  const retomar = (id: string, porAtualEmEspera: boolean) => {
+    const escolhida = espera.vendas.find((venda) => venda.id === id)
+    if (!escolhida) {
+      return
+    }
+    let restantes = tirarDaEspera(espera.vendas, id)
+    if (porAtualEmEspera && linhas.length > 0) {
+      const resultado = porEmEspera(
+        restantes,
+        carrinho.carrinho,
+        calculo.calculo?.total ?? null,
+        new Date().toISOString(),
+        gerarUuid(),
+      )
+      if (resultado.ok) {
+        restantes = resultado.vendas
+      }
+    }
+    espera.substituir(restantes)
+    carrinho.substituir(escolhida.carrinho)
+    setSelecionadaId(null)
+    setUltimaId(null)
+    setErroDaLeitura(null)
+    setJanela(null)
+    avisos.sucesso('Venda retomada.')
+  }
 
   return (
     <div className="grid min-h-[calc(100vh-9rem)] grid-cols-[minmax(0,1fr)_22rem] gap-6">
@@ -326,6 +418,51 @@ export function TelaDeVenda({ sessao, usuario, configuracao }: TelaDeVendaProps)
         }}
       />
       <JanelaConfirmar confirmacao={janela?.tipo === 'CONFIRMAR' ? janela.confirmacao : null} aoFechar={fecharJanela} />
+      <JanelaPagamento
+        aberta={janela?.tipo === 'PAGAMENTO'}
+        carrinho={carrinho.carrinho}
+        calculoInicial={calculo.calculo}
+        aoFechar={fecharJanela}
+        aoConcluir={(venda) => {
+          carrinho.limpar()
+          setErrosDaVenda(null)
+          setSelecionadaId(null)
+          setUltimaId(null)
+          setJanela(null)
+          avisos.sucesso(mensagemDaVendaConcluida(venda))
+          void queryClient.invalidateQueries({ queryKey: [...PDV_QUERY_KEY, 'vendas'] })
+          void queryClient.invalidateQueries({ queryKey: CAIXA_QUERY_KEY })
+        }}
+        aoFalharNosDados={(mensagensDaVenda, carrinhoEnviado) => {
+          setErrosDaVenda({ carrinho: carrinhoEnviado, mensagens: mensagensDaVenda })
+          setJanela(null)
+          avisos.erro('Confira os itens marcados em vermelho.')
+          tocarBipeDeErro()
+        }}
+        aoCaixaMudou={(mensagem, relida) => {
+          setJanela(null)
+          avisos.erro(mensagem)
+          if (relida !== undefined) {
+            queryClient.setQueryData(CHAVE_DA_SESSAO_ATUAL, relida)
+          }
+          // O carrinho continua no navegador; a tela mostra o estado do caixa.
+          void queryClient.invalidateQueries({ queryKey: CAIXA_QUERY_KEY })
+        }}
+      />
+      <JanelaVendasEmEspera
+        aberta={janela?.tipo === 'ESPERA'}
+        vendas={espera.vendas}
+        temVendaAberta={linhas.length > 0}
+        aoFechar={fecharJanela}
+        aoRetomar={retomar}
+        aoDescartar={(id) => espera.substituir(tirarDaEspera(espera.vendas, id))}
+      />
+      <JanelaVendasDoCaixa
+        aberta={janela?.tipo === 'VENDAS'}
+        sessaoId={sessao.id}
+        ehAdmin={usuario.perfil === 'ADMIN'}
+        aoFechar={fecharJanela}
+      />
     </div>
   )
 }
