@@ -128,7 +128,9 @@ Todas com valores **fictícios** no `.env.example` (nunca segredos reais).
 Não há usuário padrão com senha fixa no código. Em desenvolvimento, o **bootstrap idempotente** cria (se ainda não existirem) uma empresa e um usuário admin quando habilitado por variável de ambiente:
 
 ```bash
-export JWT_SECRET="um-segredo-forte-com-no-minimo-32-bytes-aqui"
+export JWT_SECRET="$(openssl rand -base64 48)"   # valores de exemplo são recusados na subida
+export POSTGRES_PASSWORD="<senha-do-.env>"
+export GEITUS_IMAGEM_SEGREDO="$(openssl rand -base64 48)"
 export GEITUS_BOOTSTRAP_DEV_ADMIN=true
 export GEITUS_DEV_ADMIN_EMAIL="admin@geitus.dev"
 export GEITUS_DEV_ADMIN_PASSWORD="troque-esta-senha"
