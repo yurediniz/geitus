@@ -17,7 +17,7 @@ Conforme o escopo definido no [CLAUDE.md](../../CLAUDE.md):
 - [Produtos](produtos.md) ✔ — em evolução (DEC-030): [Categorias e Unidades](categorias-e-unidades.md) (Fase A ✔), [Identificação e formulário](produtos-identificacao-e-formulario.md) (Fase B ✔), [Preços](produtos-precos.md) (Fase C ✔), [Estoque básico](produtos-estoque.md) (Fase D ✔), [Listagem](produtos-listagem.md) (Fase E ✔), [Número, código e balança](produtos-codigo-e-balanca.md) (Fase B2 ✔), [Embalagens de venda](produtos-embalagens.md) (Fase B3 ✔), [Custo na entrada por compra](produtos-custo-entrada.md) (Fase B4 ✔), [Fornecedores e marcas](fornecedores-e-marcas.md) (Fase B5 ✔), [Imagem do produto](produtos-imagem.md) (Fase F ✔)
 - [Clientes](clientes.md) ✔
 - [Fornecedores](fornecedores-e-marcas.md) ✔ — cadastro com representantes, marcas e produtos que vende (Fase B5, DEC-039; amplia o escopo do MVP de Produtos)
-- [PDV](pdv.md) — em especificação (DEC-042)
+- [PDV](pdv.md) ✔ — venda no balcão com carrinho no navegador, desconto, pagamento dividido, espera, cancelamento e caixa conferido por forma (DEC-042)
 - [Caixa](caixa.md) ✔ — pontos de caixa, sessões, sangria, suprimento e fechamento cego configurável (DEC-041)
 - Estoque básico
 - Financeiro básico

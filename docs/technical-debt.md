@@ -419,7 +419,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
   - **Frontend:**
     - "1.500" em KG e lido como 1,5 (ponto como decimal); avaliar dica ou recusa;
     - modal usa `useState` e validacao em funcoes puras, nao RHF + Zod (excecao consciente pelo tamanho do formulario).
-  - **Obrigatorio antes do PDV:**
+  - **Obrigatorio antes do PDV:** _resolvido no PDV (DEC-042): a venda trava os produtos em ordem de `id`, os movimentos de venda ficam ligados ao item (`item_venda_id`, unico por item e motivo) e a idempotencia e a da venda._
     - toda baixa por venda deve travar o produto antes de inserir (mesma ordem de travas do ajuste) e, numa venda com varios itens, travar os produtos em ordem de `id`;
     - a chave de idempotencia unica por empresa nao aceita varios movimentos por venda: usar chave por item/consequencia ou `(empresa_id, origem, chave)`;
     - registrar a escolha de trava pessimista no lugar do bloqueio otimista do principio 9.
@@ -587,7 +587,7 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
 - **Modulo:** Backend/Frontend (Caixa — cashier)
 - **Origem:** Revisoes de seguranca e backend do modulo Caixa (DEC-041)
 - **Prioridade:** media (obrigatoria antes do PDV)
-- **Status:** aberto
+- **Status:** finalizado no PDV (DEC-042): o modo cego esconde do OPERADOR os valores de recebimento e estorno na tela do caixa; a lista de vendas (F8) mostra totais, formas e troco (limitacao aceita); `sessaoAbertaDoUsuario` virou `travarSessaoParaVenda(UsuarioAutenticado)`; o PDV trava a sessao antes de inserir movimentos.
 - **Descricao:** o modo cego esconde o total da gaveta e o valor dos lancamentos de outra pessoa, mas o OPERADOR ve o valor dos proprios lancamentos e consegue somar o esperado. Com o PDV, entram os recebimentos (tipo `RECEBIMENTO`) e duas rotas que respondem sem gravar:
   - a sangria acima da gaveta (409) permite descobrir o esperado por busca binaria;
   - o suprimento acima do limite (400) tambem responde sem gravar.
@@ -645,6 +645,46 @@ Os itens abaixo nao devem interromper o fluxo de desenvolvimento, mas precisam s
   - **Validacao manual:** `CampoMoeda` em Android e iOS (DT-031).
 - **Impacto:** robustez, desempenho e clareza; nenhum risco imediato.
 - **Quando revisar:** na spec do PDV ou na proxima manutencao do caixa.
+
+## DT-041 — Pendencias do PDV
+
+- **ID:** DT-041
+- **Modulo:** Backend/Frontend (Vendas — sales, caixa e estoque)
+- **Origem:** Revisoes do PDV (dados, seguranca, backend, frontend, UX e QA) e teste no navegador
+- **Prioridade:** baixa (itens marcados: antes do primeiro deploy)
+- **Status:** aberto
+- **Descricao:**
+  - **Seguranca:**
+    - o fallback do lock de aba (`BroadcastChannel`) tem corrida quando o sistema e aberto por HTTP fora de `localhost` (sem Web Locks); servir sempre por HTTPS — **antes do primeiro deploy**;
+    - o carrinho guardado no navegador (com o nome do cliente) continua la depois do logout; avaliar guardar so o id do cliente ou limpar ao sair quando nao houver tentativa pendente;
+    - `ehCorpo` nao confere a forma de pagamento guardada (so visual; o servidor recusa);
+    - limite de requisicoes por usuario no `/calculo` e na busca (o projeto ainda nao tem nenhum);
+    - oraculo da sangria no modo cego por tentativas (vem do Caixa).
+  - **Banco:**
+    - contagem por forma orfa (gravada sem mudar a situacao da sessao) trava o fechamento; constraint trigger deferida exigindo a sessao fora de `ABERTA`;
+    - a ligacao `estoque_saldos` x ultimo movimento ficou so na aplicacao (sem o CHECK de saldo >= 0);
+    - o gatilho deferido da venda recalcula a venda a cada linha inserida (otimizar se o volume crescer);
+    - indices opcionais: `(empresa_id, usuario_id, concluida_em DESC, id DESC)` e `INCLUDE (forma, tipo, valor)` nos movimentos de caixa;
+    - historico das configuracoes do PDV (hoje so a ultima alteracao);
+    - o `Numerador` do tipo VENDA serializa as finalizacoes da empresa (aceitavel no MVP).
+  - **Backend:**
+    - `sales` usa `ProdutoRepository`, `ClienteRepository` e classes do `cashier` direto (avaliar interfaces ou Spring Modulith);
+    - `VendasService` grande (extrair a conferencia da chave e o cancelamento);
+    - `mesmoPedido` nao compara desconto nem embalagem na chave repetida.
+  - **Frontend e UX:**
+    - filtro por ponto no F8 (a API nao tem);
+    - quantidade digitada para produto por peso vindo da busca;
+    - aviso de troco desproporcional; motivos rapidos de sangria; atalhos 1–5 na espera; volume do bipe configuravel;
+    - confirmar com operadores reais o campo de dinheiro que preenche da direita para a esquerda (5000 = R$ 50,00);
+    - os atalhos F3, F6, F7 e F10 em Chrome/Edge do Windows (o navegador pode tratar antes da pagina);
+    - abaixo de 1024 px os botoes do painel ficam cortados (minimo da spec);
+    - sincronia entre abas so pelo lock (sem `storage`/`BroadcastChannel` para o carrinho).
+  - **Testes:**
+    - promocao vencendo entre o calculo e o finalizar de ponta a ponta (troca do `Clock`);
+    - cancelamento com queda de rede no F8; selos Promocao e Atacado na tela; "Alterado por" em Configuracoes › PDV;
+    - concorrencia contagem x venda.
+- **Impacto:** robustez, desempenho e clareza; nenhum risco imediato no uso atual.
+- **Quando revisar:** antes do primeiro deploy (itens marcados) e na proxima manutencao do PDV.
 
 ## DT-026 — Teto de profundidade e de quantidade na arvore de categorias
 

@@ -1061,3 +1061,14 @@ O PDV é a etapa 11 do MVP e depende do Caixa (DEC-041), das embalagens (DEC-037
 **Observações futuras:**
 - Impressão do recibo, TEF, devolução depois do fechamento, parcelas, crediário, autorização do ADMIN no balcão e a sugestão "Montar 1 CX + 1 UN".
 - PDV offline usando a mesma calculadora.
+
+**Atualização (2026-10-25, implementação e revisões):**
+- **Etiqueta de produto em UN (decisão do usuário):** a etiqueta precisa trazer exatamente o preço normal de 1 unidade, e só vale para produto "vendido na balança". Aceita, é cobrada pelas regras normais (promoção e atacado, com as etiquetas somando no atacado). Isso substitui "1 unidade pelo valor da etiqueta" e fecha a venda abaixo do preço por etiqueta forjada.
+- **Estoque:** o banco aceita `saldo_novo >= 0 OR motivo = 'VENDA' OR tipo = 'ENTRADA'`, para que compras e estornos sejam aceitos com o saldo ainda negativo.
+- **Desconto percentual:** arredonda para baixo.
+- **Chave de idempotência:** fica guardada junto do carrinho até a venda dar certo ou ser recusada de vez, e é conferida antes de exigir caixa aberto (impede venda duplicada depois de queda de rede).
+- **Banco:**
+  - a venda é conferida inteira no commit (constraint triggers deferidas);
+  - recebimento, baixa e estornos ficam presos à origem;
+  - o vendedor é sempre o dono da sessão.
+- **Pendências:** ver DT-041.
