@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.endsWith;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -68,6 +69,91 @@ class CancelarVendaIT extends IntegracaoDoPdv {
                 SELECT count(*) FROM movimentos_estoque m JOIN produtos p ON p.id = m.produto_id
                  WHERE p.uuid = ? AND m.motivo = 'CANCELAMENTO_VENDA' AND m.saldo_anterior = -10 AND m.saldo_novo = -5
                 """, Long.class, semEstoque)).isEqualTo(1);
+    }
+
+    /** QA A2: com o caixa em conferencia, o cancelamento e recusado e nada muda no estoque nem no caixa. */
+    @Test
+    void caixaEmConferencia409() throws Exception {
+        String venda = vender(empresa.operadora(), item(racao, "2"), pagamento("DINHEIRO", "20"), "20.00");
+        contar(empresa.operadora(), sessao, "110.00", null).andExpect(jsonPath("$.status").value("EM_CONFERENCIA"));
+        long movimentosDeCaixa = contarLinhas("movimentos_caixa");
+        long movimentosDeEstoque = contarLinhas("movimentos_estoque");
+
+        cancelar(empresa.admin(), venda, "Erro")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value(
+                        "Esta venda é de um caixa que já foi fechado ou está em conferência. Use devolução."));
+
+        assertThat(pdv.saldo(racao)).isEqualByComparingTo("3");
+        assertThat(contarLinhas("movimentos_caixa")).isEqualTo(movimentosDeCaixa);
+        assertThat(contarLinhas("movimentos_estoque")).isEqualTo(movimentosDeEstoque);
+        venda(empresa.admin(), venda).andExpect(jsonPath("$.status").value("CONCLUIDA"));
+    }
+
+    /** QA A3: CX + UN + etiqueta; o cancelamento devolve exatamente o que cada baixa tirou (3, 1 e 0,400). */
+    @Test
+    void cancelarNexgardCxMaisUnEEtiquetaDevolveOEstoqueDaBaixa() throws Exception {
+        com.geitus.app.catalog.dto.ProdutoResponse nexgard = pdv.produto(empresa, NovoProduto.de("Nexgard", "UN",
+                "89.90").comEstoque("10").comEmbalagens(new com.geitus.app.sales.CenarioDoPdv.NovaEmbalagem("CX", "3",
+                "209.90", List.of())));
+        UUID queijo = pdv.produto(empresa, NovoProduto.de("Queijo", "KG", "25.00").naBalanca(542).comEstoque("2"))
+                .id();
+        String itens = "{\"produtoId\":\"" + nexgard.id() + "\",\"embalagemId\":\"" + nexgard.embalagens().get(0).id()
+                + "\",\"quantidade\":1}," + item(nexgard.id(), "1") + ",{\"produtoId\":\"" + queijo
+                + "\",\"codigoLido\":\"2000542010000\",\"etiqueta\":true}";
+        String venda = vender(empresa.operadora(), itens, pagamento("DINHEIRO", "310"), "309.80");
+        assertThat(pdv.saldo(nexgard.id())).isEqualByComparingTo("6");
+        assertThat(pdv.saldo(queijo)).isEqualByComparingTo("1.6");
+
+        cancelar(empresa.operadora(), venda, "Desistiu").andExpect(status().isOk());
+
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT m.quantidade FROM movimentos_estoque m JOIN itens_venda i ON i.id = m.item_venda_id
+                 JOIN vendas v ON v.id = i.venda_id
+                 WHERE v.uuid = ? AND m.motivo = 'CANCELAMENTO_VENDA' ORDER BY i.ordem
+                """, BigDecimal.class, UUID.fromString(venda)))
+                .usingElementComparator(BigDecimal::compareTo)
+                .containsExactly(new BigDecimal("3"), new BigDecimal("1"), new BigDecimal("0.400"));
+        assertThat(pdv.saldo(nexgard.id())).isEqualByComparingTo("10");
+        assertThat(pdv.saldo(queijo)).isEqualByComparingTo("2");
+    }
+
+    /** QA A4: PIX cancelado (esperado 0) continua na contagem; sem ele, 400; com PIX 0, fecha. */
+    @Test
+    void fechamentoComVendaCanceladaEmPix() throws Exception {
+        String venda = vender(empresa.operadora(), item(racao, "1"), pagamento("PIX", "10"), "10.00");
+        cancelar(empresa.operadora(), venda, "Desistiu").andExpect(status().isOk());
+
+        detalhe(empresa.admin(), sessao)
+                .andExpect(jsonPath("$.formasDaContagem", org.hamcrest.Matchers.contains("DINHEIRO", "PIX")))
+                .andExpect(jsonPath("$.porForma[1].esperado").value(0.0));
+        contarPorForma(empresa.operadora(), sessao, "{\"DINHEIRO\":100}", null)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Informe o valor contado de PIX."));
+        contarPorForma(empresa.operadora(), sessao, "{\"DINHEIRO\":100,\"PIX\":0}", null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FECHADA"));
+    }
+
+    /** QA A9: o estorno igual ao dinheiro da gaveta passa; o PIX nao depende da gaveta. */
+    @Test
+    void estornoIgualAoDinheiroDaGavetaPassaEPixNaoDependeDaGaveta() throws Exception {
+        String venda = vender(empresa.operadora(), item(racao, "2"), pagamento("DINHEIRO", "10") + ","
+                + pagamento("PIX", "10"), "20.00");
+        lancar(empresa.admin(), sessao, "SANGRIA", "100.00").andExpect(status().isCreated());
+        detalhe(empresa.admin(), sessao).andExpect(jsonPath("$.dinheiroNaGaveta").value(10.0));
+
+        cancelar(empresa.operadora(), venda, "Desistiu").andExpect(status().isOk());
+
+        detalhe(empresa.admin(), sessao)
+                .andExpect(jsonPath("$.dinheiroNaGaveta").value(0.0))
+                .andExpect(jsonPath("$.porForma[1].forma").value("PIX"))
+                .andExpect(jsonPath("$.porForma[1].esperado").value(0.0));
+    }
+
+    private long contarLinhas(String tabela) {
+        return jdbcTemplate.queryForObject("SELECT count(*) FROM " + tabela + " WHERE empresa_id = ?", Long.class,
+                empresa.id());
     }
 
     @Test

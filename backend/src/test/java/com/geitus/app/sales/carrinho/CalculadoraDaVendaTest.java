@@ -345,6 +345,85 @@ class CalculadoraDaVendaTest {
                 "O valor da etiqueta deixa Bolo abaixo do preço mínimo (R$ 2,80 por UN)."));
     }
 
+    // ---------- QA A8 ----------
+
+    @Test
+    void descontoDoTotalRepartidoDeixaLinhaAbaixoDoMinimo() {
+        Produto comMinimo = produto("Ração premium", un, Precos.de("10.00").comMinimo("9.80"));
+        Produto livre = produto("Petisco", un, Precos.de("10.00"));
+
+        CalculoDaVenda calculo = CalculadoraDaVenda.calcular(
+                List.of(daUnidade(1, comMinimo, "1"), daUnidade(2, livre, "1")),
+                new DescontoInformado(TipoDesconto.VALOR, new BigDecimal("1.00")), List.of(), true, LIMITE_PADRAO,
+                HOJE);
+
+        assertThat(calculo.linhas().get(0).descontoRateado()).isEqualByComparingTo("0.50");
+        assertThat(calculo.erros()).containsExactly(new ErroDoCalculo("itens[0]",
+                "O desconto deixa Ração premium abaixo do preço mínimo (R$ 9,80 por UN)."));
+    }
+
+    @Test
+    void limiteDoOperadorSomaItemETotal() {
+        Produto item = produto("Item", un, Precos.de("100.00"));
+        LinhaParaCalculo comSeis = comDesconto(daUnidade(1, item, "1"), TipoDesconto.VALOR, "6.00");
+        DescontoInformado cinco = new DescontoInformado(TipoDesconto.VALOR, new BigDecimal("5.00"));
+
+        CalculoDaVenda soDoItem = CalculadoraDaVenda.calcular(List.of(comSeis), null, List.of(), false,
+                LIMITE_PADRAO, HOJE);
+        CalculoDaVenda soDoTotal = CalculadoraDaVenda.calcular(List.of(daUnidade(1, item, "1")), cinco, List.of(),
+                false, LIMITE_PADRAO, HOJE);
+        CalculoDaVenda somados = CalculadoraDaVenda.calcular(List.of(comSeis), cinco, List.of(), false,
+                LIMITE_PADRAO, HOJE);
+
+        assertThat(soDoItem.erros()).isEmpty();
+        assertThat(soDoTotal.erros()).isEmpty();
+        assertThat(somados.erros()).containsExactly(
+                new ErroDoCalculo("desconto", "O desconto passa do limite do operador (10%)."));
+    }
+
+    @Test
+    void etiquetaEEmbalagemNaoContamParaOAtacado() {
+        Produto agua = produto("Água", un, Precos.de("2.00").comAtacado("1.50", "3"));
+        ProdutoEmbalagem fardo = embalagem(agua, cx, "6", null);
+
+        CalculoDaVenda calculo = calcular(List.of(etiqueta(agua, TipoInformacaoEtiqueta.VALOR, "4.000"),
+                daEmbalagem(2, agua, fardo, "1"), daUnidade(3, agua, "2")));
+
+        assertThat(calculo.linhas().get(0).quantidade()).isEqualByComparingTo("2");
+        assertThat(calculo.linhas()).extracting(LinhaCalculada::origem).containsExactly(OrigemPrecoDaVenda.ETIQUETA,
+                OrigemPrecoDaVenda.EMBALAGEM, OrigemPrecoDaVenda.NORMAL);
+        assertThat(calculo.linhas().get(2).precoUnitario()).isEqualByComparingTo("2.00");
+    }
+
+    @Test
+    void atacadoDeixaDeValerQuandoASomaCai() {
+        Produto agua = produto("Água", un, Precos.de("2.00").comAtacado("1.50", "12"));
+
+        CalculoDaVenda comDoze = calcular(List.of(daUnidade(1, agua, "7"), daUnidade(2, agua, "5")));
+        CalculoDaVenda comOnze = calcular(List.of(daUnidade(1, agua, "7"), daUnidade(2, agua, "4")));
+
+        assertThat(comDoze.linhas()).extracting(LinhaCalculada::origem).containsOnly(OrigemPrecoDaVenda.ATACADO);
+        assertThat(comOnze.linhas()).extracting(LinhaCalculada::origem).containsOnly(OrigemPrecoDaVenda.NORMAL);
+        assertThat(comOnze.total()).isEqualByComparingTo("22.00");
+    }
+
+    /** A promocao vale ate o ultimo dia (inclusive) e deixa de valer no dia seguinte, a partir da meia-noite. */
+    @Test
+    void promocaoVaiAteOUltimoDiaEVenceNaMeiaNoite() {
+        Produto racao = produto("Ração", un, Precos.de("10.00").comPromocao("8.00"));
+        java.time.LocalDate ultimoDia = HOJE.plusDays(1);
+
+        CalculoDaVenda noUltimoDia = CalculadoraDaVenda.calcular(List.of(daUnidade(1, racao, "1")), null, List.of(),
+                true, LIMITE_PADRAO, ultimoDia);
+        CalculoDaVenda noDiaSeguinte = CalculadoraDaVenda.calcular(List.of(daUnidade(1, racao, "1")), null,
+                List.of(), true, LIMITE_PADRAO, ultimoDia.plusDays(1));
+
+        assertThat(noUltimoDia.linhas().get(0).origem()).isEqualTo(OrigemPrecoDaVenda.PROMOCIONAL);
+        assertThat(noUltimoDia.total()).isEqualByComparingTo("8.00");
+        assertThat(noDiaSeguinte.linhas().get(0).origem()).isEqualTo(OrigemPrecoDaVenda.NORMAL);
+        assertThat(noDiaSeguinte.total()).isEqualByComparingTo("10.00");
+    }
+
     // ---------- Pagamento (3.4) ----------
 
     @Test

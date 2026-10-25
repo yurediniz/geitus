@@ -26,14 +26,12 @@ class ConsultaDeVendasIT extends IntegracaoDoPdv {
     private EmpresaDoPdv empresa;
     private UUID racao;
     private Long bruno;
-    private String hoje;
 
     @BeforeEach
     void criarEmpresa() {
         empresa = pdv.novaEmpresa();
         racao = pdv.produto(empresa, NovoProduto.de("Ração", "UN", "10.00")).id();
         bruno = cenario.novoUsuario(empresa.caixa(), "Bruno Lima", "OPERADOR");
-        hoje = pdv.hoje().toString();
     }
 
     @Test
@@ -42,12 +40,14 @@ class ConsultaDeVendasIT extends IntegracaoDoPdv {
         abrirCaixa(bruno, cenario.novoPonto(empresa.caixa(), "Caixa 2"), "0.00");
         String daAna = vender(empresa.operadora(), item(racao, "1"), pagamento("DINHEIRO", "10"), "10.00");
         String doBruno = vender(bruno, item(racao, "2"), pagamento("PIX", "20"), "20.00");
+        String de = dataDaVenda(daAna);
+        String ate = dataDaVenda(doBruno);
 
-        vendas(empresa.operadora(), "?de=" + hoje)
+        vendas(empresa.operadora(), "?de=" + de)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.itens[*].id", contains(daAna)))
                 .andExpect(jsonPath("$.totalItens").value(1));
-        vendas(empresa.admin(), "?de=" + hoje + "&ate=" + hoje)
+        vendas(empresa.admin(), "?de=" + de + "&ate=" + ate)
                 .andExpect(jsonPath("$.itens[*].id", contains(doBruno, daAna)));
         venda(empresa.operadora(), doBruno).andExpect(status().isNotFound());
         venda(empresa.admin(), doBruno).andExpect(status().isOk())
@@ -79,16 +79,18 @@ class ConsultaDeVendasIT extends IntegracaoDoPdv {
         String primeira = vender(empresa.operadora(), item(racao, "1"), pagamento("DINHEIRO", "10"), "10.00");
         String segunda = vender(empresa.operadora(), item(racao, "2"), pagamento("DINHEIRO", "20"), "20.00");
         cancelar(empresa.operadora(), primeira, "Desistiu").andExpect(status().isOk());
+        String de = dataDaVenda(primeira);
+        String ate = dataDaVenda(segunda);
 
         vendas(empresa.operadora(), "?status=CANCELADA").andExpect(jsonPath("$.itens[*].id", contains(primeira)));
         vendas(empresa.operadora(), "?status=CONCLUIDA").andExpect(jsonPath("$.itens[*].id", contains(segunda)));
         vendas(empresa.operadora(), "?numero=2").andExpect(jsonPath("$.itens[*].id", contains(segunda)));
-        vendas(empresa.operadora(), "?de=" + hoje + "&ate=" + hoje).andExpect(jsonPath("$.itens", hasSize(2)));
-        String amanha = LocalDate.parse(hoje).plusDays(1).toString();
+        vendas(empresa.operadora(), "?de=" + de + "&ate=" + ate).andExpect(jsonPath("$.itens", hasSize(2)));
+        String amanha = LocalDate.parse(ate).plusDays(1).toString();
         vendas(empresa.operadora(), "?de=" + amanha).andExpect(jsonPath("$.itens", hasSize(0)));
-        vendas(empresa.operadora(), "?ate=" + LocalDate.parse(hoje).minusDays(1))
+        vendas(empresa.operadora(), "?ate=" + LocalDate.parse(de).minusDays(1))
                 .andExpect(jsonPath("$.itens", hasSize(0)));
-        vendas(empresa.operadora(), "?de=" + amanha + "&ate=" + hoje)
+        vendas(empresa.operadora(), "?de=" + amanha + "&ate=" + ate)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.campos[0].campo").value("de"));
         vendas(empresa.operadora(), "?tamanho=0").andExpect(status().isBadRequest());
@@ -117,7 +119,14 @@ class ConsultaDeVendasIT extends IntegracaoDoPdv {
         venda(outra.admin(), venda)
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.mensagem").value("Venda não encontrada."));
-        vendas(outra.admin(), "?de=" + hoje).andExpect(jsonPath("$.itens", hasSize(0)));
+        vendas(outra.admin(), "?de=" + dataDaVenda(venda)).andExpect(jsonPath("$.itens", hasSize(0)));
         vendas(outra.admin(), "?sessaoId=" + UUID.randomUUID()).andExpect(jsonPath("$.itens", hasSize(0)));
+    }
+
+    /** A data (em America/Sao_Paulo) em que a venda foi concluida, lida da propria venda: nao depende do relogio. */
+    private String dataDaVenda(String venda) throws Exception {
+        String concluidaEm = com.jayway.jsonpath.JsonPath.read(venda(empresa.admin(), venda)
+                .andReturn().getResponse().getContentAsString(), "$.concluidaEm");
+        return concluidaEm.substring(0, 10);
     }
 }

@@ -149,6 +149,37 @@ class FinalizarVendaIT extends IntegracaoDoPdv {
         assertThat(pdv.saldo(racao)).isEqualByComparingTo("3");
     }
 
+    /** QA A5: o limite do operador vale na finalizacao pelo perfil do banco (o token antigo de ADMIN nao basta). */
+    @Test
+    void descontoAcimaDoLimiteDoOperadorNaFinalizacao400() throws Exception {
+        UUID racao = pdv.produto(empresa, NovoProduto.de("Ração", "UN", "100.00")).id();
+        Long promovida = cenario.novoUsuario(empresa.caixa(), "Promovida", "ADMIN");
+        abrirCaixa(empresa.operadora(), empresa.ponto(), "0.00");
+        abrirCaixa(empresa.admin(), cenario.novoPonto(empresa.caixa(), "Caixa 2"), "0.00");
+        abrirCaixa(promovida, cenario.novoPonto(empresa.caixa(), "Caixa 3"), "0.00");
+        String tokenAntigo = cenario.token(promovida);
+        cenario.rebaixarParaOperador(promovida);
+
+        finalizar(empresa.operadora(), comDescontoDe15(racao))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("O desconto passa do limite do operador (10%)."))
+                .andExpect(jsonPath("$.campos[0].campo").value("desconto"));
+        finalizar(empresa.admin(), comDescontoDe15(racao)).andExpect(status().isCreated());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/pdv/vendas")
+                        .header("Authorization", tokenAntigo)
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content(comDescontoDe15(racao)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("desconto"));
+        assertThat(contarVendas()).isEqualTo(1);
+    }
+
+    private static String comDescontoDe15(UUID produto) {
+        return "{\"itens\":[" + item(produto, "1") + "],\"desconto\":{\"tipo\":\"PERCENTUAL\",\"valor\":15},"
+                + "\"pagamentos\":[" + pagamento("DINHEIRO", "85") + "],\"chave\":\"" + UUID.randomUUID()
+                + "\",\"totalEsperado\":85.00}";
+    }
+
     @Test
     void chaveComOutrosDados409() throws Exception {
         abrirCaixa(empresa.operadora(), empresa.ponto(), "100.00");

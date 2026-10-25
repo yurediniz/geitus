@@ -131,6 +131,24 @@ class CalculoIT extends IntegracaoDoPdv {
                 .andExpect(jsonPath("$.erros[0].campo").value("desconto"));
     }
 
+    /** QA A5: o limite configurado (12,5%) vale no calculo e sai formatado na mensagem. */
+    @Test
+    void limiteConfiguradoValeNoCalculo() throws Exception {
+        configurarPdv(empresa, true, "12.5");
+        UUID racao = pdv.produto(empresa, NovoProduto.de("Ração", "UN", "100.00")).id();
+
+        calcular(empresa.operadora(), "{\"itens\":[" + item(racao, "1") + "],\"desconto\":{\"tipo\":\"PERCENTUAL\","
+                + "\"valor\":12.5}}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.erros", hasSize(0)))
+                .andExpect(jsonPath("$.total").value(87.5));
+        calcular(empresa.operadora(), "{\"itens\":[" + item(racao, "1") + "],\"desconto\":{\"tipo\":\"PERCENTUAL\","
+                + "\"valor\":12.51}}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.erros[0].campo").value("desconto"))
+                .andExpect(jsonPath("$.erros[0].mensagem").value("O desconto passa do limite do operador (12,5%)."));
+    }
+
     /** Review Focus 4: o desconto do total ficou maior que o subtotal depois de tirar uma linha. */
     @Test
     void descontoDoTotalMaiorQueOSubtotalNoCampoDesconto() throws Exception {
