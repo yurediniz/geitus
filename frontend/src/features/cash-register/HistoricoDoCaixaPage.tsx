@@ -347,7 +347,7 @@ function TabelaDoHistorico({
                   <p key={forma} className="mt-1 text-xs">
                     <span className="text-muted-foreground">{`${ROTULO_DA_FORMA[forma]}: `}</span>
                     <TextoDaDiferenca
-                      valor={sessao.porForma.find((valores) => valores.forma === forma)?.diferenca ?? 0}
+                      valor={(sessao.porForma ?? []).find((valores) => valores.forma === forma)?.diferenca ?? 0}
                       className="whitespace-nowrap"
                     />
                   </p>

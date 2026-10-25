@@ -19,6 +19,7 @@ import { useBuscaComAtraso } from '@/hooks/useBuscaComAtraso'
 import { cn } from '@/lib/utils'
 import { HttpError } from '@/services/httpClient'
 import { buscarVenda, cancelarVenda, listarVendas } from '@/services/pdvService'
+import { FORMAS_DE_PAGAMENTO, type FormaDePagamento } from '@/types/caixa'
 import type { FiltrosDeVendas, Venda, VendaResumo } from '@/types/pdv'
 
 export interface JanelaVendasDoCaixaProps {
@@ -34,14 +35,36 @@ const MENSAGEM_SEM_MOTIVO = 'Informe o motivo do cancelamento.'
 const FALHA_AO_CANCELAR = 'Não foi possível cancelar a venda. Confira a conexão e tente de novo.'
 const VENDA_INDISPONIVEL = 'Esta venda não está mais disponível.'
 
-/** O que fazer depois do cancelamento: com dinheiro, quanto devolver (o recebido, sem o troco). */
+/** A forma na frase da devolucao, em minusculas: "em dinheiro", "no débito", "no crédito", "no PIX". */
+const DEVOLUCAO_NA_FORMA: Readonly<Record<FormaDePagamento, string>> = {
+  DINHEIRO: 'em dinheiro',
+  DEBITO: 'no débito',
+  CREDITO: 'no crédito',
+  PIX: 'no PIX',
+}
+
+/** "a", "a e b", "a, b e c". */
+function juntarComE(partes: readonly string[]): string {
+  return partes.length <= 1 ? (partes[0] ?? '') : `${partes.slice(0, -1).join(', ')} e ${partes[partes.length - 1]}`
+}
+
+/**
+ * O que devolver ao cliente depois do cancelamento, por forma, na ordem
+ * dinheiro, debito, credito e PIX. O dinheiro e o recebido (pago menos o troco).
+ */
 function mensagemDoCancelamento(venda: Venda): string {
-  const emDinheiro = venda.pagamentos
-    .filter((pagamento) => pagamento.forma === 'DINHEIRO')
-    .reduce((soma, pagamento) => soma + Math.round(pagamento.valor * 100), 0)
-  const devolver = emDinheiro - Math.round(venda.troco * 100)
-  return devolver > 0
-    ? `Venda nº ${venda.numero} cancelada. Devolva ${formatarReais(devolver / 100)} em dinheiro ao cliente.`
+  const centavosPorForma = new Map<FormaDePagamento, number>()
+  for (const pagamento of venda.pagamentos) {
+    centavosPorForma.set(pagamento.forma, (centavosPorForma.get(pagamento.forma) ?? 0) + Math.round(pagamento.valor * 100))
+  }
+  const troco = Math.round(venda.troco * 100)
+  centavosPorForma.set('DINHEIRO', (centavosPorForma.get('DINHEIRO') ?? 0) - troco)
+  const partes = FORMAS_DE_PAGAMENTO.flatMap((forma) => {
+    const centavos = centavosPorForma.get(forma) ?? 0
+    return centavos > 0 ? [`${formatarReais(centavos / 100)} ${DEVOLUCAO_NA_FORMA[forma]}`] : []
+  })
+  return partes.length > 0
+    ? `Venda nº ${venda.numero} cancelada. Devolva ao cliente ${juntarComE(partes)}.`
     : `Venda nº ${venda.numero} cancelada. Estoque e caixa estornados.`
 }
 
@@ -333,7 +356,8 @@ function DetalheDaVenda({
             <div className="min-w-0">
               <p className="font-medium">{item.nome}</p>
               <p className="text-xs text-muted-foreground tabular-nums">
-                {`${formatarQuantidade(item.quantidade)} ${item.embalagemRotulo ?? item.unidade} × ${formatarReais(item.precoUnitario)}`}
+                {/* O item da venda nao diz se a unidade e fracionada: quantidade quebrada sai com 3 casas, como na lista. */}
+                {`${formatarQuantidade(item.quantidade, item.embalagemRotulo === null && !Number.isInteger(item.quantidade))} ${item.embalagemRotulo ?? item.unidade} × ${formatarReais(item.precoUnitario)}`}
               </p>
             </div>
             <span className="shrink-0 font-semibold tabular-nums">{formatarReais(item.valorLiquido)}</span>

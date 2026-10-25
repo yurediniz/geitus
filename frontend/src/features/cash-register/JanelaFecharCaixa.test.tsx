@@ -269,6 +269,25 @@ describe('JanelaFecharCaixa', () => {
     })
   })
 
+  it('sessão sem porForma e formasDaContagem (backend antigo): só o dinheiro, sem quebrar', async () => {
+    const { porForma: _porForma, formasDaContagem: _formas, ...semCampos } = NAO_CEGO
+    contarMock.mockResolvedValue({ ...fechada(NAO_CEGO), valorContado: 320, diferenca: 0 })
+    renderJanela(semCampos as SessaoDeCaixa)
+
+    digitarContado('320,00')
+    expect(screen.getByText('Confere')).toBeInTheDocument()
+    enviar()
+
+    await waitFor(() => expect(contarMock).toHaveBeenCalledWith(NAO_CEGO.id, { contagens: { DINHEIRO: 320 }, justificativa: null }))
+  })
+
+  it('sessão em conferência sem porForma (backend antigo): o resultado do dinheiro', () => {
+    const { porForma: _porForma, formasDaContagem: _formas, ...semCampos } = emConferencia(CEGO)
+    const janela = renderJanela(semCampos as SessaoDeCaixa)
+
+    expect(within(janela).getByLabelText('Resultado da contagem')).toHaveTextContent('Falta de R$ 2,00')
+  })
+
   it('retomada: sessão EM_CONFERENCIA abre direto no passo da justificativa, com o foco nela', () => {
     const janela = renderJanela(emConferencia(CEGO))
 

@@ -769,6 +769,82 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
   })
 
   describe('vendas do caixa (F8)', () => {
+    it.each([
+      [
+        'dinheiro com troco e PIX',
+        [
+          { forma: 'DINHEIRO' as const, valor: 400 },
+          { forma: 'PIX' as const, valor: 46.3 },
+        ],
+        100,
+        'Venda nº 3 cancelada. Devolva ao cliente R$ 300,00 em dinheiro e R$ 46,30 no PIX.',
+      ],
+      [
+        'três formas',
+        [
+          { forma: 'PIX' as const, valor: 10 },
+          { forma: 'DINHEIRO' as const, valor: 20 },
+          { forma: 'DEBITO' as const, valor: 30 },
+        ],
+        0,
+        'Venda nº 3 cancelada. Devolva ao cliente R$ 20,00 em dinheiro, R$ 30,00 no débito e R$ 10,00 no PIX.',
+      ],
+      [
+        'crédito e o dinheiro todo virou troco',
+        [
+          { forma: 'DINHEIRO' as const, valor: 5 },
+          { forma: 'CREDITO' as const, valor: 40 },
+        ],
+        5,
+        'Venda nº 3 cancelada. Devolva ao cliente R$ 40,00 no crédito.',
+      ],
+    ])('a mensagem do cancelamento lista a devolução por forma (%s)', async (_caso, pagamentos, troco, mensagem) => {
+      const vendida = venda({ id: 'v-3', numero: 3, pagamentos, troco })
+      listarVendasMock.mockResolvedValue({ itens: [vendida], pagina: 0, tamanho: 50, totalItens: 1 })
+      buscarVendaMock.mockResolvedValue(vendida)
+      cancelarVendaMock.mockResolvedValue({ ...vendida, status: 'CANCELADA', podeCancelar: false })
+      renderPdv()
+      await campo()
+      await tecla('F8')
+      const janela = await screen.findByRole('dialog', { name: 'Vendas do caixa' })
+      fireEvent.click(await within(janela).findByRole('button', { name: /Nº 3/ }))
+      fireEvent.click(await within(janela).findByRole('button', { name: 'Cancelar venda' }))
+      fireEvent.change(within(janela).getByLabelText(/Motivo do cancelamento/), { target: { value: 'Cliente desistiu' } })
+      fireEvent.click(within(janela).getByRole('button', { name: 'Confirmar cancelamento' }))
+
+      expect(await within(janela).findByText(mensagem)).toBeInTheDocument()
+    })
+
+    it('o detalhe da venda mostra a quantidade fracionada com 3 casas', async () => {
+      listarVendasMock.mockResolvedValue({ itens: [vendaResumo()], pagina: 0, tamanho: 50, totalItens: 1 })
+      buscarVendaMock.mockResolvedValue(
+        venda({
+          itens: [
+            {
+              ordem: 1,
+              nome: 'Queijo minas',
+              embalagemRotulo: null,
+              quantidade: 0.5,
+              unidade: 'KG',
+              precoUnitario: 25,
+              origemPreco: 'ETIQUETA',
+              valorBruto: 12.5,
+              descontoItem: 0,
+              descontoRateado: 0,
+              valorLiquido: 12.5,
+            },
+          ],
+        }),
+      )
+      renderPdv()
+      await campo()
+      await tecla('F8')
+      const janela = await screen.findByRole('dialog', { name: 'Vendas do caixa' })
+      fireEvent.click(await within(janela).findByRole('button', { name: /Nº 128/ }))
+
+      expect(await within(janela).findByText(/^0,500 KG × R\$\s25,00$/)).toBeInTheDocument()
+    })
+
     it('lista a sessão atual; o detalhe mostra itens e pagamentos; cancela com o motivo', async () => {
       listarVendasMock.mockResolvedValue({
         itens: [
@@ -824,7 +900,7 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
       await waitFor(() => expect(cancelarVendaMock).toHaveBeenCalledWith('v-128', 'Cliente desistiu'))
       // UX 15: com dinheiro, quanto devolver.
       expect(
-        await within(janela).findByText('Venda nº 128 cancelada. Devolva R$ 74,70 em dinheiro ao cliente.'),
+        await within(janela).findByText('Venda nº 128 cancelada. Devolva ao cliente R$ 74,70 em dinheiro.'),
       ).toBeInTheDocument()
     })
 
@@ -919,7 +995,7 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
     fireEvent.change(within(janela).getByLabelText(/Motivo do cancelamento/), { target: { value: 'Erro' } })
     fireEvent.click(within(janela).getByRole('button', { name: 'Confirmar cancelamento' }))
 
-    expect(await within(janela).findByText('Venda nº 128 cancelada. Estoque e caixa estornados.')).toBeInTheDocument()
+    expect(await within(janela).findByText('Venda nº 128 cancelada. Devolva ao cliente R$ 74,70 no PIX.')).toBeInTheDocument()
   })
 
   it('UX 8: total mudou sem cobertura: "Ajustar pagamento" fecha só a janela interna e mantém as formas', async () => {

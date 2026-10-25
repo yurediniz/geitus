@@ -4,6 +4,7 @@ import {
   abertoEmOutroDia,
   diferencaEntre,
   formatarDataHoraCaixa,
+  formasComDiferenca,
   formatarDiferenca,
   formatarHora,
   formatarReais,
@@ -165,6 +166,11 @@ describe('formatacaoCaixa', () => {
       expect(mensagemDoFechamento('Caixa 1', 0, [valores('DINHEIRO', 0), valores('PIX', 0)])).toBe('Caixa 1 fechado')
       // Só o dinheiro na sessão: a mensagem de sempre, sem nomear a forma.
       expect(semNbsp(mensagemDoFechamento('Caixa 1', -2, [valores('DINHEIRO', -2)]))).toBe('Caixa 1 fechado com falta de R$ 2,00')
+    })
+
+    it('formas com diferença e mensagem do fechamento sem porForma (backend antigo)', () => {
+      expect(formasComDiferenca(undefined)).toEqual([])
+      expect(semNbsp(mensagemDoFechamento('Caixa 1', -2, undefined))).toBe('Caixa 1 fechado com falta de R$ 2,00')
     })
 
     it('mensagem do fechamento com o nome do ponto e a diferença', () => {

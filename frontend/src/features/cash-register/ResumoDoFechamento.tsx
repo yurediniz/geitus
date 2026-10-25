@@ -106,7 +106,9 @@ export function ResumoDoFechamento({ sessao }: { sessao: SessaoDeCaixa }) {
   const temVendasEmDinheiro = sessao.movimentos.some(
     (movimento) => movimento.forma === 'DINHEIRO' && (movimento.tipo === 'RECEBIMENTO' || movimento.tipo === 'ESTORNO'),
   )
-  const variasFormas = sessao.porForma.length > 1
+  // Backend antigo, sem `porForma`: so o dinheiro.
+  const porForma = sessao.porForma ?? []
+  const variasFormas = porForma.length > 1
 
   return (
     <div className="space-y-3 text-sm">
@@ -134,7 +136,7 @@ export function ResumoDoFechamento({ sessao }: { sessao: SessaoDeCaixa }) {
           </Linha>
         )}
       </dl>
-      {variasFormas && <TabelaPorForma porForma={sessao.porForma} />}
+      {variasFormas && <TabelaPorForma porForma={porForma} />}
       {sessao.justificativa && (
         <div className="rounded-md bg-muted/60 px-3 py-2">
           <p className="text-xs font-medium text-muted-foreground">Justificativa</p>

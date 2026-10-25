@@ -164,8 +164,9 @@ function juntarNomes(nomes: readonly string[]): string {
 }
 
 /** As formas (fora o dinheiro) com diferenca diferente de zero. */
-export function formasComDiferenca(porForma: readonly ValoresPorForma[]): FormaDePagamento[] {
-  return porForma
+export function formasComDiferenca(porForma: readonly ValoresPorForma[] | undefined): FormaDePagamento[] {
+  // Backend antigo, sem `porForma`: nenhuma forma alem do dinheiro.
+  return (porForma ?? [])
     .filter((valores) => valores.forma !== 'DINHEIRO' && valores.diferenca !== null && emCentavos(valores.diferenca) !== 0)
     .map((valores) => valores.forma)
 }
@@ -185,8 +186,9 @@ function textoDaSobraOuFalta(centavos: number): string {
 export function mensagemDoFechamento(
   nomeDoPonto: string,
   diferenca: number | null,
-  porForma: readonly ValoresPorForma[] = [],
+  porForma: readonly ValoresPorForma[] | undefined = [],
 ): string {
+  porForma ??= []
   const centavosDoDinheiro = diferenca === null ? 0 : emCentavos(diferenca)
   if (porForma.length <= 1) {
     return centavosDoDinheiro === 0 ? `${nomeDoPonto} fechado` : `${nomeDoPonto} fechado com ${textoDaSobraOuFalta(centavosDoDinheiro)}`

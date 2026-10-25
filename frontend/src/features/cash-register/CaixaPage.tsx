@@ -79,7 +79,7 @@ export function CaixaPage() {
 
   // O resumo recebe o foco ao aparecer (CaixaFechado).
   const aoFechado = (fechada: SessaoDeCaixa) => {
-    avisos.sucesso(mensagemDoFechamento(fechada.ponto.nome, fechada.diferenca, fechada.porForma))
+    avisos.sucesso(mensagemDoFechamento(fechada.ponto.nome, fechada.diferenca, fechada.porForma ?? []))
     if (sessaoVistaId !== null) {
       // ADMIN fechou o caixa de outra pessoa: continua nele, agora no resumo, com "Voltar".
       queryClient.setQueryData(chaveDaSessao(fechada.id), fechada)

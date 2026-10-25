@@ -196,8 +196,8 @@ function EmConferencia({ sessao }: { sessao: SessaoDeCaixa }) {
   return (
     <div className="space-y-2 rounded-md bg-warning-soft px-4 py-3 text-sm text-warning-soft-foreground">
       <p className="font-semibold">Contagem registrada · falta a justificativa</p>
-      {sessao.porForma.length > 1 ? (
-        sessao.porForma.map((valores) => (
+      {(sessao.porForma ?? []).length > 1 ? (
+        (sessao.porForma ?? []).map((valores) => (
           <div key={valores.forma} role="group" aria-label={ROTULO_DA_FORMA[valores.forma]} className="space-y-0.5">
             <p aria-hidden="true" className="text-xs font-medium text-foreground">
               {ROTULO_DA_FORMA[valores.forma]}

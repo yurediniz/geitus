@@ -3,8 +3,22 @@ import { render, screen, within } from '@testing-library/react'
 
 import { ResumoDoFechamento } from '@/features/cash-register/ResumoDoFechamento'
 import { movimentoDeTeste, sessaoDeTeste } from '@/test/fixturesCaixa'
+import type { SessaoDeCaixa } from '@/types/caixa'
 
 describe('ResumoDoFechamento', () => {
+  it('sessão sem porForma e formasDaContagem (backend antigo) não quebra a tela', () => {
+    const { porForma: _porForma, formasDaContagem: _formas, ...semCampos } = sessaoDeTeste({
+      status: 'FECHADA',
+      valorEsperado: 320,
+      valorContado: 318,
+      diferenca: -2,
+    })
+    render(<ResumoDoFechamento sessao={semCampos as SessaoDeCaixa} />)
+
+    expect(screen.getByText('Diferença').nextSibling).toHaveTextContent('Falta de R$ 2,00')
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+
   it('soma suprimentos e sangrias quando todos os valores estão visíveis', () => {
     render(<ResumoDoFechamento sessao={sessaoDeTeste()} />)
 

@@ -79,7 +79,7 @@ function esperadoDaForma(sessao: SessaoDeCaixa, forma: FormaDePagamento): number
   if (forma === 'DINHEIRO') {
     return sessao.dinheiroNaGaveta
   }
-  return sessao.porForma.find((valores) => valores.forma === forma)?.esperado ?? null
+  return (sessao.porForma ?? []).find((valores) => valores.forma === forma)?.esperado ?? null
 }
 
 /** Texto da janela conforme o passo, o modo, as formas e se quem fecha ve o esperado (`dinheiroNaGaveta`). */
@@ -307,7 +307,7 @@ function ConteudoFecharCaixa({
   const diferencaDoExemplo = conferencia
     ? primeiraDiferenca([
         { forma: 'DINHEIRO', valor: conferencia.diferenca },
-        ...conferencia.porForma.map((valores) => ({ forma: valores.forma, valor: valores.diferenca })),
+        ...(conferencia.porForma ?? []).map((valores) => ({ forma: valores.forma, valor: valores.diferenca })),
       ])
     : diferencaAoVivo
 
@@ -472,9 +472,9 @@ function ResultadoDaContagem({ sessao }: { sessao: SessaoDeCaixa }) {
       <h3 id={`${ID_RESULTADO}-titulo`} className="sr-only">
         Resultado da contagem
       </h3>
-      {sessao.porForma.length > 1 ? (
+      {(sessao.porForma ?? []).length > 1 ? (
         <div id={ID_RESULTADO} className="space-y-2">
-          {sessao.porForma.map((valores) => (
+          {(sessao.porForma ?? []).map((valores) => (
             <div key={valores.forma} role="group" aria-label={ROTULO_DA_FORMA[valores.forma]}>
               <ValoresDaForma
                 titulo={ROTULO_DA_FORMA[valores.forma]}

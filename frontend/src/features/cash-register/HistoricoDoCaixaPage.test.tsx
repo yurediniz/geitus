@@ -127,6 +127,15 @@ describe('HistoricoDoCaixaPage', () => {
     listarSessoesMock.mockResolvedValue(pagina([FECHADA_CONFERE, FECHADA_COM_FALTA, ABERTA, EM_CONFERENCIA]))
   })
 
+  it('sessões sem porForma e formasDaContagem (backend antigo) não derrubam o histórico', async () => {
+    const { porForma: _porForma, formasDaContagem: _formas, ...semCampos } = FECHADA_COM_FALTA
+    listarSessoesMock.mockResolvedValue(pagina([semCampos as SessaoDeCaixaResumo]))
+    renderPagina()
+
+    const tabela = await screen.findByRole('table', { name: 'Sessões de caixa' })
+    expect(within(tabela).getByText('Falta de R$ 2,00')).toBeInTheDocument()
+  })
+
   it('mostra as colunas e a diferença com cor (verde quando confere, âmbar quando não)', async () => {
     renderPagina()
 
