@@ -53,7 +53,7 @@ O campo **"Código ou nome"** tem sempre o foco. O texto lido é interpretado ne
    - O produto é o de **código** igual ao lido (número sem zeros à esquerda).
    - **Etiqueta de valor** (`VALOR`): o valor da linha é o valor da etiqueta.
      - Em unidade **fracionada**, a quantidade é valor ÷ preço vigente sem atacado, com 3 casas, arredondada meio para cima.
-     - Em unidade **não fracionada**, se o valor for múltiplo exato do preço, a quantidade é o quociente; senão, a quantidade é 1 e o valor é o da etiqueta.
+     - Em unidade **não fracionada** (decisão do usuário, §10): o valor da etiqueta precisa ser **exatamente o preço normal de 1 unidade**; senão, erro "O valor da etiqueta ({R$ x}) não confere com o preço de {nome} ({R$ normal}).". Aceita, a linha é 1 UN com o preço das regras normais (promoção e atacado, §3.2).
    - **Etiqueta de peso** (`PESO`): a quantidade é o peso lido, e o valor é quantidade × preço vigente sem atacado, arredondado a centavos meio para cima. Só vale para produto de unidade fracionada; senão: "Etiqueta de peso para produto que não é vendido por peso.".
    - **Linha nova:** cada etiqueta é sempre uma linha nova, com origem de preço `ETIQUETA`.
 2. **`código*quantidade`** ou só o código. A quantidade padrão é 1. O código pode ser:
@@ -497,3 +497,63 @@ Todas autenticadas e isoladas pela empresa do JWT. Recurso de outra empresa → 
   - decisão do modo cego com recebimentos (§3.9);
   - `sessaoAbertaDoUsuario` com `UsuarioAutenticado` e trava.
 - **DT-028 (parcial):** item de venda referencia o produto com FK `RESTRICT`; produto vendido não é excluído.
+
+## 10. Ajustes na implementação
+
+Decisões tomadas durante a implementação e as revisões (2026-10-24), que completam ou corrigem o texto acima.
+
+**Regras**
+- **Etiqueta só de produto vendido na balança.** A releitura da etiqueta só aceita produto com "vendido na balança" marcado; para os outros, "Código não encontrado." (segurança: impede forjar uma etiqueta de R$ 0,01 para qualquer produto). A linha de etiqueta confere **sempre** o preço mínimo, mesmo sem desconto: "O valor da etiqueta deixa {nome} abaixo do preço mínimo ({R$ x} por {sigla}).". A regra antiga "UN não múltiplo = 1 unidade pelo valor" foi **substituída** (ver abaixo).
+- **Etiqueta de produto vendido em UN (decisão do usuário):** a etiqueta precisa trazer exatamente o **preço normal** de 1 unidade, nem mais nem menos; senão, erro. Aceita, vira 1 UN cobrada pelas regras normais: promoção vigente e atacado, com as etiquetas de UN somando na quantidade do atacado junto com as unidades bipadas pelo código. Exemplo: Ração Gato 1 kg (normal R$ 10,00, promocional R$ 9,00, atacado R$ 8,50 a partir de 3 UN): a etiqueta de R$ 10,00 é cobrada a R$ 9,00; com 3 unidades na venda, R$ 8,50 cada; etiquetas de R$ 9,00 ou R$ 20,00 dão erro. A origem do preço é a da regra (`NORMAL`, `PROMOCIONAL` ou `ATACADO`). Produto por peso não tem essa conferência: a quantidade sai do valor.
+- **Desconto percentual arredonda para baixo** (a favor da loja): X% nunca passa de X%. Exemplo: 10% de R$ 2,45 = R$ 0,24.
+- **Preço mínimo nas outras linhas:** só é conferido quando há desconto, porque promoção, atacado e embalagem já são validados contra o mínimo no cadastro.
+- **Repartição do desconto do total:** os centavos vão para baixo e o resto vai para a linha de maior valor (empate: a primeira).
+- **Estoque negativo:** o banco aceita `saldo_novo >= 0 OR motivo = 'VENDA' OR tipo = 'ENTRADA'`. Sem a entrada, uma compra ou o estorno de outra venda com o saldo ainda negativo (−10 + 5 = −5) seriam recusados. O ajuste manual continua sem deixar negativo.
+- **Produto vendido** (com ou sem controle de estoque) não aparece como excluível: "Este produto já foi vendido e não pode ser excluído. Inative-o.".
+- **Limites de entrada:**
+  - valores com até 10 dígitos inteiros e 2 casas;
+  - quantidade com até 9 inteiros e 3 casas;
+  - `?codigo=` até 60 caracteres e `?busca=` até 100;
+  - a finalização recusa mais de 300 linhas **antes** de travar o caixa e os produtos.
+- **`GET /api/pdv/itens`** com `codigo` e `busca` juntos, ou sem nenhum: 400 "Informe o código ou o texto da busca.".
+- **Código alfanumérico:** todo texto sem espaço é tratado como código (Code128 e outros); texto com espaço abre a busca por nome. Um texto sem dígitos que não é código também abre a busca.
+- **Pagamentos gravados** com os valores normalizados pelo cálculo, não os do navegador.
+- **Modo cego:** a lista de vendas (F8) mostra, além do total, as formas e o troco de cada venda. A limitação aceita em §3.9 é essa.
+
+**Chave de idempotência (corrige §6.3)**
+- **Ciclo da chave:** ela **não** nasce ao abrir a janela de pagamento.
+  - Nasce na primeira tentativa de finalizar e fica guardada junto do carrinho, no navegador.
+  - É reaproveitada em qualquer nova tentativa, mesmo depois de fechar a janela ou recarregar a página.
+  - Só é trocada depois de sucesso ou de uma recusa definitiva.
+- **Depois de falha de rede:**
+  - o pagamento fica travado, com "A última tentativa pode ter sido registrada. Tente de novo com os mesmos valores.";
+  - "Descartar tentativa" pede para conferir em Vendas do caixa (F8) antes de liberar.
+- **409 "outros dados":** vira "Esta venda pode já ter sido registrada. Confira em Vendas do caixa (F8).".
+- **Venda repetida que volta cancelada:** "Esta venda já tinha sido registrada e depois cancelada. Confira em Vendas do caixa (F8).".
+- **Uma aba do PDV por usuário** no mesmo navegador (`navigator.locks`): duas abas apagariam a chave uma da outra e poderiam duplicar a venda.
+
+**Banco (V17)**
+- **Vendedor:** é sempre o dono da sessão (FK `fk_venda_sessao_do_vendedor` para `(empresa_id, id, aberta_por)`).
+- **Venda conferida no commit:** uma constraint trigger deferida confere a venda inteira no commit:
+  - pelo menos um item;
+  - somas dos itens iguais aos totais da venda;
+  - pagamentos − troco = total;
+  - troco ≤ dinheiro.
+- **Estornos presos à origem:**
+  - o estorno de caixa exige o recebimento da mesma venda, forma e valor, e a aplicação lê os recebimentos gravados;
+  - o cancelamento de estoque exige a baixa do mesmo item, com a quantidade oposta.
+- **Conferência por forma:**
+  - CHECKs da sessão trocados por gatilhos, com o esperado de cada forma conferido de novo na saída de `ABERTA`;
+  - a contagem trava a sessão com `FOR NO KEY UPDATE`.
+- **Índice da lista por sessão:** `(empresa_id, sessao_caixa_id, concluida_em DESC, id DESC)`.
+- **Ordem de travas:** sessão → produtos em ordem de `id` → saldos. O carrinho é montado depois de travar os produtos. A renomeação de marca também trava os produtos em ordem de `id`.
+
+**Frontend**
+- **Modo foco:** em `/pdv` a sidebar fica recolhida (botão "Menu"), e o total ajusta a fonte ao tamanho do texto.
+- **Última venda:** aparece no painel, abaixo do TOTAL, com o troco em destaque, até o primeiro item da próxima.
+- **Pagamento:** débito, crédito e PIX acima do que falta pagar são recusados na hora.
+- **Leitura:**
+  - leituras pendentes bloqueiam o F10 ("Aguarde a leitura…"), com tempo máximo de 8 s;
+  - o erro de leitura fica visível até a próxima recusa, até Esc ou por 6 s, e traz o código lido;
+  - o Del mostra "{nome} removido da venda." com Desfazer.
+- **F8:** paginação ("Carregar mais") e busca pelo número da venda. O filtro por ponto fica para depois.
