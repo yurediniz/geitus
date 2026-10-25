@@ -503,6 +503,34 @@ describe('JanelaFecharCaixa', () => {
       await waitFor(() => expect(aoConcluir).toHaveBeenCalled())
     })
 
+    it('PIX com movimento e esperado 0 (venda cancelada): o campo aparece, "0,00" confere e vai na contagem', async () => {
+      // Recebimento e estorno em PIX: a forma teve movimento, mas o esperado é zero.
+      const comPixZerado = sessaoDeTeste({
+        fechamentoCego: false,
+        dinheiroNaGaveta: 320,
+        formasDaContagem: ['DINHEIRO', 'PIX'],
+        porForma: [
+          { forma: 'DINHEIRO', esperado: 320, contado: null, diferenca: null },
+          { forma: 'PIX', esperado: 0, contado: null, diferenca: null },
+        ],
+      })
+      contarMock.mockResolvedValue(fechada(comPixZerado))
+      const janela = renderJanela(comPixZerado)
+
+      const pix = screen.getByLabelText('PIX contado')
+      expect(within(janela).getByText('Esperado R$ 0,00')).toBeInTheDocument()
+      digitarContado('320,00')
+      fireEvent.change(pix, { target: { value: '0,00' } })
+      expect(within(janela).getAllByText('Confere')).toHaveLength(2)
+      expect(screen.queryByLabelText(/justificativa/i)).not.toBeInTheDocument()
+      enviar()
+
+      await waitFor(() =>
+        expect(contarMock).toHaveBeenCalledWith(comPixZerado.id, { contagens: { DINHEIRO: 320, PIX: 0 }, justificativa: null }),
+      )
+      await waitFor(() => expect(aoConcluir).toHaveBeenCalled())
+    })
+
     it('forma sem valor não vai ao servidor: "Informe o valor contado de Débito."', async () => {
       renderJanela(NAO_CEGO_COM_DEBITO)
 

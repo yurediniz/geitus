@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -784,6 +784,89 @@ describe('PdvPage', () => {
     fireEvent.keyDown(campoDoCliente, { key: 'Enter' })
 
     await waitFor(() => expect(screen.getByLabelText('Cliente')).toHaveTextContent('Mariana Lopes'))
+  })
+
+  describe('erros de dados do cálculo (A6)', () => {
+    it('cálculo 409 itens[0] (produto inativado depois do bipe) marca a linha e bloqueia o F10', async () => {
+      calcularMock.mockRejectedValue(
+        new HttpError(409, 'Requisicao falhou (HTTP 409).', { 'itens[0]': 'Produto inativo — não pode ser vendido.' }),
+      )
+      renderPdv()
+      await ler('542')
+
+      await waitFor(() => expect(within(linhas()[0]).getByText('Produto inativo — não pode ser vendido.')).toBeInTheDocument())
+      expect(linhas()[0]).toHaveAccessibleDescription('Produto inativo — não pode ser vendido.')
+      expect(screen.getByRole('button', { name: /Pagamento/ })).toBeDisabled()
+
+      await tecla('F10')
+
+      expect(await screen.findByText('Corrija os erros da venda antes de pagar.')).toBeInTheDocument()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('cliente inativado: o 404 em clienteId mostra "Cliente não encontrado." e o F3 permite tirar o cliente', async () => {
+      listarClientesMock.mockResolvedValue([{ id: 'c-1', numero: 1, nome: 'Maria Silva', cpf: null, telefone: null } as Cliente])
+      renderPdv()
+      await ler('542')
+      await waitFor(() => expect(screen.getByRole('button', { name: /Pagamento/ })).toBeEnabled())
+      await tecla('F3')
+      const escolha = await screen.findByRole('dialog', { name: 'Cliente da venda' })
+      fireEvent.change(within(escolha).getByLabelText('Nome, CPF ou telefone'), { target: { value: 'Maria' } })
+      // O cliente foi inativado em outro lugar: o cálculo com ele dá 404 no campo clienteId.
+      calcularMock.mockImplementation(async (carrinho) => {
+        if (carrinho.clienteId) {
+          throw new HttpError(404, 'Requisicao falhou (HTTP 404).', { clienteId: 'Cliente não encontrado.' })
+        }
+        return calculoFalso(carrinho)
+      })
+      fireEvent.click(await within(escolha).findByRole('option', { name: /Maria Silva/ }))
+
+      expect(await screen.findByText('Cliente não encontrado.')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Pagamento/ })).toBeDisabled()
+
+      await tecla('F3')
+      const janela = await screen.findByRole('dialog', { name: 'Cliente da venda' })
+      fireEvent.click(within(janela).getByRole('button', { name: 'Tirar da venda' }))
+
+      await waitFor(() => expect(screen.queryByText('Cliente não encontrado.')).not.toBeInTheDocument())
+      expect(screen.getByLabelText('Cliente')).toHaveTextContent('Sem cliente')
+      await waitFor(() => expect(screen.getByRole('button', { name: /Pagamento/ })).toBeEnabled())
+    })
+  })
+
+  it('três leituras em menos de 150 ms viram um cálculo só (A10)', async () => {
+    renderPdv()
+    const entrada = await campo()
+    await waitFor(() => expect(screen.getByText('Caixa 1 · Ana Souza')).toBeInTheDocument())
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      for (const codigo of ['542', '900', '542']) {
+        fireEvent.change(entrada, { target: { value: codigo } })
+        fireEvent.keyDown(entrada, { key: 'Enter' })
+        // 40 ms entre as leituras: cada mudança reinicia a espera do cálculo.
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(40)
+        })
+      }
+      expect(linhas()).toHaveLength(2)
+      expect(calcularMock).not.toHaveBeenCalled()
+
+      // A espera conta da última mudança do carrinho: 149 ms sem cálculo, 150 ms e um pedido só.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(149)
+      })
+      expect(calcularMock).not.toHaveBeenCalled()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(calcularMock).toHaveBeenCalledTimes(1)
+      expect(ultimoCarrinho().itens.map((item) => [item.produtoId, item.quantidade])).toEqual([
+        ['p-racao', 2],
+        ['p-nexgard', 1],
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   describe('total sempre da venda atual (I2)', () => {

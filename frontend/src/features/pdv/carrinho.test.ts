@@ -106,6 +106,40 @@ describe('carrinho', () => {
       ).toBe(true)
     })
 
+    it('UN, CX e etiqueta do mesmo produto somam no saldo', () => {
+      // Saldo 10: 2 UN + 2 CX c/ 3 = 8; uma etiqueta de 3 passa do saldo.
+      let carrinho = ok(adicionarItem(CARRINHO_VAZIO, itemResolvido({ produto: NEXGARD, quantidade: 2 }), 'l-1', CONTROLADO))
+      carrinho = ok(
+        adicionarItem(
+          carrinho,
+          itemResolvido({ tipo: 'EMBALAGEM', produto: NEXGARD, embalagemId: 'e-cx3', quantidade: 2 }),
+          'l-2',
+          CONTROLADO,
+        ),
+      )
+      expect(quantidadeDeEstoque(carrinho, NEXGARD.id)).toBe(8)
+
+      expect(
+        adicionarItem(carrinho, itemResolvido({ tipo: 'ETIQUETA', produto: NEXGARD, quantidade: 3, codigoLido: '2000900030000' }), 'l-3', CONTROLADO),
+      ).toEqual({ ok: false, erro: 'Estoque insuficiente para Nexgard M (saldo 10 UN).' })
+      expect(
+        adicionarItem(carrinho, itemResolvido({ tipo: 'ETIQUETA', produto: NEXGARD, quantidade: 2, codigoLido: '2000900020000' }), 'l-3', CONTROLADO).ok,
+      ).toBe(true)
+    })
+
+    it('trocar 2 UN para 2 CX respeita o saldo', () => {
+      const comSaldo5 = { ...NEXGARD, saldo: 5 }
+      const unidade = ok(adicionarItem(CARRINHO_VAZIO, itemResolvido({ produto: comSaldo5, quantidade: 2 }), 'l-1', CONTROLADO))
+
+      // 2 CX c/ 3 = 6 UN > 5.
+      expect(trocarEmbalagem(unidade, 'l-1', 'e-cx3', CONTROLADO)).toEqual({
+        ok: false,
+        erro: 'Estoque insuficiente para Nexgard M (saldo 5 UN).',
+      })
+      // Com "Vender sem estoque" ligada, passa.
+      expect(trocarEmbalagem(unidade, 'l-1', 'e-cx3', LIVRE).ok).toBe(true)
+    })
+
     it('produto sem controle de estoque nunca é recusado pelo saldo', () => {
       const semControle = { ...RACAO, controlaEstoque: false, saldo: null }
       expect(adicionarItem(CARRINHO_VAZIO, itemResolvido({ produto: semControle, quantidade: 500 }), 'l-1', CONTROLADO).ok).toBe(

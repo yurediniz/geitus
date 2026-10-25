@@ -7,7 +7,7 @@ import { CampoMoeda } from '@/components/ui/campo-moeda'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatarReais, ROTULO_DA_FORMA } from '@/features/cash-register/formatacaoCaixa'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
-import { paraRequest, type Carrinho, type TentativaDeVenda } from '@/features/pdv/carrinho'
+import { paraRequest, type Carrinho, type TentativaDeVenda, type TravaDaTentativa } from '@/features/pdv/carrinho'
 import { classificarFalhaDaVenda, MENSAGEM_ABRA_O_CAIXA, MENSAGEM_TERMINE_O_FECHAMENTO } from '@/features/pdv/errosDaVenda'
 import { devolverFocoAoCampo } from '@/features/pdv/focoDoPdv'
 import { JanelaTotalMudou } from '@/features/pdv/JanelaTotalMudou'
@@ -172,7 +172,7 @@ function ConteudoDoPagamento({
     formasRef.current?.focus()
   }
 
-  const tratarFalha = async (falha: unknown, dados: FinalizarVendaRequest) => {
+  const tratarFalha = async (falha: unknown, dados: FinalizarVendaRequest, travaDoEnvio: TravaDaTentativa | null) => {
     const classificada = classificarFalhaDaVenda(falha)
     switch (classificada.tipo) {
       case 'REDE':
@@ -217,7 +217,13 @@ function ConteudoDoPagamento({
           return
         }
         if (relida === null || relida.status !== 'ABERTA' || relida.id !== sessaoId) {
-          aoMudarTentativa(null)
+          if (travaDoEnvio === null) {
+            aoMudarTentativa(null)
+          } else {
+            // A venda pode ter sido gravada antes (REDE) ou ja existe (OUTROS_DADOS): a chave e a trava ficam.
+            // Com o caixa reaberto, o "Tentar de novo" manda a mesma chave e o servidor devolve a venda original.
+            aoMudarTentativa({ chave: dados.chave, corpo: dados, trava: travaDoEnvio })
+          }
           aoCaixaMudou(classificada.mensagem, relida)
         } else {
           setErro(classificada.mensagem)
@@ -249,7 +255,7 @@ function ConteudoDoPagamento({
       .catch(async (falha: unknown) => {
         mudarEnvio(false)
         setTotalMudou(null)
-        await tratarFalha(falha, dados)
+        await tratarFalha(falha, dados, trava)
       })
   }
 

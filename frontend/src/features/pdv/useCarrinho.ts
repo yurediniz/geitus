@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import {
   adicionarItem,
@@ -66,14 +66,16 @@ export function useCarrinho(empresaId: number, usuarioId: number, opcoes: Opcoes
     opcoesRef.current = opcoes
   }, [opcoes])
 
-  useEffect(() => {
-    gravarNoNavegador(chave, guardado, empresaId, usuarioId)
-  }, [chave, guardado, empresaId, usuarioId])
-
-  const gravar = useCallback((novo: CarrinhoGuardado) => {
-    atualRef.current = novo
-    setGuardado(novo)
-  }, [])
+  // Grava na hora (e nao num efeito): a tela pode sair no mesmo render (ex.: o caixa fechou) e a
+  // chave pendente da venda nao pode ficar desatualizada no navegador.
+  const gravar = useCallback(
+    (novo: CarrinhoGuardado) => {
+      atualRef.current = novo
+      setGuardado(novo)
+      gravarNoNavegador(chave, novo, empresaId, usuarioId)
+    },
+    [chave, empresaId, usuarioId],
+  )
 
   /** Uma venda nova (limpar, retomar da espera): sem tentativa pendente. */
   const substituir = useCallback((carrinho: Carrinho) => gravar({ carrinho, tentativa: null }), [gravar])

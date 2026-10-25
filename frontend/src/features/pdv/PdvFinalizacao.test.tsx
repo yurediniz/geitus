@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 
 import { chaveDoCarrinho, lerCarrinhoGuardado, lerGuardado, type Carrinho } from '@/features/pdv/carrinho'
 import { PdvPage } from '@/features/pdv/PdvPage'
+import { MENSAGEM_TENTATIVA_PENDENTE } from '@/features/pdv/useCarrinho'
 import { chaveDasVendasEmEspera, guardarVendasEmEspera, type VendaEmEspera } from '@/features/pdv/vendasEmEspera'
 import { useAuth } from '@/hooks/useAuth'
 import { listarPontos, sessaoAtual } from '@/services/caixaService'
@@ -250,7 +251,15 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
       const antes = calcularMock.mock.calls.length
 
       await abrirPagamento()
-      await new Promise((resolve) => setTimeout(resolve, 300))
+      // Timers falsos no lugar da espera real: passa do atraso do cálculo sem depender do relógio.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      try {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1_000)
+        })
+      } finally {
+        vi.useRealTimers()
+      }
 
       expect(calcularMock.mock.calls.length).toBe(antes)
     })
@@ -429,6 +438,92 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
       await waitFor(() => expect(finalizarMock).toHaveBeenCalledTimes(2))
       expect(finalizarMock.mock.calls[1][0]).toEqual(finalizarMock.mock.calls[0][0])
       expect(await screen.findByText('Venda nº 131 concluída')).toBeInTheDocument()
+    })
+
+    it('a rede caiu e depois o caixa fechou: a tentativa continua com a mesma chave', async () => {
+      finalizarMock
+        .mockRejectedValueOnce(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
+        .mockRejectedValueOnce(new HttpError(409, 'Abra o caixa para vender.'))
+        .mockResolvedValueOnce(venda({ numero: 132, troco: 0 }))
+      listarPontosMock.mockResolvedValue([pontoDeTeste()])
+      const { unmount } = renderPdv()
+      await lancar('542')
+      const janela = await abrirPagamento()
+      await pagar(janela, '4')
+      await waitFor(() => expect(within(janela).getByRole('button', { name: /Finalizar venda/ })).toBeEnabled())
+      fireEvent.click(within(janela).getByRole('button', { name: /Finalizar venda/ }))
+      await within(janela).findByText(MENSAGEM_PODE_TER_SIDO_GRAVADA)
+      const chave = finalizarMock.mock.calls[0][0].chave
+      // O ADMIN fechou o caixa antes do "Tentar de novo".
+      sessaoAtualMock.mockResolvedValue(null)
+      fireEvent.click(within(janela).getByRole('button', { name: 'Tentar de novo' }))
+
+      expect(await screen.findByRole('heading', { name: 'Abra o caixa para vender.' })).toBeInTheDocument()
+      expect(lerGuardado(localStorage.getItem(chaveDoCarrinho(EMPRESA, USUARIO)), EMPRESA, USUARIO).tentativa).toMatchObject({
+        chave,
+        trava: 'REDE',
+      })
+      unmount()
+
+      // O caixa foi reaberto: a mesma chave volta no "Tentar de novo" (o backend devolve a venda original).
+      sessaoAtualMock.mockResolvedValue(sessaoDeTeste())
+      renderPdv()
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+      await tecla('F10')
+      const reaberta = await screen.findByRole('dialog', { name: 'Pagamento' })
+      fireEvent.click(within(reaberta).getByRole('button', { name: 'Tentar de novo' }))
+
+      await waitFor(() => expect(finalizarMock).toHaveBeenCalledTimes(3))
+      expect(finalizarMock.mock.calls.map(([dados]) => dados.chave)).toEqual([chave, chave, chave])
+      expect(await screen.findByRole('status', { name: 'Última venda' })).toHaveTextContent('Venda nº 132 concluída')
+    })
+
+    it('com a tentativa travada, bipar, +, F6 e Retomar são recusados', async () => {
+      finalizarMock.mockRejectedValue(new HttpError(0, 'Nao foi possivel conectar ao servidor.'))
+      const emEspera: VendaEmEspera = {
+        id: 'v-espera',
+        criadaEm: '2026-10-24T18:00:00-03:00',
+        itens: 1,
+        total: 89.9,
+        carrinho: {
+          linhas: [{ id: 'l-e', produto: NEXGARD, embalagemId: null, quantidade: 1, codigoLido: '900', etiqueta: false, desconto: null }],
+          desconto: null,
+          cliente: null,
+        },
+      }
+      localStorage.setItem(chaveDasVendasEmEspera(EMPRESA, USUARIO), guardarVendasEmEspera([emEspera], EMPRESA, USUARIO))
+      renderPdv()
+      await lancar('542')
+      const janela = await abrirPagamento()
+      await pagar(janela, '4')
+      await waitFor(() => expect(within(janela).getByRole('button', { name: /Finalizar venda/ })).toBeEnabled())
+      fireEvent.click(within(janela).getByRole('button', { name: /Finalizar venda/ }))
+      await within(janela).findByText(MENSAGEM_PODE_TER_SIDO_GRAVADA)
+      fireEvent.keyDown(janela, { key: 'Escape' })
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      const corpo = guardado()
+      const recusado = await screen.findByText.bind(screen)
+
+      await ler('900')
+      expect(await recusado(MENSAGEM_TENTATIVA_PENDENTE)).toBeInTheDocument()
+      await tecla('Escape')
+      await tecla('+')
+      expect(await recusado(MENSAGEM_TENTATIVA_PENDENTE)).toBeInTheDocument()
+      await tecla('Escape')
+      await tecla('F6')
+      expect(await recusado(MENSAGEM_TENTATIVA_PENDENTE)).toBeInTheDocument()
+      await tecla('F7')
+      const espera = await screen.findByRole('dialog', { name: 'Vendas em espera' })
+      fireEvent.click(within(espera).getByRole('button', { name: 'Retomar' }))
+      fireEvent.click(await within(espera).findByRole('button', { name: 'Pôr em espera e retomar' }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(await recusado(MENSAGEM_TENTATIVA_PENDENTE)).toBeInTheDocument()
+      // Nada mudou: o mesmo carrinho (1 Ração), a mesma tentativa e a venda continua em espera.
+      expect(guardado()).toEqual(corpo)
+      expect(guardado().linhas).toEqual([expect.objectContaining({ quantidade: 1, produto: expect.objectContaining({ id: 'p-racao' }) })])
+      expect(lerGuardado(localStorage.getItem(chaveDoCarrinho(EMPRESA, USUARIO)), EMPRESA, USUARIO).tentativa?.trava).toBe('REDE')
+      expect(localStorage.getItem(chaveDasVendasEmEspera(EMPRESA, USUARIO))).toContain('v-espera')
     })
 
     it('"Descartar tentativa" pede confirmação, libera a edição e a próxima tentativa usa outra chave', async () => {
