@@ -44,6 +44,7 @@ public final class CalculadoraDaVenda {
     public static final String MENSAGEM_LIMITE_DE_LINHAS = "A venda atingiu o limite de 300 itens.";
     static final String MENSAGEM_PESO_SEM_FRACAO = "Etiqueta de peso para produto que não é vendido por peso.";
     static final String MENSAGEM_SEM_PRECO = "Produto sem preço de venda.";
+    static final String MENSAGEM_ETIQUETA_FORA_DO_PRECO = "O valor da etiqueta (%s) não confere com o preço de %s (%s).";
     static final String MENSAGEM_VALOR_DO_ITEM_ACIMA = "O valor do item passa do limite.";
     static final String MENSAGEM_TOTAL_ACIMA = "O total da venda passa do limite.";
     static final String MENSAGEM_DESCONTO_NEGATIVO = "O desconto não pode ser negativo.";
@@ -123,7 +124,7 @@ public final class CalculadoraDaVenda {
         List<LinhaPrecificada> precificadas = new ArrayList<>();
         for (LinhaParaCalculo linha : linhas) {
             LinhaPrecificada semDesconto = linha.etiqueta() != null
-                    ? daEtiqueta(linha, hoje, erros)
+                    ? daEtiqueta(linha, unidadesPorProduto, hoje, erros)
                     : daQuantidade(linha, unidadesPorProduto, hoje, erros);
             if (semDesconto.valorBruto().compareTo(LIMITE_DE_VALOR) > 0) {
                 erros.add(new ErroDoCalculo(linha.campo(), MENSAGEM_VALOR_DO_ITEM_ACIMA));
@@ -136,17 +137,29 @@ public final class CalculadoraDaVenda {
     }
 
     /**
-     * Soma das quantidades validas das linhas de unidade (nem etiqueta, nem
-     * embalagem) de cada produto: decide o atacado de todas elas (3.2).
+     * Soma das quantidades validas das linhas de unidade (sem embalagem) e das
+     * etiquetas de UN aceitas (1 cada) de cada produto: decide o atacado de
+     * todas elas (3.2). A etiqueta de produto fracionado nao entra.
      */
     private static Map<Long, BigDecimal> quantidadesDasUnidades(List<LinhaParaCalculo> linhas) {
         Map<Long, BigDecimal> somas = new HashMap<>();
         for (LinhaParaCalculo linha : linhas) {
             if (linha.daUnidade() && quantidadeValida(linha)) {
                 somas.merge(linha.produto().getId(), linha.quantidade(), BigDecimal::add);
+            } else if (etiquetaDeUnidadeAceita(linha)) {
+                somas.merge(linha.produto().getId(), BigDecimal.ONE, BigDecimal::add);
             }
         }
         return somas;
+    }
+
+    /** Etiqueta de VALOR de produto em unidade inteira com exatamente o preco de venda normal de 1 unidade. */
+    private static boolean etiquetaDeUnidadeAceita(LinhaParaCalculo linha) {
+        LeituraEtiqueta leitura = linha.etiqueta();
+        Produto produto = linha.produto();
+        return leitura != null && leitura.tipo() == TipoInformacaoEtiqueta.VALOR
+                && !produto.getUnidade().isFracionada() && produto.getPrecoVenda().signum() > 0
+                && emReais(leitura.valor()).compareTo(produto.getPrecoVenda()) == 0;
     }
 
     private static LinhaPrecificada daQuantidade(LinhaParaCalculo linha, Map<Long, BigDecimal> unidadesPorProduto,
@@ -177,32 +190,40 @@ public final class CalculadoraDaVenda {
     }
 
     /**
-     * Etiqueta de balanca (3.1), sempre com o preco vigente sem atacado. Valor:
-     * fracionada, a quantidade e valor / preco (3 casas); nao fracionada, o
-     * quociente exato ou 1 pelo valor da etiqueta. Peso: so em unidade
-     * fracionada, e o valor e peso x preco.
+     * Etiqueta de balanca (3.1).
+     * <ul>
+     *   <li>Produto fracionado: valor, a quantidade e valor / preco vigente sem
+     *       atacado (3 casas) e o valor e o da etiqueta; peso, o valor e peso x
+     *       preco.</li>
+     *   <li>Produto em unidade inteira: so etiqueta de valor, com exatamente o
+     *       preco de venda normal de 1 unidade; a linha e 1 UN com o preco das
+     *       regras da unidade (promocional, atacado pela soma com as linhas de
+     *       unidade). Peso: recusada.</li>
+     * </ul>
      */
-    private static LinhaPrecificada daEtiqueta(LinhaParaCalculo linha, LocalDate hoje, List<ErroDoCalculo> erros) {
+    private static LinhaPrecificada daEtiqueta(LinhaParaCalculo linha, Map<Long, BigDecimal> unidadesPorProduto,
+            LocalDate hoje, List<ErroDoCalculo> erros) {
         LeituraEtiqueta leitura = linha.etiqueta();
         Produto produto = linha.produto();
-        boolean fracionada = produto.getUnidade().isFracionada();
         BigDecimal preco = PrecoDeVenda.vigenteSemAtacado(produto, hoje).precoUnitario();
-        if (preco.signum() <= 0) {
+        if (preco.signum() <= 0 || produto.getPrecoVenda().signum() <= 0) {
             // Sem preco nao ha quantidade a calcular (seria uma divisao por zero): linha zerada e o erro.
             erros.add(new ErroDoCalculo(linha.campo(), MENSAGEM_SEM_PRECO));
             BigDecimal zero = emQuantidade(BigDecimal.ZERO);
             return semDesconto(linha, zero, zero, ZERO, OrigemPrecoDaVenda.ETIQUETA, ZERO);
         }
+        if (!produto.getUnidade().isFracionada()) {
+            return daEtiquetaDeUnidade(linha, unidadesPorProduto, hoje, erros);
+        }
         LinhaPrecificada precificada;
         if (leitura.tipo() == TipoInformacaoEtiqueta.PESO) {
-            if (!fracionada) {
-                erros.add(new ErroDoCalculo(linha.campo(), MENSAGEM_PESO_SEM_FRACAO));
-            }
             BigDecimal peso = emQuantidade(leitura.valor());
             precificada = semDesconto(linha, peso, peso, preco, OrigemPrecoDaVenda.ETIQUETA,
                     emReais(peso.multiply(preco)));
         } else {
-            precificada = daEtiquetaDeValor(linha, emReais(leitura.valor()), preco, fracionada);
+            BigDecimal valor = emReais(leitura.valor());
+            BigDecimal quantidade = valor.divide(preco, QuantidadeDaLinha.CASAS, RoundingMode.HALF_UP);
+            precificada = semDesconto(linha, quantidade, quantidade, preco, OrigemPrecoDaVenda.ETIQUETA, valor);
         }
         if (precificada.quantidade().signum() <= 0) {
             erros.add(new ErroDoCalculo(linha.campo(), QuantidadeDaLinha.MENSAGEM_NAO_POSITIVA));
@@ -210,19 +231,21 @@ public final class CalculadoraDaVenda {
         return precificada;
     }
 
-    private static LinhaPrecificada daEtiquetaDeValor(LinhaParaCalculo linha, BigDecimal valor, BigDecimal preco,
-            boolean fracionada) {
-        if (fracionada) {
-            BigDecimal quantidade = valor.divide(preco, QuantidadeDaLinha.CASAS, RoundingMode.HALF_UP);
-            return semDesconto(linha, quantidade, quantidade, preco, OrigemPrecoDaVenda.ETIQUETA, valor);
-        }
-        BigDecimal[] quocienteEResto = valor.divideAndRemainder(preco);
-        if (quocienteEResto[1].signum() == 0 && quocienteEResto[0].signum() > 0) {
-            BigDecimal quantidade = emQuantidade(quocienteEResto[0]);
-            return semDesconto(linha, quantidade, quantidade, preco, OrigemPrecoDaVenda.ETIQUETA, valor);
+    /** 1 UN com o preco das regras da unidade; a etiqueta de peso e a de outro valor sao recusadas. */
+    private static LinhaPrecificada daEtiquetaDeUnidade(LinhaParaCalculo linha,
+            Map<Long, BigDecimal> unidadesPorProduto, LocalDate hoje, List<ErroDoCalculo> erros) {
+        Produto produto = linha.produto();
+        if (linha.etiqueta().tipo() == TipoInformacaoEtiqueta.PESO) {
+            erros.add(new ErroDoCalculo(linha.campo(), MENSAGEM_PESO_SEM_FRACAO));
+        } else if (!etiquetaDeUnidadeAceita(linha)) {
+            erros.add(new ErroDoCalculo(linha.campo(), MENSAGEM_ETIQUETA_FORA_DO_PRECO.formatted(
+                    FormatoBrasileiro.reais(linha.etiqueta().valor()), produto.getNome(),
+                    FormatoBrasileiro.reais(produto.getPrecoVenda()))));
         }
         BigDecimal uma = emQuantidade(BigDecimal.ONE);
-        return semDesconto(linha, uma, uma, valor, OrigemPrecoDaVenda.ETIQUETA, valor);
+        PrecoAplicado preco = precoDaUnidade(produto, unidadesPorProduto.get(produto.getId()), hoje);
+        return semDesconto(linha, uma, uma, preco.precoUnitario(), OrigemPrecoDaVenda.da(preco.origem()),
+                emReais(preco.precoUnitario()));
     }
 
     private static LinhaPrecificada semDesconto(LinhaParaCalculo linha, BigDecimal quantidade,
@@ -359,7 +382,7 @@ public final class CalculadoraDaVenda {
             BigDecimal piso = emReais(minimo.multiply(linha.quantidadeEstoque()));
             boolean temDesconto = linha.descontoItem().add(linha.descontoRateado()).signum() > 0;
             String mensagem = null;
-            if (linha.etiqueta() && linha.valorBruto().compareTo(piso) < 0) {
+            if (linha.origem() == OrigemPrecoDaVenda.ETIQUETA && linha.valorBruto().compareTo(piso) < 0) {
                 mensagem = MENSAGEM_ETIQUETA_ABAIXO_DO_MINIMO;
             } else if (temDesconto && linha.valorLiquido().compareTo(piso) < 0) {
                 mensagem = MENSAGEM_PRECO_MINIMO;

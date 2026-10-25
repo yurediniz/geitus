@@ -278,6 +278,26 @@ class FinalizarVendaIT extends IntegracaoDoPdv {
                 """, Long.class, empresa.id())).isEqualTo(1);
     }
 
+    /** Etiqueta de UN na venda: 1 UN cada, somando no atacado com a linha de unidade; baixa 1 por etiqueta. */
+    @Test
+    void vendaComEtiquetasDeUnNoAtacado() throws Exception {
+        abrirCaixa(empresa.operadora(), empresa.ponto(), "0.00");
+        UUID racao = pdv.produto(empresa, NovoProduto.de("Ração Gato 1 kg", "UN", "10.00").emPromocao("9.00")
+                .comAtacado("8.50", "3").naBalanca(542).comEstoque("10")).id();
+        String etiqueta = "{\"produtoId\":\"" + racao + "\",\"codigoLido\":\"2000542010000\",\"etiqueta\":true}";
+
+        finalizar(empresa.operadora(), vendaJson(etiqueta + "," + etiqueta + "," + item(racao, "1"),
+                pagamento("PIX", "25.50"), "25.50", UUID.randomUUID()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.total").value(25.5))
+                .andExpect(jsonPath("$.itens[0].etiqueta").value(true))
+                .andExpect(jsonPath("$.itens[0].codigoLido").value("2000542010000"))
+                .andExpect(jsonPath("$.itens[0].origemPreco").value("ATACADO"))
+                .andExpect(jsonPath("$.itens[0].quantidade").value(1.0));
+
+        assertThat(pdv.saldo(racao)).isEqualByComparingTo("7");
+    }
+
     /** BACK-I2: produto vendido sem controle de estoque (sem movimento) tambem nao e excluivel. */
     @Test
     void produtoVendidoSemControleNaoEExcluivel() throws Exception {

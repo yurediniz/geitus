@@ -155,9 +155,11 @@ CREATE TABLE itens_venda (
     CONSTRAINT ck_item_venda_quantidade_estoque CHECK (
         (embalagem_quantidade IS NULL AND quantidade_estoque = quantidade)
         OR (embalagem_quantidade IS NOT NULL AND quantidade_estoque = quantidade * embalagem_quantidade)),
-    -- A origem acompanha o tipo da linha.
+    -- A origem acompanha o tipo da linha: ETIQUETA so em linha de etiqueta (a
+    -- etiqueta de produto fracionado); a etiqueta de UN tem o preco das regras
+    -- da unidade (NORMAL, PROMOCIONAL ou ATACADO); EMBALAGEM so com o retrato.
     CONSTRAINT ck_item_venda_origem_da_linha CHECK (
-        (etiqueta = (origem_preco = 'ETIQUETA'))
+        (origem_preco <> 'ETIQUETA' OR etiqueta)
         AND ((embalagem_rotulo IS NOT NULL) = (origem_preco = 'EMBALAGEM'))),
     CONSTRAINT ck_item_venda_custo CHECK (custo_unitario IS NULL OR custo_unitario >= 0)
 );

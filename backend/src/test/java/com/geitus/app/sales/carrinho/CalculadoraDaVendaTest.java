@@ -49,26 +49,70 @@ class CalculadoraDaVendaTest {
         assertThat(linha.etiqueta()).isTrue();
     }
 
-    @Test
-    void etiquetaDeValorEmUnMultiploDoPrecoViraQuantidadeInteira() {
-        Produto pao = produto("Pão", un, Precos.de("5.00"));
+    // Etiqueta de UN (decisao do usuario): o valor e exatamente o preco normal de 1 unidade; a linha e 1 UN
+    // com o preco das regras da unidade. Exemplo: Racao Gato 1 kg, normal 10,00, promocional 9,00 e atacado
+    // 8,50 a partir de 3 UN.
 
-        LinhaCalculada linha = umaLinha(etiqueta(pao, TipoInformacaoEtiqueta.VALOR, "10.000"));
-
-        assertThat(linha.quantidade()).isEqualByComparingTo("2");
-        assertThat(linha.precoUnitario()).isEqualByComparingTo("5.00");
-        assertThat(linha.valorBruto()).isEqualByComparingTo("10.00");
+    private Produto racaoGato() {
+        return produto("Ração Gato 1 kg", un, Precos.de("10.00").comPromocao("9.00").comAtacado("8.50", "3"));
     }
 
     @Test
-    void etiquetaDeValorEmUnNaoMultiploViraUmaUnidadePeloValor() {
-        Produto bolo = produto("Bolo", un, Precos.de("3.00"));
-
-        LinhaCalculada linha = umaLinha(etiqueta(bolo, TipoInformacaoEtiqueta.VALOR, "10.000"));
+    void etiquetaDeUnComOPrecoNormalViraUmaUnidadeComAPromocao() {
+        LinhaCalculada linha = umaLinha(etiquetaNa(1, racaoGato(), "10.000"));
 
         assertThat(linha.quantidade()).isEqualByComparingTo("1");
-        assertThat(linha.precoUnitario()).isEqualByComparingTo("10.00");
-        assertThat(linha.valorBruto()).isEqualByComparingTo("10.00");
+        assertThat(linha.quantidadeEstoque()).isEqualByComparingTo("1");
+        assertThat(linha.precoUnitario()).isEqualByComparingTo("9.00");
+        assertThat(linha.valorBruto()).isEqualByComparingTo("9.00");
+        assertThat(linha.origem()).isEqualTo(OrigemPrecoDaVenda.PROMOCIONAL);
+        assertThat(linha.etiqueta()).isTrue();
+    }
+
+    @Test
+    void tresEtiquetasDeUnAtingemOAtacado() {
+        Produto racao = racaoGato();
+
+        CalculoDaVenda calculo = calcular(List.of(etiquetaNa(1, racao, "10.000"), etiquetaNa(2, racao, "10.000"),
+                etiquetaNa(3, racao, "10.000")));
+
+        assertThat(calculo.erros()).isEmpty();
+        assertThat(calculo.linhas()).extracting(LinhaCalculada::origem).containsOnly(OrigemPrecoDaVenda.ATACADO);
+        assertThat(calculo.total()).isEqualByComparingTo("25.50");
+    }
+
+    @Test
+    void duasEtiquetasDeUnEUmaLinhaDeUnidadeSomamNoAtacado() {
+        Produto racao = racaoGato();
+
+        CalculoDaVenda calculo = calcular(List.of(etiquetaNa(1, racao, "10.000"), daUnidade(2, racao, "1"),
+                etiquetaNa(3, racao, "10.000")));
+
+        assertThat(calculo.erros()).isEmpty();
+        assertThat(calculo.linhas()).extracting(LinhaCalculada::precoUnitario)
+                .usingElementComparator(BigDecimal::compareTo)
+                .containsExactly(new BigDecimal("8.50"), new BigDecimal("8.50"), new BigDecimal("8.50"));
+    }
+
+    @Test
+    void etiquetaDeUnComValorDiferenteDoNormalRecusada() {
+        for (String valor : List.of("9.000", "20.000")) {
+            CalculoDaVenda calculo = calcular(List.of(etiquetaNa(1, racaoGato(), valor)));
+
+            assertThat(calculo.erros()).containsExactly(new ErroDoCalculo("itens[0]",
+                    "O valor da etiqueta (" + com.geitus.app.shared.formato.FormatoBrasileiro.reais(new BigDecimal(valor))
+                            + ") não confere com o preço de Ração Gato 1 kg (R$ 10,00)."));
+        }
+    }
+
+    @Test
+    void etiquetaDeUnSemPromocaoSaiNormal() {
+        Produto pao = produto("Pão", un, Precos.de("5.00"));
+
+        LinhaCalculada linha = umaLinha(etiquetaNa(1, pao, "5.000"));
+
+        assertThat(linha.origem()).isEqualTo(OrigemPrecoDaVenda.NORMAL);
+        assertThat(linha.valorBruto()).isEqualByComparingTo("5.00");
     }
 
     @Test
@@ -337,12 +381,12 @@ class CalculadoraDaVendaTest {
 
     @Test
     void etiquetaDeValorAbaixoDoMinimoMesmoSemDesconto() {
-        Produto bolo = produto("Bolo", un, Precos.de("3.00").comMinimo("2.80"));
+        Produto queijo = produto("Queijo", kg, Precos.de("25.00").comMinimo("30.00"));
 
-        CalculoDaVenda calculo = calcular(List.of(etiqueta(bolo, TipoInformacaoEtiqueta.VALOR, "2.500")));
+        CalculoDaVenda calculo = calcular(List.of(etiqueta(queijo, TipoInformacaoEtiqueta.VALOR, "10.000")));
 
         assertThat(calculo.erros()).containsExactly(new ErroDoCalculo("itens[0]",
-                "O valor da etiqueta deixa Bolo abaixo do preço mínimo (R$ 2,80 por UN)."));
+                "O valor da etiqueta deixa Queijo abaixo do preço mínimo (R$ 30,00 por KG)."));
     }
 
     // ---------- QA A8 ----------
@@ -382,17 +426,17 @@ class CalculadoraDaVendaTest {
     }
 
     @Test
-    void etiquetaEEmbalagemNaoContamParaOAtacado() {
-        Produto agua = produto("Água", un, Precos.de("2.00").comAtacado("1.50", "3"));
-        ProdutoEmbalagem fardo = embalagem(agua, cx, "6", null);
+    void etiquetaDeKgEEmbalagemNaoContamParaOAtacado() {
+        Produto queijo = produto("Queijo", kg, Precos.de("25.00").comAtacado("20.00", "3"));
+        ProdutoEmbalagem peca = embalagem(queijo, cx, "5", null);
 
-        CalculoDaVenda calculo = calcular(List.of(etiqueta(agua, TipoInformacaoEtiqueta.VALOR, "4.000"),
-                daEmbalagem(2, agua, fardo, "1"), daUnidade(3, agua, "2")));
+        CalculoDaVenda calculo = calcular(List.of(etiqueta(queijo, TipoInformacaoEtiqueta.VALOR, "50.000"),
+                daEmbalagem(2, queijo, peca, "1"), daUnidade(3, queijo, "2.5")));
 
         assertThat(calculo.linhas().get(0).quantidade()).isEqualByComparingTo("2");
         assertThat(calculo.linhas()).extracting(LinhaCalculada::origem).containsExactly(OrigemPrecoDaVenda.ETIQUETA,
                 OrigemPrecoDaVenda.EMBALAGEM, OrigemPrecoDaVenda.NORMAL);
-        assertThat(calculo.linhas().get(2).precoUnitario()).isEqualByComparingTo("2.00");
+        assertThat(calculo.linhas().get(2).precoUnitario()).isEqualByComparingTo("25.00");
     }
 
     @Test
@@ -534,6 +578,12 @@ class CalculadoraDaVendaTest {
     private static LinhaParaCalculo daEmbalagem(int ordem, Produto produto, ProdutoEmbalagem embalagem,
             String quantidade) {
         return new LinhaParaCalculo(ordem, produto, embalagem, null, "789", new BigDecimal(quantidade), null);
+    }
+
+    /** Etiqueta de valor na posicao informada. */
+    private static LinhaParaCalculo etiquetaNa(int ordem, Produto produto, String valor) {
+        return new LinhaParaCalculo(ordem, produto, null, new LeituraEtiqueta(produto.getCodigo(),
+                TipoInformacaoEtiqueta.VALOR, new BigDecimal(valor)), "2000542010000", BigDecimal.ONE, null);
     }
 
     private static LinhaParaCalculo etiqueta(Produto produto, TipoInformacaoEtiqueta tipo, String valor) {

@@ -205,21 +205,59 @@ class CalculoIT extends IntegracaoDoPdv {
                 .andExpect(jsonPath("$.campos[0].campo").value("itens[0]"));
     }
 
-    /** Etiqueta de valor forjada abaixo do minimo: o erro sai mesmo sem desconto. */
+    /**
+     * Etiqueta de KG cujo valor deixa a linha abaixo do minimo: o erro sai mesmo sem desconto. O cadastro nao
+     * aceita minimo acima do preco; o teste o grava direto no banco.
+     */
     @Test
     void etiquetaDeValorAbaixoDoPrecoMinimo() throws Exception {
-        UUID bolo = pdv.produto(empresa, NovoProduto.de("Bolo", "UN", "3.00").comPrecoMinimo("2.80").naBalanca(542))
-                .id();
+        UUID queijo = pdv.produto(empresa, NovoProduto.de("Queijo", "KG", "25.00").naBalanca(542)).id();
+        jdbcTemplate.update("UPDATE produtos SET preco_minimo = 30.00 WHERE uuid = ?", queijo);
 
-        calcular(empresa.operadora(), "{\"itens\":[{\"produtoId\":\"" + bolo + "\",\"codigoLido\":"
-                + "\"2000542002500\",\"etiqueta\":true}]}")
+        calcular(empresa.operadora(), "{\"itens\":[" + etiqueta(queijo, "2000542010000") + "]}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.erros[0].campo").value("itens[0]"))
                 .andExpect(jsonPath("$.erros[0].mensagem").value(
-                        "O valor da etiqueta deixa Bolo abaixo do preço mínimo (R$ 2,80 por UN)."));
-        resolver(empresa.operadora(), "2000542002500")
+                        "O valor da etiqueta deixa Queijo abaixo do preço mínimo (R$ 30,00 por KG)."));
+        resolver(empresa.operadora(), "2000542010000")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.campos[0].campo").value("codigo"));
+    }
+
+    /** Etiqueta de UN (Racao Gato: normal 10, promocional 9, atacado 8,50 a partir de 3): o preco da unidade. */
+    @Test
+    void etiquetaDeUnSegueAPromocaoEOAtacado() throws Exception {
+        UUID racao = pdv.produto(empresa, NovoProduto.de("Ração Gato 1 kg", "UN", "10.00").emPromocao("9.00")
+                .comAtacado("8.50", "3").naBalanca(542)).id();
+        String etiqueta = etiqueta(racao, "2000542010000");
+
+        calcular(empresa.operadora(), "{\"itens\":[" + etiqueta + "]}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.erros", hasSize(0)))
+                .andExpect(jsonPath("$.linhas[0].quantidade").value(1.0))
+                .andExpect(jsonPath("$.linhas[0].etiqueta").value(true))
+                .andExpect(jsonPath("$.linhas[0].origemPreco").value("PROMOCIONAL"))
+                .andExpect(jsonPath("$.total").value(9.0));
+        calcular(empresa.operadora(), "{\"itens\":[" + etiqueta + "," + etiqueta + "," + item(racao, "1") + "]}")
+                .andExpect(jsonPath("$.linhas[*].origemPreco", org.hamcrest.Matchers.everyItem(
+                        org.hamcrest.Matchers.is("ATACADO"))))
+                .andExpect(jsonPath("$.total").value(25.5));
+        calcular(empresa.operadora(), "{\"itens\":[" + etiqueta(racao, "2000542009000") + "]}")
+                .andExpect(jsonPath("$.erros[0].campo").value("itens[0]"))
+                .andExpect(jsonPath("$.erros[0].mensagem").value(
+                        "O valor da etiqueta (R$ 9,00) não confere com o preço de Ração Gato 1 kg (R$ 10,00)."));
+        resolver(empresa.operadora(), "2000542010000")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tipo").value("ETIQUETA"))
+                .andExpect(jsonPath("$.quantidade").value(1.0));
+        resolver(empresa.operadora(), "2000542020000")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value(
+                        "O valor da etiqueta (R$ 20,00) não confere com o preço de Ração Gato 1 kg (R$ 10,00)."));
+    }
+
+    private static String etiqueta(UUID produto, String codigoLido) {
+        return "{\"produtoId\":\"" + produto + "\",\"codigoLido\":\"" + codigoLido + "\",\"etiqueta\":true}";
     }
 
     /** SEG-1: valor gigante no desconto do item e do total responde rapido, sem travar o servidor. */
