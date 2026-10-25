@@ -72,7 +72,12 @@ function ItemDaLista({
   const aviso = avisosPorLinha[linha.id]
   const selecionada = linha.id === selecionadaId
   const destacada = destaque?.linhaId === linha.id
-  const selo = calculada ? SELO_DA_ORIGEM[calculada.origemPreco] : linha.etiqueta ? SELO_DA_ORIGEM.ETIQUETA : undefined
+  // "Balança" sai pelo campo da linha: a etiqueta de UN volta com a origem normal, promocional ou de atacado.
+  // O selo da origem (Promoção, Atacado) sai junto quando for o caso.
+  const selos = [
+    linha.etiqueta ? SELO_DA_ORIGEM.ETIQUETA : undefined,
+    calculada && calculada.origemPreco !== 'ETIQUETA' ? SELO_DA_ORIGEM[calculada.origemPreco] : undefined,
+  ].filter((selo): selo is string => selo !== undefined)
   const desconto = calculada ? calculada.descontoItem + calculada.descontoRateado : 0
   // Embalagem e sempre inteira; a unidade fracionada mostra as 3 casas ("0,400 KG").
   const fracionada = linha.produto.fracionada && linha.embalagemId === null
@@ -154,11 +159,11 @@ function ItemDaLista({
       <div className="min-w-32 space-y-0.5 text-right text-sm">
         <p className="text-base font-semibold tabular-nums">{calculada ? formatarReais(calculada.valorLiquido) : '—'}</p>
         <p className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground tabular-nums">
-          {selo && (
-            <span className="rounded-full bg-accent px-1.5 py-0.5 text-[11px] font-medium text-accent-foreground">
+          {selos.map((selo) => (
+            <span key={selo} className="rounded-full bg-accent px-1.5 py-0.5 text-[11px] font-medium text-accent-foreground">
               {selo}
             </span>
-          )}
+          ))}
           {calculada && `${formatarReais(calculada.precoUnitario)} / ${unidadeDaLinha(linha)}`}
         </p>
         {(linha.desconto || desconto > 0) && (

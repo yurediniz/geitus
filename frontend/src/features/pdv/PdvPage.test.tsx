@@ -185,6 +185,58 @@ describe('PdvPage', () => {
       expect(within(linhas()[0]).getByText('Balança')).toBeInTheDocument()
     })
 
+    it('etiqueta de UN em promoção: o selo "Balança" sai pelo campo etiqueta e o "Promoção" pela origem', async () => {
+      porCodigo({ '2000542002490': itemResolvido({ tipo: 'ETIQUETA', quantidade: 1, codigoLido: '2000542002490' }) })
+      // Regra nova do backend: a etiqueta de UN vira 1 UN cobrada pelas regras normais (origem nao e ETIQUETA).
+      calcularMock.mockImplementation(async (carrinho) => {
+        const calculo = calculoFalso(carrinho)
+        return { ...calculo, linhas: calculo.linhas.map((linha) => ({ ...linha, origemPreco: 'PROMOCIONAL' as const })) }
+      })
+      renderPdv()
+
+      await ler('2000542002490')
+
+      await waitFor(() => expect(within(linhas()[0]).getByText('Promoção')).toBeInTheDocument())
+      expect(within(linhas()[0]).getByText('Balança')).toBeInTheDocument()
+    })
+
+    it('etiqueta de UN com preço normal mostra só "Balança"; + e − continuam recusados', async () => {
+      porCodigo({ '2000542002490': itemResolvido({ tipo: 'ETIQUETA', quantidade: 1, codigoLido: '2000542002490' }) })
+      renderPdv()
+
+      await ler('2000542002490')
+
+      await waitFor(() => expect(ultimoCarrinho().itens[0]).toMatchObject({ etiqueta: true, quantidade: 1 }))
+      expect(within(linhas()[0]).getByText('Balança')).toBeInTheDocument()
+      expect(within(linhas()[0]).queryByText('Promoção')).not.toBeInTheDocument()
+      await tecla('+')
+      expect(await screen.findByText('A quantidade da etiqueta da balança não pode ser alterada.')).toBeInTheDocument()
+      expect(ultimoCarrinho().itens[0].quantidade).toBe(1)
+    })
+
+    it('etiqueta de UN com valor diferente do preço: a mensagem do servidor na linha', async () => {
+      const mensagem = 'O valor da etiqueta (R$ 20,00) não confere com o preço de Ração X 1kg (R$ 24,90).'
+      porCodigo({ '2000542002000': itemResolvido({ tipo: 'ETIQUETA', quantidade: 1, codigoLido: '2000542002000' }) })
+      calcularMock.mockImplementation(async (carrinho) => calculoFalso(carrinho, { erros: [{ campo: 'itens[0]', mensagem }] }))
+      renderPdv()
+
+      await ler('2000542002000')
+
+      await waitFor(() => expect(within(linhas()[0]).getByText(mensagem)).toBeInTheDocument())
+      expect(screen.getByRole('button', { name: /Pagamento/ })).toBeDisabled()
+    })
+
+    it('etiqueta de UN recusada já na leitura: a mensagem do servidor no campo', async () => {
+      const mensagem = 'O valor da etiqueta (R$ 20,00) não confere com o preço de Ração X 1kg (R$ 24,90).'
+      resolverMock.mockRejectedValue(new HttpError(400, 'Dados invalidos.', { codigo: mensagem }))
+      renderPdv()
+
+      await ler('2000542002000')
+
+      expect(await screen.findByText(mensagem)).toBeInTheDocument()
+      expect(linhas()).toHaveLength(0)
+    })
+
     it('código não encontrado: o erro no campo, o bipe e o carrinho sem mudança', async () => {
       renderPdv()
 
