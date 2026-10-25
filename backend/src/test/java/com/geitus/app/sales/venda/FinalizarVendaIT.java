@@ -120,6 +120,29 @@ class FinalizarVendaIT extends IntegracaoDoPdv {
         assertThat(pdv.saldo(racao)).isEqualByComparingTo("3");
     }
 
+    /** QA A1: a rede caiu depois de gravar e o caixa fechou (e reabriu); o reenvio devolve a venda original. */
+    @Test
+    void mesmaChaveDepoisDeFecharEReabrirOCaixaDevolveAVendaOriginal() throws Exception {
+        UUID sessao = abrirCaixa(empresa.operadora(), empresa.ponto(), "0.00");
+        UUID racao = pdv.produto(empresa, NovoProduto.de("Ração", "UN", "10.00").comEstoque("5")).id();
+        String pedido = vendaJson(item(racao, "2"), pagamento("DINHEIRO", "20"), "20.00", UUID.randomUUID());
+        String original = com.jayway.jsonpath.JsonPath.read(finalizar(empresa.operadora(), pedido)
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
+        contar(empresa.operadora(), sessao, "20.00", null).andExpect(jsonPath("$.status").value("FECHADA"));
+
+        finalizar(empresa.operadora(), pedido)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(original))
+                .andExpect(jsonPath("$.podeCancelar").value(false));
+        abrirCaixa(empresa.operadora(), empresa.ponto(), "0.00");
+        finalizar(empresa.operadora(), pedido)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(original));
+
+        assertThat(contarVendas()).isEqualTo(1);
+        assertThat(pdv.saldo(racao)).isEqualByComparingTo("3");
+    }
+
     @Test
     void chaveComOutrosDados409() throws Exception {
         abrirCaixa(empresa.operadora(), empresa.ponto(), "100.00");

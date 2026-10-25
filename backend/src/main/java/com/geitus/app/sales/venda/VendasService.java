@@ -63,8 +63,9 @@ import com.geitus.app.shared.paginacao.Paginacao;
  * 3.8 e 5.3).
  *
  * <p><b>Finalizar</b>, num pedido atomico, nesta ordem: resolver o usuario
- * (empresa e perfil do banco); travar a sessao aberta dele; conferir a chave;
- * travar os produtos em ordem de id; montar o carrinho com os dados ja
+ * (empresa e perfil do banco); conferir a chave (a repeticao do mesmo pedido
+ * devolve a venda original mesmo com o caixa ja fechado); travar a sessao
+ * aberta dele; conferir a chave de novo; travar os produtos em ordem de id; montar o carrinho com os dados ja
  * travados; recalcular tudo; conferir o {@code totalEsperado}; validar (400 com
  * os campos; 409 no estoque com "Vender sem estoque" desligada); gravar a
  * venda, os itens e os pagamentos; baixar o estoque e registrar os
@@ -167,8 +168,15 @@ public class VendasService {
     }
 
     private ResultadoDaVenda finalizar(UsuarioAutenticado usuario, FinalizarVendaRequest request) {
-        SessaoAbertaParaVenda sessao = recebimentos.travarSessaoParaVenda(usuario);
+        // A chave vem antes da sessao: a repeticao do mesmo pedido devolve a venda original mesmo que o
+        // caixa dela ja tenha fechado (a rede caiu depois de gravar e o operador fechou o caixa).
         Optional<ResultadoDaVenda> repetida = vendaRepetida(usuario, request);
+        if (repetida.isPresent()) {
+            return repetida.get();
+        }
+        SessaoAbertaParaVenda sessao = recebimentos.travarSessaoParaVenda(usuario);
+        // De novo com a sessao travada: um pedido simultaneo com a mesma chave pode ter acabado de gravar.
+        repetida = vendaRepetida(usuario, request);
         if (repetida.isPresent()) {
             return repetida.get();
         }
