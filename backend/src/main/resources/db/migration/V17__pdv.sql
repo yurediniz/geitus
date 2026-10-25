@@ -344,7 +344,7 @@ BEGIN
         END IF;
     END IF;
 
-    -- Sessao inexistente na empresa fica para a FK fk_venda_sessao recusar.
+    -- Sessao inexistente na empresa fica para a FK fk_venda_sessao_do_vendedor recusar.
     SELECT status INTO situacao
     FROM sessoes_caixa
     WHERE empresa_id = NEW.empresa_id AND id = NEW.sessao_caixa_id
@@ -640,3 +640,158 @@ $$;
 CREATE TRIGGER tg_movimento_estoque_estorno_da_baixa
     BEFORE INSERT ON movimentos_estoque
     FOR EACH ROW EXECUTE FUNCTION fn_movimento_estoque_estorno_da_baixa();
+
+-- Recebimento preso ao pagamento: a venda esta CONCLUIDA e tem o pagamento da
+-- mesma forma, com o mesmo valor (no dinheiro, o entregue menos o troco).
+-- Venda de outra empresa, forma fora da lista e valor nao positivo ficam para
+-- as FKs e os CHECKs.
+CREATE FUNCTION fn_movimento_caixa_recebimento_do_pagamento() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+DECLARE
+    venda vendas%ROWTYPE;
+BEGIN
+    IF NEW.tipo <> 'RECEBIMENTO' OR NEW.venda_id IS NULL OR NEW.valor <= 0
+            OR NEW.forma NOT IN ('DINHEIRO', 'DEBITO', 'CREDITO', 'PIX') THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT * INTO venda FROM vendas WHERE empresa_id = NEW.empresa_id AND id = NEW.venda_id;
+    IF NOT FOUND THEN
+        RETURN NEW;
+    END IF;
+
+    IF venda.status <> 'CONCLUIDA' OR NOT EXISTS (
+            SELECT 1
+            FROM pagamentos_venda p
+            WHERE p.venda_id = venda.id AND p.forma = NEW.forma
+              AND NEW.valor = p.valor - CASE WHEN p.forma = 'DINHEIRO' THEN venda.troco ELSE 0 END) THEN
+        RAISE EXCEPTION 'Recebimento sem o pagamento da venda concluída na mesma forma e com o mesmo valor.'
+            USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER tg_movimento_caixa_recebimento_do_pagamento
+    BEFORE INSERT ON movimentos_caixa
+    FOR EACH ROW EXECUTE FUNCTION fn_movimento_caixa_recebimento_do_pagamento();
+
+-- Baixa presa ao item: a baixa VENDA tira exatamente a quantidade de estoque do
+-- item. Item de outra empresa fica para a FK.
+CREATE FUNCTION fn_movimento_estoque_baixa_do_item() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+DECLARE
+    quantidade_do_item NUMERIC(12,3);
+BEGIN
+    IF NEW.motivo <> 'VENDA' OR NEW.item_venda_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT quantidade_estoque INTO quantidade_do_item
+    FROM itens_venda
+    WHERE empresa_id = NEW.empresa_id AND id = NEW.item_venda_id;
+
+    IF FOUND AND -NEW.quantidade <> quantidade_do_item THEN
+        RAISE EXCEPTION 'Baixa de estoque diferente da quantidade do item vendido.'
+            USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER tg_movimento_estoque_baixa_do_item
+    BEFORE INSERT ON movimentos_estoque
+    FOR EACH ROW EXECUTE FUNCTION fn_movimento_estoque_baixa_do_item();
+
+-- Movimento de estoque da venda (baixa e estorno) e imutavel. Os outros
+-- continuam como na V9 (a exclusao do produto apaga o estoque inicial do
+-- cadastro).
+CREATE FUNCTION fn_movimento_estoque_da_venda_imutavel() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD.origem = 'VENDA' THEN
+        RAISE EXCEPTION 'Movimento de estoque da venda não pode ser alterado nem excluído.'
+            USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER tg_movimento_estoque_da_venda_imutavel
+    BEFORE UPDATE OR DELETE ON movimentos_estoque
+    FOR EACH ROW EXECUTE FUNCTION fn_movimento_estoque_da_venda_imutavel();
+
+-- Cancelamento coerente no commit (constraint triggers deferidas): todo
+-- estorno (de caixa ou de estoque) e de venda CANCELADA, e a venda cancelada
+-- tem um ESTORNO para cada RECEBIMENTO e um CANCELAMENTO_VENDA para cada baixa
+-- VENDA dos itens.
+CREATE FUNCTION fn_estorno_de_venda_cancelada() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+DECLARE
+    alvo BIGINT;
+BEGIN
+    IF TG_TABLE_NAME = 'movimentos_caixa' THEN
+        alvo := NEW.venda_id;
+    ELSE
+        SELECT venda_id INTO alvo FROM itens_venda WHERE empresa_id = NEW.empresa_id AND id = NEW.item_venda_id;
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM vendas WHERE id = alvo AND status = 'CANCELADA') THEN
+        RAISE EXCEPTION 'Estorno de uma venda que não foi cancelada.'
+            USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+CREATE CONSTRAINT TRIGGER tg_estorno_de_caixa_de_venda_cancelada
+    AFTER INSERT ON movimentos_caixa
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW
+    WHEN (NEW.tipo = 'ESTORNO')
+    EXECUTE FUNCTION fn_estorno_de_venda_cancelada();
+
+CREATE CONSTRAINT TRIGGER tg_estorno_de_estoque_de_venda_cancelada
+    AFTER INSERT ON movimentos_estoque
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW
+    WHEN (NEW.motivo = 'CANCELAMENTO_VENDA')
+    EXECUTE FUNCTION fn_estorno_de_venda_cancelada();
+
+CREATE FUNCTION fn_venda_cancelada_completa() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    IF EXISTS (
+            SELECT 1
+            FROM movimentos_caixa r
+            WHERE r.empresa_id = NEW.empresa_id AND r.venda_id = NEW.id AND r.tipo = 'RECEBIMENTO'
+              AND NOT EXISTS (SELECT 1 FROM movimentos_caixa e
+                              WHERE e.empresa_id = r.empresa_id AND e.venda_id = r.venda_id AND e.tipo = 'ESTORNO'
+                                AND e.forma = r.forma AND e.valor = r.valor)) THEN
+        RAISE EXCEPTION 'Venda % cancelada sem o estorno de todos os recebimentos.', NEW.numero
+            USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+    IF EXISTS (
+            SELECT 1
+            FROM movimentos_estoque b
+            JOIN itens_venda i ON i.empresa_id = b.empresa_id AND i.id = b.item_venda_id
+            WHERE i.venda_id = NEW.id AND b.motivo = 'VENDA'
+              AND NOT EXISTS (SELECT 1 FROM movimentos_estoque c
+                              WHERE c.empresa_id = b.empresa_id AND c.item_venda_id = b.item_venda_id
+                                AND c.motivo = 'CANCELAMENTO_VENDA')) THEN
+        RAISE EXCEPTION 'Venda % cancelada sem o estorno de todas as baixas de estoque.', NEW.numero
+            USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+CREATE CONSTRAINT TRIGGER tg_venda_cancelada_completa
+    AFTER UPDATE ON vendas
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW
+    WHEN (OLD.status = 'CONCLUIDA' AND NEW.status = 'CANCELADA')
+    EXECUTE FUNCTION fn_venda_cancelada_completa();

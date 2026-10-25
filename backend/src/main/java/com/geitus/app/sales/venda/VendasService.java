@@ -199,6 +199,7 @@ public class VendasService {
         estoqueDaVenda.baixar(empresaId, usuario.usuarioId(), baixas);
         recebimentos.registrarRecebimentos(empresaId, sessao.sessaoId(), venda.getId(), usuario.usuarioId(),
                 calculo.recebidosPorForma());
+        vendaRepository.conferirConstraintsAgora();
         return new ResultadoDaVenda(respostas.completa(venda, usuario), true);
     }
 
@@ -364,7 +365,9 @@ public class VendasService {
                 .map(item -> new BaixaDeItem(item.getProdutoId(), item.getId(), item.getQuantidadeEstoque()))
                 .toList());
         venda.cancelar(usuario.usuarioId(), agora(), motivo);
-        return respostas.completa(vendaRepository.saveAndFlush(venda), usuario);
+        Venda cancelada = vendaRepository.saveAndFlush(venda);
+        vendaRepository.conferirConstraintsAgora();
+        return respostas.completa(cancelada, usuario);
     }
 
     private static String motivoValidado(String motivo) {

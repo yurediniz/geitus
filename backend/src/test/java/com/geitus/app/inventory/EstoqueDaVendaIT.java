@@ -113,7 +113,7 @@ class EstoqueDaVendaIT extends IntegracaoDoPdv {
         BaixaDeItem daSacola = new BaixaDeItem(pdv.idDoProduto(sacola), itemVendido(sacola, "1"), BigDecimal.ONE);
         baixar(doArroz, daSacola);
 
-        naTransacao(() -> estoqueDaVenda.estornar(empresa.id(), empresa.operadora(), List.of(doArroz, daSacola)));
+        estornar(List.of(doArroz, daSacola));
 
         assertThat(pdv.saldo(arroz)).isEqualByComparingTo("2");
         assertThat(jdbcTemplate.queryForObject("""
@@ -172,7 +172,7 @@ class EstoqueDaVendaIT extends IntegracaoDoPdv {
         UUID arroz = pdv.produto(empresa, NovoProduto.de("Arroz", "UN", "5.00").comEstoque("5")).id();
         BaixaDeItem baixa = new BaixaDeItem(pdv.idDoProduto(arroz), itemVendido(arroz, "2"), new BigDecimal("2.000"));
         baixar(baixa);
-        naTransacao(() -> estoqueDaVenda.estornar(empresa.id(), empresa.operadora(), List.of(baixa)));
+        estornar(List.of(baixa));
 
         mockMvc.perform(get("/api/produtos/" + arroz + "/estoque/movimentos")
                         .header("Authorization", cenario.token(empresa.operadora())))
@@ -206,6 +206,18 @@ class EstoqueDaVendaIT extends IntegracaoDoPdv {
 
     private void baixar(BaixaDeItem... baixas) {
         naTransacao(() -> estoqueDaVenda.baixar(empresa.id(), empresa.operadora(), List.of(baixas)));
+    }
+
+    /** O estorno do estoque com o cancelamento das vendas dos itens, na mesma transacao (a V17 confere no commit). */
+    private void estornar(List<BaixaDeItem> baixas) {
+        naTransacao(() -> {
+            estoqueDaVenda.estornar(empresa.id(), empresa.operadora(), baixas);
+            baixas.forEach(baixa -> jdbcTemplate.update("""
+                    UPDATE vendas SET status = 'CANCELADA', cancelada_por = ?, cancelada_em = now(),
+                           motivo_cancelamento = 'Teste'
+                     WHERE id = (SELECT venda_id FROM itens_venda WHERE id = ?) AND status = 'CONCLUIDA'
+                    """, empresa.operadora(), baixa.itemVendaId()));
+        });
     }
 
     private void naTransacao(Runnable acao) {

@@ -322,12 +322,17 @@ class ContagemPorFormaIT extends IntegracaoDoCaixa {
         return venda;
     }
 
-    /** O cancelamento da venda no caixa: estorna os recebimentos gravados dela. */
+    /**
+     * O cancelamento da venda no caixa: estorna os recebimentos gravados dela e
+     * cancela a venda na mesma transacao (a V17 confere os dois no commit).
+     */
     private void estornar(UUID sessao, long venda, boolean escondeValor) {
         long sessaoId = idDaSessao(sessao);
         naTransacao(() -> {
             recebimentos.travarSessaoDaVenda(empresa.id(), sessaoId);
             recebimentos.registrarEstornos(empresa.id(), sessaoId, venda, empresa.operadora(), escondeValor);
+            jdbcTemplate.update("UPDATE vendas SET status = 'CANCELADA', cancelada_por = ?, cancelada_em = now(),"
+                    + " motivo_cancelamento = 'Teste' WHERE id = ?", empresa.operadora(), venda);
             return null;
         });
     }

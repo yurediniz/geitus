@@ -148,7 +148,7 @@ class MigracaoV17IT {
 
     @Test
     void recebimentoExigeVendaEValorPositivo() {
-        long venda = inserirVenda(empresaA, sessaoA, usuarioA, "10.00");
+        long venda = inserirVendaPaga("10.00", "DEBITO");
 
         assertViolacao(movimentoDaVendaSql(sessaoA, null, "RECEBIMENTO", "DEBITO", "10.00"),
                 "ck_movimento_caixa_da_venda");
@@ -156,7 +156,7 @@ class MigracaoV17IT {
                 "ck_movimento_caixa_valor");
         assertViolacao("INSERT INTO movimentos_caixa (uuid, empresa_id, sessao_caixa_id, tipo, forma, valor, motivo,"
                 + " usuario_id, venda_id, criado_em) VALUES (gen_random_uuid(), " + empresaA + ", " + sessaoA
-                + ", 'RECEBIMENTO', 'PIX', 10.00, 'Venda', " + usuarioA + ", " + venda + ", now())",
+                + ", 'RECEBIMENTO', 'DEBITO', 10.00, 'Venda', " + usuarioA + ", " + venda + ", now())",
                 "ck_movimento_caixa_motivo");
         jdbc.update(movimentoDaVendaSql(sessaoA, venda, "RECEBIMENTO", "DEBITO", "10.00"));
 
@@ -181,14 +181,15 @@ class MigracaoV17IT {
     /** DADOS-I3: o estorno de caixa devolve so o que a venda recebeu, na mesma forma e valor. */
     @Test
     void estornoDeCaixaPresoAoRecebimento() {
-        long venda = inserirVenda(empresaA, sessaoA, usuarioA, "20.00");
+        long venda = inserirVendaPaga("20.00", "PIX");
 
         assertViolacao(movimentoDaVendaSql(sessaoA, venda, "ESTORNO", "PIX", "20.00"), "recebimento");
         jdbc.update(movimentoDaVendaSql(sessaoA, venda, "RECEBIMENTO", "PIX", "20.00"));
         assertViolacao(movimentoDaVendaSql(sessaoA, venda, "ESTORNO", "PIX", "15.00"), "recebimento");
         assertViolacao(movimentoDaVendaSql(sessaoA, venda, "ESTORNO", "DINHEIRO", "20.00"), "recebimento");
 
-        jdbc.update(movimentoDaVendaSql(sessaoA, venda, "ESTORNO", "PIX", "20.00"));
+        jdbc.execute(movimentoDaVendaSql(sessaoA, venda, "ESTORNO", "PIX", "20.00") + "; "
+                + cancelarSql(venda, "Desistiu"));
         assertViolacao(movimentoDaVendaSql(sessaoA, venda, "ESTORNO", "PIX", "20.00"), "uq_movimento_caixa_venda");
     }
 
@@ -333,7 +334,10 @@ class MigracaoV17IT {
                 NUMERO.incrementAndGet(), "2", "1");
         long item = venda[1];
         jdbc.update(movimentoDeEstoqueSql(produtoA, "SAIDA", "VENDA", "VENDA", "-2", "5", item));
-        jdbc.update(movimentoDeEstoqueSql(produtoA, "ENTRADA", "CANCELAMENTO_VENDA", "VENDA", "2", "3", item));
+        jdbc.update(movimentoDeEstoqueSql(produtoA, "SAIDA", "VENDA", "VENDA", "-1", "3", venda[2]));
+        jdbc.execute(movimentoDeEstoqueSql(produtoA, "ENTRADA", "CANCELAMENTO_VENDA", "VENDA", "2", "2", item)
+                + "; " + movimentoDeEstoqueSql(produtoA, "ENTRADA", "CANCELAMENTO_VENDA", "VENDA", "1", "4",
+                        venda[2]) + "; " + cancelarSql(venda[0], "Desistiu"));
 
         assertViolacao(movimentoDeEstoqueSql(produtoA, "ENTRADA", "CANCELAMENTO_VENDA", "VENDA", "2", "5", item),
                 "uq_movimento_estoque_item_venda");
@@ -342,7 +346,9 @@ class MigracaoV17IT {
         assertViolacao(movimentoDeEstoqueSql(produtoA, "SAIDA", "CANCELAMENTO_VENDA", "VENDA", "-2", "7", item),
                 "ck_movimento_estoque_motivo_do_tipo");
         long outroProduto = inserirProduto(empresaA, "Feijao");
-        assertViolacao(movimentoDeEstoqueSql(outroProduto, "SAIDA", "VENDA", "VENDA", "-1", "0", venda[2]),
+        long itemDoArroz = vendaCoerente(empresaA, sessaoA, usuarioA, produtoA, UUID.randomUUID(),
+                NUMERO.incrementAndGet(), "1")[1];
+        assertViolacao(movimentoDeEstoqueSql(outroProduto, "SAIDA", "VENDA", "VENDA", "-1", "0", itemDoArroz),
                 "fk_movimento_estoque_item_venda");
     }
 
@@ -359,11 +365,72 @@ class MigracaoV17IT {
                 "baixa");
     }
 
+    /** A baixa VENDA tira exatamente a quantidade de estoque do item. */
+    @Test
+    void baixaPresaAQuantidadeDoItem() {
+        long item = vendaCoerente(empresaA, sessaoA, usuarioA, produtoA, UUID.randomUUID(), NUMERO.incrementAndGet(),
+                "2")[1];
+
+        assertViolacao(movimentoDeEstoqueSql(produtoA, "SAIDA", "VENDA", "VENDA", "-3", "5", item),
+                "diferente da quantidade");
+        jdbc.update(movimentoDeEstoqueSql(produtoA, "SAIDA", "VENDA", "VENDA", "-2", "5", item));
+    }
+
+    /** O movimento de estoque da venda nao muda nem sai; os outros continuam como na V9. */
+    @Test
+    void movimentoDeEstoqueDaVendaImutavel() {
+        long item = vendaCoerente(empresaA, sessaoA, usuarioA, produtoA, UUID.randomUUID(), NUMERO.incrementAndGet(),
+                "2")[1];
+        jdbc.update(movimentoDeEstoqueSql(produtoA, "SAIDA", "VENDA", "VENDA", "-2", "5", item));
+
+        assertViolacao("UPDATE movimentos_estoque SET observacao = 'x' WHERE item_venda_id = " + item, "venda");
+        assertViolacao("DELETE FROM movimentos_estoque WHERE item_venda_id = " + item, "venda");
+        jdbc.update("DELETE FROM movimentos_estoque WHERE produto_id = " + produtoA + " AND origem = 'AJUSTE_MANUAL'");
+    }
+
+    /** Cancelamento coerente no commit, nos dois sentidos: estorno sem cancelar e cancelar sem estornar. */
+    @Test
+    void cancelamentoCoerenteNoCommit() {
+        long venda = inserirVendaPaga("20.00", "PIX");
+        jdbc.update(movimentoDaVendaSql(sessaoA, venda, "RECEBIMENTO", "PIX", "20.00"));
+
+        assertViolacao(movimentoDaVendaSql(sessaoA, venda, "ESTORNO", "PIX", "20.00"), "não foi cancelada");
+        assertViolacao(cancelarSql(venda, "Desistiu"), "recebimentos");
+
+        long[] vendaComBaixa = vendaCoerente(empresaA, sessaoA, usuarioA, produtoA, UUID.randomUUID(),
+                NUMERO.incrementAndGet(), "2");
+        jdbc.update(movimentoDeEstoqueSql(produtoA, "SAIDA", "VENDA", "VENDA", "-2", "5", vendaComBaixa[1]));
+        assertViolacao(movimentoDeEstoqueSql(produtoA, "ENTRADA", "CANCELAMENTO_VENDA", "VENDA", "2", "3",
+                vendaComBaixa[1]), "não foi cancelada");
+        assertViolacao(cancelarSql(vendaComBaixa[0], "Desistiu"), "baixas");
+
+        jdbc.execute(movimentoDaVendaSql(sessaoA, venda, "ESTORNO", "PIX", "20.00") + "; "
+                + cancelarSql(venda, "Desistiu"));
+        jdbc.execute(movimentoDeEstoqueSql(produtoA, "ENTRADA", "CANCELAMENTO_VENDA", "VENDA", "2", "3",
+                vendaComBaixa[1]) + "; " + cancelarSql(vendaComBaixa[0], "Desistiu"));
+        assertThat(contar("SELECT count(*) FROM vendas WHERE status = 'CANCELADA'")).isEqualTo(2);
+    }
+
+    /** O recebimento e o pagamento da venda concluida, na mesma forma e valor (no dinheiro, sem o troco). */
+    @Test
+    void recebimentoPresoAoPagamento() {
+        long vendaComTroco = jdbc.queryForObject(vendaComUmItemSql(new BigDecimal("10.00"), new BigDecimal("10.00"),
+                "'DINHEIRO', 15.00", "5"), Long.class);
+
+        assertViolacao(movimentoDaVendaSql(sessaoA, vendaComTroco, "RECEBIMENTO", "DINHEIRO", "15.00"), "pagamento");
+        assertViolacao(movimentoDaVendaSql(sessaoA, vendaComTroco, "RECEBIMENTO", "PIX", "10.00"), "pagamento");
+        jdbc.update(movimentoDaVendaSql(sessaoA, vendaComTroco, "RECEBIMENTO", "DINHEIRO", "10.00"));
+
+        long cancelada = inserirVendaPaga("20.00", "PIX");
+        jdbc.update(cancelarSql(cancelada, "Desistiu"));
+        assertViolacao(movimentoDaVendaSql(sessaoA, cancelada, "RECEBIMENTO", "PIX", "20.00"), "pagamento");
+    }
+
     // ---------- Contagem por forma e conferencia ----------
 
     @Test
     void contagemPorFormaImutavelEUnica() {
-        long venda = inserirVenda(empresaA, sessaoA, usuarioA, "20.00");
+        long venda = inserirVendaPaga("20.00", "DEBITO");
         jdbc.update(movimentoDaVendaSql(sessaoA, venda, "RECEBIMENTO", "DEBITO", "20.00"));
         jdbc.update(contagemSql(sessaoA, "DEBITO", "20.00", "20.00"));
 
@@ -378,7 +445,7 @@ class MigracaoV17IT {
 
     @Test
     void contagemComEsperadoDiferenteDosMovimentosRecusada() {
-        long venda = inserirVenda(empresaA, sessaoA, usuarioA, "20.00");
+        long venda = inserirVendaPaga("20.00", "PIX");
         jdbc.update(movimentoDaVendaSql(sessaoA, venda, "RECEBIMENTO", "PIX", "20.00"));
 
         assertViolacao(contagemSql(sessaoA, "PIX", "15.00", "15.00"), "esperado");
@@ -386,7 +453,7 @@ class MigracaoV17IT {
 
     @Test
     void emConferenciaComDiferencaSoNoCartaoAceita() {
-        long venda = inserirVenda(empresaA, sessaoA, usuarioA, "20.00");
+        long venda = inserirVendaPaga("20.00", "DEBITO");
         jdbc.update(movimentoDaVendaSql(sessaoA, venda, "RECEBIMENTO", "DEBITO", "20.00"));
         jdbc.update(contagemSql(sessaoA, "DEBITO", "20.00", "15.00"));
 
@@ -397,7 +464,7 @@ class MigracaoV17IT {
 
     @Test
     void emConferenciaSemDiferencaEmNenhumaFormaRecusada() {
-        long venda = inserirVenda(empresaA, sessaoA, usuarioA, "20.00");
+        long venda = inserirVendaPaga("20.00", "DEBITO");
         jdbc.update(movimentoDaVendaSql(sessaoA, venda, "RECEBIMENTO", "DEBITO", "20.00"));
         jdbc.update(contagemSql(sessaoA, "DEBITO", "20.00", "20.00"));
 
@@ -406,7 +473,7 @@ class MigracaoV17IT {
 
     @Test
     void fechadaComDiferencaNoCartaoSemJustificativaRecusada() {
-        long venda = inserirVenda(empresaA, sessaoA, usuarioA, "20.00");
+        long venda = inserirVendaPaga("20.00", "DEBITO");
         jdbc.update(movimentoDaVendaSql(sessaoA, venda, "RECEBIMENTO", "DEBITO", "20.00"));
         jdbc.update(contagemSql(sessaoA, "DEBITO", "20.00", "15.00"));
 
@@ -419,7 +486,7 @@ class MigracaoV17IT {
 
     @Test
     void fechamentoSemContarFormaComMovimentoRecusado() {
-        long venda = inserirVenda(empresaA, sessaoA, usuarioA, "20.00");
+        long venda = inserirVendaPaga("20.00", "CREDITO");
         jdbc.update(movimentoDaVendaSql(sessaoA, venda, "RECEBIMENTO", "CREDITO", "20.00"));
 
         assertViolacao(contarDinheiroSql(sessaoA, "FECHADA", false, "105.00"), "Conte");
@@ -432,10 +499,11 @@ class MigracaoV17IT {
                 "valor_esperado = 110.00").replace("diferenca = 110.00 - 105.00", "diferenca = 0"),
                 "esperado em dinheiro");
 
-        long venda = inserirVenda(empresaA, sessaoA, usuarioA, "20.00");
+        long venda = inserirVendaPaga("20.00", "PIX");
         jdbc.update(movimentoDaVendaSql(sessaoA, venda, "RECEBIMENTO", "PIX", "20.00"));
         jdbc.update(contagemSql(sessaoA, "PIX", "20.00", "20.00"));
-        jdbc.update(movimentoDaVendaSql(sessaoA, venda, "ESTORNO", "PIX", "20.00"));
+        jdbc.execute(movimentoDaVendaSql(sessaoA, venda, "ESTORNO", "PIX", "20.00") + "; "
+                + cancelarSql(venda, "Desistiu"));
 
         assertViolacao(contarDinheiroSql(sessaoA, "FECHADA", true, "105.00"), "esperado de uma forma");
     }
@@ -616,14 +684,26 @@ class MigracaoV17IT {
 
     private long[] vendaCoerente(long empresa, long sessao, long usuario, long produto, UUID chave, long numero,
             String... quantidades) {
+        return vendaCoerentePaga("DINHEIRO", empresa, sessao, usuario, produto, chave, numero, quantidades);
+    }
+
+    private long[] vendaCoerentePaga(String forma, long empresa, long sessao, long usuario, long produto, UUID chave,
+            long numero, String... quantidades) {
         List<long[]> linhas = jdbc.query(vendaCoerenteSql(empresa, sessao, usuario, produto, chave, numero,
-                quantidades), (linha, indice) -> new long[] {linha.getLong("venda"), linha.getLong("item")});
+                quantidades).replace("'DINHEIRO', ", "'" + forma + "', "), (linha, indice) -> new long[] {linha.getLong("venda"), linha.getLong("item")});
         long[] ids = new long[linhas.size() + 1];
         ids[0] = linhas.get(0)[0];
         for (int indice = 0; indice < linhas.size(); indice++) {
             ids[indice + 1] = linhas.get(indice)[1];
         }
         return ids;
+    }
+
+    /** Venda coerente na sessao A, paga inteira na forma informada (total multiplo de 5,00); devolve o id. */
+    private long inserirVendaPaga(String total, String forma) {
+        String quantidade = new BigDecimal(total).divide(PRECO).toPlainString();
+        return vendaCoerentePaga(forma, empresaA, sessaoA, usuarioA, produtoA, UUID.randomUUID(),
+                NUMERO.incrementAndGet(), quantidade)[0];
     }
 
     /** Venda coerente de um item do produto da empresa com o total informado (multiplo de 5,00). */

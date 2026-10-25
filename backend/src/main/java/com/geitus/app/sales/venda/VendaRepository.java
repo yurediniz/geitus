@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
@@ -19,6 +20,16 @@ import jakarta.persistence.LockModeType;
 interface VendaRepository extends Repository<Venda, Long> {
 
     Venda saveAndFlush(Venda venda);
+
+    /**
+     * Confere ja as constraints deferidas da V17 (venda coerente e
+     * cancelamento coerente), que senao so rodariam no commit: uma violacao
+     * sai neste comando como violacao de integridade (409 generico), e nao
+     * como erro no commit (500). Vale ate o fim da transacao. Exige transacao.
+     */
+    @Modifying
+    @Query(value = "SET CONSTRAINTS ALL IMMEDIATE", nativeQuery = true)
+    void conferirConstraintsAgora();
 
     Optional<Venda> findByEmpresaIdAndChaveIdempotencia(Long empresaId, UUID chave);
 

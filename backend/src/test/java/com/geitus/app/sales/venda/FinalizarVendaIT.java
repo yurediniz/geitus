@@ -29,6 +29,12 @@ import com.geitus.app.sales.IntegracaoDoPdv;
  */
 class FinalizarVendaIT extends IntegracaoDoPdv {
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private VendaRepository vendaRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.transaction.PlatformTransactionManager gerenciadorDeTransacoes;
+
     private EmpresaDoPdv empresa;
 
     @BeforeEach
@@ -497,6 +503,29 @@ class FinalizarVendaIT extends IntegracaoDoPdv {
                 SELECT p.valor::text FROM pagamentos_venda p JOIN vendas v ON v.id = p.venda_id
                  WHERE v.empresa_id = ? ORDER BY p.forma
                 """, String.class, empresa.id())).containsExactly("5.50", "4.50");
+    }
+
+    /**
+     * DADOS 2: a conferencia deferida roda no comando ({@code SET CONSTRAINTS ALL IMMEDIATE}) e sai como
+     * violacao de integridade, nao no commit. A aplicacao nao produz venda incoerente; o teste forca uma pelo
+     * JDBC na mesma transacao.
+     */
+    @Test
+    void conferenciaDeferidaSaiComoViolacaoDeIntegridade() throws Exception {
+        UUID sessao = abrirCaixa(empresa.operadora(), empresa.ponto(), "0.00");
+        org.springframework.transaction.support.TransactionTemplate transacao =
+                new org.springframework.transaction.support.TransactionTemplate(gerenciadorDeTransacoes);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> transacao.executeWithoutResult(status -> {
+            jdbcTemplate.update("""
+                    INSERT INTO vendas (uuid, empresa_id, numero, sessao_caixa_id, usuario_id, status, subtotal,
+                                        desconto_itens, desconto_total, total, troco, chave_idempotencia, concluida_em)
+                    VALUES (gen_random_uuid(), ?, 999, ?, ?, 'CONCLUIDA', 10, 0, 0, 10, 0, gen_random_uuid(), now())
+                    """, empresa.id(), pdv.idDaSessao(sessao), empresa.operadora());
+            vendaRepository.conferirConstraintsAgora();
+        })).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+                .hasMessageContaining("incoerente");
+        assertThat(contarVendas()).isZero();
     }
 
     // ---------- Apoio ----------
