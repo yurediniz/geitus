@@ -82,6 +82,18 @@ class CalculadoraDaVendaTest {
         assertThat(linha.valorBruto()).isEqualByComparingTo("7.00");
     }
 
+    /** R2: sem preco de venda nao ha divisao; a linha sai zerada com o erro. */
+    @Test
+    void etiquetaDeProdutoSemPrecoNaoDivide() {
+        Produto brinde = produto("Brinde", kg, Precos.de("0.00"));
+
+        CalculoDaVenda calculo = calcular(List.of(etiqueta(brinde, TipoInformacaoEtiqueta.VALOR, "10.000")));
+
+        assertThat(calculo.erros()).startsWith(new ErroDoCalculo("itens[0]", "Produto sem preço de venda."));
+        assertThat(calculo.linhas().get(0).quantidade()).isEqualByComparingTo("0");
+        assertThat(calculo.linhas().get(0).valorBruto()).isEqualByComparingTo("0");
+    }
+
     @Test
     void etiquetaDePesoEmProdutoNaoFracionadoRecusada() {
         Produto pao = produto("Pão", un, Precos.de("5.00"));

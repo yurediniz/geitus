@@ -224,6 +224,24 @@ class CalculoIT extends IntegracaoDoPdv {
         assertThat(java.time.Duration.ofNanos(System.nanoTime() - inicio)).isLessThan(java.time.Duration.ofSeconds(5));
     }
 
+    /** R2: etiqueta de produto sem preco nao divide por zero; o erro sai no campo. */
+    @Test
+    void etiquetaDeProdutoSemPreco() throws Exception {
+        UUID brinde = pdv.produto(empresa, NovoProduto.de("Brinde", "KG", "0.00").naBalanca(542)).id();
+
+        calcular(empresa.operadora(), "{\"itens\":[{\"produtoId\":\"" + brinde + "\",\"codigoLido\":"
+                + "\"2000542010000\",\"etiqueta\":true}]}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.erros[0].campo").value("itens[0]"))
+                .andExpect(jsonPath("$.erros[0].mensagem").value("Produto sem preço de venda."))
+                .andExpect(jsonPath("$.linhas[0].quantidade").value(0.0))
+                .andExpect(jsonPath("$.total").value(0.0));
+        resolver(empresa.operadora(), "2000542010000")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Produto sem preço de venda."))
+                .andExpect(jsonPath("$.campos[0].campo").value("codigo"));
+    }
+
     @Test
     void codigoLidoLongo400() throws Exception {
         UUID racao = pdv.produto(empresa, NovoProduto.de("Ração", "UN", "10.00")).id();

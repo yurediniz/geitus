@@ -43,6 +43,7 @@ public final class CalculadoraDaVenda {
 
     public static final String MENSAGEM_LIMITE_DE_LINHAS = "A venda atingiu o limite de 300 itens.";
     static final String MENSAGEM_PESO_SEM_FRACAO = "Etiqueta de peso para produto que não é vendido por peso.";
+    static final String MENSAGEM_SEM_PRECO = "Produto sem preço de venda.";
     static final String MENSAGEM_VALOR_DO_ITEM_ACIMA = "O valor do item passa do limite.";
     static final String MENSAGEM_TOTAL_ACIMA = "O total da venda passa do limite.";
     static final String MENSAGEM_DESCONTO_NEGATIVO = "O desconto não pode ser negativo.";
@@ -186,6 +187,12 @@ public final class CalculadoraDaVenda {
         Produto produto = linha.produto();
         boolean fracionada = produto.getUnidade().isFracionada();
         BigDecimal preco = PrecoDeVenda.vigenteSemAtacado(produto, hoje).precoUnitario();
+        if (preco.signum() <= 0) {
+            // Sem preco nao ha quantidade a calcular (seria uma divisao por zero): linha zerada e o erro.
+            erros.add(new ErroDoCalculo(linha.campo(), MENSAGEM_SEM_PRECO));
+            BigDecimal zero = emQuantidade(BigDecimal.ZERO);
+            return semDesconto(linha, zero, zero, ZERO, OrigemPrecoDaVenda.ETIQUETA, ZERO);
+        }
         LinhaPrecificada precificada;
         if (leitura.tipo() == TipoInformacaoEtiqueta.PESO) {
             if (!fracionada) {
