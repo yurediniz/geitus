@@ -283,11 +283,12 @@ class PontosDeCaixaIT extends IntegracaoDoCaixa {
         EmpresaDeCaixa empresa = cenario.novaEmpresa();
         UUID caixa1 = cenario.novoPonto(empresa, "Caixa 1");
         UUID caixa2 = cenario.novoPonto(empresa, "Caixa 2");
+        // Datas fixas: a anterior relativa a now() passaria a ser a mais recente com o tempo.
+        OffsetDateTime abertaEm = OffsetDateTime.parse("2026-10-24T11:02:00Z");
         UUID anterior = cenario.sessaoAbertaPorJdbc(empresa, caixa1, empresa.admin(), "80.00",
-                OffsetDateTime.now().minusDays(1));
+                abertaEm.minusDays(1));
         cenario.fecharPorJdbc(anterior, empresa.admin());
-        UUID aberta = cenario.sessaoAbertaPorJdbc(empresa, caixa1, empresa.operadora(), "150.00",
-                OffsetDateTime.parse("2026-10-24T11:02:00Z"));
+        UUID aberta = cenario.sessaoAbertaPorJdbc(empresa, caixa1, empresa.operadora(), "150.00", abertaEm);
 
         listar(empresa.operadora(), "")
                 .andExpect(jsonPath("$[0].nome").value("Caixa 1"))
