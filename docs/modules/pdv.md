@@ -61,7 +61,8 @@ O campo **"Código ou nome"** tem sempre o foco. O texto lido é interpretado ne
    - **um código de barras do produto:** lança a **unidade**;
    - **um código de barras de uma embalagem:** lança a **embalagem**.
    - **Quantidade:** decimal com vírgula ou ponto. Decimal só em unidade fracionada (para embalagem, a quantidade é sempre inteira).
-3. **Texto que não é código:** abre a busca por nome (§5.3), só com produtos **ativos**, até 20 resultados. Setas e Enter escolhem.
+3. **Busca no próprio campo (DEC-044):** com 3 caracteres ou mais, os produtos aparecem enquanto se digita (§5.3: nome, código ou código de barras, só **ativos**, até 20). Setas e Enter (ou o clique no card) lançam 1 unidade.
+4. **Catálogo (DEC-044):** antes de digitar, os produtos **ativos** aparecem em cards, os **mais vendidos nos últimos 30 dias** primeiro (vendas concluídas, contadas por venda e não por quantidade) e o resto por nome, em páginas de 24. Uma faixa com as **categorias principais** filtra (a categoria vale com as subcategorias). O clique no card lança 1 unidade.
 
 **Recusas (sem alterar o carrinho, com mensagem no campo e um bipe de erro discreto):**
 - "Código não encontrado.";
@@ -287,6 +288,7 @@ Todas autenticadas e isoladas pela empresa do JWT. Recurso de outra empresa → 
 |---|---|---|
 | `GET /api/pdv/itens?codigo=` | todos | 200 com o item resolvido; 404 "Código não encontrado."; 409 produto inativo; 400 quantidade inválida |
 | `GET /api/pdv/itens?busca=` | todos | 200, até 20 produtos ativos (nome, código, unidade, preço vigente, saldo, miniatura, embalagens) |
+| `GET /api/pdv/catalogo?categoria=&pagina=` | todos | 200 `{ produtos, temMais }`: 24 produtos ativos por página, os mais vendidos (30 dias) primeiro e o resto por nome; `categoria` (UUID) inclui as subcategorias, e a de outra empresa responde vazio; 400 página fora de 0–400 |
 | `POST /api/pdv/calculo` | todos | 200 `CalculoDaVenda`, mesmo com regras violadas (vêm em `erros`); 400 só para corpo malformado |
 | `POST /api/pdv/vendas` | todos | 201 / 200 (chave repetida) / 400 / 409 |
 | `GET /api/pdv/vendas` | OPERADOR: das próprias sessões · ADMIN: todas | 200 paginado; filtros `sessaoId` (padrão: a sessão atual do usuário), `status`, `de`, `ate`, `numero` |
@@ -346,16 +348,14 @@ Todas autenticadas e isoladas pela empresa do JWT. Recurso de outra empresa → 
   - mostra "Abra o caixa para vender." e o botão **Abrir caixa**, com a mesma janela do Caixa;
   - em conferência, mostra "Termine o fechamento do caixa." com o link para o Caixa.
 - **Layout (desktop; mínimo 1024 px):**
-  - **Coluna esquerda: lista de linhas.** Nº, nome, código lido, seletor "UN ▾" quando há embalagens, quantidade, preço unitário (com selo **Promoção**, **Atacado** ou **Balança**), desconto e valor.
-    - A última linha lançada fica destacada, com a miniatura do produto.
-    - Os avisos aparecem na própria linha ("Estoque insuficiente (saldo 2 UN)").
-  - **Rodapé: campo "Código ou nome"**, com foco permanente (volta sozinho depois de cada janela).
-  - **Coluna direita, fixa:**
-    - **TOTAL** em destaque (o maior texto da tela), com subtotal e descontos;
-    - cliente;
-    - os botões com o atalho escrito;
-    - "Caixa 1 · Ana Souza".
-- **Atalhos:** F2 busca · F3 cliente · F4 desconto do item selecionado · Shift+F4 desconto do total · F6 pôr em espera · F7 vendas em espera · F8 vendas do caixa · F10 pagamento · ↑/↓ seleciona linha · + / − quantidade da linha · Del remove a linha (com confirmação se houver desconto) · Esc fecha janelas.
+  - **Barra superior (grafite, modo foco sem a sidebar):** marca, caixa com a situação, operador, **Em espera (n)** (F7), **Vendas do caixa** (F8) e **Menu**.
+  - **Coluna esquerda: campo "Código ou nome" no topo**, com foco permanente (volta sozinho depois de cada janela), e logo abaixo a **busca ao vivo** (DEC-044): com 3 caracteres ou mais (e sem `*`), os produtos ativos aparecem em cards (miniatura, código, preço vigente, saldo). Antes disso, o **catálogo** (§3.1, item 4), com a faixa das categorias principais ("Todas" + uma por categoria) e mais cards ao rolar.
+  - **Coluna direita:**
+    - cliente (F3);
+    - **itens do carrinho**: miniatura, nome, preço unitário (com selo **Promoção**, **Atacado** ou **Balança**), código lido, desconto e valor, com **− quantidade +**, seletor "UN ▾" quando há embalagens, **%** (desconto do item) e **×** (remover). A última linha lançada tem um destaque breve; os avisos aparecem na própria linha ("Estoque insuficiente (saldo 2 UN)");
+    - resumo (subtotal, descontos, **Desconto da venda** Shift+F4) e o **Total da venda** em destaque (o maior texto da tela);
+    - **Ir para pagamento** (F10) e **Pôr em espera** (F6).
+- **Atalhos:** F2 seleciona o campo de busca · F3 cliente · F4 desconto do item selecionado · Shift+F4 desconto do total · F6 pôr em espera · F7 vendas em espera · F8 vendas do caixa · F9 imprimir o comprovante da última venda · F10 pagamento · ↑/↓ seleciona linha (com os cards da busca na tela, ↑/↓ escolhem o card) · + / − quantidade da linha · Del remove a linha (com confirmação se houver desconto) · Esc fecha janelas.
 - **Feedback:**
   - erro de leitura: em vermelho no campo e um bipe curto (Web Audio, com volume baixo);
   - linha nova: um destaque breve (sem animação lenta).
@@ -363,14 +363,17 @@ Todas autenticadas e isoladas pela empresa do JWT. Recurso de outra empresa → 
 - **Carrinho no navegador:** guardado em `localStorage` por empresa e usuário. Recarregar a página mantém a venda.
 
 ### 6.3 Pagamento (F10)
-- **Janela:** botões **1 Dinheiro**, **2 Débito**, **3 Crédito** e **4 PIX**. A tecla escolhe a forma e preenche o valor com o que falta pagar; Enter adiciona.
+- **Tela inteira** (DEC-044), com **Voltar ao carrinho** (Esc) na barra: à esquerda, 1. forma e 2. valor; à direita, 3. resumo e pagamentos e 4. conferência dos itens.
+- **Formas:** **1 Dinheiro**, **2 Débito**, **3 Crédito** e **4 PIX**. A tecla escolhe a forma e preenche o valor com o que falta pagar; Enter adiciona ("Usar o que falta" repreenche).
 - **Formas usadas:** ficam listadas, com remover.
 - **Em destaque:** **Falta pagar** e **Troco**.
 - **Finalizar:** com o pago cobrindo o total, Enter finaliza. O botão fica desabilitado durante o envio, e a chave é gerada ao abrir a janela.
 - **Depois de concluir:**
   - aviso "Venda nº 128 concluída · Troco R$ 5,00";
   - o carrinho fica vazio e o foco volta ao campo;
-  - não há tela intermediária.
+  - não há tela intermediária;
+  - junto do troco, **Imprimir comprovante** (F9). Nada é impresso sem o operador pedir.
+- **Comprovante (DEC-044):** cupom de 80 mm no formato de uma NFC-e, mas **não fiscal**: empresa (nome, razão social, CNPJ, IE, endereço, telefone), "DOCUMENTO NÃO FISCAL", itens (nº, descrição, quantidade × unitário, valor e desconto), quantidade de itens, total, descontos, valor a pagar, formas, troco, consumidor (ou "CONSUMIDOR NÃO IDENTIFICADO"), nº da venda, data e hora, ponto e operador, e o aviso de que não substitui a nota fiscal. Venda cancelada sai com "*** VENDA CANCELADA ***". Impressão pela janela do navegador (`@media print`, papel de 80 mm).
 - **"O total da venda mudou":** janela com o total anterior e o novo, mais **Confirmar e finalizar** e **Voltar à venda**.
 - **Rede caiu:** a janela mantém tudo, e um novo Enter reenvia **a mesma chave**.
 
@@ -378,7 +381,7 @@ Todas autenticadas e isoladas pela empresa do JWT. Recurso de outra empresa → 
 - **Em espera:** lista com hora, itens e total, mais **Retomar** e **Descartar** (com confirmação).
 - **Vendas do caixa:**
   - lista da sessão atual com nº, hora, cliente, formas, total e situação;
-  - o detalhe mostra itens e pagamentos, mais **Cancelar venda** com o motivo (até 200 caracteres);
+  - o detalhe mostra itens e pagamentos, mais **Imprimir comprovante** (reimpressão) e **Cancelar venda** com o motivo (até 200 caracteres);
   - ADMIN: filtro por ponto e período.
 
 ### 6.5 Caixa (muda)
@@ -516,7 +519,9 @@ Decisões tomadas durante a implementação e as revisões (2026-10-24), que com
   - `?codigo=` até 60 caracteres e `?busca=` até 100;
   - a finalização recusa mais de 300 linhas **antes** de travar o caixa e os produtos.
 - **`GET /api/pdv/itens`** com `codigo` e `busca` juntos, ou sem nenhum: 400 "Informe o código ou o texto da busca.".
-- **Código alfanumérico:** todo texto sem espaço é tratado como código (Code128 e outros); texto com espaço abre a busca por nome. Um texto sem dígitos que não é código também abre a busca.
+- **Código alfanumérico:** todo texto sem espaço é tratado como código (Code128 e outros); texto com espaço é busca por nome. Um texto sem dígitos que não é código volta ao campo e vira busca.
+- **Enter com a busca na tela (DEC-044):** lança o card ativo quando o operador o escolheu com as setas, ou quando o texto é um nome (com espaço ou sem dígito) e os cards do termo já chegaram. Fora isso, o Enter lê o código: um número com cards na tela continua indo para a leitura (o bipe de uma embalagem nunca vira 1 unidade). Um nome com espaço teclado antes de os cards chegarem lança o card ativo quando eles chegam. Escolher um card entra pela mesma fila das leituras. Os cards do termo anterior ficam esmaecidos e sem clique até chegarem os do termo atual.
+- **Pagamentos informados** ficam guardados ao voltar ao carrinho (Esc) enquanto o carrinho não muda.
 - **Pagamentos gravados** com os valores normalizados pelo cálculo, não os do navegador.
 - **Modo cego:** a lista de vendas (F8) mostra, além do total, as formas e o troco de cada venda. A limitação aceita em §3.9 é essa.
 

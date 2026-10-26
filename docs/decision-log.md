@@ -1086,3 +1086,22 @@ O PDV é a etapa 11 do MVP e depende do Caixa (DEC-041), das embalagens (DEC-037
 - Agentes reduzidos a `revisor` (escopo × plano, correção, testes, segurança e dados) e `revisor-ux` (tela no navegador). Removidos `cto` e os demais executores e revisores (substitui DEC-008 e DEC-021).
 - Plugin Superpowers desligado no projeto (`.claude/settings.json`); travas de Git por permissão (sem push para `main`, sem `--force`, sem `reset --hard`).
 **Impacto:** menos contexto por sessão, dois pontos de decisão do usuário (plano e entrega), revisão obrigatória por fatia com o escopo como critério bloqueante. Specs e planos antigos do Superpowers continuam no repositório até a etapa de enxugamento da documentação.
+
+---
+
+## DEC-044 — PDV: busca ao vivo no campo do topo e novo visual
+
+**Data:** 2026-10-26
+**Status:** Aceita
+**Contexto:** depois de testar o PDV, o usuário pediu o campo de digitação no topo, servindo também de busca (sem abrir outra janela), com os produtos aparecendo a partir de 3 caracteres, e um visual mais moderno a partir de duas telas de referência (venda e pagamento).
+**Decisão (escolhas do usuário):**
+- Layout das referências com as cores da marca (âmbar e creme) e uma barra superior grafite; não o azul e verde das imagens.
+- ~~A área de produtos mostra só os resultados da busca (sem catálogo nem filtro por categoria).~~ Substituído na atualização abaixo: catálogo e faixa de categorias entraram.
+- O pagamento abre em tela inteira, com "Voltar ao carrinho" (Esc).
+- A janela de busca (F2) sai: o F2 seleciona o campo. Debounce de 250 ms, para o bipe do scanner não disparar busca.
+- Ficam fora, por escopo: Pix dividido em maquininha/transferência, link de pagamento, crédito em loja, venda a prazo, parcelas, NSU, orçamento, filtro por espécie e status de sincronização.
+**Impacto:** na primeira parte, só frontend (a busca do servidor já atendia nome, código e código de barras); a atualização abaixo acrescenta a rota do catálogo. Spec em `docs/modules/pdv.md` §3.1, §6.2, §6.3 e §10.
+
+**Atualização (2026-10-26, depois do teste do usuário):**
+- **Catálogo antes de digitar**, como na referência: os mais vendidos dos últimos 30 dias primeiro (escolha do usuário; contados por venda concluída) e o resto por nome, em páginas de 24, com a faixa só das **categorias principais** (com as subcategorias). Rota nova `GET /api/pdv/catalogo`, sem migration. O filtro por espécie da referência ficou de fora.
+- **Comprovante não fiscal** de 80 mm no formato de uma NFC-e, com "DOCUMENTO NÃO FISCAL" e o aviso de que não substitui a nota (o sistema ainda não emite NFC-e). Oferecido por botão e F9 depois da venda (nada imprime sozinho) e reimpresso em Vendas do caixa (F8). Impressão pela janela do navegador, sem biblioteca nova. Isso antecipa a "impressão do recibo" das observações futuras da DEC-042.
