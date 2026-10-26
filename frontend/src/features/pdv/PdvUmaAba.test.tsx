@@ -32,6 +32,13 @@ vi.mock('@/services/pdvService', () => ({
   listarVendas: vi.fn(),
   buscarVenda: vi.fn(),
   cancelarVenda: vi.fn(),
+  listarCatalogo: vi.fn(async () => ({ produtos: [], temMais: false })),
+}))
+vi.mock('@/services/categoriaService', () => ({ listarCategorias: vi.fn(async () => []) }))
+vi.mock('@/services/empresaService', () => ({
+  obterEmpresa: vi.fn(async () => {
+    throw new Error('Sem a empresa no teste.')
+  }),
 }))
 
 const EMPRESA = 3

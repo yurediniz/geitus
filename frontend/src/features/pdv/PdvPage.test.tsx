@@ -12,9 +12,12 @@ import { listarPontos, sessaoAtual } from '@/services/caixaService'
 import { listarClientes } from '@/services/clienteService'
 import { buscar as buscarConfiguracao } from '@/services/configuracaoPdvService'
 import { HttpError } from '@/services/httpClient'
-import { buscarProdutos, calcular, resolverCodigo } from '@/services/pdvService'
+import { listarCategorias } from '@/services/categoriaService'
+import { buscarProdutos, calcular, listarCatalogo, resolverCodigo } from '@/services/pdvService'
 import { pontoDeTeste, sessaoDeTeste } from '@/test/fixturesCaixa'
+import { elementosObservados, instalarIntersectionObserverFalso, simularInterseccao } from '@/test/intersectionObserver'
 import { calculoFalso, itemResolvido, NEXGARD, produtoDoPdv, QUEIJO, RACAO } from '@/test/fixturesPdv'
+import type { Categoria } from '@/types/catalogo'
 import type { Cliente } from '@/types/cliente'
 import type { CalculoDaVenda, CarrinhoRequest } from '@/types/pdv'
 
@@ -36,6 +39,13 @@ vi.mock('@/services/pdvService', () => ({
   listarVendas: vi.fn(),
   buscarVenda: vi.fn(),
   cancelarVenda: vi.fn(),
+  listarCatalogo: vi.fn(async () => ({ produtos: [], temMais: false })),
+}))
+vi.mock('@/services/categoriaService', () => ({ listarCategorias: vi.fn(async () => []) }))
+vi.mock('@/services/empresaService', () => ({
+  obterEmpresa: vi.fn(async () => {
+    throw new Error('Sem a empresa no teste.')
+  }),
 }))
 
 const useAuthMock = vi.mocked(useAuth)
@@ -149,9 +159,12 @@ describe('PdvPage', () => {
       renderPdv()
 
       expect(await campo()).toHaveFocus()
-      expect(screen.getByText('Nenhum item. Bipe o código ou digite o nome do produto.')).toBeInTheDocument()
+      expect(screen.getByText('Nenhum item ainda.')).toBeInTheDocument()
       expect(total()).toHaveTextContent('R$ 0,00')
-      expect(screen.getByText('Caixa 1 · Ana Souza')).toBeInTheDocument()
+      const barra = screen.getByRole('banner')
+      expect(within(barra).getByText('Caixa 1')).toBeInTheDocument()
+      expect(within(barra).getByText('Ana Souza')).toBeInTheDocument()
+      expect(within(barra).getByRole('button', { name: 'Abrir menu de navegação' })).toBeInTheDocument()
     })
 
     it('542*3 resolve e o mesmo produto de novo soma na mesma linha; o total é o do servidor', async () => {
@@ -223,7 +236,7 @@ describe('PdvPage', () => {
       await ler('2000542002000')
 
       await waitFor(() => expect(within(linhas()[0]).getByText(mensagem)).toBeInTheDocument())
-      expect(screen.getByRole('button', { name: /Pagamento/ })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /Ir para pagamento/ })).toBeDisabled()
     })
 
     it('etiqueta de UN recusada já na leitura: a mensagem do servidor no campo', async () => {
@@ -270,9 +283,31 @@ describe('PdvPage', () => {
       }
     })
 
-    it('os atalhos da linha ficam escritos sob o campo', async () => {
+    it('com itens, os atalhos da linha ficam escritos sob o carrinho', async () => {
       renderPdv()
-      expect(await screen.findByText('↑ ↓ escolhe a linha · + − quantidade · Del remove')).toBeInTheDocument()
+      await ler('542')
+      expect(await screen.findByText('↑ ↓ escolhe a linha · + − quantidade · F4 desconto · Del remove')).toBeInTheDocument()
+    })
+
+    it('os botões da linha mudam a quantidade, abrem o desconto e removem', async () => {
+      renderPdv()
+      await ler('542')
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Aumentar a quantidade de Ração X 1kg' }))
+      await waitFor(() => expect(ultimoCarrinho().itens[0].quantidade).toBe(2))
+      fireEvent.click(screen.getByRole('button', { name: 'Diminuir a quantidade de Ração X 1kg' }))
+      await waitFor(() => expect(ultimoCarrinho().itens[0].quantidade).toBe(1))
+      expect(screen.getByRole('button', { name: 'Diminuir a quantidade de Ração X 1kg' })).toBeDisabled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Desconto de Ração X 1kg' }))
+      const desconto = await screen.findByRole('dialog', { name: 'Desconto do item' })
+      fireEvent.keyDown(desconto, { key: 'Escape' })
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remover Ração X 1kg' }))
+      await waitFor(() => expect(linhas()).toHaveLength(0))
+      expect(screen.getByText('Ração X 1kg removido da venda.')).toBeInTheDocument()
     })
 
     it('quantidade fracionada sempre com 3 casas', async () => {
@@ -294,7 +329,25 @@ describe('PdvPage', () => {
       await waitFor(() =>
         expect(linhas()[0].querySelector('[data-destaque]')?.getAttribute('data-destaque')).not.toBe(primeiro),
       )
-      expect(linhas()[0].querySelector('[data-destaque]')).toHaveClass('motion-safe:animate-[pulse_0.6s_ease-out_1]')
+      // O destaque aparece e some (termina invisivel): nao fica parecendo a linha selecionada.
+      expect(linhas()[0].querySelector('[data-destaque]')).toHaveClass(
+        'opacity-0',
+        'motion-safe:animate-[geitus-destaque_0.9s_ease-out_1]',
+      )
+    })
+
+    it('a linha selecionada tem a faixa da seleção, e só ela', async () => {
+      renderPdv()
+      await ler('542')
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+      await ler('900')
+      await waitFor(() => expect(linhas()).toHaveLength(2))
+
+      await tecla('ArrowUp')
+
+      expect(linhas()[0]).toHaveAttribute('aria-current', 'true')
+      expect(linhas()[0].className).toContain('inset_4px_0_0_var(--color-primary)')
+      expect(linhas()[1].className).not.toContain('inset_4px_0_0_var(--color-primary)')
     })
 
     it('produto inativo: a mensagem do servidor no campo', async () => {
@@ -342,28 +395,197 @@ describe('PdvPage', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
 
-    it('texto com espaço abre a busca direto, sem consultar o código', async () => {
+    it('texto com espaço busca no próprio campo, sem consultar o código', async () => {
       buscarProdutosMock.mockResolvedValue([])
       renderPdv()
 
       await ler('ração x')
 
-      const janela = await screen.findByRole('dialog', { name: 'Buscar produto' })
-      expect(within(janela).getByLabelText('Nome do produto')).toHaveValue('ração x')
+      expect(await screen.findByText('Nenhum produto ativo encontrado para "ração x".')).toBeInTheDocument()
+      expect(await campo()).toHaveValue('ração x')
       expect(resolverMock).not.toHaveBeenCalled()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
 
-    it('texto sem dígito que não é código (404) abre a busca, sem erro nem bipe', async () => {
+    it('texto sem dígito que não é código (404) volta ao campo e mostra a busca, sem erro nem bipe', async () => {
       buscarProdutosMock.mockResolvedValue([])
       renderPdv()
 
       await ler('ração')
 
-      const janela = await screen.findByRole('dialog', { name: 'Buscar produto' })
-      expect(within(janela).getByLabelText('Nome do produto')).toHaveValue('ração')
+      await waitFor(async () => expect(await campo()).toHaveValue('ração'))
+      expect(await screen.findByText('Nenhum produto ativo encontrado para "ração".')).toBeInTheDocument()
       expect(resolverMock).toHaveBeenCalledWith('ração', expect.any(AbortSignal))
       expect(bipeMock).not.toHaveBeenCalled()
       expect(screen.queryByText(/não encontrado/)).not.toBeInTheDocument()
+    })
+
+    it('a busca começa com 3 caracteres e mostra os produtos enquanto se digita', async () => {
+      buscarProdutosMock.mockResolvedValue([{ ...RACAO, precoVigente: 24.9 }])
+      renderPdv()
+      const entrada = await campo()
+
+      fireEvent.change(entrada, { target: { value: 'ra' } })
+      expect(await screen.findByText(/Digite mais 1 letra para buscar\./)).toBeInTheDocument()
+      await new Promise((resolve) => setTimeout(resolve, 400))
+      expect(buscarProdutosMock).not.toHaveBeenCalled()
+
+      fireEvent.change(entrada, { target: { value: 'rac' } })
+      await waitFor(() => expect(buscarProdutosMock).toHaveBeenCalledWith('rac', expect.anything()))
+      const opcao = await screen.findByRole('option', { name: /Ração X 1kg/ })
+      expect(opcao).toHaveTextContent('R$ 24,90')
+      expect(entrada).toHaveAttribute('aria-expanded', 'true')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('clicar no card lança o produto e limpa a busca', async () => {
+      buscarProdutosMock.mockResolvedValue([{ ...RACAO, precoVigente: 24.9 }])
+      renderPdv()
+      const entrada = await campo()
+
+      fireEvent.change(entrada, { target: { value: 'ração' } })
+      fireEvent.click(await screen.findByRole('option', { name: /Ração X 1kg/ }))
+
+      await waitFor(() => expect(ultimoCarrinho().itens).toEqual([expect.objectContaining({ produtoId: 'p-racao', codigoLido: null })]))
+      expect(entrada).toHaveValue('')
+      expect(screen.queryByRole('option')).not.toBeInTheDocument()
+    })
+
+    it('com as setas, o Enter lança o card escolhido mesmo com um texto que parece código', async () => {
+      buscarProdutosMock.mockResolvedValue([
+        { ...RACAO, precoVigente: 24.9 },
+        { ...NEXGARD, precoVigente: 89.9 },
+      ])
+      renderPdv()
+      const entrada = await campo()
+
+      fireEvent.change(entrada, { target: { value: '542' } })
+      await screen.findByRole('option', { name: /Nexgard M/ })
+      fireEvent.keyDown(entrada, { key: 'ArrowDown' })
+      expect(screen.getByRole('option', { name: /Nexgard M/ })).toHaveAttribute('aria-selected', 'true')
+      fireEvent.keyDown(entrada, { key: 'Enter' })
+
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+      expect(linhas()[0]).toHaveTextContent('Nexgard M')
+      expect(resolverMock).not.toHaveBeenCalled()
+    })
+
+    it('sem usar as setas, um número com os cards na tela continua sendo lido como código', async () => {
+      buscarProdutosMock.mockResolvedValue([{ ...NEXGARD, precoVigente: 89.9 }])
+      renderPdv()
+      const entrada = await campo()
+
+      fireEvent.change(entrada, { target: { value: '542' } })
+      await screen.findByRole('option', { name: /Nexgard M/ })
+      fireEvent.keyDown(entrada, { key: 'Enter' })
+
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+      expect(resolverMock).toHaveBeenCalledWith('542', expect.any(AbortSignal))
+      expect(linhas()[0]).toHaveTextContent('Ração X 1kg')
+    })
+
+    it('o card escolhido com um bipe ainda pendente entra depois do bipe', async () => {
+      let responder: (item: ReturnType<typeof itemResolvido>) => void = () => undefined
+      resolverMock.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            responder = resolve
+          }),
+      )
+      buscarProdutosMock.mockResolvedValue([{ ...RACAO, precoVigente: 24.9 }])
+      renderPdv()
+
+      await ler('900')
+      const entrada = await campo()
+      fireEvent.change(entrada, { target: { value: 'ração' } })
+      fireEvent.click(await screen.findByRole('option', { name: /Ração X 1kg/ }))
+      expect(linhas()).toHaveLength(0)
+
+      responder(itemResolvido({ produto: NEXGARD, codigoLido: '900' }))
+      await waitFor(() => expect(linhas()).toHaveLength(2))
+      expect(linhas()[0]).toHaveTextContent('Nexgard M')
+      expect(linhas()[1]).toHaveTextContent('Ração X 1kg')
+    })
+
+    it('com os cards na tela, ↑/↓ são da busca; sem cards, voltam a escolher a linha do carrinho', async () => {
+      buscarProdutosMock.mockResolvedValue([
+        { ...RACAO, precoVigente: 24.9 },
+        { ...NEXGARD, precoVigente: 89.9 },
+      ])
+      renderPdv()
+      await ler('542')
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+      await ler('900')
+      await waitFor(() => expect(linhas()).toHaveLength(2))
+      expect(linhas()[1]).toHaveAttribute('aria-current', 'true')
+
+      const entrada = await campo()
+      fireEvent.change(entrada, { target: { value: 'pet' } })
+      await screen.findByRole('option', { name: /Nexgard M/ })
+      fireEvent.keyDown(entrada, { key: 'ArrowUp' })
+      fireEvent.keyDown(entrada, { key: 'ArrowDown' })
+      expect(screen.getByRole('option', { name: /Nexgard M/ })).toHaveAttribute('aria-selected', 'true')
+      expect(linhas()[1]).toHaveAttribute('aria-current', 'true')
+
+      fireEvent.keyDown(entrada, { key: 'Escape' })
+      await waitFor(() => expect(screen.queryByRole('listbox', { name: 'Produtos encontrados' })).not.toBeInTheDocument())
+      fireEvent.keyDown(entrada, { key: 'ArrowUp' })
+      expect(linhas()[0]).toHaveAttribute('aria-current', 'true')
+    })
+
+    it('o 404 atrasado de uma palavra não mexe no texto que o operador já digitou', async () => {
+      let recusar: (erro: unknown) => void = () => undefined
+      resolverMock.mockImplementation(
+        () =>
+          new Promise((_resolve, reject) => {
+            recusar = reject
+          }),
+      )
+      buscarProdutosMock.mockResolvedValue([{ ...NEXGARD, precoVigente: 89.9 }])
+      renderPdv()
+
+      await ler('ração')
+      const entrada = await campo()
+      fireEvent.change(entrada, { target: { value: '7891' } })
+      await screen.findByRole('option', { name: /Nexgard M/ })
+
+      recusar(new HttpError(404, 'Código não encontrado.'))
+      await waitFor(() => expect(screen.queryByRole('status', { name: 'Lendo o código' })).not.toBeInTheDocument())
+      expect(entrada).toHaveValue('7891')
+      expect(screen.getByRole('option', { name: /Nexgard M/ })).toHaveAttribute('aria-selected', 'true')
+    })
+
+    it('Enter num nome com espaço antes de os cards chegarem lança o card quando eles chegam', async () => {
+      let responder: (produtos: Awaited<ReturnType<typeof buscarProdutos>>) => void = () => undefined
+      buscarProdutosMock.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            responder = resolve
+          }),
+      )
+      renderPdv()
+
+      await ler('ração x')
+      expect(linhas()).toHaveLength(0)
+      await waitFor(() => expect(buscarProdutosMock).toHaveBeenCalledWith('ração x', expect.anything()))
+      responder([{ ...RACAO, precoVigente: 24.9 }])
+
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+      expect(resolverMock).not.toHaveBeenCalled()
+      expect(await campo()).toHaveValue('')
+    })
+
+    it('Esc limpa a busca', async () => {
+      buscarProdutosMock.mockResolvedValue([{ ...RACAO, precoVigente: 24.9 }])
+      renderPdv()
+      const entrada = await campo()
+
+      fireEvent.change(entrada, { target: { value: 'ração' } })
+      await screen.findByRole('option', { name: /Ração X 1kg/ })
+      fireEvent.keyDown(entrada, { key: 'Escape' })
+
+      expect(entrada).toHaveValue('')
+      await waitFor(() => expect(screen.queryByRole('option')).not.toBeInTheDocument())
     })
 
     it('contrato novo: etiqueta de produto que não é da balança dá 404 e vira erro de leitura com o código', async () => {
@@ -385,38 +607,48 @@ describe('PdvPage', () => {
       await ler('2000077010000')
 
       await waitFor(() => expect(within(linhas()[0]).getByText(mensagem)).toBeInTheDocument())
-      expect(screen.getByRole('button', { name: /Pagamento/ })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /Ir para pagamento/ })).toBeDisabled()
     })
 
-    it('texto que não é código abre a busca por nome; Enter escolhe o produto', async () => {
+    it('texto que não é código vira busca por nome; Enter lança o card ativo', async () => {
       buscarProdutosMock.mockResolvedValue([{ ...RACAO, precoVigente: 24.9 }])
       renderPdv()
 
       await ler('ração')
 
-      const janela = await screen.findByRole('dialog', { name: 'Buscar produto' })
-      const busca = within(janela).getByLabelText('Nome do produto')
-      expect(busca).toHaveValue('ração')
+      const busca = await campo()
+      await waitFor(() => expect(busca).toHaveValue('ração'))
       await waitFor(() => expect(buscarProdutosMock).toHaveBeenCalledWith('ração', expect.anything()))
-      expect(await within(janela).findByRole('option', { name: /Ração X 1kg/ })).toHaveAttribute('aria-selected', 'true')
+      expect(await screen.findByRole('option', { name: /Ração X 1kg/ })).toHaveAttribute('aria-selected', 'true')
       fireEvent.keyDown(busca, { key: 'Enter' })
 
-      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
       await waitFor(() => expect(ultimoCarrinho().itens).toEqual([expect.objectContaining({ produtoId: 'p-racao', codigoLido: null })]))
+      expect(busca).toHaveValue('')
       await waitFor(async () => expect(await campo()).toHaveFocus())
     })
   })
 
   describe('atalhos', () => {
-    it('F2, F3, F4 e Shift+F4 abrem as janelas; Esc fecha e o foco volta ao campo', async () => {
-      buscarProdutosMock.mockResolvedValue([])
+    it('F2 seleciona o campo de busca, sem abrir janela', async () => {
+      renderPdv()
+      const entrada = (await campo()) as HTMLInputElement
+      fireEvent.change(entrada, { target: { value: 'ra' } })
+      entrada.blur()
+
+      fireEvent.keyDown(window, { key: 'F2' })
+
+      expect(entrada).toHaveFocus()
+      expect([entrada.selectionStart, entrada.selectionEnd]).toEqual([0, 2])
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('F3, F4 e Shift+F4 abrem as janelas; Esc fecha e o foco volta ao campo', async () => {
       listarClientesMock.mockResolvedValue([])
       renderPdv()
       await ler('542')
       await waitFor(() => expect(linhas()).toHaveLength(1))
 
       for (const [key, shiftKey, titulo] of [
-        ['F2', false, 'Buscar produto'],
         ['F3', false, 'Cliente da venda'],
         ['F4', false, 'Desconto do item'],
         ['F4', true, 'Desconto da venda'],
@@ -591,7 +823,7 @@ describe('PdvPage', () => {
       localStorage.setItem(chaveDoCarrinho(EMPRESA, USUARIO), texto)
       renderPdv()
 
-      expect(await screen.findByText('Nenhum item. Bipe o código ou digite o nome do produto.')).toBeInTheDocument()
+      expect(await screen.findByText('Nenhum item ainda.')).toBeInTheDocument()
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     })
 
@@ -606,7 +838,7 @@ describe('PdvPage', () => {
       )
       renderPdv()
 
-      expect(await screen.findByText('Nenhum item. Bipe o código ou digite o nome do produto.')).toBeInTheDocument()
+      expect(await screen.findByText('Nenhum item ainda.')).toBeInTheDocument()
     })
   })
 
@@ -624,7 +856,7 @@ describe('PdvPage', () => {
 
     expect(await screen.findByText('Corrija os erros da venda antes de pagar.')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Pagamento/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Ir para pagamento/ })).toBeDisabled()
   })
 
   it('pagamentos sem valor no cálculo do carrinho não bloqueiam a tela', async () => {
@@ -636,7 +868,7 @@ describe('PdvPage', () => {
 
     await waitFor(() => expect(total()).toHaveTextContent('R$ 24,90'))
     expect(screen.queryByText('Falta pagar R$ 24,90.')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Pagamento/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Ir para pagamento/ })).toBeEnabled()
   })
 
   describe('caixa', () => {
@@ -697,7 +929,7 @@ describe('PdvPage', () => {
     it('F10 logo depois de um bipe ainda pendente é recusado com "Aguarde a leitura…"', async () => {
       renderPdv()
       await ler('542')
-      await waitFor(() => expect(screen.getByRole('button', { name: /Pagamento/ })).toBeEnabled())
+      await waitFor(() => expect(screen.getByRole('button', { name: /Ir para pagamento/ })).toBeEnabled())
       resolverMock.mockImplementation(() => new Promise(() => undefined))
 
       await ler('900')
@@ -705,7 +937,7 @@ describe('PdvPage', () => {
 
       expect(await screen.findByText('Aguarde a leitura…')).toBeInTheDocument()
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Pagamento/ })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /Ir para pagamento/ })).toBeDisabled()
       expect(screen.getByRole('status', { name: 'Lendo o código' })).toBeInTheDocument()
       expect(bipeMock).not.toHaveBeenCalled()
     })
@@ -801,17 +1033,18 @@ describe('PdvPage', () => {
       texto === 'ração' ? [{ ...RACAO, precoVigente: 24.9 }] : [{ ...NEXGARD, precoVigente: 89.9 }],
     )
     renderPdv()
-    await ler('ração')
-    const janela = await screen.findByRole('dialog', { name: 'Buscar produto' })
-    const busca = within(janela).getByLabelText('Nome do produto')
-    await within(janela).findByRole('option', { name: /Ração X 1kg/ })
+    const busca = await campo()
+    fireEvent.change(busca, { target: { value: 'ração' } })
+    await screen.findByRole('option', { name: /Ração X 1kg/ })
 
     fireEvent.change(busca, { target: { value: 'nexgard' } })
     fireEvent.keyDown(busca, { key: 'Enter' })
 
-    // O Enter não lançou a ração da busca anterior.
-    expect(screen.getByRole('dialog', { name: 'Buscar produto' })).toBeInTheDocument()
-    expect(await within(janela).findByRole('option', { name: /Nexgard M/ })).toBeInTheDocument()
+    // O Enter não lançou a ração da busca anterior: "nexgard" foi lido como código e, sem ele, voltou para a busca.
+    await waitFor(() => expect(resolverMock).toHaveBeenCalledWith('nexgard', expect.any(AbortSignal)))
+    expect(await screen.findByRole('option', { name: /Nexgard M/ })).toBeInTheDocument()
+    expect(linhas()).toHaveLength(0)
+    await waitFor(() => expect(busca).toHaveValue('nexgard'))
     fireEvent.keyDown(busca, { key: 'Enter' })
     await waitFor(() => expect(linhas()).toHaveLength(1))
     expect(linhas()[0]).toHaveTextContent('Nexgard M')
@@ -848,7 +1081,7 @@ describe('PdvPage', () => {
 
       await waitFor(() => expect(within(linhas()[0]).getByText('Produto inativo — não pode ser vendido.')).toBeInTheDocument())
       expect(linhas()[0]).toHaveAccessibleDescription('Produto inativo — não pode ser vendido.')
-      expect(screen.getByRole('button', { name: /Pagamento/ })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /Ir para pagamento/ })).toBeDisabled()
 
       await tecla('F10')
 
@@ -860,7 +1093,7 @@ describe('PdvPage', () => {
       listarClientesMock.mockResolvedValue([{ id: 'c-1', numero: 1, nome: 'Maria Silva', cpf: null, telefone: null } as Cliente])
       renderPdv()
       await ler('542')
-      await waitFor(() => expect(screen.getByRole('button', { name: /Pagamento/ })).toBeEnabled())
+      await waitFor(() => expect(screen.getByRole('button', { name: /Ir para pagamento/ })).toBeEnabled())
       await tecla('F3')
       const escolha = await screen.findByRole('dialog', { name: 'Cliente da venda' })
       fireEvent.change(within(escolha).getByLabelText('Nome, CPF ou telefone'), { target: { value: 'Maria' } })
@@ -874,7 +1107,7 @@ describe('PdvPage', () => {
       fireEvent.click(await within(escolha).findByRole('option', { name: /Maria Silva/ }))
 
       expect(await screen.findByText('Cliente não encontrado.')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Pagamento/ })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /Ir para pagamento/ })).toBeDisabled()
 
       await tecla('F3')
       const janela = await screen.findByRole('dialog', { name: 'Cliente da venda' })
@@ -882,14 +1115,14 @@ describe('PdvPage', () => {
 
       await waitFor(() => expect(screen.queryByText('Cliente não encontrado.')).not.toBeInTheDocument())
       expect(screen.getByLabelText('Cliente')).toHaveTextContent('Sem cliente')
-      await waitFor(() => expect(screen.getByRole('button', { name: /Pagamento/ })).toBeEnabled())
+      await waitFor(() => expect(screen.getByRole('button', { name: /Ir para pagamento/ })).toBeEnabled())
     })
   })
 
   it('três leituras em menos de 150 ms viram um cálculo só (A10)', async () => {
     renderPdv()
     const entrada = await campo()
-    await waitFor(() => expect(screen.getByText('Caixa 1 · Ana Souza')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Ana Souza')).toBeInTheDocument())
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
       for (const codigo of ['542', '900', '542']) {
@@ -1010,16 +1243,167 @@ describe('PdvPage', () => {
         }),
     )
     renderPdv()
-    await ler('ração')
-    const janela = await screen.findByRole('dialog', { name: 'Buscar produto' })
-    const busca = within(janela).getByLabelText('Nome do produto')
+    const busca = await campo()
+    fireEvent.change(busca, { target: { value: 'ração' } })
     await waitFor(() => expect(buscarProdutosMock).toHaveBeenCalled())
 
     fireEvent.keyDown(busca, { key: 'ArrowDown' })
     responder([{ ...RACAO, precoVigente: 24.9 }])
-    expect(await within(janela).findByRole('option', { name: /Ração X 1kg/ })).toHaveAttribute('aria-selected', 'true')
+    expect(await screen.findByRole('option', { name: /Ração X 1kg/ })).toHaveAttribute('aria-selected', 'true')
     fireEvent.keyDown(busca, { key: 'Enter' })
 
     await waitFor(() => expect(linhas()).toHaveLength(1))
+  })
+  describe('catálogo antes de digitar (DEC-044)', () => {
+    function categoria(id: string, nome: string, parentId: string | null, selecionavel = true): Categoria {
+      return { id, nome, parentId, selecionavel } as Categoria
+    }
+
+    it('mostra os produtos e as categorias principais; a categoria filtra e o card lança', async () => {
+      vi.mocked(listarCategorias).mockResolvedValue([
+        categoria('c-racoes', 'Rações', null),
+        categoria('c-umidas', 'Úmidas', 'c-racoes'),
+        categoria('c-velha', 'Inativa', null, false),
+        categoria('c-higiene', 'Higiene', null),
+      ])
+      vi.mocked(listarCatalogo).mockImplementation(async (categoriaId) => ({
+        produtos: categoriaId === 'c-racoes' ? [{ ...RACAO, precoVigente: 24.9 }] : [
+          { ...NEXGARD, precoVigente: 89.9 },
+          { ...RACAO, precoVigente: 24.9 },
+        ],
+        temMais: false,
+      }))
+      renderPdv()
+
+      const catalogo = await screen.findByRole('list', { name: 'Catálogo' })
+      await waitFor(() => expect(within(catalogo).getAllByRole('listitem')).toHaveLength(2))
+      expect(listarCatalogo).toHaveBeenCalledWith(null, 0, expect.anything())
+      const categorias = await screen.findByRole('group', { name: 'Categorias' })
+      await waitFor(() =>
+        expect(within(categorias).getAllByRole('button').map((botao) => botao.textContent)).toEqual([
+          'Todas',
+          'Rações',
+          'Higiene',
+        ]),
+      )
+      expect(within(categorias).getByRole('button', { name: 'Todas' })).toHaveAttribute('aria-pressed', 'true')
+
+      fireEvent.click(within(categorias).getByRole('button', { name: 'Rações' }))
+      await waitFor(() => expect(listarCatalogo).toHaveBeenCalledWith('c-racoes', 0, expect.anything()))
+      await waitFor(() => expect(within(screen.getByRole('list', { name: 'Catálogo' })).getAllByRole('listitem')).toHaveLength(1))
+      expect(within(categorias).getByRole('button', { name: 'Rações' })).toHaveAttribute('aria-pressed', 'true')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Lançar Ração X 1kg' }))
+      await waitFor(() => expect(linhas()).toHaveLength(1))
+      expect(await campo()).toHaveFocus()
+    })
+
+    it('"Mostrar mais" traz a próxima página', async () => {
+      vi.mocked(listarCatalogo).mockImplementation(async (_categoria, pagina) =>
+        pagina === 0
+          ? { produtos: [{ ...RACAO, precoVigente: 24.9 }], temMais: true }
+          : { produtos: [{ ...NEXGARD, precoVigente: 89.9 }], temMais: false },
+      )
+      renderPdv()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Mostrar mais' }))
+
+      await waitFor(() => expect(listarCatalogo).toHaveBeenCalledWith(null, 1, expect.anything()))
+      await waitFor(() => expect(within(screen.getByRole('list', { name: 'Catálogo' })).getAllByRole('listitem')).toHaveLength(2))
+      expect(screen.queryByRole('button', { name: 'Mostrar mais' })).not.toBeInTheDocument()
+    })
+
+    it('com 3 caracteres a busca toma o lugar do catálogo; Esc volta ao catálogo', async () => {
+      vi.mocked(listarCatalogo).mockResolvedValue({ produtos: [{ ...NEXGARD, precoVigente: 89.9 }], temMais: false })
+      buscarProdutosMock.mockResolvedValue([{ ...RACAO, precoVigente: 24.9 }])
+      renderPdv()
+      await screen.findByRole('list', { name: 'Catálogo' })
+      const entrada = await campo()
+
+      fireEvent.change(entrada, { target: { value: 'ração' } })
+      await screen.findByRole('listbox', { name: 'Produtos encontrados' })
+      expect(screen.queryByRole('list', { name: 'Catálogo' })).not.toBeInTheDocument()
+
+      fireEvent.keyDown(entrada, { key: 'Escape' })
+      expect(await screen.findByRole('list', { name: 'Catálogo' })).toBeInTheDocument()
+    })
+
+    it('rolando até o fim carrega a próxima página; se ela falhar, avisa e só tenta de novo pelo botão', async () => {
+      instalarIntersectionObserverFalso()
+      let falhar = true
+      vi.mocked(listarCatalogo).mockImplementation(async (_categoria, pagina) => {
+        if (pagina === 0) {
+          return { produtos: [{ ...RACAO, precoVigente: 24.9 }], temMais: true }
+        }
+        if (falhar) {
+          throw new HttpError(0, 'Sem conexão.')
+        }
+        return { produtos: [{ ...NEXGARD, precoVigente: 89.9 }], temMais: false }
+      })
+      try {
+        renderPdv()
+        await screen.findByRole('list', { name: 'Catálogo' })
+        await waitFor(() => expect(elementosObservados()).toHaveLength(1))
+
+        simularInterseccao(elementosObservados()[0], true)
+
+        expect(await screen.findByText('Não foi possível carregar mais produtos.')).toBeInTheDocument()
+        expect(listarCatalogo).toHaveBeenCalledTimes(2)
+        // Com a falha, nada fica observando o fim: o pedido nao se repete sozinho.
+        expect(elementosObservados()).toHaveLength(0)
+
+        falhar = false
+        fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }))
+        await waitFor(() =>
+          expect(within(screen.getByRole('list', { name: 'Catálogo' })).getAllByRole('listitem')).toHaveLength(2),
+        )
+        expect(screen.queryByText('Não foi possível carregar mais produtos.')).not.toBeInTheDocument()
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('um produto que aparece em duas páginas (o ranking mudou no meio) não se repete', async () => {
+      vi.mocked(listarCatalogo).mockImplementation(async (_categoria, pagina) =>
+        pagina === 0
+          ? { produtos: [{ ...RACAO, precoVigente: 24.9 }], temMais: true }
+          : { produtos: [{ ...RACAO, precoVigente: 24.9 }, { ...NEXGARD, precoVigente: 89.9 }], temMais: false },
+      )
+      renderPdv()
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Mostrar mais' }))
+
+      await waitFor(() => expect(listarCatalogo).toHaveBeenCalledWith(null, 1, expect.anything()))
+      await waitFor(() =>
+        expect(
+          within(screen.getByRole('list', { name: 'Catálogo' }))
+            .getAllByRole('button')
+            .map((botao) => botao.getAttribute('aria-label')),
+        ).toEqual(['Lançar Ração X 1kg', 'Lançar Nexgard M']),
+      )
+    })
+
+    it('a categoria escolhida continua depois de uma busca', async () => {
+      vi.mocked(listarCategorias).mockResolvedValue([categoria('c-racoes', 'Rações', null)])
+      vi.mocked(listarCatalogo).mockResolvedValue({ produtos: [{ ...RACAO, precoVigente: 24.9 }], temMais: false })
+      buscarProdutosMock.mockResolvedValue([])
+      renderPdv()
+      const categorias = await screen.findByRole('group', { name: 'Categorias' })
+      fireEvent.click(await within(categorias).findByRole('button', { name: 'Rações' }))
+      const entrada = await campo()
+
+      fireEvent.change(entrada, { target: { value: 'xyz' } })
+      await screen.findByText('Nenhum produto ativo encontrado para "xyz".')
+      fireEvent.keyDown(entrada, { key: 'Escape' })
+
+      const voltou = await screen.findByRole('group', { name: 'Categorias' })
+      expect(within(voltou).getByRole('button', { name: 'Rações' })).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    it('sem produtos ativos, o catálogo avisa', async () => {
+      vi.mocked(listarCatalogo).mockResolvedValue({ produtos: [], temMais: false })
+      renderPdv()
+      expect(await screen.findByText('Nenhum produto ativo cadastrado.')).toBeInTheDocument()
+    })
   })
 })

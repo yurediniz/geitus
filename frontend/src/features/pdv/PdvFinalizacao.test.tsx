@@ -8,12 +8,14 @@ import { PdvPage } from '@/features/pdv/PdvPage'
 import { MENSAGEM_TENTATIVA_PENDENTE } from '@/features/pdv/useCarrinho'
 import { chaveDasVendasEmEspera, guardarVendasEmEspera, type VendaEmEspera } from '@/features/pdv/vendasEmEspera'
 import { useAuth } from '@/hooks/useAuth'
+import { obterEmpresa } from '@/services/empresaService'
 import { listarPontos, sessaoAtual } from '@/services/caixaService'
 import { buscar as buscarConfiguracao } from '@/services/configuracaoPdvService'
 import { HttpError } from '@/services/httpClient'
 import { buscarVenda, calcular, cancelarVenda, finalizar, listarVendas, resolverCodigo } from '@/services/pdvService'
 import { pontoDeTeste, sessaoDeTeste } from '@/test/fixturesCaixa'
 import { calculoFalso, itemResolvido, NEXGARD, RACAO, vendaResumo } from '@/test/fixturesPdv'
+import type { Empresa } from '@/types/empresa'
 import type { CarrinhoRequest, Venda } from '@/types/pdv'
 
 vi.mock('@/hooks/useAuth', () => ({ useAuth: vi.fn() }))
@@ -34,6 +36,13 @@ vi.mock('@/services/pdvService', () => ({
   listarVendas: vi.fn(),
   buscarVenda: vi.fn(),
   cancelarVenda: vi.fn(),
+  listarCatalogo: vi.fn(async () => ({ produtos: [], temMais: false })),
+}))
+vi.mock('@/services/categoriaService', () => ({ listarCategorias: vi.fn(async () => []) }))
+vi.mock('@/services/empresaService', () => ({
+  obterEmpresa: vi.fn(async () => {
+    throw new Error('Sem a empresa no teste.')
+  }),
 }))
 
 const useAuthMock = vi.mocked(useAuth)
@@ -107,7 +116,7 @@ async function lancar(...codigos: string[]) {
     await ler(codigo)
     await waitFor(() => expect(linhas().length).toBeGreaterThanOrEqual(antes))
   }
-  await waitFor(() => expect(screen.getByRole('button', { name: /Pagamento/ })).toBeEnabled())
+  await waitFor(() => expect(screen.getByRole('button', { name: /Ir para pagamento/ })).toBeEnabled())
 }
 
 async function abrirPagamento() {
@@ -170,6 +179,41 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
   })
 
   describe('pagamento (F10)', () => {
+    it('voltar ao carrinho guarda os pagamentos informados; mudar o carrinho os descarta', async () => {
+      renderPdv()
+      await lancar('542*3')
+      let janela = await abrirPagamento()
+      await pagar(janela, '4', '10.00')
+      await within(janela).findByRole('button', { name: 'Remover PIX' })
+
+      fireEvent.click(within(janela).getByRole('button', { name: /Voltar ao carrinho/ }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      janela = await abrirPagamento()
+      expect(within(janela).getByRole('button', { name: 'Remover PIX' })).toBeInTheDocument()
+      await waitFor(() => expect(within(janela).getByText('Falta pagar').nextSibling).toHaveTextContent('R$ 64,70'))
+
+      fireEvent.keyDown(janela, { key: 'Escape' })
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      await lancar('542')
+      janela = await abrirPagamento()
+      expect(within(janela).queryByRole('button', { name: 'Remover PIX' })).not.toBeInTheDocument()
+      expect(within(janela).getByText('Nenhum pagamento ainda.')).toBeInTheDocument()
+    })
+
+    it('"Usar o que falta" preenche o valor com o que falta e foca o campo', async () => {
+      renderPdv()
+      await lancar('542')
+      const janela = await abrirPagamento()
+      fireEvent.keyDown(within(janela).getByRole('group', { name: 'Formas de pagamento' }), { key: '1' })
+      const valor = await within(janela).findByLabelText('Valor em Dinheiro')
+      fireEvent.change(valor, { target: { value: '5' } })
+
+      fireEvent.click(within(janela).getByRole('button', { name: 'Usar o que falta' }))
+
+      expect(valor).toHaveValue('24,90')
+      expect(valor).toHaveFocus()
+    })
+
     it('as teclas 1–4 escolhem a forma e preenchem o que falta pagar', async () => {
       renderPdv()
       await lancar('542')
@@ -654,7 +698,7 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
         expect(within(linhas()[indice]).getByText(mensagem)).toBeInTheDocument()
         expect(within(linhas()[1 - indice]).queryByText('com erro')).not.toBeInTheDocument()
         expect(guardado().linhas).toHaveLength(2)
-        expect(screen.getByRole('button', { name: /Pagamento/ })).toBeDisabled()
+        expect(screen.getByRole('button', { name: /Ir para pagamento/ })).toBeDisabled()
       },
     )
 
@@ -1019,5 +1063,169 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'O total da venda mudou' })).not.toBeInTheDocument())
     const pagamento = screen.getByRole('dialog', { name: 'Pagamento' })
     expect(within(pagamento).getByRole('list', { name: 'Formas usadas' })).toHaveTextContent('PIX')
+  })
+  describe('comprovante não fiscal (F9)', () => {
+    const EMPRESA_DO_CUPOM = {
+      nome: 'Mercado Central',
+      razaoSocial: 'Mercado Central Ltda',
+      cnpj: '11222333000181',
+      inscricaoEstadual: '123456',
+      telefone: '11987654321',
+      endereco: {
+        cep: '01001000',
+        logradouro: 'Rua A',
+        numero: '10',
+        complemento: null,
+        bairro: 'Centro',
+        municipio: 'São Paulo',
+        uf: 'SP',
+      },
+    } as Empresa
+
+    function vendaComItens(parcial: Partial<Venda> = {}): Venda {
+      return venda({
+        numero: 128,
+        subtotal: 74.7,
+        total: 74.7,
+        troco: 5.3,
+        pagamentos: [
+          { forma: 'PIX', valor: 20 },
+          { forma: 'DINHEIRO', valor: 60 },
+        ],
+        itens: [
+          {
+            ordem: 1,
+            nome: 'Ração X 1kg',
+            embalagemRotulo: null,
+            quantidade: 3,
+            unidade: 'UN',
+            precoUnitario: 24.9,
+            origemPreco: 'NORMAL',
+            valorBruto: 74.7,
+            descontoItem: 0,
+            descontoRateado: 0,
+            valorLiquido: 74.7,
+          },
+        ],
+        ...parcial,
+      })
+    }
+
+    function cupom() {
+      const area = document.getElementById('area-de-impressao')
+      if (!area) {
+        throw new Error('Sem a área de impressão.')
+      }
+      return area
+    }
+
+    beforeEach(() => {
+      vi.mocked(obterEmpresa).mockResolvedValue(EMPRESA_DO_CUPOM)
+      window.print = vi.fn()
+    })
+
+    it('depois de vender, "Imprimir comprovante" imprime o cupom não fiscal com a empresa, os itens e o troco', async () => {
+      finalizarMock.mockResolvedValue(vendaComItens())
+      let impresso = ''
+      vi.mocked(window.print).mockImplementation(() => {
+        impresso = cupom().textContent ?? ''
+        window.dispatchEvent(new Event('afterprint'))
+      })
+      renderPdv()
+      await lancar('542*3')
+      const janela = await abrirPagamento()
+      await pagar(janela, '1', '80,00')
+      await waitFor(() => expect(within(janela).getByRole('button', { name: /Finalizar venda/ })).toBeEnabled())
+      fireEvent.click(within(janela).getByRole('button', { name: /Finalizar venda/ }))
+      const ultima = await screen.findByRole('status', { name: 'Última venda' })
+
+      fireEvent.click(within(ultima).getByRole('button', { name: /Imprimir comprovante/ }))
+
+      await waitFor(() => expect(window.print).toHaveBeenCalledTimes(1))
+      expect(impresso).toContain('Mercado Central Ltda')
+      expect(impresso).toContain('CNPJ 11.222.333/0001-81')
+      expect(impresso).toContain('DOCUMENTO NÃO FISCAL')
+      expect(impresso).toContain('Ração X 1kg')
+      expect(impresso).toContain('3 UN x 24,90')
+      expect(impresso).toContain('Troco R$5,30')
+      expect(impresso).toContain('CONSUMIDOR NÃO IDENTIFICADO')
+      expect(impresso).toContain('não substitui a nota fiscal')
+      // Impresso, o cupom sai da página e o foco volta ao campo.
+      await waitFor(() => expect(document.getElementById('area-de-impressao')).toBeNull())
+      await waitFor(async () => expect(await campo()).toHaveFocus())
+
+      await tecla('F9')
+      await waitFor(() => expect(window.print).toHaveBeenCalledTimes(2))
+    })
+
+    it('cancelada no F8 depois de vender, o painel e o F9 passam a mostrar e imprimir a cancelada', async () => {
+      const concluida = vendaComItens({ id: 'v-128' })
+      const cancelada = vendaComItens({ id: 'v-128', status: 'CANCELADA', podeCancelar: false })
+      finalizarMock.mockResolvedValue(concluida)
+      listarVendasMock.mockResolvedValue({ itens: [concluida], pagina: 0, tamanho: 50, totalItens: 1 })
+      buscarVendaMock.mockResolvedValue({ ...concluida, podeCancelar: true })
+      cancelarVendaMock.mockResolvedValue(cancelada)
+      let impresso = ''
+      vi.mocked(window.print).mockImplementation(() => {
+        impresso = cupom().textContent ?? ''
+        window.dispatchEvent(new Event('afterprint'))
+      })
+      renderPdv()
+      await lancar('542*3')
+      const pagamento = await abrirPagamento()
+      await pagar(pagamento, '1', '80,00')
+      await waitFor(() => expect(within(pagamento).getByRole('button', { name: /Finalizar venda/ })).toBeEnabled())
+      fireEvent.click(within(pagamento).getByRole('button', { name: /Finalizar venda/ }))
+      await screen.findByRole('status', { name: 'Última venda' })
+
+      await tecla('F8')
+      const janela = await screen.findByRole('dialog', { name: 'Vendas do caixa' })
+      fireEvent.click(await within(janela).findByRole('button', { name: /Nº 128/ }))
+      fireEvent.click(await within(janela).findByRole('button', { name: 'Cancelar venda' }))
+      fireEvent.change(within(janela).getByLabelText(/Motivo do cancelamento/), { target: { value: 'Desistiu' } })
+      fireEvent.click(within(janela).getByRole('button', { name: 'Confirmar cancelamento' }))
+      await within(janela).findByText(/Venda nº 128 cancelada/)
+      fireEvent.keyDown(janela, { key: 'Escape' })
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+      expect(screen.getByRole('status', { name: 'Última venda' })).toHaveTextContent('Venda nº 128 cancelada')
+      await tecla('F9')
+      await waitFor(() => expect(window.print).toHaveBeenCalledTimes(1))
+      expect(impresso).toContain('*** VENDA CANCELADA ***')
+    })
+
+    it('F9 sem venda concluída avisa e não imprime', async () => {
+      renderPdv()
+      await campo()
+
+      await tecla('F9')
+
+      expect(
+        await screen.findByText('Finalize a venda para imprimir o comprovante. Para reimprimir, use Vendas do caixa (F8).'),
+      ).toBeInTheDocument()
+      expect(window.print).not.toHaveBeenCalled()
+    })
+
+    it('Vendas do caixa (F8) reimprime o comprovante, com a marca de cancelada', async () => {
+      const cancelada = vendaComItens({ id: 'v-9', numero: 9, status: 'CANCELADA', podeCancelar: false })
+      listarVendasMock.mockResolvedValue({ itens: [cancelada], pagina: 0, tamanho: 50, totalItens: 1 })
+      buscarVendaMock.mockResolvedValue(cancelada)
+      let impresso = ''
+      vi.mocked(window.print).mockImplementation(() => {
+        impresso = cupom().textContent ?? ''
+        window.dispatchEvent(new Event('afterprint'))
+      })
+      renderPdv()
+      await campo()
+
+      await tecla('F8')
+      const janela = await screen.findByRole('dialog', { name: 'Vendas do caixa' })
+      fireEvent.click(await within(janela).findByRole('button', { name: /Nº 9/ }))
+      fireEvent.click(await within(janela).findByRole('button', { name: 'Imprimir comprovante' }))
+
+      await waitFor(() => expect(window.print).toHaveBeenCalledTimes(1))
+      expect(impresso).toContain('Venda nº 9')
+      expect(impresso).toContain('*** VENDA CANCELADA ***')
+    })
   })
 })

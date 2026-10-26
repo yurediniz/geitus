@@ -1,10 +1,12 @@
-import { useEffect, useId, useRef, useState } from 'react'
-import { AlertCircle, AlertTriangle, ImageIcon, ScanBarcode } from 'lucide-react'
+import { useEffect, useId, useRef, type MouseEvent } from 'react'
+import { AlertCircle, AlertTriangle, Minus, Percent, Plus, ShoppingBasket, X } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
 import { NativeSelect } from '@/components/ui/native-select'
 import { formatarReais } from '@/features/cash-register/formatacaoCaixa'
 import { unidadeDaLinha, type LinhaDoCarrinho } from '@/features/pdv/carrinho'
 import { formatarQuantidade, SELO_DA_ORIGEM, textoDoDesconto } from '@/features/pdv/formatacaoPdv'
+import { MiniaturaDoProduto } from '@/features/pdv/MiniaturaDoProduto'
 import { cn } from '@/lib/utils'
 import type { LinhaCalculada } from '@/types/pdv'
 
@@ -23,24 +25,30 @@ export interface ListaDeLinhasProps {
   errosPorLinha: Readonly<Record<string, string | undefined>>
   avisosPorLinha: Readonly<Record<string, string | undefined>>
   selecionadaId: string | null
-  /** A ultima linha lancada: destacada a cada lancamento, com a miniatura do produto. */
+  /** A ultima linha lancada: destacada a cada lancamento. */
   destaque: DestaqueDaLinha | null
   aoSelecionar: (linhaId: string) => void
   aoTrocarEmbalagem: (linhaId: string, embalagemId: string | null) => void
+  /** Os botoes − e + da linha (os mesmos do teclado). */
+  aoMudarQuantidade: (linhaId: string, delta: 1 | -1) => void
+  /** O botao % da linha (o mesmo do F4). */
+  aoDescontar: (linhaId: string) => void
+  /** O botao × da linha (o mesmo do Del). */
+  aoRemover: (linhaId: string) => void
 }
 
 /**
- * A lista de linhas do PDV (spec §6.2): no, nome, codigo lido, "UN ▾" quando
- * ha embalagens, quantidade, preco unitario com o selo, desconto e valor. Os
+ * A lista de linhas do PDV (spec §6.2): miniatura, nome, quantidade com − e +,
+ * "UN ▾" quando ha embalagens, preco unitario com o selo, desconto e valor. Os
  * valores sao os do servidor; os erros e avisos aparecem na propria linha.
  */
 export function ListaDeLinhas(props: ListaDeLinhasProps) {
   const { linhas } = props
   if (linhas.length === 0) {
     return (
-      <div className="flex h-full min-h-48 flex-col items-center justify-center gap-3 rounded-lg bg-muted/40 p-8 text-center">
-        <ScanBarcode className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
-        <p className="text-muted-foreground">Nenhum item. Bipe o código ou digite o nome do produto.</p>
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+        <ShoppingBasket className="h-10 w-10 text-muted-foreground/60" aria-hidden="true" />
+        <p className="text-muted-foreground">Nenhum item ainda.</p>
       </div>
     )
   }
@@ -63,6 +71,9 @@ function ItemDaLista({
   destaque,
   aoSelecionar,
   aoTrocarEmbalagem,
+  aoMudarQuantidade,
+  aoDescontar,
+  aoRemover,
 }: ListaDeLinhasProps & { linha: LinhaDoCarrinho; numero: number }) {
   const itemRef = useRef<HTMLLIElement>(null)
   const idErro = useId()
@@ -81,6 +92,12 @@ function ItemDaLista({
   const desconto = calculada ? calculada.descontoItem + calculada.descontoRateado : 0
   // Embalagem e sempre inteira; a unidade fracionada mostra as 3 casas ("0,400 KG").
   const fracionada = linha.produto.fracionada && linha.embalagemId === null
+  const nome = linha.produto.nome
+  /** Os botoes agem na linha sem seleciona-la de novo pelo clique do item. */
+  const naLinha = (acao: () => void) => (event: MouseEvent) => {
+    event.stopPropagation()
+    acao()
+  }
 
   useEffect(() => {
     if (selecionada) {
@@ -95,8 +112,9 @@ function ItemDaLista({
       aria-describedby={[erro && idErro, aviso && idAviso].filter(Boolean).join(' ') || undefined}
       onClick={() => aoSelecionar(linha.id)}
       className={cn(
-        'relative grid cursor-pointer grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-start gap-x-3 gap-y-1 px-3 py-2.5 transition-colors',
-        selecionada ? 'bg-accent/60' : 'hover:bg-muted/50',
+        'relative flex cursor-pointer gap-3 rounded-lg px-2 py-2 transition-colors',
+        // A selecionada tem a faixa ambar a esquerda: e nela que + / − / F4 / Del agem.
+        selecionada ? 'bg-accent/70 shadow-[inset_4px_0_0_var(--color-primary)]' : 'hover:bg-muted/50',
         erro && 'border-l-4 border-destructive bg-destructive/5',
       )}
     >
@@ -106,86 +124,123 @@ function ItemDaLista({
           key={destaque.vez}
           data-destaque={destaque.vez}
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 rounded-md bg-primary/10 motion-safe:animate-[pulse_0.6s_ease-out_1] motion-reduce:hidden"
+          className="pointer-events-none absolute inset-0 rounded-lg bg-primary/25 opacity-0 motion-safe:animate-[geitus-destaque_0.9s_ease-out_1] motion-reduce:hidden"
         />
       )}
-      <span className="pt-0.5 text-sm text-muted-foreground tabular-nums">{numero}</span>
+      <span className="sr-only">{`Item ${numero}`}</span>
+      <MiniaturaDoProduto url={linha.produto.miniaturaUrl} className="size-12" />
 
-      <div className="flex min-w-0 items-start gap-3">
-        {destacada && <Miniatura url={linha.produto.miniaturaUrl} />}
-        <div className="min-w-0 space-y-0.5">
-          <p className="truncate font-medium">
-            {linha.produto.nome}
-            {erro && <span className="sr-only">com erro</span>}
-          </p>
-          {linha.codigoLido && <p className="text-xs text-muted-foreground tabular-nums">{linha.codigoLido}</p>}
-          {erro && (
-            <p className="flex items-start gap-1 text-sm font-medium text-destructive">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              <span id={idErro}>{erro}</span>
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-0.5">
+            <p className="truncate font-medium">
+              {nome}
+              {erro && <span className="sr-only">com erro</span>}
             </p>
-          )}
-          {aviso && (
-            <p className="flex items-start gap-1 text-sm text-warning-soft-foreground">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              <span id={idAviso}>{aviso}</span>
+            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground tabular-nums">
+              {selos.map((selo) => (
+                <span key={selo} className="rounded-full bg-accent px-1.5 py-0.5 text-[11px] font-medium text-accent-foreground">
+                  {selo}
+                </span>
+              ))}
+              {calculada && <span>{`${formatarReais(calculada.precoUnitario)} / ${unidadeDaLinha(linha)}`}</span>}
+              {linha.codigoLido && <span>{`· ${linha.codigoLido}`}</span>}
             </p>
-          )}
+            {(linha.desconto || desconto > 0) && (
+              <p className="text-xs text-success-soft-foreground tabular-nums">
+                {`Desconto ${linha.desconto ? textoDoDesconto(linha.desconto) : ''}${desconto > 0 ? ` (− ${formatarReais(desconto)})` : ''}`.trim()}
+              </p>
+            )}
+          </div>
+          <p className="shrink-0 text-base font-semibold tabular-nums">{calculada ? formatarReais(calculada.valorLiquido) : '—'}</p>
         </div>
-      </div>
 
-      <div className="flex items-center gap-2 text-sm">
-        <span className="font-semibold tabular-nums">{formatarQuantidade(linha.quantidade, fracionada)}</span>
-        {linha.produto.embalagens.length > 0 && !linha.etiqueta ? (
-          <NativeSelect
-            aria-label={`Unidade da linha ${numero}`}
-            value={linha.embalagemId ?? UNIDADE}
-            onClick={(event) => event.stopPropagation()}
-            onChange={(event) => aoTrocarEmbalagem(linha.id, event.target.value === UNIDADE ? null : event.target.value)}
-            className="h-11 w-auto min-w-20 py-0 text-sm"
-          >
-            <option value={UNIDADE}>{linha.produto.unidade}</option>
-            {linha.produto.embalagens.map((embalagem) => (
-              <option key={embalagem.id} value={embalagem.id}>
-                {embalagem.rotulo}
-              </option>
-            ))}
-          </NativeSelect>
-        ) : (
-          <span className="text-muted-foreground">{unidadeDaLinha(linha)}</span>
-        )}
-      </div>
-
-      <div className="min-w-32 space-y-0.5 text-right text-sm">
-        <p className="text-base font-semibold tabular-nums">{calculada ? formatarReais(calculada.valorLiquido) : '—'}</p>
-        <p className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground tabular-nums">
-          {selos.map((selo) => (
-            <span key={selo} className="rounded-full bg-accent px-1.5 py-0.5 text-[11px] font-medium text-accent-foreground">
-              {selo}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center rounded-lg border bg-card">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 rounded-r-none"
+              aria-label={`Diminuir a quantidade de ${nome}`}
+              // O − nunca deixa a linha abaixo de 1 (remover e com o ×).
+              disabled={linha.etiqueta || linha.quantidade - 1 < 1}
+              onClick={naLinha(() => aoMudarQuantidade(linha.id, -1))}
+            >
+              <Minus className="size-3.5" aria-hidden="true" />
+            </Button>
+            <span className="min-w-10 px-1 text-center text-sm font-semibold tabular-nums">
+              {formatarQuantidade(linha.quantidade, fracionada)}
             </span>
-          ))}
-          {calculada && `${formatarReais(calculada.precoUnitario)} / ${unidadeDaLinha(linha)}`}
-        </p>
-        {(linha.desconto || desconto > 0) && (
-          <p className="text-xs text-success-soft-foreground tabular-nums">
-            {`Desconto ${linha.desconto ? textoDoDesconto(linha.desconto) : ''}${desconto > 0 ? ` (− ${formatarReais(desconto)})` : ''}`.trim()}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 rounded-l-none"
+              aria-label={`Aumentar a quantidade de ${nome}`}
+              disabled={linha.etiqueta}
+              onClick={naLinha(() => aoMudarQuantidade(linha.id, 1))}
+            >
+              <Plus className="size-3.5" aria-hidden="true" />
+            </Button>
+          </div>
+          {linha.produto.embalagens.length > 0 && !linha.etiqueta ? (
+            <NativeSelect
+              aria-label={`Unidade da linha ${numero}`}
+              value={linha.embalagemId ?? UNIDADE}
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => aoTrocarEmbalagem(linha.id, event.target.value === UNIDADE ? null : event.target.value)}
+              className="h-8 w-auto min-w-20 py-0 text-sm"
+            >
+              <option value={UNIDADE}>{linha.produto.unidade}</option>
+              {linha.produto.embalagens.map((embalagem) => (
+                <option key={embalagem.id} value={embalagem.id}>
+                  {embalagem.rotulo}
+                </option>
+              ))}
+            </NativeSelect>
+          ) : (
+            <span className="px-1 text-sm text-muted-foreground">{unidadeDaLinha(linha)}</span>
+          )}
+          <div className="ml-auto flex items-center gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-8 text-success-soft-foreground"
+              aria-label={`Desconto de ${nome}`}
+              title="Desconto do item (F4)"
+              onClick={naLinha(() => aoDescontar(linha.id))}
+            >
+              <Percent className="size-3.5" aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="size-8 text-destructive hover:text-destructive"
+              aria-label={`Remover ${nome}`}
+              title="Remover (Del)"
+              onClick={naLinha(() => aoRemover(linha.id))}
+            >
+              <X className="size-4" aria-hidden="true" />
+            </Button>
+          </div>
+        </div>
+
+        {erro && (
+          <p className="flex items-start gap-1 text-sm font-medium text-destructive">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span id={idErro}>{erro}</span>
+          </p>
+        )}
+        {aviso && (
+          <p className="flex items-start gap-1 text-sm text-warning-soft-foreground">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span id={idAviso}>{aviso}</span>
           </p>
         )}
       </div>
     </li>
-  )
-}
-
-/** A miniatura da ultima linha lancada; sem imagem (ou se ela falhar), o icone neutro. */
-function Miniatura({ url }: { url: string | null }) {
-  const [falhou, setFalhou] = useState(false)
-  return (
-    <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
-      {url && !falhou ? (
-        <img src={url} alt="" decoding="async" onError={() => setFalhou(true)} className="h-full w-full object-contain" />
-      ) : (
-        <ImageIcon className="size-5 text-muted-foreground/70" aria-hidden="true" />
-      )}
-    </div>
   )
 }

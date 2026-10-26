@@ -1,27 +1,30 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { acaoDoAtalho, type AcaoDoPdv } from '@/features/pdv/atalhosDoPdv'
 import { tocarBipeDeErro } from '@/features/pdv/bipeDeErro'
 import { CampoDeLeitura } from '@/features/pdv/CampoDeLeitura'
-import { Undo2 } from 'lucide-react'
+import { ListOrdered, PauseCircle, Undo2, UserRound } from 'lucide-react'
 
+import { MenuDeNavegacao } from '@/components/layout/Navegacao'
 import { Button } from '@/components/ui/button'
 import { CAIXA_QUERY_KEY, CHAVE_DA_SESSAO_ATUAL } from '@/features/cash-register/caixaQuery'
 import { PRODUTOS_QUERY_KEY } from '@/features/catalog/catalogoQuery'
 import type { Carrinho, LinhaDoCarrinho } from '@/features/pdv/carrinho'
-import { focarCampoDeLeitura, ID_CAMPO_DE_LEITURA } from '@/features/pdv/focoDoPdv'
-import { JanelaBusca } from '@/features/pdv/JanelaBusca'
+import { BarraDoPdv, DadoDaBarra } from '@/features/pdv/BarraDoPdv'
+import { CLASSE_DO_BOTAO_DA_BARRA } from '@/features/pdv/estiloDaBarra'
+import { focarCampoDeLeitura, ID_CAMPO_DE_LEITURA, selecionarCampoDeLeitura } from '@/features/pdv/focoDoPdv'
 import { JanelaCliente } from '@/features/pdv/JanelaCliente'
 import { JanelaConfirmar, type Confirmacao } from '@/features/pdv/JanelaConfirmar'
 import { JanelaDesconto, type AlvoDoDesconto } from '@/features/pdv/JanelaDesconto'
 import { JanelaPagamento } from '@/features/pdv/JanelaPagamento'
 import { JanelaVendasDoCaixa } from '@/features/pdv/JanelaVendasDoCaixa'
 import { JanelaVendasEmEspera } from '@/features/pdv/JanelaVendasEmEspera'
+import { ImpressaoDoComprovante } from '@/features/pdv/ImpressaoDoComprovante'
 import { LIMITES_DA_LEITURA } from '@/features/pdv/filaDeLeituras'
 import { ListaDeLinhas, type DestaqueDaLinha } from '@/features/pdv/ListaDeLinhas'
 import { ehDoPagamento, separarMensagens } from '@/features/pdv/mensagensDoCalculo'
-import { PainelDoTotal, type AcaoDoPainel } from '@/features/pdv/PainelDoTotal'
+import { PainelDoTotal } from '@/features/pdv/PainelDoTotal'
 import { PDV_QUERY_KEY } from '@/features/pdv/pdvQuery'
 import { useCalculo } from '@/features/pdv/useCalculo'
 import { MENSAGEM_TENTATIVA_PENDENTE, useCarrinho } from '@/features/pdv/useCarrinho'
@@ -35,10 +38,9 @@ import type { AvisosDaTela } from '@/hooks/useFeedbackDaTela'
 import { gerarUuid } from '@/lib/uuid'
 import type { Usuario } from '@/types/auth'
 import type { SessaoDeCaixa } from '@/types/caixa'
-import type { ConfiguracaoDoPdv, LinhaCalculada, MensagemDoCalculo, Venda } from '@/types/pdv'
+import type { ConfiguracaoDoPdv, LinhaCalculada, MensagemDoCalculo, PagamentoInformado, Venda } from '@/types/pdv'
 
 type Janela =
-  | { tipo: 'BUSCA'; texto: string }
   | { tipo: 'CLIENTE' }
   | { tipo: 'DESCONTO'; desconto: AlvoDoDesconto }
   | { tipo: 'CONFIRMAR'; confirmacao: Confirmacao }
@@ -58,12 +60,17 @@ export interface TelaDeVendaProps {
   /** Undefined enquanto carrega (ou se falhar): vale o padrao, e o servidor confere ao finalizar. */
   configuracao: ConfiguracaoDoPdv | undefined
   avisos: AvisosDaTela
+  /** Os avisos da tela (sucesso e erro), logo abaixo da barra. */
+  feedback?: ReactNode
 }
 
-const MENSAGEM_BLOQUEADO = 'Corrija os erros da venda antes de pagar.'
+const SEM_PAGAMENTOS: readonly PagamentoInformado[] = []
+
+const MENSAGEM_BLOQUEADO ='Corrija os erros da venda antes de pagar.'
 const MENSAGEM_CALCULANDO = 'Aguarde o cálculo da venda.'
 const MENSAGEM_SEM_ITENS = 'Lance um item primeiro.'
 const MENSAGEM_AGUARDE_A_LEITURA = 'Aguarde a leitura…'
+const MENSAGEM_NADA_PARA_IMPRIMIR = 'Finalize a venda para imprimir o comprovante. Para reimprimir, use Vendas do caixa (F8).'
 
 /** Quanto tempo o aviso "removido da venda" oferece o Desfazer. */
 const TEMPO_DO_DESFAZER_MS = 6_000
@@ -75,11 +82,12 @@ interface LinhaRemovida {
 }
 
 /**
- * A venda com o caixa aberto (spec do PDV §6.2): a lista de linhas, o campo
- * "Código ou nome" no rodape (foco permanente) e a coluna do total. O
- * carrinho fica no navegador; o calculo exibido e sempre o do servidor.
+ * A venda com o caixa aberto (spec do PDV §6.2): a barra com o caixa e o
+ * operador; a esquerda, o campo "Código ou nome" no topo (foco permanente)
+ * com a busca ao vivo; a direita, o cliente, os itens e o total. O carrinho
+ * fica no navegador; o calculo exibido e sempre o do servidor.
  */
-export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVendaProps) {
+export function TelaDeVenda({ sessao, usuario, configuracao, avisos, feedback }: TelaDeVendaProps) {
   const queryClient = useQueryClient()
   const venderSemEstoque = configuracao?.venderSemEstoque ?? true
   const opcoes = useMemo(() => ({ venderSemEstoque }), [venderSemEstoque])
@@ -91,11 +99,15 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
   const [erroDaLeitura, setErroDaLeitura] = useState<{ mensagem: string; vez: number } | null>(null)
   const [removida, setRemovida] = useState<LinhaRemovida | null>(null)
   const [ultimaVenda, setUltimaVenda] = useState<Venda | null>(null)
+  const [vendaParaImprimir, setVendaParaImprimir] = useState<Venda | null>(null)
   const [janela, setJanela] = useState<Janela | null>(null)
   const [errosDaVenda, setErrosDaVenda] = useState<ErrosDaVenda | null>(null)
   const [leiturasPendentes, setLeiturasPendentes] = useState(0)
   const [avisoDaLeitura, setAvisoDaLeitura] = useState<string | null>(null)
   const espera = useVendasEmEspera(usuario.empresa.id, usuario.id)
+  const idCliente = useId()
+  /** Os pagamentos informados e o carrinho em que valem: mudou o carrinho, recomeca do zero. */
+  const [rascunho, setRascunho] = useState<{ carrinho: Carrinho; pagamentos: PagamentoInformado[] } | null>(null)
 
   const { linhas } = carrinho
   const selecionada: LinhaDoCarrinho | undefined =
@@ -208,11 +220,78 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
   }, [])
 
   const fecharJanela = useCallback(() => setJanela(null), [])
+  const terminarImpressao = useCallback(() => {
+    setVendaParaImprimir(null)
+    focarCampoDeLeitura()
+  }, [])
+
+  const carrinhoAtual = carrinho.atual
+  const guardarPagamentos = useCallback(
+    (pagamentos: PagamentoInformado[]) => setRascunho({ carrinho: carrinhoAtual(), pagamentos }),
+    [carrinhoAtual],
+  )
+
+  /** F4 ou o botao % da linha. */
+  const descontarLinha = (linha: LinhaDoCarrinho | undefined) => {
+    if (!livreParaMudar()) {
+      return
+    }
+    if (!linha) {
+      recusar(MENSAGEM_SEM_ITENS)
+      return
+    }
+    setSelecionadaId(linha.id)
+    setJanela({
+      tipo: 'DESCONTO',
+      desconto: {
+        alvo: linha.id,
+        titulo: 'Desconto do item',
+        descricao: linha.produto.nome,
+        atual: linha.desconto,
+      },
+    })
+  }
+
+  /** + / − (teclado ou botoes da linha). */
+  const mudarQuantidade = (linha: LinhaDoCarrinho | undefined, delta: 1 | -1) => {
+    if (!linha) {
+      return
+    }
+    const resultado = carrinho.alterarQuantidade(linha.id, delta)
+    if (!resultado.ok) {
+      recusar(resultado.erro)
+    }
+  }
+
+  /** Del ou o botao × da linha: com desconto, confirma antes. */
+  const pedirRemocao = (linha: LinhaDoCarrinho | undefined) => {
+    if (!linha || !livreParaMudar()) {
+      return
+    }
+    if (linha.desconto) {
+      setJanela({
+        tipo: 'CONFIRMAR',
+        confirmacao: {
+          titulo: `Remover ${linha.produto.nome}?`,
+          descricao: 'A linha tem desconto. O desconto também sai.',
+          confirmar: 'Remover',
+          aoConfirmar: () => {
+            setJanela(null)
+            removerComDesfazer(linha)
+          },
+        },
+      })
+      return
+    }
+    removerComDesfazer(linha)
+    focarCampoDeLeitura()
+  }
 
   const executar = (acao: AcaoDoPdv) => {
     switch (acao) {
       case 'BUSCA':
-        setJanela({ tipo: 'BUSCA', texto: '' })
+        // A busca e o proprio campo do topo: o F2 o seleciona.
+        selecionarCampoDeLeitura()
         return
       case 'CLIENTE':
         if (livreParaMudar()) {
@@ -220,22 +299,7 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
         }
         return
       case 'DESCONTO_ITEM':
-        if (!livreParaMudar()) {
-          return
-        }
-        if (!selecionada) {
-          recusar(MENSAGEM_SEM_ITENS)
-          return
-        }
-        setJanela({
-          tipo: 'DESCONTO',
-          desconto: {
-            alvo: selecionada.id,
-            titulo: 'Desconto do item',
-            descricao: selecionada.produto.nome,
-            atual: selecionada.desconto,
-          },
-        })
+        descontarLinha(selecionada)
         return
       case 'DESCONTO_TOTAL':
         if (!livreParaMudar()) {
@@ -266,38 +330,11 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
         return
       }
       case 'MAIS':
-      case 'MENOS': {
-        if (!selecionada) {
-          return
-        }
-        const resultado = carrinho.alterarQuantidade(selecionada.id, acao === 'MAIS' ? 1 : -1)
-        if (!resultado.ok) {
-          recusar(resultado.erro)
-        }
+      case 'MENOS':
+        mudarQuantidade(selecionada, acao === 'MAIS' ? 1 : -1)
         return
-      }
       case 'REMOVER':
-        if (!selecionada || !livreParaMudar()) {
-          return
-        }
-        if (selecionada.desconto) {
-          const linha = selecionada
-          setJanela({
-            tipo: 'CONFIRMAR',
-            confirmacao: {
-              titulo: `Remover ${linha.produto.nome}?`,
-              descricao: 'A linha tem desconto. O desconto também sai.',
-              confirmar: 'Remover',
-              aoConfirmar: () => {
-                setJanela(null)
-                removerComDesfazer(linha)
-              },
-            },
-          })
-          return
-        }
-        removerComDesfazer(selecionada)
-        focarCampoDeLeitura()
+        pedirRemocao(selecionada)
         return
       case 'PAGAMENTO':
         if (linhas.length === 0) {
@@ -349,6 +386,14 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
       case 'VENDAS_DO_CAIXA':
         setJanela({ tipo: 'VENDAS' })
         return
+      case 'IMPRIMIR':
+        // So a venda que acabou de sair (ainda no painel); as anteriores, pelo F8.
+        if (ultimaVenda) {
+          setVendaParaImprimir(ultimaVenda)
+        } else {
+          recusar(MENSAGEM_NADA_PARA_IMPRIMIR)
+        }
+        return
     }
   }
 
@@ -391,28 +436,6 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
     }
   }
 
-  const acoes: AcaoDoPainel[] = [
-    { atalho: 'F2', rotulo: 'Buscar', aoClicar: () => executar('BUSCA') },
-    { atalho: 'F3', rotulo: 'Cliente', aoClicar: () => executar('CLIENTE') },
-    { atalho: 'F4', rotulo: 'Desconto do item', aoClicar: () => executar('DESCONTO_ITEM'), desabilitado: !selecionada },
-    {
-      atalho: 'Shift+F4',
-      rotulo: 'Desconto da venda',
-      aoClicar: () => executar('DESCONTO_TOTAL'),
-      desabilitado: linhas.length === 0,
-    },
-    { atalho: 'F6', rotulo: 'Pôr em espera', aoClicar: () => executar('POR_EM_ESPERA'), desabilitado: linhas.length === 0 },
-    { atalho: 'F7', rotulo: `Em espera (${espera.vendas.length})`, aoClicar: () => executar('VENDAS_EM_ESPERA') },
-    { atalho: 'F8', rotulo: 'Vendas do caixa', aoClicar: () => executar('VENDAS_DO_CAIXA') },
-    {
-      atalho: 'F10',
-      rotulo: 'Pagamento',
-      aoClicar: () => executar('PAGAMENTO'),
-      desabilitado: !podePagar,
-      principal: true,
-    },
-  ]
-
   const retomar = (id: string, porAtualEmEspera: boolean) => {
     const escolhida = espera.vendas.find((venda) => venda.id === id)
     if (!escolhida) {
@@ -446,52 +469,59 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
     avisos.sucesso('Venda retomada.')
   }
 
+  const atalhoDaBarra = (tecla: string) => (
+    <kbd aria-hidden="true" className="rounded bg-white/15 px-1.5 py-0.5 font-sans text-[11px] font-semibold">
+      {tecla}
+    </kbd>
+  )
+
   return (
-    <div className="grid min-h-[calc(100vh-9rem)] grid-cols-[minmax(0,1fr)_22rem] gap-6">
-      <section aria-label="Venda" className="flex min-h-0 flex-col rounded-xl bg-card shadow-sm">
-        <div className="min-h-0 flex-1 overflow-y-auto p-2">
-          <ListaDeLinhas
-            linhas={linhas}
-            calculoPorLinha={calculoPorLinha}
-            errosPorLinha={mensagens.errosPorLinha}
-            avisosPorLinha={mensagens.avisosPorLinha}
-            selecionadaId={selecionada?.id ?? null}
-            destaque={destaque}
-            aoSelecionar={(linhaId) => {
-              setSelecionadaId(linhaId)
-              focarCampoDeLeitura()
-            }}
-            aoTrocarEmbalagem={(linhaId, embalagemId) => {
-              const resultado = carrinho.trocarEmbalagem(linhaId, embalagemId)
-              if (!resultado.ok) {
-                recusar(resultado.erro)
-              }
-              focarCampoDeLeitura()
-            }}
-          />
-        </div>
-        <div className="space-y-2 border-t p-4">
-          {removida && (
-            <div role="status" className="flex items-center justify-between gap-3 rounded-md bg-muted/60 px-3 py-1.5 text-sm">
-              <span>{`${removida.nome} removido da venda.`}</span>
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-11 md:h-9"
-                onClick={() => {
-                  const resultado = carrinho.restaurar(removida.anterior)
-                  setRemovida(null)
-                  if (!resultado.ok) {
-                    recusar(resultado.erro)
-                  }
-                  focarCampoDeLeitura()
-                }}
-              >
-                <Undo2 className="h-4 w-4" aria-hidden="true" />
-                Desfazer
-              </Button>
-            </div>
-          )}
+    <div className="flex min-h-screen flex-col lg:h-screen">
+      <BarraDoPdv
+        acoes={
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              className={CLASSE_DO_BOTAO_DA_BARRA}
+              onClick={() => executar('VENDAS_EM_ESPERA')}
+              aria-keyshortcuts="F7"
+            >
+              <PauseCircle className="h-4 w-4" aria-hidden="true" />
+              {`Em espera (${espera.vendas.length})`}
+              {atalhoDaBarra('F7')}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              className={CLASSE_DO_BOTAO_DA_BARRA}
+              onClick={() => executar('VENDAS_DO_CAIXA')}
+              aria-keyshortcuts="F8"
+            >
+              <ListOrdered className="h-4 w-4" aria-hidden="true" />
+              Vendas do caixa
+              {atalhoDaBarra('F8')}
+            </Button>
+            <MenuDeNavegacao comRotulo className={CLASSE_DO_BOTAO_DA_BARRA} />
+          </>
+        }
+      >
+        <DadoDaBarra rotulo="Caixa">
+          <span className="flex items-center gap-2">
+            {sessao.ponto.nome}
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
+              <span aria-hidden="true" className="size-2 rounded-full bg-success" />
+              Aberto
+            </span>
+          </span>
+        </DadoDaBarra>
+        <DadoDaBarra rotulo="Operador">{usuario.nome}</DadoDaBarra>
+      </BarraDoPdv>
+
+      {feedback && <div className="px-4 pt-3 empty:hidden">{feedback}</div>}
+
+      <div className="grid min-h-0 flex-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(23rem,28rem)]">
+        <section aria-label="Produtos" className="flex min-h-[28rem] flex-col rounded-2xl bg-card p-4 shadow-sm lg:min-h-0">
           <CampoDeLeitura
             erro={erroDaLeitura?.mensagem ?? null}
             aoLimparErro={() => setErroDaLeitura(null)}
@@ -508,53 +538,130 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
               }
             }}
             aoRecusar={recusar}
-            aoBuscar={(texto) => setJanela({ tipo: 'BUSCA', texto })}
           />
-        </div>
-        {Object.keys(mensagens.errosPorLinha).length > 0 && (
-          <div role="alert" aria-label="Erros dos itens" className="sr-only">
-            {linhas
-              .map((linha, indice) => ({ numero: indice + 1, erro: mensagens.errosPorLinha[linha.id] }))
-              .filter(({ erro }) => erro)
-              .map(({ numero, erro }) => (
-                <p key={numero}>{`Item ${numero}: ${erro}`}</p>
-              ))}
-          </div>
-        )}
-      </section>
+        </section>
 
-      <PainelDoTotal
-        calculo={calculo.calculo}
-        vazio={linhas.length === 0}
-        ultimaVenda={ultimaVenda}
-        calculando={calculo.calculando}
-        erros={mensagens.gerais}
-        falhaDoCalculo={calculo.falhaDoCalculo}
-        aoTentarDeNovo={calculo.recalcular}
-        clienteNome={carrinho.cliente?.nome ?? null}
-        pontoEOperador={`${sessao.ponto.nome} · ${usuario.nome}`}
-        acoes={acoes}
-      />
+        <aside aria-label="Venda" className="flex min-h-0 flex-col gap-3">
+          <section aria-label="Atendimento" className="flex items-center gap-3 rounded-2xl bg-card px-4 py-2.5 shadow-sm">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+              <UserRound className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0 flex-1 leading-tight">
+              <p id={idCliente} className="text-xs text-muted-foreground">
+                Cliente
+              </p>
+              <p role="note" aria-labelledby={idCliente} className="truncate font-medium">
+                {carrinho.cliente?.nome ?? 'Sem cliente'}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 gap-2"
+              onClick={() => executar('CLIENTE')}
+              aria-keyshortcuts="F3"
+            >
+              {carrinho.cliente ? 'Trocar' : 'Informar'}
+              <kbd aria-hidden="true" className="rounded bg-foreground/10 px-1.5 py-0.5 font-sans text-[11px] font-semibold">
+                F3
+              </kbd>
+            </Button>
+          </section>
 
-      <JanelaBusca
-        textoInicial={janela?.tipo === 'BUSCA' ? janela.texto : null}
-        aoFechar={fecharJanela}
-        aoEscolher={(produto) => {
-          setJanela(null)
-          const resultado = carrinho.adicionar({
-            tipo: 'UNIDADE',
-            quantidade: 1,
-            produto,
-            embalagemId: null,
-            codigoLido: null,
-          })
-          if (resultado.ok) {
-            lancou(resultado.linhaId)
-          } else {
-            recusar(resultado.erro)
-          }
-        }}
-      />
+          <section aria-labelledby="pdv-itens-titulo" className="flex min-h-48 flex-1 flex-col rounded-2xl bg-card shadow-sm">
+            <div className="flex items-baseline justify-between gap-3 border-b px-4 pt-3 pb-2">
+              <h2 id="pdv-itens-titulo" className="font-display text-base font-semibold">
+                Itens do carrinho
+              </h2>
+              <span className="text-sm text-muted-foreground tabular-nums">
+                {`${linhas.length} ${linhas.length === 1 ? 'item' : 'itens'}`}
+              </span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1">
+              <ListaDeLinhas
+                linhas={linhas}
+                calculoPorLinha={calculoPorLinha}
+                errosPorLinha={mensagens.errosPorLinha}
+                avisosPorLinha={mensagens.avisosPorLinha}
+                selecionadaId={selecionada?.id ?? null}
+                destaque={destaque}
+                aoSelecionar={(linhaId) => {
+                  setSelecionadaId(linhaId)
+                  focarCampoDeLeitura()
+                }}
+                aoTrocarEmbalagem={(linhaId, embalagemId) => {
+                  const resultado = carrinho.trocarEmbalagem(linhaId, embalagemId)
+                  if (!resultado.ok) {
+                    recusar(resultado.erro)
+                  }
+                  focarCampoDeLeitura()
+                }}
+                aoMudarQuantidade={(linhaId, delta) => {
+                  setSelecionadaId(linhaId)
+                  mudarQuantidade(
+                    linhas.find((linha) => linha.id === linhaId),
+                    delta,
+                  )
+                  focarCampoDeLeitura()
+                }}
+                aoDescontar={(linhaId) => descontarLinha(linhas.find((linha) => linha.id === linhaId))}
+                aoRemover={(linhaId) => pedirRemocao(linhas.find((linha) => linha.id === linhaId))}
+              />
+            </div>
+            {removida && (
+              <div role="status" className="mx-3 mb-2 flex items-center justify-between gap-3 rounded-lg bg-muted/70 px-3 py-1.5 text-sm">
+                <span>{`${removida.nome} removido da venda.`}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-11 md:h-9"
+                  onClick={() => {
+                    const resultado = carrinho.restaurar(removida.anterior)
+                    setRemovida(null)
+                    if (!resultado.ok) {
+                      recusar(resultado.erro)
+                    }
+                    focarCampoDeLeitura()
+                  }}
+                >
+                  <Undo2 className="h-4 w-4" aria-hidden="true" />
+                  Desfazer
+                </Button>
+              </div>
+            )}
+            {linhas.length > 0 && (
+              <p className="hidden border-t px-4 py-2 text-xs text-muted-foreground [@media(min-height:760px)]:block">
+                ↑ ↓ escolhe a linha · + − quantidade · F4 desconto · Del remove
+              </p>
+            )}
+            {Object.keys(mensagens.errosPorLinha).length > 0 && (
+              <div role="alert" aria-label="Erros dos itens" className="sr-only">
+                {linhas
+                  .map((linha, indice) => ({ numero: indice + 1, erro: mensagens.errosPorLinha[linha.id] }))
+                  .filter(({ erro }) => erro)
+                  .map(({ numero, erro }) => (
+                    <p key={numero}>{`Item ${numero}: ${erro}`}</p>
+                  ))}
+              </div>
+            )}
+          </section>
+
+          <PainelDoTotal
+            calculo={calculo.calculo}
+            vazio={linhas.length === 0}
+            ultimaVenda={ultimaVenda}
+            calculando={calculo.calculando}
+            erros={mensagens.gerais}
+            falhaDoCalculo={calculo.falhaDoCalculo}
+            aoTentarDeNovo={calculo.recalcular}
+            pagamento={{ aoClicar: () => executar('PAGAMENTO'), desabilitado: !podePagar }}
+            descontoDaVenda={{ aoClicar: () => executar('DESCONTO_TOTAL'), desabilitado: linhas.length === 0 }}
+            porEmEspera={{ aoClicar: () => executar('POR_EM_ESPERA'), desabilitado: linhas.length === 0 }}
+            imprimir={{ aoClicar: () => executar('IMPRIMIR'), desabilitado: vendaParaImprimir !== null }}
+          />
+        </aside>
+      </div>
+
       <JanelaCliente
         aberta={janela?.tipo === 'CLIENTE'}
         clienteAtual={carrinho.cliente}
@@ -588,6 +695,8 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
         sessaoId={sessao.id}
         calculoInicial={calculo.calculo}
         aoTotalMudar={calculo.recalcular}
+        pagamentosGuardados={rascunho && rascunho.carrinho === carrinho.carrinho ? rascunho.pagamentos : SEM_PAGAMENTOS}
+        aoMudarPagamentos={guardarPagamentos}
         aoFechar={fecharJanela}
         aoConcluir={(venda) => {
           carrinho.limpar()
@@ -601,6 +710,8 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
           void queryClient.invalidateQueries({ queryKey: [...PDV_QUERY_KEY, 'vendas'] })
           // A venda baixou o estoque: a busca e os produtos mostram o saldo novo.
           void queryClient.invalidateQueries({ queryKey: [...PDV_QUERY_KEY, 'busca'] })
+          // O catalogo mostra o saldo novo e reordena os mais vendidos.
+          void queryClient.invalidateQueries({ queryKey: [...PDV_QUERY_KEY, 'catalogo'] })
           void queryClient.invalidateQueries({ queryKey: PRODUTOS_QUERY_KEY })
           void queryClient.invalidateQueries({ queryKey: CAIXA_QUERY_KEY })
         }}
@@ -633,6 +744,16 @@ export function TelaDeVenda({ sessao, usuario, configuracao, avisos }: TelaDeVen
         sessaoId={sessao.id}
         ehAdmin={usuario.perfil === 'ADMIN'}
         aoFechar={fecharJanela}
+        aoImprimir={setVendaParaImprimir}
+        aoCancelarVenda={(cancelada) =>
+          // A ultima venda cancelada no F8: o painel e o F9 passam a mostrar e imprimir a cancelada.
+          setUltimaVenda((atual) => (atual?.id === cancelada.id ? cancelada : atual))
+        }
+      />
+      <ImpressaoDoComprovante
+        venda={vendaParaImprimir}
+        nomeDaEmpresa={usuario.empresa.nome}
+        aoTerminar={terminarImpressao}
       />
     </div>
   )

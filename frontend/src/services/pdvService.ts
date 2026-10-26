@@ -2,6 +2,7 @@ import { apiGet, apiPost, apiPostComStatus } from '@/services/httpClient'
 import type {
   CalculoDaVenda,
   CarrinhoRequest,
+  CatalogoDoPdv,
   FiltrosDeVendas,
   FinalizarVendaRequest,
   ItemResolvido,
@@ -39,6 +40,15 @@ export function resolverCodigo(codigo: string, signal?: AbortSignal): Promise<It
 export function buscarProdutos(busca: string, signal?: AbortSignal): Promise<ProdutoEncontrado[]> {
   const params = new URLSearchParams({ busca })
   return apiGet<ProdutoEncontrado[]>(`/pdv/itens?${params.toString()}`, { autenticada: true, signal })
+}
+
+/** Uma pagina do catalogo (produtos ativos, os mais vendidos primeiro); `categoria` inclui as subcategorias. */
+export function listarCatalogo(categoria: string | null, pagina: number, signal?: AbortSignal): Promise<CatalogoDoPdv> {
+  const params = new URLSearchParams({ pagina: String(pagina) })
+  if (categoria) {
+    params.set('categoria', categoria)
+  }
+  return apiGet<CatalogoDoPdv>(`/pdv/catalogo?${params.toString()}`, { autenticada: true, signal })
 }
 
 /** Calculo do carrinho: 200 mesmo com regras violadas (em `erros`); 404/409 para dados inexistentes ou inativos. */

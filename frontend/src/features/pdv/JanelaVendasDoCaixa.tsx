@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Ban, Loader2, Receipt } from 'lucide-react'
+import { ArrowLeft, Ban, Loader2, Printer, Receipt } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -28,6 +28,10 @@ export interface JanelaVendasDoCaixaProps {
   sessaoId: string
   ehAdmin: boolean
   aoFechar: () => void
+  /** Reimprime o comprovante da venda aberta no detalhe. */
+  aoImprimir: (venda: Venda) => void
+  /** A venda foi cancelada aqui: a tela atualiza o que mostra dela (a ultima venda e o F9). */
+  aoCancelarVenda: (venda: Venda) => void
 }
 
 const TAMANHO_MAXIMO_DO_MOTIVO = 200
@@ -83,7 +87,12 @@ export function JanelaVendasDoCaixa({ aberta, aoFechar, ...props }: JanelaVendas
   )
 }
 
-function ConteudoDasVendas({ sessaoId, ehAdmin }: Omit<JanelaVendasDoCaixaProps, 'aberta' | 'aoFechar'>) {
+function ConteudoDasVendas({
+  sessaoId,
+  ehAdmin,
+  aoImprimir,
+  aoCancelarVenda,
+}: Omit<JanelaVendasDoCaixaProps, 'aberta' | 'aoFechar'>) {
   const [vendaId, setVendaId] = useState<string | null>(null)
   const [periodo, setPeriodo] = useState({ de: '', ate: '' })
   const [aviso, setAviso] = useState<string | null>(null)
@@ -121,8 +130,10 @@ function ConteudoDasVendas({ sessaoId, ehAdmin }: Omit<JanelaVendasDoCaixaProps,
         <DetalheDaVenda
           vendaId={vendaId}
           aoVoltar={() => setVendaId(null)}
+          aoImprimir={aoImprimir}
           aoCancelar={(venda) => {
             setAviso(mensagemDoCancelamento(venda))
+            aoCancelarVenda(venda)
           }}
         />
       ) : (
@@ -274,10 +285,12 @@ function LinhaDaVenda({ venda, aoAbrir }: { venda: VendaResumo; aoAbrir: () => v
 function DetalheDaVenda({
   vendaId,
   aoVoltar,
+  aoImprimir,
   aoCancelar,
 }: {
   vendaId: string
   aoVoltar: () => void
+  aoImprimir: (venda: Venda) => void
   aoCancelar: (venda: Venda) => void
 }) {
   const queryClient = useQueryClient()
@@ -297,6 +310,7 @@ function DetalheDaVenda({
       // O estorno muda o caixa, a lista de vendas e o saldo dos produtos.
       void queryClient.invalidateQueries({ queryKey: [...PDV_QUERY_KEY, 'vendas'] })
       void queryClient.invalidateQueries({ queryKey: [...PDV_QUERY_KEY, 'busca'] })
+      void queryClient.invalidateQueries({ queryKey: [...PDV_QUERY_KEY, 'catalogo'] })
       void queryClient.invalidateQueries({ queryKey: PRODUTOS_QUERY_KEY })
       void queryClient.invalidateQueries({ queryKey: CAIXA_QUERY_KEY })
     },
@@ -440,15 +454,18 @@ function DetalheDaVenda({
           </DialogFooter>
         </form>
       ) : (
-        venda.podeCancelar &&
-        venda.status === 'CONCLUIDA' && (
-          <DialogFooter>
+        <DialogFooter>
+          <Button type="button" variant="outline" className="min-h-11" onClick={() => aoImprimir(venda)}>
+            <Printer className="h-4 w-4" aria-hidden="true" />
+            Imprimir comprovante
+          </Button>
+          {venda.podeCancelar && venda.status === 'CONCLUIDA' && (
             <Button type="button" variant="outline" className="min-h-11" onClick={() => setCancelando(true)}>
               <Ban className="h-4 w-4" aria-hidden="true" />
               Cancelar venda
             </Button>
-          </DialogFooter>
-        )
+          )}
+        </DialogFooter>
       )}
     </div>
   )

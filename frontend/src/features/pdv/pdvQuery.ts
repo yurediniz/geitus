@@ -12,6 +12,14 @@ export function chaveDaBuscaDeProdutos(texto: string) {
   return [...PDV_QUERY_KEY, 'busca', texto] as const
 }
 
+/** A empresa do usuario (cabecalho do comprovante): a mesma chave da tela Empresa, que divide o cache. */
+export const CHAVE_DA_EMPRESA = ['empresa', 'minha'] as const
+
+/** O catalogo de uma categoria (null = todas); as paginas ficam juntas (useInfiniteQuery). */
+export function chaveDoCatalogo(categoria: string | null) {
+  return [...PDV_QUERY_KEY, 'catalogo', categoria] as const
+}
+
 export function chaveDasVendas(filtros: FiltrosDeVendas) {
   return [...PDV_QUERY_KEY, 'vendas', filtros] as const
 }

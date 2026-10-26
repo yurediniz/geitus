@@ -167,7 +167,7 @@ describe('RootLayout - Caixa e Configurações', () => {
     expect(within(pdv).queryByText(/^em breve$/i)).not.toBeInTheDocument()
   })
 
-  it('modo foco no /pdv: a barra lateral recolhe e o botão "Menu" a abre', async () => {
+  it('modo foco no /pdv: sem barra lateral nem topo (a barra do PDV traz o "Menu")', async () => {
     setStoredToken('token-valido')
     getMeMock.mockResolvedValue({ ...usuarioFake, perfil: 'OPERADOR' })
 
@@ -176,9 +176,8 @@ describe('RootLayout - Caixa e Configurações', () => {
     await screen.findByText('Tela do PDV')
     expect(screen.getByRole('complementary', { hidden: true })).toHaveClass('hidden')
     expect(screen.getByRole('complementary', { hidden: true })).not.toHaveClass('md:flex')
-    const menu = screen.getByRole('button', { name: 'Abrir menu de navegação' })
-    expect(menu).toHaveTextContent('Menu')
-    expect(menu).not.toHaveClass('md:hidden')
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Abrir menu de navegação' })).not.toBeInTheDocument()
   })
 
   it('fora do /pdv, a barra lateral fica fixa', async () => {

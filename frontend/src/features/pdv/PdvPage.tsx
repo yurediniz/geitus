@@ -1,12 +1,16 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ClipboardCheck, MonitorSmartphone, Wallet } from 'lucide-react'
 
+import { MenuDeNavegacao } from '@/components/layout/Navegacao'
 import { Button } from '@/components/ui/button'
 import { CAIXA_QUERY_KEY, CHAVE_DA_SESSAO_ATUAL } from '@/features/cash-register/caixaQuery'
 import { CarregandoCaixa, ErroAoCarregar } from '@/features/cash-register/EstadosDoCaixa'
 import { PontosParaAbrir } from '@/features/cash-register/PontosParaAbrir'
 import { FeedbackCatalogo } from '@/features/catalog/FeedbackCatalogo'
+import { BarraDoPdv, DadoDaBarra } from '@/features/pdv/BarraDoPdv'
+import { CLASSE_DO_BOTAO_DA_BARRA } from '@/features/pdv/estiloDaBarra'
 import { chaveDoCarrinho, lerCarrinhoGuardado } from '@/features/pdv/carrinho'
 import { CHAVE_DA_CONFIGURACAO_DO_PDV } from '@/features/pdv/pdvQuery'
 import { TelaDeVenda } from '@/features/pdv/TelaDeVenda'
@@ -28,10 +32,10 @@ function temVendaGuardada(empresaId: number, usuarioId: number): boolean {
 }
 
 /**
- * Tela do PDV (/pdv, spec `docs/modules/pdv.md` §6.2). Sem caixa aberto,
- * pede para abrir (a mesma janela do Caixa); em conferencia, leva ao Caixa;
- * com o caixa aberto, a venda. O carrinho fica no navegador e sobrevive a
- * troca de estado do caixa.
+ * Tela do PDV (/pdv, spec `docs/modules/pdv.md` §6.2), em tela cheia com a
+ * barra propria. Sem caixa aberto, pede para abrir (a mesma janela do Caixa);
+ * em conferencia, leva ao Caixa; com o caixa aberto, a venda. O carrinho fica
+ * no navegador e sobrevive a troca de estado do caixa.
  */
 export function PdvPage() {
   const { usuario } = useAuth()
@@ -48,16 +52,33 @@ export function PdvPage() {
     void queryClient.invalidateQueries({ queryKey: CAIXA_QUERY_KEY })
   }
 
+  const feedback = <FeedbackCatalogo sucesso={sucesso} erro={erro} fixo={false} />
+
+  /** Os estados sem venda: a barra com o operador e o menu, e o conteudo centralizado. */
+  const semVenda = (conteudo: ReactNode) => (
+    <>
+      <BarraDoPdv acoes={<MenuDeNavegacao comRotulo className={CLASSE_DO_BOTAO_DA_BARRA} />}>
+        {usuario && <DadoDaBarra rotulo="Operador">{usuario.nome}</DadoDaBarra>}
+      </BarraDoPdv>
+      <div className="space-y-4 p-4 md:p-6">
+        {feedback}
+        {conteudo}
+      </div>
+    </>
+  )
+
   const conteudo = () => {
     if (!usuario || atual.data === undefined) {
-      return atual.isError ? (
-        <ErroAoCarregar mensagem="Não foi possível carregar o caixa." aoTentarDeNovo={() => atual.refetch()} />
-      ) : (
-        <CarregandoCaixa rotulo="Carregando o PDV" />
+      return semVenda(
+        atual.isError ? (
+          <ErroAoCarregar mensagem="Não foi possível carregar o caixa." aoTentarDeNovo={() => atual.refetch()} />
+        ) : (
+          <CarregandoCaixa rotulo="Carregando o PDV" />
+        ),
       )
     }
     if (atual.data === null) {
-      return (
+      return semVenda(
         <section aria-labelledby="pdv-sem-caixa" className="max-w-3xl space-y-4">
           <div className="flex items-start gap-3">
             <Wallet className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -78,11 +99,11 @@ export function PdvPage() {
               void queryClient.invalidateQueries({ queryKey: CAIXA_QUERY_KEY })
             }}
           />
-        </section>
+        </section>,
       )
     }
     if (atual.data.status !== 'ABERTA') {
-      return (
+      return semVenda(
         <section aria-labelledby="pdv-em-conferencia" className="flex max-w-xl items-start gap-3 rounded-md bg-warning-soft p-4">
           <ClipboardCheck className="mt-1 h-5 w-5 shrink-0 text-warning-soft-foreground" aria-hidden="true" />
           <div className="space-y-3">
@@ -96,14 +117,14 @@ export function PdvPage() {
               <Link to="/caixa">Ir para o Caixa</Link>
             </Button>
           </div>
-        </section>
+        </section>,
       )
     }
     if (aba.situacao === 'VERIFICANDO') {
-      return <CarregandoCaixa rotulo="Abrindo o PDV" />
+      return semVenda(<CarregandoCaixa rotulo="Abrindo o PDV" />)
     }
     if (aba.situacao === 'EM_OUTRA_ABA') {
-      return (
+      return semVenda(
         <section aria-labelledby="pdv-outra-aba" className="flex max-w-xl items-start gap-3 rounded-md bg-muted/60 p-4">
           <MonitorSmartphone className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="space-y-3">
@@ -122,7 +143,7 @@ export function PdvPage() {
               </p>
             )}
           </div>
-        </section>
+        </section>,
       )
     }
     return (
@@ -132,14 +153,14 @@ export function PdvPage() {
         usuario={usuario}
         configuracao={configuracao.data}
         avisos={avisos}
+        feedback={feedback}
       />
     )
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex min-h-screen flex-col">
       <h1 className="sr-only">PDV</h1>
-      <FeedbackCatalogo sucesso={sucesso} erro={erro} />
       {conteudo()}
     </div>
   )

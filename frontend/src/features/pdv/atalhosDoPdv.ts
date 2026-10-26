@@ -13,6 +13,7 @@ export type AcaoDoPdv =
   | 'VENDAS_EM_ESPERA'
   | 'VENDAS_DO_CAIXA'
   | 'PAGAMENTO'
+  | 'IMPRIMIR'
   | 'ANTERIOR'
   | 'PROXIMA'
   | 'MAIS'
@@ -34,6 +35,7 @@ const TECLAS_DE_FUNCAO: Readonly<Record<string, AcaoDoPdv>> = {
   F6: 'POR_EM_ESPERA',
   F7: 'VENDAS_EM_ESPERA',
   F8: 'VENDAS_DO_CAIXA',
+  F9: 'IMPRIMIR',
   F10: 'PAGAMENTO',
   ArrowUp: 'ANTERIOR',
   ArrowDown: 'PROXIMA',
@@ -63,7 +65,7 @@ export function acaoDoAtalho(tecla: TeclaPressionada, campoVazio: boolean): Acao
 /**
  * Texto lido que vai para a resolucao do codigo, com a mesma regra do backend
  * (`InterpretadorDeCodigo`): todo texto sem espaco (inclusive Code128
- * alfanumerico, como "RP0012A"). Texto com espaco abre a busca por nome.
+ * alfanumerico, como "RP0012A"). Texto com espaco e busca por nome.
  */
 export function ehCodigo(texto: string): boolean {
   const aparado = texto.trim()

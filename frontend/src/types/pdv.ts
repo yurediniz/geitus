@@ -51,6 +51,12 @@ export interface ProdutoEncontrado extends ProdutoDoPdv {
   precoVigente: number
 }
 
+/** Resposta de `GET /api/pdv/catalogo`: paginas de 24, os mais vendidos primeiro. */
+export interface CatalogoDoPdv {
+  produtos: ProdutoEncontrado[]
+  temMais: boolean
+}
+
 export type TipoDeDesconto = 'PERCENTUAL' | 'VALOR'
 
 export interface DescontoInformado {

@@ -58,6 +58,12 @@
   --sidebar-foreground: #2e2a26;
   --sidebar-border: #e1d5c0;
 
+  /* Barra superior do PDV: grafite, o contexto da venda sempre a vista. */
+  --barra-pdv: #2e2a26;
+  --barra-pdv-foreground: #f7f1e8;
+  --barra-pdv-muted: #c9bfb1;
+  --barra-pdv-border: #4a443d;
+
   /*
     Paleta funcional de estados (pagamentos, pedidos, caixa).
     Cada estado tem a cor forte (+ foreground de contraste) e uma variante
@@ -119,6 +125,11 @@
   --sidebar-foreground: #f7f1e8;
   --sidebar-border: #35302a;
 
+  --barra-pdv: #15120f;
+  --barra-pdv-foreground: #f7f1e8;
+  --barra-pdv-muted: #a79e92;
+  --barra-pdv-border: #35302a;
+
   --success: #4ca85f;
   --success-foreground: #10230f;
   --success-soft: #16281a;
@@ -174,6 +185,10 @@
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-border: var(--sidebar-border);
+  --color-barra-pdv: var(--barra-pdv);
+  --color-barra-pdv-foreground: var(--barra-pdv-foreground);
+  --color-barra-pdv-muted: var(--barra-pdv-muted);
+  --color-barra-pdv-border: var(--barra-pdv-border);
 
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
@@ -273,6 +288,117 @@
 
 [data-slot="sheet-content"][data-state="closed"] {
   animation: geitus-sheet-out-left 260ms ease-in;
+}
+
+/*
+  Comprovante do PDV (DEC-044): fica fora da tela e, na impressao, e a unica
+  coisa impressa, em papel termico de 80 mm (area util ~72 mm), preto no branco.
+*/
+#area-de-impressao {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  body > *:not(#area-de-impressao) {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  #area-de-impressao {
+    display: block;
+    width: 72mm;
+    margin: 0 auto;
+    padding: 3mm 0;
+    color: #000;
+    background: #fff;
+    font-family: "Courier New", ui-monospace, monospace;
+    font-size: 11px;
+    line-height: 1.3;
+  }
+}
+
+.comprovante p {
+  margin: 0;
+}
+
+.comprovante hr {
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px dashed #000;
+}
+
+.comprovante .centro {
+  text-align: center;
+}
+
+.comprovante .forte {
+  font-weight: 700;
+}
+
+.comprovante .grande {
+  font-size: 13px;
+}
+
+.comprovante table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.comprovante th,
+.comprovante td {
+  padding: 0;
+  font-weight: inherit;
+  vertical-align: top;
+}
+
+.comprovante th {
+  font-weight: 700;
+}
+
+.comprovante .esquerda {
+  text-align: left;
+}
+
+.comprovante .direita {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.comprovante .topo {
+  width: 3.5ch;
+}
+
+.comprovante dl {
+  margin: 0 0 4px;
+}
+
+.comprovante .par {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.comprovante .par dd {
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* Destaque breve da linha lancada no PDV: aparece e some (nao fica parecendo selecao). */
+@keyframes geitus-destaque {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
