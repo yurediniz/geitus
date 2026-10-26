@@ -13,6 +13,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import com.geitus.app.cashier.CenarioDeCaixa;
 import com.geitus.app.cashier.CenarioDeCaixa.EmpresaDeCaixa;
 import com.geitus.app.catalog.ProdutoService;
+import com.geitus.app.catalog.categoria.CategoriaService;
+import com.geitus.app.catalog.categoria.dto.CategoriaRequest;
 import com.geitus.app.catalog.dto.AtacadoRequest;
 import com.geitus.app.catalog.dto.EmbalagemRequest;
 import com.geitus.app.catalog.dto.ProdutoRequest;
@@ -38,16 +40,18 @@ public class CenarioDoPdv {
     private final EmpresaRepository empresaRepository;
     private final UnidadeMedidaService unidadeService;
     private final ProdutoService produtoService;
+    private final CategoriaService categoriaService;
     private final JdbcTemplate jdbcTemplate;
     private final Clock relogio;
 
     CenarioDoPdv(CenarioDeCaixa cenarioDeCaixa, EmpresaRepository empresaRepository,
-            UnidadeMedidaService unidadeService, ProdutoService produtoService, JdbcTemplate jdbcTemplate,
-            Clock relogio) {
+            UnidadeMedidaService unidadeService, ProdutoService produtoService, CategoriaService categoriaService,
+            JdbcTemplate jdbcTemplate, Clock relogio) {
         this.cenarioDeCaixa = cenarioDeCaixa;
         this.empresaRepository = empresaRepository;
         this.unidadeService = unidadeService;
         this.produtoService = produtoService;
+        this.categoriaService = categoriaService;
         this.jdbcTemplate = jdbcTemplate;
         this.relogio = relogio;
     }
@@ -162,6 +166,17 @@ public class CenarioDoPdv {
         return produtoService.atualizarDadosBasicosParaUsuario(empresa.admin(), produto, request(empresa, novo));
     }
 
+    /** Categoria cadastrada pelo servico real; {@code pai} nulo = categoria principal. */
+    public UUID categoria(EmpresaDoPdv empresa, String nome, UUID pai) {
+        return categoriaService.cadastrarParaUsuario(empresa.admin(), new CategoriaRequest(nome, pai)).id();
+    }
+
+    /** Liga o produto a categoria direto no banco (o cadastro do produto do cenario nao tem categoria). */
+    public void categorizar(UUID produto, UUID categoria) {
+        jdbcTemplate.update("UPDATE produtos SET categoria_id = (SELECT id FROM categorias WHERE uuid = ?) "
+                + "WHERE uuid = ?", categoria, produto);
+    }
+
     public void inativarProduto(EmpresaDoPdv empresa, UUID produto) {
         produtoService.inativarParaUsuario(empresa.admin(), produto);
     }
@@ -225,12 +240,18 @@ public class CenarioDoPdv {
      */
     public long itemVendidoPorJdbc(EmpresaDoPdv empresa, UUID sessao, Long vendedor, UUID produto,
             String quantidade) {
+        return itemVendidoPorJdbc(empresa, sessao, vendedor, produto, quantidade, 0);
+    }
+
+    /** Como o de cima, com a venda concluida {@code diasAtras} dias antes de agora (o ranking do catalogo). */
+    public long itemVendidoPorJdbc(EmpresaDoPdv empresa, UUID sessao, Long vendedor, UUID produto,
+            String quantidade, int diasAtras) {
         return jdbcTemplate.queryForObject("""
                 WITH v AS (
                     INSERT INTO vendas (uuid, empresa_id, numero, sessao_caixa_id, usuario_id, status, subtotal,
                                         desconto_itens, desconto_total, total, troco, chave_idempotencia, concluida_em)
                     VALUES (gen_random_uuid(), ?, ?, ?, ?, 'CONCLUIDA', ?::numeric, 0, 0, ?::numeric, 0,
-                            gen_random_uuid(), now())
+                            gen_random_uuid(), now() - make_interval(days => ?))
                     RETURNING id, empresa_id, total),
                 i AS (
                     INSERT INTO itens_venda (empresa_id, venda_id, ordem, produto_id, produto_nome, unidade_sigla,
@@ -245,7 +266,7 @@ public class CenarioDoPdv {
                     SELECT v.empresa_id, v.id, 'DINHEIRO', v.total FROM v)
                 SELECT id FROM i
                 """, Long.class, empresa.id(), SEQUENCIA.incrementAndGet() + 100000, idDaSessao(sessao), vendedor,
-                quantidade, quantidade, produto, quantidade, quantidade);
+                quantidade, quantidade, diasAtras, produto, quantidade, quantidade);
     }
 
     private static BigDecimal valorOuNulo(String valor) {
