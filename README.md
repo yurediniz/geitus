@@ -194,4 +194,5 @@ Consulte o arquivo [CLAUDE.md](CLAUDE.md) para as diretrizes completas de arquit
 - [docs/technical-debt.md](docs/technical-debt.md) — pendências e dívidas técnicas rastreadas.
 - [docs/README.md](docs/README.md) — visão geral da documentação do projeto.
 - [docs/modules/README.md](docs/modules/README.md) — organização das especificações por módulo.
-- [.claude/agents/cto.md](.claude/agents/cto.md) — o CTO (orquestrador principal) e o catálogo dos agentes de execução e revisão.
+- [docs/produto.md](docs/produto.md) — visão, princípios de produto e de UX.
+- [.claude/agents/](.claude/agents/) — revisores do fluxo de trabalho (`revisor` e `revisor-ux`).

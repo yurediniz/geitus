@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(./mvnw test*)",
+      "Bash(./mvnw verify*)",
+      "Bash(npm run lint*)",
+      "Bash(npm run typecheck*)",
+      "Bash(npm run build*)",
+      "Bash(npm test*)",
+      "PowerShell(git status*)",
+      "PowerShell(git diff*)",
+      "PowerShell(git log*)",
+      "PowerShell(git show*)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "PowerShell(git push*)"
+    ],
+    "deny": [
+      "Bash(git push origin main*)",
+      "Bash(git push origin HEAD:main*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(docker rm *)",
+      "Bash(docker volume rm *)",
+      "PowerShell(git push origin main*)",
+      "PowerShell(git push origin HEAD:main*)",
+      "PowerShell(git push --force*)",
+      "PowerShell(git push -f*)",
+      "PowerShell(git push * --force*)",
+      "PowerShell(git push * -f*)",
+      "PowerShell(git reset --hard*)",
+      "PowerShell(docker rm *)",
+      "PowerShell(docker volume rm *)"
+    ]
+  },
+  "enabledPlugins": {
+    "superpowers@anthropic-plugin-directory": false
+  }
+}

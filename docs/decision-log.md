@@ -193,7 +193,7 @@ Criar `docs/modules/` com especificações por módulo antes de implementações
 ## DEC-008 — Uso de agentes especializados
 
 **Data:** 2026-07-01
-**Status:** Aceita
+**Status:** Substituída pela DEC-043
 **Contexto:**
 O projeto terá backend, frontend, segurança, dados, QA, UX e CI/CD.
 
@@ -471,7 +471,7 @@ Consolidar/editar migrations aplicadas é permitido **apenas enquanto não houve
 ## DEC-021 — Agente CTO como orquestrador único e adoção de práticas de harness engineering
 
 **Data:** 2026-07-15
-**Status:** Aceita
+**Status:** Substituída pela DEC-043
 **Contexto:**
 A orquestração estava descrita de forma difusa: o `CLAUDE.md` dizia que o Claude Code atuava como "engenheiro e orquestrador principal", e o processo (quem executa, quem revisa, revisores obrigatórios, fluxo) vivia no `.claude/agents/AGENTS.md`, separado do catálogo do time. Com a instalação do plugin **Superpowers**, surgiu a oportunidade de formalizar um orquestrador explícito que usasse suas skills. Restrição de arquitetura: no Claude Code, **um subagente não dispara outros subagentes** de forma confiável — quem dispara é a sessão de topo.
 
@@ -1072,3 +1072,17 @@ O PDV é a etapa 11 do MVP e depende do Caixa (DEC-041), das embalagens (DEC-037
   - recebimento, baixa e estornos ficam presos à origem;
   - o vendedor é sempre o dono da sessão.
 - **Pendências:** ver DT-041.
+
+---
+
+## DEC-043 — Fluxo de trabalho enxuto: sessão principal executa, plano aprovado e dois revisores
+
+**Data:** 2026-10-26
+**Status:** Aceita
+**Contexto:** o processo acumulava três camadas (protocolo do `CLAUDE.md` de ~28 KB, `cto.md` e o fluxo do plugin Superpowers) e 10 agentes. As entregas ficaram lentas (o PDV levou ~7 h, com 12 commits de correção), a documentação crescia junto com o código (91 commits `docs` para 101 `feat`) e nenhum passo verificava a tela de verdade.
+**Decisão:**
+- `CLAUDE.md` reescrito (~7 KB): produto, comandos, regras fixas, fluxo e "pronto quando". Visão e UX foram para `docs/produto.md`.
+- A sessão principal planeja (plan mode, plano curto e não versionado, aprovado pelo usuário), implementa e responde pelo resultado. Paralelismo só por *fork*, quando o plano prevê.
+- Agentes reduzidos a `revisor` (escopo × plano, correção, testes, segurança e dados) e `revisor-ux` (tela no navegador). Removidos `cto` e os demais executores e revisores (substitui DEC-008 e DEC-021).
+- Plugin Superpowers desligado no projeto (`.claude/settings.json`); travas de Git por permissão (sem push para `main`, sem `--force`, sem `reset --hard`).
+**Impacto:** menos contexto por sessão, dois pontos de decisão do usuário (plano e entrega), revisão obrigatória por fatia com o escopo como critério bloqueante. Specs e planos antigos do Superpowers continuam no repositório até a etapa de enxugamento da documentação.

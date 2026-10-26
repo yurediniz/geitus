@@ -48,4 +48,4 @@ Para manter consistência, cada especificação de módulo deve conter, quando f
 
 - Arquivos em Markdown (`.md`), nomeados em minúsculas e com hífen (ex.: `financeiro-basico.md`).
 - Conteúdo em português do Brasil, exceto nomes técnicos inevitáveis.
-- As especificações dos módulos devem estar sempre alinhadas com o [CLAUDE.md](../../CLAUDE.md), o [docs/engineering-guidelines.md](../engineering-guidelines.md), o [docs/decision-log.md](../decision-log.md) e o [.claude/agents/cto.md](../../.claude/agents/cto.md); em caso de conflito, o `CLAUDE.md` prevalece.
+- As especificações dos módulos devem estar sempre alinhadas com o [CLAUDE.md](../../CLAUDE.md), o [docs/engineering-guidelines.md](../engineering-guidelines.md), o [docs/decision-log.md](../decision-log.md) e o [docs/produto.md](../produto.md); em caso de conflito, o `CLAUDE.md` prevalece.
