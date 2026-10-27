@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { FORNECEDORES_QUERY_KEY, PRODUTOS_QUERY_KEY, ehMensagemGenerica } from '@/features/catalog/catalogoQuery'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
+import { ESTOQUE_QUERY_KEY } from '@/features/stock/estoqueQuery'
 import { ErroDoCampo, MarcaObrigatorio } from '@/features/products/CamposFormulario'
 import {
   ROTULO_MOTIVO,
@@ -69,6 +70,11 @@ export interface ModalAjusteEstoqueProps {
    * ultima compra, se ativo. Null/ausente = o campo comeca vazio.
    */
   fornecedorDaCompra?: FornecedorDoProduto | null
+  /**
+   * Tipo com que o modal abre (padrao: Entrada, com o motivo padrao do tipo).
+   * "Regularizar" da area Estoque abre na Contagem (spec de Estoque, regra 25).
+   */
+  tipoInicial?: TipoMovimento
   aoFechar: () => void
   /** Quem recebe o foco ao fechar (ex.: o botao que abriu; no Safari o clique nao foca o botao). */
   focoAoFechar?: () => HTMLElement | null
@@ -176,6 +182,7 @@ function ConteudoAjuste({
   embalagens = SEM_EMBALAGENS,
   custo: custoAtual = null,
   fornecedorDaCompra = null,
+  tipoInicial = 'ENTRADA',
   aoFechar,
   focoAoFechar,
   aoConcluir,
@@ -184,11 +191,11 @@ function ConteudoAjuste({
   // Gerada ao abrir; so muda depois de um 409 (a operacao desta chave ja foi registrada).
   const [chave, setChave] = useState(gerarUuid)
   const [dados, setDados] = useState<DadosAjuste>(() => ({
-    tipo: 'ENTRADA',
+    tipo: tipoInicial,
     quantidade: '',
-    motivo: motivoPadrao('ENTRADA'),
+    motivo: motivoPadrao(tipoInicial),
     observacao: '',
-    embalagemId: embalagemPadrao('ENTRADA', motivoPadrao('ENTRADA'), embalagens),
+    embalagemId: embalagemPadrao(tipoInicial, motivoPadrao(tipoInicial), embalagens),
     // Comeca vazio (spec de Estoque): o ultimo custo aparece so como dica.
     custo: '',
   }))
@@ -205,8 +212,12 @@ function ConteudoAjuste({
   const enviandoRef = useRef(false)
   const contexto: ContextoAjuste = { saldo, sigla, fracionada, embalagens }
 
-  // Saldo, listagem e historico ficam desatualizados: o prefixo de produtos cobre todos.
-  const atualizarProdutos = () => void queryClient.invalidateQueries({ queryKey: PRODUTOS_QUERY_KEY })
+  // Saldo, listagem e historico ficam desatualizados: o prefixo de produtos cobre todos,
+  // e o de estoque cobre a posicao da area Estoque.
+  const atualizarProdutos = () => {
+    void queryClient.invalidateQueries({ queryKey: PRODUTOS_QUERY_KEY })
+    void queryClient.invalidateQueries({ queryKey: ESTOQUE_QUERY_KEY })
+  }
 
   const mutation = useMutation<MovimentoEstoque, unknown, AjusteEstoqueRequest>({
     mutationFn: (ajuste) => ajustarEstoque(produtoId, ajuste),

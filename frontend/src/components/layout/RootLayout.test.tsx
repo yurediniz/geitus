@@ -38,6 +38,7 @@ function renderLayout(entrada = '/') {
               <Route index element={<div>Conteudo</div>} />
               <Route path="produtos" element={<div>Produtos</div>} />
               <Route path="produtos/categorias" element={<div>Categorias</div>} />
+              <Route path="estoque" element={<div>Estoque</div>} />
               <Route path="clientes" element={<div>Clientes</div>} />
               <Route path="pdv" element={<div>Tela do PDV</div>} />
             </Route>
@@ -89,6 +90,20 @@ describe('RootLayout - logout', () => {
     await screen.findByText('Ana Souza')
     expect(screen.getByRole('link', { name: /produtos/i })).toHaveAttribute('aria-current', 'page')
     expect(screen.getByRole('link', { name: /início/i })).not.toHaveAttribute('aria-current')
+  })
+
+  it('exibe Estoque logo depois de Produtos, ativo em /estoque, tambem para o OPERADOR', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue({ ...usuarioFake, perfil: 'OPERADOR' })
+
+    renderLayout('/estoque')
+
+    await screen.findByText('Ana Souza')
+    const estoque = screen.getByRole('link', { name: /estoque/i })
+    expect(estoque).toHaveAttribute('href', '/estoque')
+    expect(estoque).toHaveAttribute('aria-current', 'page')
+    const rotulos = screen.getAllByRole('link').map((link) => link.textContent)
+    expect(rotulos.indexOf('Estoque')).toBe(rotulos.indexOf('Produtos') + 1)
   })
 
   it('exibe Clientes como item de navegacao ativo, nao como item em breve', async () => {

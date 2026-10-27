@@ -45,7 +45,7 @@ export function EstoqueDoProduto({ produto, className }: { produto: Produto; cla
   return (
     <span className={cn('inline-flex flex-wrap items-center gap-x-2 gap-y-1', className)}>
       <span className="tabular-nums">{formatarQuantidade(produto.estoqueAtual, produto.unidade.sigla)}</span>
-      <SeloSituacaoEstoque situacao={produto.situacaoEstoque} />
+      <SeloSituacaoEstoque situacao={produto.situacaoEstoque} saldo={produto.estoqueAtual} />
     </span>
   )
 }

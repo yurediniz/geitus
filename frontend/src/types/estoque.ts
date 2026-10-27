@@ -99,3 +99,59 @@ export interface AjusteEstoqueRequest {
    */
   fornecedorId?: string
 }
+
+/** Filtro de situacao da posicao de estoque: `baixo` inclui os sem estoque e `negativo` esta contido em `sem`. */
+export const SITUACOES_POSICAO = ['sem', 'baixo', 'negativo'] as const
+export type SituacaoDaPosicao = (typeof SITUACOES_POSICAO)[number]
+
+/** Ordens da posicao de estoque (com `-` = decrescente); sem valor fica sempre no fim. */
+export const ORDENS_POSICAO = ['nome', '-nome', 'saldo', '-saldo', 'valor', '-valor'] as const
+export type OrdemDaPosicao = (typeof ORDENS_POSICAO)[number]
+
+/** Status da posicao (os mesmos da listagem de produtos). */
+export const STATUS_POSICAO = ['ativos', 'inativos', 'todos'] as const
+export type StatusDaPosicao = (typeof STATUS_POSICAO)[number]
+
+/** Estado da posicao guardado na URL (pagina a partir de 1). */
+export interface FiltrosDaPosicao {
+  busca: string
+  status: StatusDaPosicao
+  categoria: string | null
+  situacao: SituacaoDaPosicao | null
+  ordem: OrdemDaPosicao
+  pagina: number
+}
+
+/** Linha de `GET /api/estoque/posicao` (spec de Estoque, regra 22): so produtos que controlam estoque. */
+export interface PosicaoDeEstoque {
+  /** UUID publico do produto. */
+  id: string
+  numero: number
+  codigo: number | null
+  nome: string
+  unidade: { sigla: string; fracionada: boolean }
+  categoria: { caminho: string } | null
+  ativo: boolean
+  /** Saldo atual (pode ser negativo pela venda com "Vender sem estoque"). */
+  saldo: number
+  situacao: SituacaoEstoque
+  estoqueMinimo: number | null
+  pontoReposicao: number | null
+  estoqueMaximo: number | null
+  custo: number | null
+  /** Saldo x custo; null sem custo ou com saldo <= 0. */
+  valorEmCusto: number | null
+  /** A de compra ou a primeira, para a conversao "55 UN (18 CX + 1 UN)"; null sem embalagem. */
+  embalagemPrincipal: { sigla: string; quantidade: number } | null
+}
+
+/** `GET /api/estoque/posicao/resumo` (regra 24): busca, categoria e status, sem a situacao. */
+export interface ResumoDaPosicao {
+  produtos: number
+  semEstoque: number
+  baixo: number
+  negativos: number
+  valorTotalEmCusto: number
+  /** Com saldo > 0 e sem custo: ficam fora do valor total. */
+  semCusto: number
+}

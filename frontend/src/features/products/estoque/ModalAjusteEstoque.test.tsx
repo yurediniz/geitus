@@ -171,6 +171,28 @@ describe('ModalAjusteEstoque', () => {
       expect(campoMotivo()).toHaveValue('')
     })
 
+    it('com tipoInicial AJUSTE abre na Contagem com Contagem/inventário (Regularizar, spec de Estoque)', async () => {
+      renderModal({ saldo: -3, tipoInicial: 'AJUSTE' })
+
+      expect(screen.getByRole('radio', { name: 'Contagem' })).toBeChecked()
+      await waitFor(() => expect(screen.getByRole('radio', { name: 'Contagem' })).toHaveFocus())
+      expect(campoMotivo()).toHaveValue('CONTAGEM')
+      expect(campoQuantidade()).toHaveAccessibleName('Saldo contado (UN)')
+      expect(within(dialogo()).getByText('Saldo atual: -3 UN')).toBeInTheDocument()
+    })
+
+    it('o ajuste gravado invalida também a posição da área Estoque', async () => {
+      ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
+      const { queryClient } = renderModal({ tipoInicial: 'AJUSTE' })
+      const invalidar = vi.spyOn(queryClient, 'invalidateQueries')
+
+      fireEvent.change(campoQuantidade(), { target: { value: '5' } })
+      fireEvent.click(within(dialogo()).getByRole('button', { name: /ajustar para 5 un/i }))
+
+      await waitFor(() => expect(invalidar).toHaveBeenCalledWith({ queryKey: ['estoque'] }))
+      expect(invalidar).toHaveBeenCalledWith({ queryKey: PRODUTOS_QUERY_KEY })
+    })
+
     it('"Contagem" pré-seleciona Contagem/inventário e muda o rótulo para "Saldo contado", com ajuda', () => {
       renderModal()
 

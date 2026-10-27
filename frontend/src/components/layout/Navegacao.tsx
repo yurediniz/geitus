@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Package,
+  Boxes,
   Users,
   UserCog,
   ShoppingCart,
@@ -45,6 +46,7 @@ function montarItensNavegacao(ehAdmin: boolean): NavItem[] {
   return [
     { rotulo: 'Início', to: '/', icone: LayoutDashboard },
     { rotulo: 'Produtos', to: '/produtos', icone: Package },
+    { rotulo: 'Estoque', to: '/estoque', icone: Boxes },
     { rotulo: 'Clientes', to: '/clientes', icone: Users },
     { rotulo: 'PDV', to: '/pdv', icone: ShoppingCart },
     { rotulo: 'Caixa', to: '/caixa', icone: Wallet },

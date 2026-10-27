@@ -1,5 +1,11 @@
 import { apiGet, apiPost } from '@/services/httpClient'
-import type { AjusteEstoqueRequest, MovimentoEstoque } from '@/types/estoque'
+import type {
+  AjusteEstoqueRequest,
+  FiltrosDaPosicao,
+  MovimentoEstoque,
+  PosicaoDeEstoque,
+  ResumoDaPosicao,
+} from '@/types/estoque'
 import type { PaginaResponse } from '@/types/produto'
 
 /**
@@ -31,5 +37,55 @@ export function listarMovimentosDeEstoque(
   const searchParams = new URLSearchParams({ pagina: String(pagina), tamanho: String(tamanho) })
   return apiGet<PaginaResponse<MovimentoEstoque>>(`${caminhoDoEstoque(produtoId)}/movimentos?${searchParams.toString()}`, {
     autenticada: true,
+  })
+}
+
+/** Itens por pagina da posicao de estoque (o backend aceita ate 100). */
+export const TAMANHO_PAGINA_POSICAO = 25
+
+/** Busca, status e categoria: os parametros que a posicao e o resumo tem em comum. */
+function parametrosDaBusca(filtros: Pick<FiltrosDaPosicao, 'busca' | 'status' | 'categoria'>): URLSearchParams {
+  const searchParams = new URLSearchParams()
+  const busca = filtros.busca.trim()
+  if (busca) {
+    searchParams.set('busca', busca)
+  }
+  searchParams.set('status', filtros.status)
+  if (filtros.categoria) {
+    searchParams.set('categoria', filtros.categoria)
+  }
+  return searchParams
+}
+
+/**
+ * Posicao de estoque (area Estoque): os produtos que controlam estoque, com
+ * saldo, situacao e valor em custo. A `pagina` dos filtros comeca em 1 (a da
+ * API, em 0).
+ */
+export function listarPosicaoDeEstoque(
+  filtros: FiltrosDaPosicao,
+  signal?: AbortSignal,
+): Promise<PaginaResponse<PosicaoDeEstoque>> {
+  const searchParams = parametrosDaBusca(filtros)
+  if (filtros.situacao) {
+    searchParams.set('situacao', filtros.situacao)
+  }
+  searchParams.set('ordem', filtros.ordem)
+  searchParams.set('pagina', String(Math.max(0, filtros.pagina - 1)))
+  searchParams.set('tamanho', String(TAMANHO_PAGINA_POSICAO))
+  return apiGet<PaginaResponse<PosicaoDeEstoque>>(`/estoque/posicao?${searchParams.toString()}`, {
+    autenticada: true,
+    signal,
+  })
+}
+
+/** Resumo da posicao (contagens e valor total) para a busca, o status e a categoria, sem a situacao. */
+export function buscarResumoDaPosicao(
+  filtros: Pick<FiltrosDaPosicao, 'busca' | 'status' | 'categoria'>,
+  signal?: AbortSignal,
+): Promise<ResumoDaPosicao> {
+  return apiGet<ResumoDaPosicao>(`/estoque/posicao/resumo?${parametrosDaBusca(filtros).toString()}`, {
+    autenticada: true,
+    signal,
   })
 }

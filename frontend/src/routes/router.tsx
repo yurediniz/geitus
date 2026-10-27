@@ -13,6 +13,7 @@ import { EmpresaPage } from '@/features/company/EmpresaPage'
 import { ClientesPage } from '@/features/customers/ClientesPage'
 import { ProdutoPage } from '@/features/products/ProdutoPage'
 import { ProdutosListaPage } from '@/features/products/ProdutosListaPage'
+import { EstoquePage } from '@/features/stock/EstoquePage'
 import { ConfiguracoesPage } from '@/features/settings/ConfiguracoesPage'
 import { FornecedoresPage } from '@/features/suppliers/FornecedoresPage'
 import { FornecedorPage } from '@/features/suppliers/FornecedorPage'
@@ -68,6 +69,8 @@ const privateRoutes: RouteObject[] = [
           // Pagina do produto: OPERADOR abre em modo leitura; cadastro e escrita so ADMIN (pagina e backend).
           { path: 'produtos/novo', element: <ProdutoPage /> },
           { path: 'produtos/:id', element: <ProdutoPage /> },
+          // Estoque: leitura a qualquer autenticado; ajuste so ADMIN (pagina e backend).
+          { path: 'estoque', element: <EstoquePage /> },
           // Clientes: qualquer autenticado (inativar/reativar so ADMIN, controlado na pagina e no backend).
           { path: 'clientes', element: <ClientesPage /> },
           // Caixa: qualquer autenticado opera o proprio caixa; o ADMIN ve e fecha o de outras pessoas (backend).
