@@ -6,7 +6,7 @@
 
 ## 1. Objetivo
 
-Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo sem gravar um movimento, e o passado se corrige com um novo movimento. A entrada por compra registra o custo, que vira o custo do produto. A venda baixa, o cancelamento estorna e a devolução devolve ao estoque (regras no [PDV](pdv.md)). A área **Estoque** mostra a posição de todos os produtos e todas as movimentações **(etapa 12)**.
+Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo sem gravar um movimento, e o passado se corrige com um novo movimento. A entrada por compra registra o custo, que vira o custo do produto. A venda baixa, o cancelamento estorna e a devolução devolve ao estoque (regras no [PDV](pdv.md)). A área **Estoque** mostra a posição de todos os produtos e, **(etapa 12)**, todas as movimentações.
 
 ## 2. Regras de negócio
 
@@ -96,7 +96,7 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
 20. **O saldo só fica negativo por venda** (com "Vender sem estoque" ligada). Uma entrada nunca é recusada por saldo negativo, porque não piora o saldo.
 21. Os movimentos de origem `VENDA` não podem ser alterados nem apagados.
 
-**Posição de estoque** (etapa 12)
+**Posição de estoque**
 
 22. A posição lista só os produtos que controlam estoque, com o saldo, a situação (regra 16), os níveis, o custo e o **valor em custo** = saldo × custo, a centavos (meio para cima). O valor é `null` sem custo ou com saldo ≤ 0, e o total soma só os valores não nulos.
 23. Filtros combinados com E:
@@ -123,8 +123,8 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
 |---|---|---|---|
 | POST | `/api/produtos/{id}/estoque/ajustes` | ADMIN | 201 criado · 200 chave repetida · 400 · 403 · 404 · 409 |
 | GET | `/api/produtos/{id}/estoque/movimentos?pagina=&tamanho=` | autenticado | `PaginaResponse`, do mais recente ao mais antigo; tamanho de 1 a 100 |
-| GET | `/api/estoque/posicao?busca&categoria&status&situacao&ordem&pagina&tamanho` | autenticado | **(etapa 12)** `PaginaResponse` de 25 por padrão (máx. 100) |
-| GET | `/api/estoque/posicao/resumo?busca&categoria&status` | autenticado | **(etapa 12)** contagens e valor total (regra 24) |
+| GET | `/api/estoque/posicao?busca&categoria&status&situacao&ordem&pagina&tamanho` | autenticado | `PaginaResponse` de 25 por padrão (máx. 100) |
+| GET | `/api/estoque/posicao/resumo?busca&categoria&status` | autenticado | contagens e valor total (regra 24) |
 | GET | `/api/estoque/movimentos?de&ate&produto&tipo&motivo&usuario&pagina&tamanho` | autenticado | **(etapa 12)** `PaginaResponse`; tamanho de 1 a 100 |
 
 - **Ajuste (request):** `tipo`, `quantidade`, `motivo`, `observacao?`, `chave`, `embalagemId?`, `custo?`, `fornecedorId?`.
@@ -133,9 +133,9 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
   - o request ganha `controlaEstoque` (obrigatório) e `estoqueInicial` (só no POST);
   - a response ganha `estoqueAtual` (sempre com 3 casas, mesmo com o controle desligado), `situacaoEstoque`, `podeExcluir` e `custoOrigem { tipo, em, quantidade, quantidadeDeEmbalagens, embalagemRotulo } | null`. Na listagem, `custoOrigem` traz só `tipo` e `em`.
 - **Histórico de preços:** as linhas de custo trazem `origem` (`EDICAO`/`ENTRADA_COMPRA`) e, na compra, `entrada { quantidade, quantidadeDeEmbalagens, embalagemRotulo }`.
-- **Posição (etapa 12):** `id`, `numero`, `codigo`, `nome`, `unidade { sigla, fracionada }`, `categoria { caminho }`, `ativo`, `saldo`, `embalagemPrincipal { rotulo, quantidade } | null` (para a conversão "55 UN (18 CX + 1 UN)"), `situacao`, `estoqueMinimo`, `pontoReposicao`, `estoqueMaximo`, `custo`, `valorEmCusto`. **Resumo:** `produtos`, `semEstoque`, `baixo`, `negativos`, `valorTotalEmCusto`, `semCusto`.
+- **Posição:** `id`, `numero`, `codigo`, `nome`, `unidade { sigla, fracionada }`, `categoria { caminho } | null`, `ativo`, `saldo`, `embalagemPrincipal { sigla, quantidade } | null` (a de compra ou a primeira, para a conversão "55 UN (18 CX + 1 UN)"), `situacao`, `estoqueMinimo`, `pontoReposicao`, `estoqueMaximo`, `custo`, `valorEmCusto`. **Resumo:** `produtos`, `semEstoque`, `baixo`, `negativos`, `valorTotalEmCusto`, `semCusto`.
 - **Movimentações (etapa 12):** o movimento acima mais `produto { id, numero, nome, unidade }` e `venda { id, numero } | null`. Produto ou usuário de outra empresa no filtro dá lista vazia, não 404.
-- **Erros por campo:** `tipo`, `quantidade`, `motivo`, `observacao`, `custo`, `fornecedorId`; na etapa 12, `situacao`, `status`, `ordem`, `de` e `ate`. Produto de outra empresa dá 404.
+- **Erros por campo:** `tipo`, `quantidade`, `motivo`, `observacao`, `custo`, `fornecedorId`; na posição, `situacao`, `status`, `ordem` e `busca`; nas movimentações (etapa 12), `de` e `ate`. Produto de outra empresa dá 404.
 - **Origem dos dados:** empresa e usuário do movimento vêm sempre do usuário autenticado. Na listagem, os saldos e o `podeExcluir` saem em lote, sem N+1. O catálogo consulta o estoque por interfaces (`UsoDoProdutoNoEstoque`, `RegistroDeEstoqueInicial`) e não depende do pacote `inventory`.
 
 ## 4. Dados
@@ -161,7 +161,8 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
   - origem `VENDA` ⇔ item preenchido, só com `VENDA`/`CANCELAMENTO_VENDA` e sem chave;
   - `CHECK (saldo_novo >= 0 OR motivo = 'VENDA' OR tipo = 'ENTRADA')`;
   - gatilhos: a baixa tira exatamente a quantidade de estoque do item, o estorno devolve exatamente a baixa, e o movimento de venda é imutável.
-- **V18 (etapa 12):** índice `(empresa_id, criado_em DESC, id DESC)` em `movimentos_estoque`, para as movimentações sem filtro de produto. A posição não cria tabela: lê `estoque_saldos` com o produto.
+- A posição não cria tabela: lê `estoque_saldos` com o produto, com a mesma busca da listagem de produtos.
+- **V18 (etapa 12):** índice `(empresa_id, criado_em DESC, id DESC)` em `movimentos_estoque`, para as movimentações sem filtro de produto.
 - **V19 (etapa 12, devolução):** ver a seção 6.
 - `criado_em` dos movimentos é `TIMESTAMP` sem fuso (V9, [DT-030](../technical-debt.md)). O filtro por dia usa o mesmo relógio que grava a coluna.
 
@@ -179,15 +180,15 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
 - **Nota do custo (Preços):** "Último custo de entrada: R$ 10,00 por UN, em 24/10/2026 (compra de 2 CX c/ 18 UN), de {fornecedor}." ou "Custo editado manualmente em 24/10/2026.". Compra feita na página atualiza o campo Custo se ele não foi mexido; senão avisa que, ao salvar, vale o campo.
 - **Histórico:** seção Estoque antes de Preços, cada uma com "Carregar mais"; a linha traz data, usuário, tipo · motivo, "−2 UN", "12 → 10", observação, embalagem, custo e fornecedor.
 - **Listagem:** "12 UN" com selo "Estoque baixo"/"Sem estoque"; "—" sem controle.
-- **Área Estoque (etapa 12):** item "Estoque" no menu, depois de Produtos, na rota `/estoque` com as abas **Posição** e **Movimentações** (a aba fica na URL).
-  - **Posição:** cards do resumo no topo ("Sem estoque 4", "Estoque baixo 12", "Negativos 2", "Valor em estoque R$ 18.430,00 a custo"), e clicar num card aplica o filtro; o valor mostra "3 produtos sem custo" quando houver. Abaixo vêm a busca, os filtros e "Ordenar por", tudo na URL. Tabela a partir de 1.024 px e cards abaixo, no padrão da lista de produtos, com nome (abre o produto), saldo com conversão, selo da situação ("Negativo" em vermelho), níveis, custo e valor. Ações: "Ajustar" e, no negativo, "Regularizar" (só ADMIN). Depois de um ajuste a linha e o resumo recarregam. Lista vazia: "Nenhum produto controla estoque ainda." ou "Nenhum produto neste filtro.".
-  - **Movimentações:** período com os atalhos Hoje · 7 dias · 30 dias e as datas, mais produto (busca), tipo, motivo e usuário (só ADMIN). A linha traz data e hora, produto, tipo · motivo, "−2 UN", "12 → 10", usuário, observação e "Venda nº 123" quando houver. "Carregar mais" no fim.
+- **Área Estoque:** item "Estoque" no menu, depois de Produtos, na rota `/estoque`, aberta a qualquer usuário (o OPERADOR lê, sem ações). Hoje mostra só a Posição; as abas **Posição** e **Movimentações** (com a aba na URL) entram com as movimentações **(etapa 12)**.
+  - **Posição:** cards do resumo no topo ("Sem estoque 4", "Estoque baixo 12", "Negativos 2", "Valor em estoque R$ 18.430,00 a custo"), e clicar num card aplica o filtro; o valor mostra "3 produtos sem custo ficam fora" quando houver. Os filtros de situação dizem o que incluem ("Sem estoque (zerado ou negativo)", "Baixo ou sem estoque", "Negativo"). Abaixo vêm a busca, os filtros e "Ordenar por", tudo na URL. Tabela a partir de 1.024 px e cards abaixo, no padrão da lista de produtos, com nome (abre o produto), saldo com conversão, selo da situação ("Negativo" em vermelho), níveis, custo e valor. Ações (só ADMIN): "Ajustar" abre o ajuste na Entrada e, no negativo, "Regularizar" abre na Contagem; daqui o modal não traz embalagens nem o fornecedor da última compra (como na lista de produtos). Sucesso com o nome do produto e o resumo do ajuste. Depois de um ajuste a linha e o resumo recarregam. Lista vazia: "Nenhum produto controla estoque ainda." ou "Nenhum produto neste filtro.".
+  - **Movimentações (etapa 12):** período com os atalhos Hoje · 7 dias · 30 dias e as datas, mais produto (busca), tipo, motivo e usuário (só ADMIN). A linha traz data e hora, produto, tipo · motivo, "−2 UN", "12 → 10", usuário, observação e "Venda nº 123" quando houver. "Carregar mais" no fim.
 
 ## 6. Requisitos vindos do PDV
 
 Ajustes do PDV que dependem do estoque, decididos em 2026-10-26 (DEC-045).
 
-**6.1 Saldo negativo a regularizar** (etapa 12, fatia da posição). Com "Vender sem estoque" ligada, a venda pode deixar o saldo negativo (regra 20). A posição mostra esses produtos (filtro, card e selo) e o atalho para corrigir (regra 25).
+**6.1 Saldo negativo a regularizar.** Com "Vender sem estoque" ligada, a venda pode deixar o saldo negativo (regra 20). A posição mostra esses produtos (filtro, card e selo) e o atalho para corrigir (regra 25).
 
 **6.2 Devolução de item** (etapa 12, última fatia). Hoje o cancelamento só vale com o caixa da venda aberto e manda usar a devolução. Na entrega, as regras de venda e de caixa passam para o [pdv.md](pdv.md) e o [caixa.md](caixa.md), e aqui ficam só as de estoque.
 
