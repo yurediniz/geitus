@@ -184,4 +184,14 @@ describe('useFiltrosDaListaDeProdutos', () => {
 
     expect(hook().temFiltroAtivo).toBe(false)
   })
+
+  it('limpar e buscar logo em seguida nao traz de volta o filtro limpo', () => {
+    const { router, hook } = montar('/produtos?estoque=baixo&busca=xyz')
+
+    // Sem act: a acao seguinte (Enter na busca, leitor de codigo) chega antes de qualquer espera.
+    hook().limpar()
+    hook().alterar({ busca: 'arroz' })
+
+    expect(router.state.location.search).toBe('?busca=arroz')
+  })
 })

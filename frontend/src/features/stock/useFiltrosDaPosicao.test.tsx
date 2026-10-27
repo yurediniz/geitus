@@ -115,4 +115,14 @@ describe('useFiltrosDaPosicao', () => {
 
     expect(router.state.location.search).toBe('?ordem=saldo')
   })
+
+  it('limpar e buscar logo em seguida nao traz de volta o filtro limpo', () => {
+    const { router, hook } = montar('/estoque?situacao=baixo&busca=xyz')
+
+    // Sem act: a acao seguinte (Enter na busca, leitor de codigo) chega antes de qualquer espera.
+    hook().limpar()
+    hook().alterar({ busca: 'teste estoque' })
+
+    expect(router.state.location.search).toBe('?busca=teste+estoque')
+  })
 })

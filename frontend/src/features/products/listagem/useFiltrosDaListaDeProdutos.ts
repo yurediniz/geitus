@@ -114,13 +114,16 @@ export function useFiltrosDaListaDeProdutos() {
       const mudouFiltro = mudou.some((campo) => campo !== 'pagina')
       const proximos = mudouFiltro ? { ...pedido, pagina: 1 } : pedido
       const substituir = opcoes.substituir ?? mudou.includes('busca')
-      setSearchParams(escreverFiltros(proximos), { replace: substituir })
+      // flushSync: a URL nova e o proximo render saem juntos. Sem isso, o React Router aplica a
+      // navegacao numa transicao, e uma acao logo em seguida (Enter na busca, leitor de codigo)
+      // ainda usaria o `alterar` com os filtros antigos e traria de volta o que foi limpo.
+      setSearchParams(escreverFiltros(proximos), { replace: substituir, flushSync: true })
     },
     [filtros, setSearchParams],
   )
 
   const limpar = useCallback(() => {
-    setSearchParams(escreverFiltros({ ...FILTROS_PADRAO, ordem: filtros.ordem }))
+    setSearchParams(escreverFiltros({ ...FILTROS_PADRAO, ordem: filtros.ordem }), { flushSync: true })
   }, [filtros.ordem, setSearchParams])
 
   const quantidadeDeFiltros = contarFiltros(filtros)
