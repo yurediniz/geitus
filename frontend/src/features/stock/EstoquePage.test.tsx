@@ -139,7 +139,7 @@ describe('EstoquePage', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Estoque' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 2, name: '2 produtos' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /negativos\s*1/i })).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getByText('R$ 247,50', { selector: 'span.text-2xl' })).toBeInTheDocument()
+    expect(screen.getByText('R$ 247,50', { selector: 'span.text-xl' })).toBeInTheDocument()
 
     const leite = linhaDe('Leite Integral')
     expect(within(leite).getByText('55 UN')).toBeInTheDocument()
@@ -209,6 +209,17 @@ describe('EstoquePage', () => {
     const dialogo = await screen.findByRole('dialog', { name: 'Ajustar estoque' })
     expect(within(dialogo).getByRole('radio', { name: 'Contagem' })).toBeChecked()
     expect(within(dialogo).getByText('Saldo atual: -3 UN')).toBeInTheDocument()
+    expect(within(dialogo).getByText('Arroz 5 kg')).toBeInTheDocument()
+    expect(within(dialogo).getByText(/saldo ficou negativo por vendas sem estoque/i)).toBeInTheDocument()
+  })
+
+  it('o primeiro clique em Valor ordena do maior para o menor', async () => {
+    const router = renderPagina()
+    await carregada()
+
+    fireEvent.click(screen.getByRole('button', { name: /^valor/i }))
+
+    await waitFor(() => expect(router.state.location.search).toBe('?ordem=-valor'))
   })
 
   it('"Ajustar" abre o ajuste na Entrada', async () => {
@@ -267,7 +278,7 @@ describe('EstoquePage', () => {
     renderPagina()
     await carregada()
 
-    expect(screen.getByText('Nenhum produto ativo controla estoque.')).toBeInTheDocument()
+    expect(screen.getByText('Nenhum produto ativo controla estoque.', { selector: 'p.font-medium' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Ir para Produtos' })).toHaveAttribute('href', '/produtos')
     expect(screen.getByRole('button', { name: 'Ver também os inativos' })).toBeInTheDocument()
   })
@@ -277,7 +288,7 @@ describe('EstoquePage', () => {
     const router = renderPagina('/estoque?situacao=negativo')
     await carregada()
 
-    expect(screen.getByText('Nenhum produto neste filtro.')).toBeInTheDocument()
+    expect(screen.getAllByText('Nenhum produto neste filtro.')).toHaveLength(2)
     fireEvent.click(screen.getAllByRole('button', { name: /limpar filtros/i })[0])
     await waitFor(() => expect(router.state.location.search).toBe(''))
   })
@@ -299,7 +310,7 @@ describe('EstoquePage', () => {
     renderPagina('/estoque?status=todos')
     await carregada()
 
-    expect(screen.getByText('Nenhum produto neste filtro.')).toBeInTheDocument()
+    expect(screen.getByText('Nenhum produto neste filtro.', { selector: 'p.font-medium' })).toBeInTheDocument()
   })
 
   it('erro ao carregar mostra o alerta e tenta de novo', async () => {

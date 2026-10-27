@@ -75,6 +75,13 @@ export interface ModalAjusteEstoqueProps {
    * "Regularizar" da area Estoque abre na Contagem (spec de Estoque, regra 25).
    */
   tipoInicial?: TipoMovimento
+  /**
+   * Nome do produto, mostrado no topo quando o modal abre a partir de uma lista
+   * (a pessoa confirma que tocou na linha certa antes de gravar).
+   */
+  nome?: string
+  /** Linha de orientacao abaixo do saldo (ex.: o "Regularizar" do saldo negativo). */
+  explicacao?: string
   aoFechar: () => void
   /** Quem recebe o foco ao fechar (ex.: o botao que abriu; no Safari o clique nao foca o botao). */
   focoAoFechar?: () => HTMLElement | null
@@ -183,6 +190,8 @@ function ConteudoAjuste({
   custo: custoAtual = null,
   fornecedorDaCompra = null,
   tipoInicial = 'ENTRADA',
+  nome,
+  explicacao,
   aoFechar,
   focoAoFechar,
   aoConcluir,
@@ -449,7 +458,9 @@ function ConteudoAjuste({
     >
       <DialogHeader>
         <DialogTitle>Ajustar estoque</DialogTitle>
+        {nome && <p className="text-sm font-medium text-foreground">{nome}</p>}
         <DialogDescription>{`Saldo atual: ${saldoAtual}`}</DialogDescription>
+        {explicacao && <p className="text-sm text-muted-foreground">{explicacao}</p>}
       </DialogHeader>
 
       <form onSubmit={confirmar} noValidate className="space-y-4">

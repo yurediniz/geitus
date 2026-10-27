@@ -121,12 +121,15 @@ function CabecalhoOrdenavel({
   ordem,
   aoOrdenar,
   alinharDireita,
+  maiorPrimeiro = false,
   children,
 }: {
   coluna: ColunaOrdenavel
   ordem: OrdemDaPosicao
   aoOrdenar: (ordem: OrdemDaPosicao) => void
   alinharDireita?: boolean
+  /** O primeiro clique ordena do maior para o menor (no valor, ver primeiro onde esta o dinheiro). */
+  maiorPrimeiro?: boolean
   children: ReactNode
 }) {
   const direcao = direcaoDa(coluna, ordem)
@@ -135,8 +138,14 @@ function CabecalhoOrdenavel({
     <th scope="col" aria-sort={direcao} className={cn('px-3 py-2 font-medium', alinharDireita && 'text-right')}>
       <button
         type="button"
-        // Primeiro clique ordena ascendente; clicar de novo na mesma coluna inverte.
-        onClick={() => aoOrdenar(ordem === coluna ? `-${coluna}` : coluna)}
+        // Primeiro clique ordena ascendente (ou do maior, com `maiorPrimeiro`); clicar de novo inverte.
+        onClick={() => {
+          if (direcao === undefined) {
+            aoOrdenar(maiorPrimeiro ? `-${coluna}` : coluna)
+          } else {
+            aoOrdenar(direcao === 'ascending' ? `-${coluna}` : coluna)
+          }
+        }}
         className={cn(
           '-mx-2 inline-flex h-9 items-center gap-1 rounded-md px-2 outline-none hover:bg-muted hover:text-foreground',
           'focus-visible:ring-[3px] focus-visible:ring-ring/50',
@@ -183,7 +192,7 @@ export function TabelaDaPosicao({
             <th scope="col" className="px-3 py-2 text-right font-medium">
               Custo
             </th>
-            <CabecalhoOrdenavel coluna="valor" alinharDireita {...cabecalho}>
+            <CabecalhoOrdenavel coluna="valor" alinharDireita maiorPrimeiro {...cabecalho}>
               Valor
             </CabecalhoOrdenavel>
             {!somenteLeitura && (

@@ -386,6 +386,7 @@ export function ProdutosListaPage() {
           fracionada={ajuste.produto.unidade.fracionada}
           custo={ajuste.produto.custo}
           fornecedorDaCompra={fornecedorParaACompra(ajuste.produto)}
+          nome={ajuste.produto.nome}
           aoFechar={() => setAjuste(null)}
           focoAoFechar={() => (ajuste.origem.isConnected ? ajuste.origem : null)}
           aoConcluir={(movimento) => {

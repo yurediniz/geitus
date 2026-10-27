@@ -181,6 +181,13 @@ describe('ModalAjusteEstoque', () => {
       expect(within(dialogo()).getByText('Saldo atual: -3 UN')).toBeInTheDocument()
     })
 
+    it('mostra o nome do produto e a explicação quando recebidos', () => {
+      renderModal({ nome: 'Arroz 5 kg', explicacao: 'O saldo ficou negativo por vendas sem estoque.' })
+
+      expect(within(dialogo()).getByText('Arroz 5 kg')).toBeInTheDocument()
+      expect(within(dialogo()).getByText('O saldo ficou negativo por vendas sem estoque.')).toBeInTheDocument()
+    })
+
     it('o ajuste gravado invalida também a posição da área Estoque', async () => {
       ajustarEstoqueMock.mockResolvedValue(MOVIMENTO)
       const { queryClient } = renderModal({ tipoInicial: 'AJUSTE' })

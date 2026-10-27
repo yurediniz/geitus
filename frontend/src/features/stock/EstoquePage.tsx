@@ -144,21 +144,25 @@ export function EstoquePage() {
 
   const itens = pagina?.itens ?? []
   const titulo = tituloDaLista(pagina?.totalItens, temFiltroAtivo)
+  const mensagemDoVazio = temFiltroAtivo ? 'Nenhum produto neste filtro.' : 'Nenhum produto ativo controla estoque.'
+  // O leitor de tela ouve o total da pagina, ou que nada foi encontrado.
   const anuncio =
-    pagina && !isPlaceholderData && pagina.totalItens > 0
-      ? `${titulo}. Página ${filtros.pagina.toLocaleString('pt-BR')} de ${ultimaPagina.toLocaleString('pt-BR')}.`
+    pagina && !isPlaceholderData
+      ? pagina.totalItens > 0
+        ? `${titulo}. Página ${filtros.pagina.toLocaleString('pt-BR')} de ${ultimaPagina.toLocaleString('pt-BR')}.`
+        : mensagemDoVazio
       : ''
 
   const conteudoVazio = (): ReactNode =>
     temFiltroAtivo ? (
-      <ListaVazia mensagem="Nenhum produto neste filtro." comFiltro>
+      <ListaVazia mensagem={mensagemDoVazio} comFiltro>
         <Button type="button" variant="outline" className={ALTURA_DO_BOTAO} onClick={limparTudo}>
           Limpar filtros
         </Button>
       </ListaVazia>
     ) : (
       // Sem filtro, o status e o padrao (ativos): pode haver inativos que controlam estoque.
-      <ListaVazia mensagem="Nenhum produto ativo controla estoque.">
+      <ListaVazia mensagem={mensagemDoVazio}>
         <Button type="button" variant="outline" className={ALTURA_DO_BOTAO} onClick={() => alterar({ status: 'todos' })}>
           Ver também os inativos
         </Button>
@@ -293,6 +297,12 @@ export function EstoquePage() {
           fracionada={ajuste.item.unidade.fracionada}
           custo={ajuste.item.custo}
           tipoInicial={ajuste.tipo}
+          nome={ajuste.item.nome}
+          explicacao={
+            ajuste.item.saldo < 0 && ajuste.tipo === 'AJUSTE'
+              ? 'O saldo ficou negativo por vendas sem estoque. Informe quanto há de fato.'
+              : undefined
+          }
           aoFechar={() => setAjuste(null)}
           focoAoFechar={() => (ajuste.origem.isConnected ? ajuste.origem : null)}
           aoConcluir={(movimento) => {
