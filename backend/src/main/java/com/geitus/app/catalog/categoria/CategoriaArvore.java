@@ -57,6 +57,20 @@ public final class CategoriaArvore {
         return arvore.idsDaSubarvore(id);
     }
 
+    /**
+     * Ids do filtro "categoria com descendentes" das listagens: {@code null} sem
+     * filtro; categoria fora desta arvore (de outra empresa ou excluida) vira
+     * conjunto vazio, que da lista vazia sem revelar nada.
+     */
+    public Set<Long> idsDoFiltro(UUID categoria) {
+        if (categoria == null) {
+            return null;
+        }
+        return buscarPeloUuid(categoria)
+                .map(encontrada -> idsDaSubarvore(encontrada.getId()))
+                .orElse(Set.of());
+    }
+
     /** Mover {@code id} para baixo de {@code novoPaiId} criaria ciclo? */
     public boolean criariaCiclo(Long id, Long novoPaiId) {
         return arvore.criariaCiclo(id, novoPaiId);

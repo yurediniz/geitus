@@ -578,21 +578,8 @@ public class ProdutoService {
         return new FiltroDeProdutos(empresaId, TextoDeBusca.palavras(parametros.busca()),
                 TextoDeBusca.termoDeCodigo(parametros.busca()), TextoDeBusca.termoNumerico(parametros.busca()),
                 parametros.status(),
-                categoriasDoFiltro(arvore, parametros.categoria()), parametros.estoque(), parametros.emPromocao(),
+                arvore.idsDoFiltro(parametros.categoria()), parametros.estoque(), parametros.emPromocao(),
                 hoje);
-    }
-
-    /**
-     * {@code null} sem filtro; categoria fora da arvore da empresa (de outra
-     * empresa ou excluida) vira conjunto vazio: lista vazia, sem revelar nada.
-     */
-    private static Set<Long> categoriasDoFiltro(CategoriaArvore arvore, UUID categoria) {
-        if (categoria == null) {
-            return null;
-        }
-        return arvore.buscarPeloUuid(categoria)
-                .map(encontrada -> arvore.idsDaSubarvore(encontrada.getId()))
-                .orElse(Set.of());
     }
 
     /**

@@ -212,6 +212,16 @@ class CategoriaArvoreTest {
     }
 
     @Test
+    void idsDoFiltroSemCategoriaEhNuloDesconhecidaEhVaziaEConhecidaTrazASubarvore() {
+        CategoriaArvore arvore = arvore();
+
+        assertThat(arvore.idsDoFiltro(null)).isNull();
+        assertThat(arvore.idsDoFiltro(UUID.randomUUID())).isEmpty();
+        assertThat(arvore.idsDoFiltro(racao.getUuid())).containsExactlyInAnyOrder(1L, 2L, 3L, 4L);
+        assertThat(arvore.idsDoFiltro(seca.getUuid())).containsExactly(4L);
+    }
+
+    @Test
     void categoriaDesconhecidaLancaExcecao() {
         assertThatThrownBy(() -> arvore().caminho(99L)).isInstanceOf(IllegalArgumentException.class);
     }

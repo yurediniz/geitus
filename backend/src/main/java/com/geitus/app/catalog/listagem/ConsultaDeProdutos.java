@@ -35,7 +35,7 @@ import com.geitus.app.shared.busca.PadraoLike;
 @Repository
 public class ConsultaDeProdutos {
 
-    private static final String ORIGEM = """
+    static final String ORIGEM = """
              FROM produtos p
              LEFT JOIN estoque_saldos s ON s.empresa_id = p.empresa_id AND s.produto_id = p.id
             WHERE p.empresa_id = :empresaId""";
@@ -87,7 +87,7 @@ public class ConsultaDeProdutos {
     }
 
     /** Os {@code AND} dos filtros presentes, so com fragmentos fixos; os valores entram em {@code parametros}. */
-    private static String condicoes(FiltroDeProdutos filtro, MapSqlParameterSource parametros) {
+    static String condicoes(FiltroDeProdutos filtro, MapSqlParameterSource parametros) {
         StringBuilder sql = new StringBuilder(filtro.status().condicao());
         if (filtro.temBusca()) {
             sql.append(" AND (").append(condicaoDeBusca(filtro, parametros)).append(')');

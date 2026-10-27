@@ -10,10 +10,9 @@ import com.geitus.app.catalog.RegraDeNegocioException;
  */
 public enum EstoqueFiltro {
     /** Saldo ate o ponto de reposicao (ou, sem ponto, ate o minimo), incluindo os zerados. */
-    BAIXO("baixo", " AND p.controla_estoque AND (COALESCE(s.saldo, 0) <= 0"
-            + " OR COALESCE(s.saldo, 0) <= COALESCE(p.ponto_reposicao, p.estoque_minimo))"),
+    BAIXO("baixo", " AND p.controla_estoque AND " + SituacaoDaPosicao.ESTOQUE_BAIXO),
     /** Saldo menor ou igual a zero. */
-    SEM("sem", " AND p.controla_estoque AND COALESCE(s.saldo, 0) <= 0");
+    SEM("sem", " AND p.controla_estoque AND " + SituacaoDaPosicao.SEM_ESTOQUE);
 
     static final String MENSAGEM_INVALIDO = "Filtro de estoque inválido.";
     static final String CAMPO = "estoque";

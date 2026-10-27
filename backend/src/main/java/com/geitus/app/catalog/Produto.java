@@ -626,6 +626,17 @@ public class Produto {
         return Collections.unmodifiableList(embalagens);
     }
 
+    /**
+     * Embalagem principal, usada para mostrar o saldo convertido ("55 UN (18 CX
+     * + 1 UN)", spec de Produtos): a de compra, se houver; senao, a primeira da lista.
+     */
+    public Optional<ProdutoEmbalagem> embalagemPrincipal() {
+        return embalagens.stream()
+                .filter(ProdutoEmbalagem::isDeCompra)
+                .findFirst()
+                .or(() -> embalagens.stream().findFirst());
+    }
+
     /** Embalagem deste produto com o UUID publico, se houver. */
     public Optional<ProdutoEmbalagem> embalagem(UUID embalagemId) {
         return embalagens.stream()
