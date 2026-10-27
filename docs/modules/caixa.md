@@ -1,436 +1,96 @@
-# Módulo: Caixa (etapa 10)
+# Caixa
 
-> Decisões: **DEC-041**. Norte: [`visao-dominio-pdv.md`](../visao-dominio-pdv.md) §3.6. Diretriz inicial: `CLAUDE.md`, "Módulo Caixa".
+> Decisões: DEC-041 (Caixa), DEC-042 (recebimentos e conferência por forma). Migrations V16 e V17. Pendências: DT-040.
 
-## 1. Motivação e escopo
+## 1. Objetivo
 
-O caixa controla o dinheiro da gaveta durante um período de trabalho: quanto entrou como fundo de troco, quanto foi retirado ou colocado no meio do dia e quanto havia no fechamento. É a base do PDV: a venda só será finalizada com caixa aberto e ficará ligada a ele.
+Controlar o dinheiro de cada gaveta num período de trabalho: fundo de troco, sangrias, suprimentos, recebimentos do PDV e o fechamento comparando o esperado com o contado. O caixa pertence a um **ponto** (a gaveta do balcão), não à pessoa. A venda só é finalizada com caixa aberto e fica ligada a ele.
 
-**Decisões do usuário (em conversa, 2026-10-24):**
-- **O caixa pertence a um ponto de caixa** ("Caixa 1", "Caixa 2"), não à pessoa. Cada ponto tem no máximo uma sessão aberta.
-- **Sangria e suprimento entram nesta fase.**
-- **Fechamento cego e fechamento com o esperado visível existem os dois.** O ADMIN escolhe o modo nas Configurações.
-- **A tela Configurações nasce agora**, com a seção Caixa.
-- **Permissões:** o OPERADOR opera o próprio caixa. O ADMIN opera qualquer caixa e cuida dos pontos e das Configurações.
-- **Diferença no fechamento exige justificativa**, para mais ou para menos. Caixa fechado não reabre.
-- **Abordagem A:** movimentos imutáveis e saldo calculado pela soma.
+## 2. Regras de negócio
 
-**Nesta fase:**
-- pontos de caixa (cadastro, inativação);
-- sessão de caixa: abertura com fundo de troco, sangria, suprimento, contagem e fechamento;
-- configuração do modo de fechamento;
-- histórico de sessões;
-- tela Configurações (seção Caixa).
+### Pontos de caixa
+1. Nome obrigatório, aparado, até 40 caracteres, único na empresa sem diferenciar maiúsculas ("Já existe um ponto de caixa com este nome.", 409, campo `nome`). No máximo 50 pontos ("A empresa já tem o limite de 50 pontos de caixa.", 409).
+2. Ponto nunca é excluído, só inativado. Inativar exige o ponto sem sessão aberta ou em conferência ("Feche o caixa deste ponto antes de inativá-lo."). Ponto inativo não abre caixa ("Este ponto de caixa está inativo."). O último ponto ativo pode ser inativado; a tela então mostra "Nenhum ponto de caixa ativo" (ADMIN: caminho para Configurações; OPERADOR: "Peça ao administrador").
+3. "Caixa 1" automático: a V16 criou um por empresa; empresa que **nunca** teve ponto ganha o "Caixa 1" na primeira consulta de pontos (corrida tratada como "já existe").
 
-**Fora desta fase (registrado):**
-- **Com o PDV:**
-  - recebimento de venda no caixa (tipo `RECEBIMENTO`, forma de pagamento);
-  - conferência de cartão e PIX no fechamento;
-  - venda exigindo caixa aberto.
-- impressão do fechamento;
-- relatório consolidado de caixa (módulo Relatórios);
-- vínculo do ponto a um computador ou terminal;
-- integração da sangria com o Financeiro (sangria para pagar despesa);
-- permissões configuráveis por usuário;
-- mover a configuração da balança para a tela Configurações.
+### Sessão: abertura
+4. Qualquer usuário ativo abre. Fundo de troco obrigatório, ≥ 0 (zero vale), 2 casas, até 9.999.999.999,99. A tela sugere o fundo da abertura anterior do mesmo ponto.
+5. Uma sessão `ABERTA`/`EM_CONFERENCIA` por ponto ("O Caixa 1 já está aberto por Ana Souza.") e uma por usuário, inclusive ADMIN ("Você já tem um caixa aberto no Caixa 2."). Ordem das conferências: chave repetida → caixa do usuário → caixa do ponto. Garantido também no banco (índices parciais).
+6. Grava a sessão `ABERTA` e o movimento `ABERTURA` na mesma transação.
 
-## 2. Conceitos
+### Movimentos
+7. Tipos: `ABERTURA`, `SUPRIMENTO`, `SANGRIA` (sempre em `DINHEIRO`) e, vindos do PDV, `RECEBIMENTO` e `ESTORNO` (com forma e venda). Valor sempre positivo; o sinal vem do tipo. Movimento nunca muda nem é apagado.
+8. Sangria e suprimento: só quem abriu a sessão ou um ADMIN (OPERADOR em sessão de outro → 404); só em `ABERTA` ("O caixa está em conferência. Termine o fechamento." / "Este caixa já foi fechado."). Valor > 0, 2 casas, no máximo 9.999.999.999,99; motivo obrigatório, aparado, até 200 caracteres.
+9. Suprimento que deixaria o esperado acima de 9.999.999.999,99 → 400 "O valor passa do limite do caixa." (campo `valor`).
+10. Sangria não passa do dinheiro esperado (409): "A sangria passa do dinheiro na gaveta (R$ 50,00)." para ADMIN ou modo não cego; "A sangria passa do dinheiro esperado na gaveta." (sem o valor) para OPERADOR no modo cego.
+11. Esperado por forma = soma dos movimentos: `DINHEIRO` = abertura + suprimentos + recebimentos − sangrias − estornos; `DEBITO`, `CREDITO`, `PIX` = recebimentos − estornos. Não há coluna de saldo.
 
-- **Ponto de caixa:** a gaveta física de um balcão. A empresa pode ter vários. Nunca é excluído, só inativado.
-- **Sessão de caixa:** o período entre a abertura e o fechamento num ponto, aberta por um usuário.
-- **Movimento de caixa:** uma alteração de dinheiro na sessão. Nunca muda e nunca é apagado.
-- **Dinheiro esperado na gaveta:** abertura + suprimentos − sangrias. Não é coluna: é a soma dos movimentos.
-- **Contagem:** o valor que o operador contou na gaveta ao fechar.
-- **Diferença:** contado − esperado. Positiva é sobra, negativa é falta.
+### Contagem e fechamento
+12. Estados: `ABERTA` → `EM_CONFERENCIA` → `FECHADA`, ou `ABERTA` → `FECHADA`. Quem: o dono ou um ADMIN; o ADMIN que fecha o caixa de outro fica registrado.
+13. Contagem só em `ABERTA`. O dinheiro é sempre contado; débito, crédito e PIX só quando a forma teve movimento na sessão (faltando: "Informe o valor contado de Débito.", 400; forma sem movimento enviada → 400). Valor contado ≥ 0, 2 casas ("O valor contado não pode ser negativo."). Grava, por forma, esperado (calculado na hora), contado e diferença (contado − esperado), com quem contou e quando, e o modo (cego ou não) que valia no momento.
+14. Todas as diferenças zero → `FECHADA`. Alguma diferente de zero:
+    - **modo cego:** vai para `EM_CONFERENCIA` e só então mostra esperado e diferenças. Justificativa junto com a contagem → 400 "Informe a justificativa depois de ver a diferença." **sempre**, mesmo com diferença zero (senão a recusa revelaria o esperado);
+    - **modo não cego:** com justificativa, fecha direto; sem, vai para `EM_CONFERENCIA`. Justificativa enviada com diferença zero é ignorada.
+15. Fechamento só em `EM_CONFERENCIA` (em `ABERTA`: "Conte o dinheiro da gaveta antes de fechar o caixa.", 409). Justificativa única para todas as formas, obrigatória, aparada, 1–500 caracteres.
+16. A contagem não muda depois de gravada, e caixa fechado não reabre (garantido no banco). Trocar o modo depois da contagem não afeta a sessão.
+17. A sessão não fecha sozinha. Aberta em outro dia (`America/Sao_Paulo`): a tela avisa "Aberto desde 23/10 às 08:02". Usuário inativado com caixa aberto: o ADMIN fecha.
 
-## 3. Regras de negócio
+### Modo cego
+18. Configuração `fechamentoCego`, padrão **ligado**; só o ADMIN altera (perfil do token e do banco; ADMIN rebaixado com token antigo → 403), todos leem; registra quem alterou e quando.
+19. Com o modo ligado e a sessão `ABERTA`, o OPERADOR não recebe o esperado de nenhuma forma em nenhuma resposta (sessão atual, detalhe, histórico, lista de pontos, mensagens de sangria e de estorno): `dinheiroNaGaveta` sai `null`, e os movimentos lançados por outra pessoa e os `RECEBIMENTO`/`ESTORNO` saem com `valor: null` ("Valor no fechamento" na tela). O ADMIN sempre vê. Limitação aceita: o operador vê os valores dos próprios lançamentos, e a lista de vendas do PDV (F8) mostra total, formas e troco de cada venda.
 
-### 3.1 Pontos de caixa
-- **Nome:** obrigatório, até 40 caracteres, aparado. É único na empresa sem diferenciar maiúsculas (`lower(nome)`, como categorias e marcas). Nome repetido → 409 com o campo `nome`.
-- **Limite:** até 50 pontos por empresa (409 ao passar).
-- **"Caixa 1" automático:** a migration cria um ponto "Caixa 1" para cada empresa existente. Uma empresa que **nunca teve ponto** ganha o "Caixa 1" na primeira consulta de pontos. Assim o cadastro de empresa não depende do caixa. Uma corrida entre duas consultas cai na unicidade e é tratada como "já existe".
-- **Inativar:** só sem sessão aberta ou em conferência no ponto (409 "Feche o caixa deste ponto antes de inativá-lo."). Ponto inativo não abre caixa (409 "Este ponto de caixa está inativo.").
-- **Último ponto ativo:** pode ser inativado. A tela do caixa mostra "Nenhum ponto de caixa ativo" com o caminho para Configurações (ADMIN) ou "Peça ao administrador" (OPERADOR).
+### Idempotência e concorrência
+20. Abertura, sangria e suprimento levam `chave` (UUID, única por empresa): mesma chave e mesmos dados → 200 com o já gravado (a primeira é 201); outros dados → 409 "Esta operação já foi registrada com outros dados.".
+21. Contagem e fechamento são idempotentes pelo estado: mesmo valor/justificativa → 200; outro → 409 "A contagem deste caixa já foi registrada." / "Este caixa já foi fechado.".
+22. Movimentos, contagem e fechamento travam a sessão antes de ler o esperado (duas sangrias simultâneas não deixam saldo negativo). Recebimentos do PDV travam a sessão **antes** de inserir. A busca da sessão para vender devolve só `ABERTA`, nunca `EM_CONFERENCIA`.
 
-### 3.2 Abertura
-- **Quem:** qualquer usuário autenticado e ativo.
-- **Fundo de troco:** obrigatório, ≥ 0, até 2 casas e no máximo 9.999.999.999,99. Zero é aceito.
-- **Sugestão:** a tela sugere o fundo de troco da abertura anterior do mesmo ponto (`ultimoFundoTroco` na lista de pontos). Sem abertura anterior, o campo vem vazio.
-- **Um por ponto:** o ponto não pode ter sessão `ABERTA` ou `EM_CONFERENCIA` (409 "O Caixa 1 já está aberto por Ana Souza.").
-- **Um por usuário:** quem abre não pode ter outra sessão `ABERTA` ou `EM_CONFERENCIA` aberta por ele (409 "Você já tem um caixa aberto no Caixa 2."). Vale também para o ADMIN.
-- **O que grava:** a sessão (`ABERTA`) e o movimento `ABERTURA` com o valor do fundo, na mesma transação.
+### Horários
+23. Tabelas do caixa usam `TIMESTAMPTZ` preenchido pelo `Clock` (`America/Sao_Paulo`), truncado em microssegundos; a API devolve ISO-8601 com deslocamento. O "hoje" do caixa (aviso e filtros) é a data em `America/Sao_Paulo`.
 
-### 3.3 Sangria e suprimento
-- **Quem:** quem abriu a sessão ou um ADMIN. OPERADOR em sessão de outra pessoa → 404.
-- **Só em sessão `ABERTA`.** Em conferência → 409 "O caixa está em conferência. Termine o fechamento."; fechada → 409 "Este caixa já foi fechado.".
-- **Valor:** > 0, até 2 casas, no máximo 9.999.999.999,99.
-- **Limite do caixa:** um suprimento que deixaria o esperado acima de 9.999.999.999,99 → 400 "O valor passa do limite do caixa." (campo `valor`).
-- **Motivo:** obrigatório, aparado, até 200 caracteres.
-- **Sangria não passa do dinheiro na gaveta:** se o valor for maior que o esperado → 409.
-  - ADMIN ou modo não cego: "A sangria passa do dinheiro na gaveta (R$ 50,00).";
-  - OPERADOR no modo cego: "A sangria passa do dinheiro esperado na gaveta." (sem o valor, para não revelar o esperado).
+## 3. Contrato da API
 
-### 3.4 Contagem e fechamento
-Estados da sessão: `ABERTA` → `EM_CONFERENCIA` → `FECHADA`, ou `ABERTA` → `FECHADA` direto.
+Todas autenticadas; empresa do JWT; recurso de outra empresa ou sessão de outra pessoa (para OPERADOR) → 404. "Dono" = quem abriu a sessão.
 
-- **Quem:** quem abriu a sessão ou um ADMIN. Quando um ADMIN fecha a sessão de outra pessoa, o fechamento registra o ADMIN.
-- **Contagem** (`valorContado`, ≥ 0, até 2 casas):
-  - **só em `ABERTA`**;
-  - **gravação:** guarda na sessão o `valor_contado`, o `valor_esperado` (calculado na hora; depois disso não entra mais movimento) e a `diferenca`, com quem contou e quando;
-  - **diferença zero:** a sessão vai direto para `FECHADA`;
-  - **diferença diferente de zero:**
-    - **modo cego:** a sessão vai para `EM_CONFERENCIA` e a resposta mostra esperado e diferença. Uma justificativa enviada junto com a contagem → 400 "Informe a justificativa depois de ver a diferença.";
-    - **modo não cego:** com justificativa, fecha direto; sem justificativa, vai para `EM_CONFERENCIA`.
-- **Fechamento** (`justificativa`, obrigatória, aparada, de 1 a 500 caracteres):
-  - só em `EM_CONFERENCIA`;
-  - grava a justificativa, quem fechou e quando, e passa a sessão para `FECHADA`.
-- **A contagem não muda depois de gravada.** Não existe rota para trocar o valor contado.
-- **O modo vale no momento da contagem:** a sessão guarda `fechamento_cego` (o modo que valia quando foi contada). Trocar a configuração depois não afeta sessões já contadas.
-- **Caixa fechado não reabre.** Nada na sessão fechada muda (garantido no banco, §4.4).
-
-### 3.5 Caixa esquecido aberto
-- **A sessão não fecha sozinha.** Se a data de abertura (no fuso `America/Sao_Paulo`) for anterior a hoje, a tela mostra "Aberto desde 23/10 às 08:02".
-- **Quem resolve:** o dono fecha normalmente; o ADMIN pode fechar no lugar dele (§3.4).
-- **Usuário inativado com caixa aberto:** o ADMIN fecha.
-
-### 3.6 Modo cego (o que o OPERADOR não vê)
-Com `fechamentoCego` ligado e a sessão em `ABERTA`, as respostas ao **OPERADOR** não trazem `dinheiroNaGaveta` (fica `null`). A partir da contagem, todos veem esperado, contado e diferença.
-
-- **O ADMIN sempre vê** o esperado.
-- **Limitação aceita:** os movimentos que o próprio operador lançou continuam visíveis com os valores. O modo cego esconde o total, não os lançamentos.
-
-### 3.7 Idempotência
-- **Abertura, sangria e suprimento** levam uma `chave` (UUID, obrigatória), gerada pela tela ao abrir a janela e gravada no movimento. É única por empresa.
-  - mesma chave e mesmos dados → 200 com o que já foi gravado (a primeira resposta é 201);
-  - mesma chave com outros dados → 409 "Esta operação já foi registrada com outros dados.".
-- **Contagem e fechamento** são idempotentes pelo estado:
-  - repetir a contagem com o mesmo valor numa sessão já contada → 200 com o resultado gravado; outro valor → 409 "A contagem deste caixa já foi registrada.";
-  - repetir o fechamento com a mesma justificativa numa sessão fechada → 200; outra justificativa → 409 "Este caixa já foi fechado.".
-
-### 3.8 Concorrência
-- **Movimentos, contagem e fechamento travam a linha da sessão** (`SELECT ... FOR UPDATE`) antes de ler o esperado e gravar. Duas sangrias simultâneas não deixam o saldo negativo, e um fechamento não acontece no meio de um lançamento.
-- **Abertura:** a unicidade de sessão aberta por ponto e por usuário é garantida no banco (índices parciais, §4.3). Uma corrida de duas aberturas no mesmo ponto devolve 409 com a mesma mensagem de §3.2.
-
-### 3.9 Configuração
-- **`fechamentoCego`:** padrão **ligado**. Sem linha na tabela, vale o padrão.
-- **Quem altera:** só o ADMIN. A alteração registra quem alterou e quando.
-- **Quem lê:** todos os autenticados, porque a tela do caixa precisa do modo.
-
-## 4. Banco — migration `V16__caixa.sql`
-
-Migration aditiva (V1–V15 intactas). Convenções do estoque (V9):
-- PK `BIGINT` identity mais `uuid` público (DEC-015, DEC-019);
-- isolamento por FKs compostas `(empresa_id, …)` (DEC-016);
-- `UNIQUE (empresa_id, id)` como alvo das FKs.
-
-**Diferença de propósito:** os horários são `TIMESTAMPTZ` (§4.5).
-
-### 4.1 `pontos_caixa`
-| Coluna | Tipo | Observações |
+| Método · Rota | Perfil | Observação |
 |---|---|---|
-| `id` | `BIGINT` identity | PK |
-| `uuid` | `UUID` | NOT NULL, `UNIQUE` |
-| `empresa_id` | `BIGINT` | NOT NULL, FK → `empresa(id)` |
-| `nome` | `VARCHAR(40)` | NOT NULL, `CHECK (nome = btrim(nome) AND nome <> '')` |
-| `ativo` | `BOOLEAN` | NOT NULL, default `true` |
-| `criado_em`, `atualizado_em` | `TIMESTAMPTZ` | `criado_em` NOT NULL |
-
-- `UNIQUE (empresa_id, id)`;
-- índice único `(empresa_id, lower(nome))`;
-- carga: um "Caixa 1" ativo por empresa existente.
-
-### 4.2 `configuracoes_caixa`
-| Coluna | Tipo | Observações |
-|---|---|---|
-| `empresa_id` | `BIGINT` | PK, FK → `empresa(id)` |
-| `fechamento_cego` | `BOOLEAN` | NOT NULL, default `true` |
-| `atualizado_por` | `BIGINT` | NOT NULL, FK composta `(empresa_id, atualizado_por)` → `usuario` |
-| `atualizado_em` | `TIMESTAMPTZ` | NOT NULL |
-
-### 4.3 `sessoes_caixa`
-| Coluna | Tipo | Observações |
-|---|---|---|
-| `id`, `uuid`, `empresa_id` | | como acima; `UNIQUE (empresa_id, id)` |
-| `ponto_caixa_id` | `BIGINT` | NOT NULL, FK composta → `pontos_caixa`, `RESTRICT` |
-| `status` | `VARCHAR(15)` | `CHECK IN ('ABERTA','EM_CONFERENCIA','FECHADA')` |
-| `aberta_por`, `aberta_em` | `BIGINT`, `TIMESTAMPTZ` | NOT NULL; FK composta → `usuario` |
-| `fundo_troco` | `NUMERIC(12,2)` | NOT NULL, `>= 0` |
-| `fechamento_cego` | `BOOLEAN` | modo usado na contagem; NULL antes dela |
-| `valor_esperado`, `valor_contado`, `diferenca` | `NUMERIC(12,2)` | NULL antes da contagem; `valor_contado >= 0` |
-| `contada_por`, `contada_em` | `BIGINT`, `TIMESTAMPTZ` | NULL antes da contagem; FK composta → `usuario` |
-| `justificativa` | `VARCHAR(500)` | |
-| `fechada_por`, `fechada_em` | `BIGINT`, `TIMESTAMPTZ` | NULL até fechar; FK composta → `usuario` |
-
-**Regras no banco:**
-- **Uma sessão aberta por ponto:** índice único parcial `(empresa_id, ponto_caixa_id) WHERE status IN ('ABERTA','EM_CONFERENCIA')`.
-- **Uma sessão aberta por usuário:** índice único parcial `(empresa_id, aberta_por) WHERE status IN ('ABERTA','EM_CONFERENCIA')`.
-- **Coerência por estado (`CHECK`):**
-  - `ABERTA` → campos da contagem e do fechamento nulos;
-  - `EM_CONFERENCIA` → contagem preenchida, `diferenca <> 0`, fechamento nulo;
-  - `FECHADA` → contagem e fechamento preenchidos.
-- **Diferença:** `diferenca = valor_contado - valor_esperado`.
-- **Justificativa:** `diferenca <> 0` em sessão `FECHADA` exige `justificativa` não vazia.
-- **Índice do histórico:** `(empresa_id, aberta_em DESC)`.
-
-### 4.4 `movimentos_caixa`
-| Coluna | Tipo | Observações |
-|---|---|---|
-| `id`, `uuid`, `empresa_id` | | como acima |
-| `sessao_caixa_id` | `BIGINT` | NOT NULL, FK composta → `sessoes_caixa`, `RESTRICT` |
-| `tipo` | `VARCHAR(15)` | `CHECK IN ('ABERTURA','SUPRIMENTO','SANGRIA')` |
-| `valor` | `NUMERIC(12,2)` | sempre positivo (o sinal sai do tipo); `ABERTURA >= 0`, demais `> 0` |
-| `motivo` | `VARCHAR(200)` | obrigatório em `SUPRIMENTO` e `SANGRIA`; nulo em `ABERTURA` |
-| `usuario_id` | `BIGINT` | NOT NULL, FK composta → `usuario` |
-| `chave_idempotencia` | `UUID` | NOT NULL, `UNIQUE (empresa_id, chave_idempotencia)` |
-| `criado_em` | `TIMESTAMPTZ` | NOT NULL |
-
-- **Abertura única:** índice único parcial `(empresa_id, sessao_caixa_id) WHERE tipo = 'ABERTURA'`.
-- **Índice:** `(empresa_id, sessao_caixa_id, id)`.
-
-**Imutabilidade garantida no banco (gatilhos):**
-- `movimentos_caixa`: `BEFORE UPDATE OR DELETE` → erro.
-- `sessoes_caixa`:
-  - `BEFORE DELETE` → erro;
-  - `BEFORE UPDATE` quando `OLD.status = 'FECHADA'` → erro;
-  - `BEFORE UPDATE` que mude `empresa_id`, `ponto_caixa_id`, `aberta_por`, `aberta_em` ou `fundo_troco` → erro;
-  - `BEFORE UPDATE` que mude a contagem já gravada → erro.
-
-### 4.5 Fuso dos horários (parte da DT-030)
-- **Tipo:** as quatro tabelas usam `TIMESTAMPTZ`.
-- **Preenchimento:** a aplicação grava `OffsetDateTime`/`Instant` obtido do `Clock` único (`RelogioConfig`, `America/Sao_Paulo`), nunca `LocalDateTime.now()` nem `DEFAULT now()`.
-- **API:** os horários saem em ISO-8601 com deslocamento (`2026-10-24T08:02:00-03:00`).
-- **"Hoje" do caixa** (aviso de §3.5 e filtro por período) é a data em `America/Sao_Paulo`.
-- **As tabelas antigas** continuam na DT-030 (corrigir antes do primeiro deploy).
-
-## 5. Backend
-
-### 5.1 Pacotes
-- **`cashier`** (novo):
-  - `cashier/ponto` (pontos de caixa);
-  - `cashier/sessao` (sessões, movimentos, contagem e fechamento);
-  - `cashier/configuracao` (configuração do caixa).
-- **Dependências:** `cashier` depende de `iam` (usuário) e `company` (empresa). Nada depende de `cashier` nesta fase. O PDV vai depender dele.
-- **Empresa do usuário (DT-025):** o Caixa **não duplica** o `resolverEmpresaId`. Esta fase cria o resolvedor compartilhado em `iam` previsto na DT-025 e o usa no `cashier`. Migrar os services antigos para ele é opcional nesta fase.
-- **Paginação (DT-032):** `Paginacao` e `PaginaResponse` vão para `shared`. Os usos atuais mudam só o `import`.
-
-### 5.2 Rotas
-Todas autenticadas e isoladas pela empresa do JWT. Recurso de outra empresa → 404.
-
-| Método e rota | Perfil | Respostas |
-|---|---|---|
-| `GET /api/caixa/pontos` | todos | 200. Lista ativos e inativos (filtro `ativo`), com `situacao` e `ultimoFundoTroco`. Garante o "Caixa 1" (§3.1). |
+| `GET /api/caixa/pontos?ativo=` | todos | Lista com `situacao` (sessão aberta, quem, quando) e `ultimoFundoTroco`; garante o "Caixa 1" |
 | `POST /api/caixa/pontos` | ADMIN | 201 / 400 / 409 |
-| `PATCH /api/caixa/pontos/{id}` | ADMIN | 200 / 400 / 404 / 409 (renomear) |
-| `PATCH /api/caixa/pontos/{id}/inativar` · `/reativar` | ADMIN | 200 / 404 / 409 |
-| `GET /api/caixa/sessoes/atual` | todos | 200 com a sessão `ABERTA`/`EM_CONFERENCIA` aberta pelo usuário, ou 204 |
-| `POST /api/caixa/sessoes` | todos | 201 / 200 (chave repetida) / 400 / 404 (ponto) / 409 |
-| `POST /api/caixa/sessoes/{id}/movimentos` | dono ou ADMIN | 201 / 200 / 400 / 404 / 409 |
-| `POST /api/caixa/sessoes/{id}/contagem` | dono ou ADMIN | 200 / 400 / 404 / 409 |
-| `POST /api/caixa/sessoes/{id}/fechamento` | dono ou ADMIN | 200 / 400 / 404 / 409 |
-| `GET /api/caixa/sessoes` | OPERADOR: as suas · ADMIN: todas | 200 / 400. Paginado; filtros `pontoId`, `status`, `de`, `ate` (datas). |
-| `GET /api/caixa/sessoes/{id}` | dono ou ADMIN | 200 / 404 |
-| `GET /api/configuracoes/caixa` | todos | 200 `{ fechamentoCego, atualizadoPorNome, atualizadoEm }` |
-| `PUT /api/configuracoes/caixa` | ADMIN | 200 / 400 |
+| `PATCH /api/caixa/pontos/{id}` | ADMIN | Renomear |
+| `PATCH /api/caixa/pontos/{id}/inativar` · `/reativar` | ADMIN | 409 com caixa aberto |
+| `GET /api/caixa/sessoes/atual` | todos | Sessão `ABERTA`/`EM_CONFERENCIA` do usuário, ou 204 |
+| `POST /api/caixa/sessoes` | todos | `{pontoId, fundoTroco, chave}` · 201 / 200 (chave repetida) / 409 |
+| `POST /api/caixa/sessoes/{id}/movimentos` | dono ou ADMIN | `{tipo: SANGRIA\|SUPRIMENTO, valor, motivo, chave}` |
+| `POST /api/caixa/sessoes/{id}/contagem` | dono ou ADMIN | `{contagens: {DINHEIRO: 318.00, DEBITO: 120.00}, justificativa?}` |
+| `POST /api/caixa/sessoes/{id}/fechamento` | dono ou ADMIN | `{justificativa}` |
+| `GET /api/caixa/sessoes` | OPERADOR: as suas · ADMIN: todas | Paginado (padrão 20, máx. 100); filtros `pontoId`, `status`, `de`, `ate` ("A data inicial não pode ser depois da final.", campo `de`) |
+| `GET /api/caixa/sessoes/{id}` | dono ou ADMIN | Com movimentos (mais recente primeiro); a lista do histórico vem sem eles |
+| `GET /api/configuracoes/caixa` | todos | `{fechamentoCego, atualizadoPorNome, atualizadoEm}` |
+| `PUT /api/configuracoes/caixa` | ADMIN | |
 
-**"Dono"** é quem abriu a sessão. OPERADOR em sessão de outra pessoa → 404, como recurso de outra empresa. A regra de perfil das rotas de ponto e configuração fica no `SecurityConfig` (403). A regra de dono fica no service.
+A sessão traz `dinheiroNaGaveta` (regra 19), `fechamentoCego` (o da empresa enquanto `ABERTA`, o gravado depois), a fotografia da contagem e do fechamento por forma, `podeOperar` e os movimentos (recebimento e estorno com o nº da venda).
 
-### 5.3 Contratos
-**Ponto (item da lista):**
-```json
-{ "id": "uuid", "nome": "Caixa 1", "ativo": true, "ultimoFundoTroco": 150.00,
-  "situacao": { "status": "ABERTA", "sessaoId": "uuid", "abertaPorNome": "Ana Souza",
-                "abertaEm": "2026-10-24T08:02:00-03:00" } }
-```
-`situacao` é `null` quando o ponto está livre.
+Erros por campo: `fundoTroco`, `valor`, `motivo`, `contagens.<FORMA>`, `justificativa`, `nome`, `pontoId`, `tipo`. Outras mensagens: "Escolha sangria ou suprimento.", "Informe o motivo.", "O motivo deve ter até 200 caracteres.", "Informe o nome do ponto de caixa.", "O nome do ponto de caixa deve ter até 40 caracteres.", "Ponto de caixa não encontrado.", "Caixa não encontrado.".
 
-**Abrir:** `{ "pontoId": "uuid", "fundoTroco": 150.00, "chave": "uuid" }`
+## 4. Dados
 
-**Movimento:** `{ "tipo": "SANGRIA", "valor": 200.00, "motivo": "Depósito no cofre", "chave": "uuid" }`
+- **V16:** `pontos_caixa` (nome único por `lower`), `configuracoes_caixa`, `sessoes_caixa` (fotografia do dinheiro na própria sessão), `movimentos_caixa` (chave de idempotência única por empresa — desde a V17 nula em recebimento e estorno, cuja idempotência é a da venda; uma `ABERTURA` por sessão). CHECKs de coerência por estado: em `ABERTA` os campos de contagem e fechamento são nulos (`ck_sessao_caixa_aberta`), em `FECHADA` preenchidos (`ck_sessao_caixa_fechada`); diferença = contado − esperado garantida no banco (`ck_sessao_caixa_diferenca`, `ck_contagem_caixa_diferenca`). PK `BIGINT` + `uuid` público; FKs compostas `(empresa_id, …)`.
+- **Uma sessão aberta por ponto e por usuário:** índices únicos parciais `WHERE status IN ('ABERTA','EM_CONFERENCIA')` (as consultas usam o mesmo predicado).
+- **Gatilhos de imutabilidade:** movimento não muda nem é apagado; movimento só entra em sessão `ABERTA` (lida com `FOR SHARE`); sessão não é apagada, nasce `ABERTA`, não muda depois de `FECHADA`, não troca empresa/ponto/quem abriu/abertura/fundo/`id`/`uuid` nem a contagem gravada, e não vai de `ABERTA` a `FECHADA` com diferença no modo cego.
+- **V17:** `movimentos_caixa` ganha `forma` e `venda_id`; tipos `RECEBIMENTO`/`ESTORNO` exigem venda, valor > 0, sem motivo, únicos por `(venda, tipo, forma)`; o estorno exige o recebimento da mesma venda, forma e valor. `contagens_caixa` guarda a contagem de débito, crédito e PIX (o dinheiro fica na sessão). A coerência por estado (conferência exige alguma diferença; diferença exige justificativa) passou para gatilhos, que conferem de novo o esperado de cada forma na saída de `ABERTA`; a contagem trava a sessão com `FOR NO KEY UPDATE`.
+- Índices: histórico por `aberta_em DESC` e `(empresa_id, ponto_caixa_id, aberta_em DESC, id DESC)` (último fundo, filtro por ponto).
 
-**Contagem:** `{ "valorContado": 318.00, "justificativa": null }`. **Fechamento:** `{ "justificativa": "Troco dado a mais" }`
+## 5. Telas
 
-**Sessão (resposta de todas as rotas de sessão):**
-```json
-{ "id": "uuid", "ponto": { "id": "uuid", "nome": "Caixa 1" }, "status": "EM_CONFERENCIA",
-  "abertaPorNome": "Ana Souza", "abertaEm": "…", "fundoTroco": 150.00,
-  "dinheiroNaGaveta": 320.00, "fechamentoCego": true,
-  "valorEsperado": 320.00, "valorContado": 318.00, "diferenca": -2.00,
-  "contadaPorNome": "Ana Souza", "contadaEm": "…",
-  "justificativa": null, "fechadaPorNome": null, "fechadaEm": null,
-  "movimentos": [ { "id": "uuid", "tipo": "SANGRIA", "valor": 200.00, "motivo": "Depósito no cofre",
-                    "usuarioNome": "Ana Souza", "criadoEm": "…" } ],
-  "podeOperar": true }
-```
-- **`dinheiroNaGaveta`:** o esperado atual. `null` para o OPERADOR no modo cego enquanto `ABERTA` (§3.6).
-- **`fechamentoCego`:** com a sessão `ABERTA`, é o modo atual da empresa; depois da contagem, o modo gravado.
-- **`movimentos`:** do mais recente para o mais antigo. A lista do histórico traz a sessão **sem** `movimentos`.
-- **Erros por campo:** `fundoTroco`, `valor`, `motivo`, `valorContado`, `justificativa`, `nome`, `pontoId`, `tipo`.
+- **Menu:** "Caixa" (`/caixa`, todos) e "Configurações" (`/configuracoes`, só ADMIN, `AdminRoute`). Código em `features/cash-register/` e `features/settings/`.
+- **`/caixa` sem caixa aberto:** pontos ativos com a situação ("Caixa 1 · livre", "Caixa 2 · aberto por Ana às 08:02"); "Abrir caixa" abre a janela do fundo de troco (foco no campo, sugestão preenchida, Enter confirma, chave gerada ao abrir). Com um só ponto ativo, mostra direto "Abrir o Caixa 1". Todos ocupados: "Todos os caixas estão em uso".
+- **`/caixa` com caixa aberto:** cabeçalho com ponto e quem abriu; "Dinheiro na gaveta R$ 320,00" (no modo cego, para o OPERADOR: "Fechamento cego: o valor esperado aparece depois da contagem."); botões Suprimento, Sangria e Fechar caixa (janelas com Valor e Motivo, botão desabilitado durante o envio); lista de movimentos (sangria em âmbar). Feedback: "Caixa aberto", "Sangria de R$ 200,00 registrada", "Suprimento de R$ 50,00 registrado".
+- **Fechar caixa:** um campo por forma (Dinheiro sempre; Débito, Crédito e PIX se tiveram movimento). Não cego: esperado e diferença ao lado, ao vivo ("Confere" em verde; "Sobra/Falta de R$ 2,00" em âmbar), justificativa quando houver diferença. Cego: botão "Conferir", depois o resultado e, se houver diferença, a justificativa e "Fechar caixa"; a janela avisa que a contagem não pode ser alterada depois. Em conferência interrompida, a tela mostra "Contagem registrada · falta a justificativa" e o botão "Justificar e fechar" (a janela não abre sozinha). ADMIN no caixa de outro: aviso "Você está fechando o caixa aberto por Ana Souza.". Depois: resumo do fechamento por forma, "Caixa fechado" ou "Caixa 2 fechado com falta de R$ 2,00" e "Abrir novo caixa".
+- **ADMIN:** vê os pontos com caixa de outras pessoas e entra neles ("Ver caixa").
+- **`/caixa/historico`:** tabela paginada (ponto, aberto por/quando, fechado por/quando, esperado, contado, diferença em verde/âmbar, "Aberto"/"Em conferência"), filtros de ponto, situação e período; OPERADOR só vê as suas. Detalhe em painel lateral com movimentos e o fechamento por forma.
+- **`/configuracoes` › Caixa (ADMIN):** interruptor "Fechamento cego" ("Quem fecha o caixa informa o valor contado sem ver o esperado. A diferença aparece depois da contagem."), salvo ao alternar ("Configuração salva", revertido se falhar); pontos com adicionar, renomear em linha, inativar/reativar.
+- **Comportamento:** em qualquer 409 de lançamento, contagem ou fechamento, a tela relê a sessão e decide pelo `status` real. O logout limpa o cache de dados do navegador. Dinheiro com `CampoMoeda` e formato pt-BR.
 
-## 6. Frontend
+## 6. Fora do escopo e pendências
 
-### 6.1 Navegação
-- **Caixa:** o item "Caixa" do menu deixa de ser "em breve" e leva a `/caixa`, para todos.
-- **Configurações:** item novo, só para ADMIN, que leva a `/configuracoes` (protegido por `AdminRoute`).
-- **Rotas novas:** `/caixa`, `/caixa/historico` e `/configuracoes`, com a feature nova em `features/cash-register/` e a tela de configurações em `features/settings/`.
-
-### 6.2 `/caixa`: sem caixa aberto
-- **Pontos:** a tela lista os pontos ativos com a situação ("Caixa 1 · livre", "Caixa 2 · aberto por Ana às 08:02").
-- **Abrir caixa:**
-  - o botão "Abrir caixa" no ponto livre abre uma janela com **Fundo de troco** (`CampoMoeda`, foco inicial), preenchida com `ultimoFundoTroco`;
-  - Enter confirma, e a chave é gerada ao abrir a janela.
-- **Um único ponto ativo:** a escolha é pulada, e a tela mostra direto "Abrir o Caixa 1".
-- **Nenhum ponto ativo:** a tela mostra a mensagem de §3.1.
-
-### 6.3 `/caixa`: com caixa aberto
-- **Cabeçalho:** "Caixa 1 · aberto por você às 08:02". Com abertura em outro dia, aparece o aviso âmbar "Aberto desde 23/10 às 08:02".
-- **Destaque:**
-  - "Dinheiro na gaveta **R$ 320,00**";
-  - no modo cego, o OPERADOR vê no lugar: "Fechamento cego: o valor esperado aparece depois da contagem.".
-- **Ações:** **Suprimento**, **Sangria** e **Fechar caixa**.
-  - Sangria e suprimento abrem uma janela pequena com **Valor** (foco inicial) e **Motivo**.
-  - O botão de confirmar fica desabilitado durante o envio.
-- **Movimentos:** lista com hora, tipo (com cor discreta: sangria em âmbar, suprimento e abertura neutros), valor, motivo e quem lançou.
-- **Feedback:** "Caixa aberto", "Sangria de R$ 200,00 registrada", "Suprimento de R$ 50,00 registrado".
-
-### 6.4 Fechar caixa
-- **Modo não cego:**
-  - campo **"Dinheiro contado na gaveta"**, com o esperado e a diferença ao lado, atualizados enquanto digita;
-  - diferença zero em verde ("Confere"); sobra ou falta em âmbar ("Sobra de R$ 2,00" / "Falta de R$ 2,00");
-  - com diferença, aparece a **Justificativa** obrigatória;
-  - "Fechar caixa" envia a contagem com a justificativa.
-- **Modo cego:**
-  - só o campo e o botão **"Conferir"**;
-  - depois aparece o resultado (esperado, contado, diferença);
-  - se houver diferença, aparece a **Justificativa** e o botão **"Fechar caixa"**.
-- **Conferência interrompida:** se a janela for fechada em `EM_CONFERENCIA`, a tela do caixa mostra "Contagem registrada · falta a justificativa" e reabre direto nesse passo.
-- **ADMIN fechando o caixa de outra pessoa:** aviso no topo da janela: "Você está fechando o caixa aberto por Ana Souza.".
-- **Depois de fechar:**
-  - aparece o resumo do fechamento (fundo, suprimentos, sangrias, esperado, contado, diferença, justificativa) e o botão **"Abrir novo caixa"**;
-  - mensagem: "Caixa fechado" ou "Caixa fechado com falta de R$ 2,00".
-
-### 6.5 ADMIN em `/caixa`
-- **Caixas de outras pessoas:** o ADMIN vê os pontos com caixa aberto por outra pessoa e pode abrir qualquer um ("Ver caixa").
-- **No caixa de outra pessoa:** a tela é a mesma de §6.3, com o cabeçalho "aberto por Ana Souza".
-- **Caixa próprio:** o ADMIN pode abrir o próprio caixa normalmente.
-
-### 6.6 `/caixa/historico`
-- **Tabela:**
-  - colunas: ponto, aberto por e quando, fechado por e quando, esperado, contado e diferença (verde quando zero, âmbar quando não);
-  - estado: "Aberto" ou "Em conferência" para sessões não fechadas;
-  - paginação com `PaginacaoLista`.
-- **Filtros:** ponto, situação e período (de/até).
-- **OPERADOR:** vê só as suas sessões, sem o filtro de quem abriu.
-- **Detalhe:** clicar numa sessão abre o painel lateral (`Sheet`) com os movimentos e a fotografia do fechamento.
-
-### 6.7 `/configuracoes` (ADMIN)
-- **Estrutura:** página com seções, nesta fase só **Caixa**.
-- **Seção Caixa:**
-  - **Fechamento cego:** interruptor com a frase "Quem fecha o caixa informa o valor contado sem ver o esperado. A diferença aparece depois da contagem.". Salva ao alternar, com a mensagem "Configuração salva" e o interruptor revertido se falhar.
-  - **Pontos de caixa:** lista com nome e situação, **"+ Adicionar ponto"**, renomear em linha, **Inativar/Reativar**.
-  - Inativar um ponto com caixa aberto mostra a mensagem do servidor.
-
-### 6.8 Estados e componentes
-- **Estados:** carregando, erro com "Tentar de novo", vazio e sucesso em todas as telas.
-- **Dinheiro:** `CampoMoeda` (reuso; a validação manual em Android e iOS da DT-031 continua pendente) e formatação `pt-BR` em reais.
-- **Dados:** TanStack Query com chaves próprias do caixa. Depois de cada lançamento, invalida a sessão atual e a lista de pontos.
-
-## 7. Segurança
-- **Empresa e usuário vêm do JWT.** O usuário do movimento, da contagem e do fechamento é sempre o autenticado.
-- **Perfis:**
-  - ponto e configuração exigem ADMIN no `SecurityConfig`;
-  - a regra "dono ou ADMIN" é aplicada no service e testada com OPERADOR em sessão de outro (404).
-- **Modo cego:** o esperado não sai em **nenhuma** resposta ao OPERADOR enquanto a sessão está `ABERTA`, nem na lista de pontos, no histórico, no detalhe ou na mensagem de erro da sangria.
-- **Perfil do token:** o perfil vem do token (limitação já registrada na DT-032).
-- **Revisores obrigatórios:** `data-reviewer` (V16, gatilhos, índices parciais, `TIMESTAMPTZ`) e `security-reviewer` (perfis, regra do dono, vazamento do esperado no modo cego).
-
-## 8. Testes (critérios de aceite)
-
-**Banco (Testcontainers):**
-- a V16 aplica sobre a V15 com dados e cria um "Caixa 1" por empresa;
-- duas sessões abertas no mesmo ponto, ou duas abertas pelo mesmo usuário, são recusadas pelo banco;
-- `UPDATE` e `DELETE` em `movimentos_caixa` são recusados;
-- `UPDATE` em sessão `FECHADA` e `DELETE` em qualquer sessão são recusados;
-- `CHECK` de coerência por estado e diferença com justificativa;
-- horários gravados com fuso: uma sessão aberta com o `Clock` fixo em `2026-10-24T08:02-03:00` é lida de volta no mesmo instante, com a JVM em UTC.
-
-**Backend:**
-- **Abertura:**
-  - fundo zero aceito, negativo e com 3 casas recusados;
-  - ponto inativo → 409; ponto ocupado → 409 com o nome de quem abriu; usuário com outro caixa → 409;
-  - chave repetida → 200 com a mesma sessão; mesma chave com outro fundo → 409.
-- **Sangria:**
-  - exatamente igual ao esperado é aceita (gaveta fica em R$ 0,00); um centavo a mais → 409;
-  - OPERADOR no modo cego recebe a mensagem sem o valor.
-- **Duas sangrias simultâneas** que juntas passam do esperado: uma passa e a outra recebe 409.
-- **Contagem e fechamento:**
-  - diferença zero fecha direto, nos dois modos;
-  - modo cego com diferença → `EM_CONFERENCIA`; justificativa junto com a contagem no modo cego → 400;
-  - modo não cego com diferença e justificativa → `FECHADA`; sem justificativa → `EM_CONFERENCIA`;
-  - nova contagem com outro valor → 409; com o mesmo → 200;
-  - lançamento em `EM_CONFERENCIA` ou `FECHADA` → 409;
-  - fechamento sem justificativa ou só com espaços → 400.
-- **Troca de modo:** trocar o modo depois da contagem não muda a sessão (`fechamentoCego` gravado).
-- **Modo cego:** `dinheiroNaGaveta` é `null` para OPERADOR em `ABERTA` em todas as rotas (atual, detalhe, histórico, pontos), e preenchido para ADMIN.
-- **Permissões:**
-  - OPERADOR em sessão de outro → 404 em detalhe, movimento, contagem e fechamento;
-  - OPERADOR em rotas de ponto e configuração (escrita) → 403;
-  - ADMIN fecha a sessão de outro e o fechamento registra o ADMIN;
-  - sessão e ponto de outra empresa → 404.
-- **Pontos:** "Caixa 1" automático só para empresa sem nenhum ponto; nome repetido com outra caixa de letra → 409; inativar com caixa aberto → 409.
-- **Histórico:** OPERADOR só vê as suas sessões; filtros por ponto, situação e período (datas em `America/Sao_Paulo`).
-
-**Frontend (Vitest + Testing Library):**
-- abrir caixa com a sugestão do fundo, e o pulo da escolha com um único ponto;
-- sangria acima do esperado mostra o erro do servidor;
-- fechamento não cego mostra a diferença ao vivo e exige justificativa;
-- fechamento cego esconde o esperado, mostra o resultado depois de "Conferir" e retoma em `EM_CONFERENCIA` ao recarregar;
-- aviso "Aberto desde…" com abertura em outro dia;
-- Configurações: interruptor salva e reverte em erro; OPERADOR não vê o item e é barrado em `/configuracoes`;
-- histórico com filtros e painel de detalhe.
-
-**Manual (navegador, usuário de teste):**
-- abrir, suprimento, sangria, fechar sem diferença e com diferença, nos dois modos;
-- ADMIN fechando o caixa de um OPERADOR.
-
-## 9. Integrações futuras (para o PDV)
-- **Venda:** a venda vai procurar a sessão `ABERTA` do usuário (`GET /api/caixa/sessoes/atual`) e gravar nela os recebimentos (tipo `RECEBIMENTO`, com forma de pagamento). Recebimento em dinheiro entra no esperado da gaveta.
-- **Conferência por forma:** a conferência de cartão e PIX vira uma contagem por forma de pagamento, definida na spec do PDV.
-- **Chave de idempotência:** a do movimento já é única por empresa. A venda deve gerar uma chave por recebimento (ver DT-032).
-
-## 10. Ajustes na implementação
-
-Decisões tomadas durante a implementação e as revisões (2026-10-24), que completam ou corrigem o texto acima.
-
-**Regras**
-- **Justificativa junto com a contagem no modo cego:** dá 400 **sempre**, mesmo com diferença zero. Se o 400 dependesse da diferença, o operador descobriria o esperado por tentativa, porque a contagem recusada não é gravada.
-- **Justificativa no modo não cego com diferença zero:** é ignorada. A sessão fecha com a justificativa nula.
-- **Ordem das conferências na abertura:** primeiro a chave repetida, depois "Você já tem um caixa aberto…" e por último "O Caixa 1 já está aberto…", que é a mensagem mais útil para quem tem caixa em outro ponto.
-- **Lançamentos de outra pessoa no modo cego:** a §3.6 aceita mostrar só os lançamentos do próprio operador. Para o OPERADOR, com a sessão `ABERTA` e o modo cego ligado, os movimentos lançados por outro usuário (por exemplo, uma sangria do ADMIN) saem com `valor: null`. A tela mostra "Valor no fechamento" no lugar do valor.
-- **Escritas de ponto e configuração:** além do perfil do token (`SecurityConfig`), conferem o perfil do banco. Um ADMIN rebaixado com token antigo recebe 403.
-- **`sessaoAbertaDoUsuario`** (para o PDV) devolve só sessão `ABERTA`, nunca `EM_CONFERENCIA`.
-
-**Mensagens que a spec não definia**
-- "Já existe um ponto de caixa com este nome." (409, campo `nome`)
-- "A empresa já tem o limite de 50 pontos de caixa." (409)
-- "Informe o nome do ponto de caixa." e "O nome do ponto de caixa deve ter até 40 caracteres." (400)
-- "Conte o dinheiro da gaveta antes de fechar o caixa." (409, fechamento de sessão `ABERTA`)
-- "Escolha sangria ou suprimento.", "Informe o motivo." e "O motivo deve ter até 200 caracteres." (400)
-- "A data inicial não pode ser depois da final." (400, campo `de`)
-- "Ponto de caixa não encontrado." e "Caixa não encontrado." (404)
-
-**Banco (V16)**
-- **Movimento só em sessão aberta:** gatilho `BEFORE INSERT` em `movimentos_caixa`, que lê o status da sessão com `FOR SHARE` e recusa quando ele não é `ABERTA`. Regra para o PDV: travar a sessão **antes** de inserir o movimento.
-- **Gatilho da sessão:** também exige que a sessão nasça `ABERTA` e proíbe `ABERTA → FECHADA` com diferença no modo cego. Ele protege ainda `id` e `uuid`.
-- **Índice extra** `ix_sessao_caixa_ponto (empresa_id, ponto_caixa_id, aberta_em DESC, id DESC)`, para o último fundo de troco, o filtro do histórico por ponto e a FK do ponto.
-- **Sessão atual:** as consultas filtram por `status IN ('ABERTA','EM_CONFERENCIA')`, igual ao predicado dos índices parciais, para usá-los.
-- **Horários** truncados em microssegundos, como no resto do projeto.
-
-**Frontend**
-- **Retomada em conferência:** a tela mostra "Contagem registrada · falta a justificativa" e o botão "Justificar e fechar". A janela não abre sozinha.
-- **Conflitos:** em qualquer 409 de lançamento, contagem ou fechamento, a tela relê a sessão e decide pelo `status` real, não pelo texto da mensagem.
-- **Logout:** limpa o cache de dados do navegador, para um OPERADOR no mesmo terminal não ver por instantes o que o ADMIN viu.
-- **Textos de UX** revisados pelo `product-ux-reviewer`:
-  - "Todos os caixas estão em uso";
-  - o aviso do caixa de outra pessoa;
-  - "a contagem não pode ser alterada depois";
-  - "Caixa 2 fechado com falta de R$ 2,00".
+- Fora: impressão do fechamento, relatório consolidado (módulo Relatórios), vínculo do ponto a um computador, sangria integrada ao Financeiro, permissões configuráveis por usuário, configuração da balança em Configurações.
+- Pendências: [DT-040](../technical-debt.md) (banco, backend, UX e testes), oráculo da sangria no modo cego (DT-039/DT-041), fuso das tabelas antigas (DT-030).

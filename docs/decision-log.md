@@ -189,7 +189,7 @@ Spec: [`produtos.md`](modules/produtos.md).
 - Estoque inicial do cadastro é a primeira entrada.
 - Produto movimentado não troca de unidade.
 
-Spec: [`produtos-estoque.md`](modules/produtos-estoque.md).
+Spec: [`estoque.md`](modules/estoque.md).
 
 ## DEC-035 — Listagem de produtos paginada (Fase E)
 2026-10-23 · Aceita

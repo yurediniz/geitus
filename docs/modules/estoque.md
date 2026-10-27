@@ -1,0 +1,162 @@
+# Estoque
+
+> Decisões: DEC-034 (estoque básico), DEC-038 (custo pela última entrada), DEC-037 (ajuste por embalagem), DEC-039 (fornecedor na compra), DEC-042 (baixa e estorno pela venda). Pacote `inventory`. Migrations V9, V12, V13, V14 e V17.
+
+## 1. Objetivo
+
+Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo sem gravar um movimento, e o passado se corrige com um novo movimento. A entrada por compra registra o custo, que vira o custo do produto. A venda baixa e o cancelamento estorna (regras no [PDV](pdv.md)).
+
+## 2. Regras de negócio
+
+**Controle de estoque**
+1. Flag `controlaEstoque` por produto, ligada por padrão. Desligada: a tela esconde saldo e ajuste, a listagem mostra "—", `situacaoEstoque` é `null` e o ajuste dá 400 "Este produto não controla estoque.". Na venda, o produto não gera movimento.
+2. Desligar com saldo é permitido: saldo e histórico ficam guardados e voltam ao religar. A tela avisa: "O saldo atual de 12 UN fica guardado e volta se você religar o controle."
+
+**Ajuste manual** (só ADMIN)
+
+3. Tipos e o que o usuário informa:
+
+   | Tela | `tipo` | Informa | Variação gravada |
+   |---|---|---|---|
+   | Entrada | `ENTRADA` | quantidade > 0 | `+quantidade` |
+   | Saída | `SAIDA` | quantidade > 0 | `−quantidade` |
+   | Contagem | `AJUSTE` | saldo contado ≥ 0 | `contado − saldo atual` |
+
+4. Até 3 casas decimais, e fração só em unidade fracionada ("A unidade UN não aceita quantidade fracionada."). Até 9 dígitos inteiros: "A quantidade deve ter no máximo 9 dígitos inteiros e 3 casas decimais.". O saldo resultante não passa de 999.999.999,999 ("O saldo não pode passar de 999.999.999,999.").
+5. **O ajuste manual nunca deixa o saldo negativo:** a saída maior que o saldo dá 400 "Saldo insuficiente: há 3 UN.". Uma contagem igual ao saldo dá 400 "O saldo já é 12 UN.".
+6. Motivos por tipo:
+
+   | Tipo | Motivos |
+   |---|---|
+   | Entrada | `COMPRA` (Compra/recebimento), `DEVOLUCAO_CLIENTE`, `OUTRO` |
+   | Saída | `PERDA_AVARIA`, `VENCIDO`, `USO_INTERNO`, `DEVOLUCAO_FORNECEDOR`, `OUTRO` |
+   | Contagem | `CONTAGEM` (Contagem/inventário), `OUTRO` |
+   | Só do sistema | `ESTOQUE_INICIAL` (cadastro), `VENDA` e `CANCELAMENTO_VENDA` (PDV) |
+
+   Motivo de outro tipo dá 400 "Este motivo não vale para o tipo de movimento escolhido.", e motivo do sistema num ajuste dá 400 "Este motivo é registrado só pelo sistema.". A observação é opcional, com até 200 caracteres, e obrigatória em `OUTRO` ("Descreva o motivo.").
+7. **Ajuste por embalagem** (Entrada e Saída, produto com embalagem):
+   - a quantidade é o número de embalagens, inteiro e > 0 ("Informe um número inteiro de embalagens.");
+   - o movimento é gravado em unidades (± n × quantidade da embalagem), com o retrato da embalagem (rótulo, quantidade e número de embalagens), sem FK;
+   - a regra do saldo negativo vale sobre o total em unidades;
+   - Contagem e "Zerar estoque" são só em unidades: com embalagem, 400 "A contagem é feita na unidade de venda.";
+   - embalagem de outro produto ou removida dá 404 "Embalagem não encontrada.".
+
+**Entrada por compra: custo e fornecedor**
+
+8. Só na Entrada com motivo `COMPRA` o custo é **obrigatório e maior que zero**:
+   - custo ausente dá "Informe o custo da compra.";
+   - custo zero ou negativo dá "O custo deve ser maior que zero.";
+   - custo em outro tipo ou motivo dá "O custo só é informado na entrada por compra.";
+   - até 10 dígitos inteiros e 2 casas.
+
+   Em embalagem, o valor digitado é o custo de **1 embalagem**, como na nota. O custo por unidade é a divisão, com 4 casas no movimento.
+9. **O custo do produto passa a ser o último custo de entrada**, por unidade, arredondado a centavos (meio para cima), na mesma transação do movimento:
+   - se o arredondamento der R$ 0,00, dá 400 "O custo deve ser maior que zero.";
+   - o produto guarda a origem `ENTRADA_COMPRA` com a data e a hora do movimento, mesmo quando o valor não mudou;
+   - o histórico de preços só ganha uma linha de custo, ligada ao movimento, quando o valor muda.
+
+   Não há custo médio.
+10. A edição manual do custo no cadastro grava a origem `EDICAO`. Apagar o custo zera a origem. Uma edição que não mexe no custo não muda nada. Produtos anteriores à V13 ficam sem origem.
+11. Na compra, o **fornecedor** é opcional e só aceito ativo:
+   - inativo dá "Este fornecedor está inativo.";
+   - fora da compra dá "O fornecedor só é informado na entrada por compra.".
+
+   Com fornecedor, na mesma transação: o movimento guarda o fornecedor, que entra na lista do produto (se faltar) e vira o "da última compra". Se o produto já tiver 20 fornecedores, a ligação de um novo dá 400 (detalhe em [fornecedores-e-marcas.md](fornecedores-e-marcas.md)).
+
+**Estoque inicial e exclusão**
+
+12. O cadastro aceita um `estoqueInicial` opcional (> 0, mesmas regras de fração e limite), gravado como a primeira entrada (`ESTOQUE_INICIAL`, origem `CADASTRO`) na mesma transação.
+   - Com o controle desligado, 400.
+   - No PATCH, 400 "O estoque inicial só pode ser informado no cadastro. Use Ajustar estoque.".
+   - No máximo um estoque inicial por produto, partindo do saldo zero.
+13. Produto pode ser excluído (`podeExcluir`) sem movimentos, ou quando o **único** movimento é o estoque inicial. Nesse caso o movimento e o saldo são apagados antes do produto, e o diálogo avisa. Qualquer outro movimento dá 409 "Este produto já teve movimentação de estoque e não pode ser excluído. Inative-o.", garantido também pela FK RESTRICT.
+14. Produto com movimentos não troca de unidade de venda: "Não é possível trocar a unidade de um produto com movimentação de estoque.". Uma unidade usada por produto movimentado não deixa de ser fracionada: "Esta unidade é usada por produtos com movimentação de estoque.".
+
+**Níveis e situação**
+
+15. Mínimo ≤ ponto de reposição ≤ máximo, quando os dois lados de cada par estão informados (400 com o campo).
+16. A situação é calculada (não é coluna) e só existe com o controle ligado:
+   - `SEM_ESTOQUE` quando o saldo ≤ 0;
+   - `BAIXO` quando o saldo ≤ ponto de reposição, ou ≤ mínimo quando não há ponto;
+   - `NORMAL` nos demais casos.
+
+**Concorrência e idempotência**
+
+17. Cada movimento garante a linha de saldo (`INSERT … ON CONFLICT DO NOTHING`) e a trava com `FOR UPDATE`. Ajuste, edição, exclusão, inativar e reativar travam antes a linha do produto. Saídas concorrentes nunca deixam o saldo negativo: a perdedora recebe 400.
+18. O ajuste exige uma `chave` (UUID gerado ao abrir o modal), única por empresa:
+   - a repetição com os mesmos dados devolve 200 com o movimento já gravado (o primeiro pedido responde 201);
+   - a repetição com outro produto ou outros dados dá 409 "Esta operação já foi registrada com outros dados.";
+   - entram na comparação: tipo, quantidade, motivo, observação, embalagem, custo e fornecedor.
+
+**Venda** (regras completas no [PDV](pdv.md))
+
+19. A venda grava uma `SAIDA`/`VENDA` por item que controla estoque, ligada ao item. O cancelamento grava a `ENTRADA`/`CANCELAMENTO_VENDA` correspondente, com a mesma quantidade. São no máximo uma baixa e um estorno por item, de origem `VENDA`, sem chave própria (a idempotência é a da venda).
+20. **O saldo só fica negativo por venda** (com "Vender sem estoque" ligada). Uma entrada nunca é recusada por saldo negativo, porque não piora o saldo.
+21. Os movimentos de origem `VENDA` não podem ser alterados nem apagados.
+
+## 3. Contrato da API
+
+| Método | Rota | Perfil | Observação |
+|---|---|---|---|
+| POST | `/api/produtos/{id}/estoque/ajustes` | ADMIN | 201 criado · 200 chave repetida · 400 · 403 · 404 · 409 |
+| GET | `/api/produtos/{id}/estoque/movimentos?pagina=&tamanho=` | autenticado | `PaginaResponse`, do mais recente ao mais antigo; tamanho de 1 a 100 |
+
+- **Ajuste (request):** `tipo`, `quantidade`, `motivo`, `observacao?`, `chave`, `embalagemId?`, `custo?`, `fornecedorId?`.
+- **Movimento (response):** `id`, `tipo`, `motivo`, `origem`, `quantidade` (com sinal), `saldoAnterior`, `saldoNovo`, `observacao`, `usuarioNome`, `criadoEm`, `embalagem { rotulo, quantidadePorEmbalagem, quantidadeDeEmbalagens } | null`, `custoInformado`, `custoUnitario`, `fornecedor { id, nome } | null`.
+- **Produto:**
+  - o request ganha `controlaEstoque` (obrigatório) e `estoqueInicial` (só no POST);
+  - a response ganha `estoqueAtual` (sempre com 3 casas, mesmo com o controle desligado), `situacaoEstoque`, `podeExcluir` e `custoOrigem { tipo, em, quantidade, quantidadeDeEmbalagens, embalagemRotulo } | null`. Na listagem, `custoOrigem` traz só `tipo` e `em`.
+- **Histórico de preços:** as linhas de custo trazem `origem` (`EDICAO`/`ENTRADA_COMPRA`) e, na compra, `entrada { quantidade, quantidadeDeEmbalagens, embalagemRotulo }`.
+- **Erros por campo:** `tipo`, `quantidade`, `motivo`, `observacao`, `custo`, `fornecedorId`. Produto de outra empresa dá 404.
+- **Origem dos dados:** empresa e usuário do movimento vêm sempre do usuário autenticado. Na listagem, os saldos e o `podeExcluir` saem em lote, sem N+1. O catálogo consulta o estoque por interfaces (`UsoDoProdutoNoEstoque`, `RegistroDeEstoqueInicial`) e não depende do pacote `inventory`.
+
+## 4. Dados
+
+- **`estoque_saldos` (V9):** uma linha por produto, criada no primeiro movimento (sem linha, o saldo é 0). FK composta para o produto, `ON DELETE RESTRICT`. Desde a V17 não tem mais CHECK de saldo ≥ 0.
+- **`movimentos_estoque` (V9):**
+  - só inserção, com quantidade ≠ 0 e o sinal coerente com o tipo;
+  - `saldo_novo = saldo_anterior + quantidade`;
+  - CHECK da matriz tipo × motivo;
+  - `CADASTRO` ⇒ `ENTRADA`/`ESTOQUE_INICIAL`;
+  - chave única por empresa;
+  - FKs compostas para produto (RESTRICT) e usuário;
+  - índice `(empresa_id, produto_id, criado_em DESC, id DESC)`.
+- **V12:** retrato da embalagem no movimento.
+- **V13:**
+  - `custo_informado` e `custo_unitario`, preenchidos juntos e só em entrada por compra manual. A compra nova exige custo por uma CHECK `NOT VALID`; as compras antigas, sem custo, continuam válidas;
+  - `custo_unitario = round(custo_informado / embalagem_quantidade, 4)` com retrato de embalagem, ou igual a `custo_informado` sem retrato;
+  - em `produtos`: `custo_origem`/`custo_origem_em`, com `CHECK (custo IS NOT NULL OR custo_origem IS NULL)`;
+  - em `produto_historico_precos`: `origem` e `movimento_id`, por FK de três colunas para um movimento do mesmo produto.
+- **V14:** `fornecedor_id` no movimento (FK RESTRICT), só em entrada por compra manual.
+- **V17:**
+  - `item_venda_id`, por FK para o item do mesmo produto, único por (item, motivo);
+  - origem `VENDA` ⇔ item preenchido, só com `VENDA`/`CANCELAMENTO_VENDA` e sem chave;
+  - `CHECK (saldo_novo >= 0 OR motivo = 'VENDA' OR tipo = 'ENTRADA')`;
+  - gatilhos: a baixa tira exatamente a quantidade de estoque do item, o estorno devolve exatamente a baixa, e o movimento de venda é imutável.
+
+## 5. Telas
+
+- **Seção Estoque do produto:** interruptor "Controlar estoque"; saldo com o selo da situação e, com embalagem, a conversão pela embalagem principal ("55 UN (18 CX + 1 UN)"); mínimo, ponto e máximo; no cadastro novo, "Estoque inicial (opcional)". O OPERADOR vê, sem ajustar.
+- **"Ajustar estoque"** (ADMIN, produto salvo; também no card da lista) só fica bloqueado com alteração pendente de controle, unidade ou embalagens ("Salve as mudanças de controle, unidade ou embalagens antes de ajustar o estoque.").
+- **Modal:**
+  - tipo Entrada · Saída · Contagem (no histórico, "Ajuste"); na Contagem o rótulo vira "Saldo contado"; seletor "Em" (a compra abre na embalagem de compra);
+  - motivo: Entrada abre em Compra/recebimento, Contagem em Contagem/inventário, Saída sem motivo;
+  - custo só em Entrada + Compra ("Custo por UN" ou "Custo de 1 CX c/ 18 UN"), vazio com a dica do último custo, "= R$ 10,00 por UN" em embalagem, descartado ao trocar tipo, motivo ou "Em"; fornecedor preenchido com o da última compra;
+  - prévia: "2 CX c/ 18 UN = +36 UN · Saldo: 10 UN → 46 UN · Custo: R$ 9,50 → R$ 10,00 por UN"; contagem igual ao saldo em tom neutro, sem confirmar;
+  - "Zerar estoque" (saldo > 0) = contagem para 0; o botão diz o que acontece ("Registrar entrada de 36 UN", "Ajustar para 10 UN") e trava no envio; Enter confirma, Esc fecha (não durante o envio);
+  - sucesso com o resumo ("Entrada de 36 UN (2 CX c/ 18 UN) registrada. Saldo: 46 UN. Custo atualizado para R$ 10,00."); qualquer falha recarrega o saldo.
+- **Nota do custo (Preços):** "Último custo de entrada: R$ 10,00 por UN, em 24/10/2026 (compra de 2 CX c/ 18 UN), de {fornecedor}." ou "Custo editado manualmente em 24/10/2026.". Compra feita na página atualiza o campo Custo se ele não foi mexido; senão avisa que, ao salvar, vale o campo.
+- **Histórico:** seção Estoque antes de Preços, cada uma com "Carregar mais"; a linha traz data, usuário, tipo · motivo, "−2 UN", "12 → 10", observação, embalagem, custo e fornecedor.
+- **Listagem:** "12 UN" com selo "Estoque baixo"/"Sem estoque"; "—" sem controle.
+
+## 6. Fora do escopo e pendências
+
+Fora do escopo:
+- custo médio;
+- nota de compra (Compras/NF-e), frete e impostos no custo;
+- vários depósitos, lote, série e validade;
+- reserva;
+- estorno de um movimento manual (a correção é um novo ajuste);
+- relatórios de movimentação.
+
+Pendências: [DT-028](../technical-debt.md) (auditoria da exclusão), DT-032 (estoque), DT-036 (custo na entrada).
