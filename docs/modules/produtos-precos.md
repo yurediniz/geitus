@@ -1,6 +1,6 @@
 # Produtos: Preços (Fase C da evolução de Produtos)
 
-> **Status:** implementado em 2026-10-21 (migration V8 aplicada). Ajustes das revisões em §10. Terceira das 6 fases da DEC-030; decisões desta fase na **DEC-033**. Depende da Fase B ([produtos-identificacao-e-formulario.md](produtos-identificacao-e-formulario.md)). Registro de design: [`docs/superpowers/specs/2026-10-21-produtos-fase-c-design.md`](../superpowers/specs/2026-10-21-produtos-fase-c-design.md).
+> **Status:** implementado em 2026-10-21 (migration V8 aplicada). Ajustes das revisões em §10. Terceira das 6 fases da DEC-030; decisões desta fase na **DEC-033**. Depende da Fase B ([produtos-identificacao-e-formulario.md](produtos-identificacao-e-formulario.md)).
 
 ## 1. Visão geral
 

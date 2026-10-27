@@ -1,6 +1,6 @@
 # Módulo: Clientes
 
-> **Status:** implementado (etapa 9) em 2026-10-20 — backend (`com.geitus.app.customer`, migration V5) e frontend (`/clientes`). Design: [`docs/superpowers/specs/2026-10-20-modulo-clientes-design.md`](../superpowers/specs/2026-10-20-modulo-clientes-design.md); plano: [`docs/superpowers/plans/2026-10-20-modulo-clientes.md`](../superpowers/plans/2026-10-20-modulo-clientes.md). Decisões em **DEC-029**.
+> **Status:** implementado (etapa 9) em 2026-10-20 — backend (`com.geitus.app.customer`, migration V5) e frontend (`/clientes`). Decisões em **DEC-029**.
 
 ## 1. Visão geral
 

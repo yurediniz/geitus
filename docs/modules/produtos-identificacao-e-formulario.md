@@ -1,6 +1,6 @@
 # Produtos: Identificação e formulário em abas (Fase B da evolução de Produtos)
 
-> **Status:** implementado em 2026-10-21 (migration V7 aplicada; página `/produtos/novo` e `/produtos/:id`). Ajustes das revisões em §6.2, §6.3 e §10. Segunda das 6 fases da DEC-030; decisões desta fase na **DEC-032**. Depende da Fase A ([categorias-e-unidades.md](categorias-e-unidades.md)). Registro de design: [`docs/superpowers/specs/2026-10-21-produtos-fase-b-design.md`](../superpowers/specs/2026-10-21-produtos-fase-b-design.md).
+> **Status:** implementado em 2026-10-21 (migration V7 aplicada; página `/produtos/novo` e `/produtos/:id`). Ajustes das revisões em §6.2, §6.3 e §10. Segunda das 6 fases da DEC-030; decisões desta fase na **DEC-032**. Depende da Fase A ([categorias-e-unidades.md](categorias-e-unidades.md)).
 
 ## 1. Visão geral
 

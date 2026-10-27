@@ -1,51 +1,32 @@
-# Documentação dos módulos
+# Specs dos módulos
 
-Esta pasta contém a especificação detalhada de cada módulo do **Geitus**.
+Uma spec por módulo, **viva**: descreve como o módulo funciona hoje e muda junto com a regra. Não é diário de implementação nem plano — o histórico fica no Git e o porquê no [`decision-log`](../decision-log.md).
 
-Cada módulo do sistema terá o seu próprio documento, descrevendo o que ele faz, suas regras de negócio e como se relaciona com os demais. A especificação de um módulo é criada quando ele entra em desenvolvimento — a documentação cresce de forma incremental, junto com o produto.
+## Specs
 
----
+| Módulo | Spec | Decisões |
+|---|---|---|
+| Autenticação | [autenticacao.md](autenticacao.md) | DEC-016, DEC-024 |
+| Empresa | [empresa.md](empresa.md) | DEC-016, DEC-024 |
+| Usuários | [usuarios.md](usuarios.md) | DEC-024 |
+| Produtos (catálogo) | [produtos.md](produtos.md) | DEC-025, 028, 030–033, 035–037, 040 |
+| Estoque | [produtos-estoque.md](produtos-estoque.md) | DEC-034, DEC-038 |
+| Fornecedores e marcas | [fornecedores-e-marcas.md](fornecedores-e-marcas.md) | DEC-039 |
+| Clientes | [clientes.md](clientes.md) | DEC-029 |
+| Caixa | [caixa.md](caixa.md) | DEC-041 |
+| PDV | [pdv.md](pdv.md) | DEC-042, DEC-044 |
 
-## Módulos previstos no MVP
+Sem spec ainda (escopo em [`produto.md`](../produto.md)): financeiro básico, dashboard, relatórios. Módulo novo começa pela spec, aprovada antes da primeira fatia.
 
-Conforme o escopo definido no [CLAUDE.md](../../CLAUDE.md):
+## Formato curto
 
-- [Autenticação](autenticacao.md) ✔
-- Layout principal
-- [Empresa](empresa.md) ✔
-- [Usuários](usuarios.md) ✔
-- [Produtos](produtos.md) ✔ — em evolução (DEC-030): [Categorias e Unidades](categorias-e-unidades.md) (Fase A ✔), [Identificação e formulário](produtos-identificacao-e-formulario.md) (Fase B ✔), [Preços](produtos-precos.md) (Fase C ✔), [Estoque básico](produtos-estoque.md) (Fase D ✔), [Listagem](produtos-listagem.md) (Fase E ✔), [Número, código e balança](produtos-codigo-e-balanca.md) (Fase B2 ✔), [Embalagens de venda](produtos-embalagens.md) (Fase B3 ✔), [Custo na entrada por compra](produtos-custo-entrada.md) (Fase B4 ✔), [Fornecedores e marcas](fornecedores-e-marcas.md) (Fase B5 ✔), [Imagem do produto](produtos-imagem.md) (Fase F ✔)
-- [Clientes](clientes.md) ✔
-- [Fornecedores](fornecedores-e-marcas.md) ✔ — cadastro com representantes, marcas e produtos que vende (Fase B5, DEC-039; amplia o escopo do MVP de Produtos)
-- [PDV](pdv.md) ✔ — venda no balcão com carrinho no navegador, desconto, pagamento dividido, espera, cancelamento e caixa conferido por forma (DEC-042)
-- [Caixa](caixa.md) ✔ — pontos de caixa, sessões, sangria, suprimento e fechamento cego configurável (DEC-041)
-- Estoque básico
-- Financeiro básico
-- Dashboard básico
-- Relatórios básicos
-- Configurações básicas — iniciada com a seção Caixa (DEC-041)
+Alvo: até ~12 KB por spec (Produtos até ~25 KB). Seções, nesta ordem, só as que fizerem sentido:
 
-> Cada item ganha um arquivo próprio (ex.: `produtos.md`, `pdv.md`, `caixa.md`) assim que é iniciado — os já especificados estão linkados acima.
+1. **Objetivo** — 2 a 3 linhas: o que o módulo resolve.
+2. **Regras de negócio** — numeradas, uma regra por item, com as mensagens que o usuário vê quando importarem.
+3. **Contrato da API** — tabela `Método · Rota · Perfil · Observação` e os erros que importam (status e campo).
+4. **Dados** — tabelas e constraints essenciais, com as migrations (Vx). O detalhe de coluna fica na migration.
+5. **Telas** — rotas, comportamento e atalhos essenciais.
+6. **Fora do escopo e pendências** — o que ficou de fora de propósito e os links para as DTs.
 
----
-
-## Estrutura sugerida para o documento de um módulo
-
-Para manter consistência, cada especificação de módulo deve conter, quando fizer sentido:
-
-1. **Visão geral** — o que é o módulo e qual problema resolve.
-2. **Escopo** — o que está e o que não está incluído (respeitando o MVP).
-3. **Entidades e campos** — dados principais e campos essenciais.
-4. **Regras de negócio** — validações, restrições e comportamentos obrigatórios.
-5. **Fluxos** — passo a passo das operações principais.
-6. **Integrações** — relação com outros módulos (ex.: PDV com Estoque e Caixa).
-7. **Histórico e auditoria** — ações que devem ser rastreáveis.
-8. **Pontos em aberto** — decisões pendentes ou pontos a definir no futuro.
-
----
-
-## Convenções
-
-- Arquivos em Markdown (`.md`), nomeados em minúsculas e com hífen (ex.: `financeiro-basico.md`).
-- Conteúdo em português do Brasil, exceto nomes técnicos inevitáveis.
-- As especificações dos módulos devem estar sempre alinhadas com o [CLAUDE.md](../../CLAUDE.md), o [docs/engineering-guidelines.md](../engineering-guidelines.md), o [docs/decision-log.md](../decision-log.md) e o [docs/produto.md](../produto.md); em caso de conflito, o `CLAUDE.md` prevalece.
+Não entra: plano de tarefas, critérios de teste por cenário, diário de "ajustes na implementação", nomes de revisores. Regra decidida durante a implementação entra como regra na seção 2.

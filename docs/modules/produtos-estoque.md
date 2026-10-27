@@ -1,6 +1,6 @@
 # Produtos: Estoque básico (Fase D da evolução de Produtos)
 
-> **Status:** implementado em 2026-10-21 (migration V9 aplicada). Ajustes das revisões e decisões do usuário em §10. Quarta das 6 fases da DEC-030; decisões desta fase na **DEC-034**. Depende da Fase C ([produtos-precos.md](produtos-precos.md)). Antecipa parte da etapa 12 (Estoque básico) do `CLAUDE.md`. Registro de design: [`docs/superpowers/specs/2026-10-21-produtos-fase-d-design.md`](../superpowers/specs/2026-10-21-produtos-fase-d-design.md).
+> **Status:** implementado em 2026-10-21 (migration V9 aplicada). Ajustes das revisões e decisões do usuário em §10. Quarta das 6 fases da DEC-030; decisões desta fase na **DEC-034**. Depende da Fase C ([produtos-precos.md](produtos-precos.md)). Antecipa parte da etapa 12 (Estoque básico) do `CLAUDE.md`.
 
 ## 1. Visão geral
 

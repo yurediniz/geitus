@@ -1,6 +1,6 @@
 # Catálogo: Categorias e Unidades de medida (Fase A da evolução de Produtos)
 
-> **Status:** implementado em 2026-10-21 (migration V6 aplicada; backend `catalog.unidade`/`catalog.categoria`; telas `/produtos/categorias` e `/produtos/unidades`). Ajustes vindos das revisões estão em §10. Primeira das 6 fases da evolução do cadastro de produtos (DEC-030); decisões de modelagem desta fase em **DEC-031**. Registro de design: [`docs/superpowers/specs/2026-10-20-produtos-fase-a-design.md`](../superpowers/specs/2026-10-20-produtos-fase-a-design.md).
+> **Status:** implementado em 2026-10-21 (migration V6 aplicada; backend `catalog.unidade`/`catalog.categoria`; telas `/produtos/categorias` e `/produtos/unidades`). Ajustes vindos das revisões estão em §10. Primeira das 6 fases da evolução do cadastro de produtos (DEC-030); decisões de modelagem desta fase em **DEC-031**.
 
 ## 1. Visão geral
 

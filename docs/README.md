@@ -1,34 +1,17 @@
 # Documentação do Geitus
 
-Esta pasta reúne a documentação do **Geitus**, o sistema SaaS de PDV e ERP básico para pequenos negócios.
+Markdown, em português do Brasil, versionado junto com o código. Cada informação fica em um lugar só; o que o código já diz não se repete aqui.
 
-O objetivo é manter, em um só lugar, as decisões, regras de negócio e especificações que orientam o desenvolvimento — de forma que qualquer pessoa da equipe consiga entender o produto sem depender apenas do código.
+| Arquivo | Para quê | Quando ler |
+|---|---|---|
+| [`CLAUDE.md`](../CLAUDE.md) | Produto, comandos, regras fixas do código e fluxo de trabalho | Sempre (carregado em toda sessão) |
+| [`produto.md`](produto.md) | Visão, princípios de produto e de UX, visual | Tarefas de tela, fluxo ou decisão de produto |
+| [`modules/`](modules/) | Spec viva de cada módulo: regras, contrato, dados e telas | Antes de mexer no módulo |
+| [`decision-log.md`](decision-log.md) | Decisões de arquitetura e de produto, com o porquê | Quando a tarefa toca uma decisão |
+| [`technical-debt.md`](technical-debt.md) | Pendências abertas, por quando atacar | Ao mexer no módulo e antes do deploy |
+| [`engineering-guidelines.md`](engineering-guidelines.md) | Padrões de código detalhados | Consulta pontual |
+| [`visao-dominio-pdv.md`](visao-dominio-pdv.md) | Norte de longo prazo do domínio (não é escopo) | Ao especificar um módulo novo |
 
----
+A API é documentada pelo Swagger (`/swagger-ui.html`, só em desenvolvimento), que não substitui a spec do módulo.
 
-## Como a documentação é organizada
-
-- **[CLAUDE.md](../CLAUDE.md)** (na raiz do repositório): documento principal com as diretrizes gerais, arquitetura, stack, princípios de produto e regras de negócio. É a fonte de verdade do projeto e tem prioridade sobre solicitações soltas.
-- **[docs/](.)** (esta pasta): documentação de apoio, decisões técnicas e materiais de referência que não pertencem ao código.
-- **[docs/engineering-guidelines.md](engineering-guidelines.md)**: guia de padrões técnicos — engenharia, código, arquitetura, testes, segurança e revisão.
-- **[docs/decision-log.md](decision-log.md)**: registro de decisões importantes do projeto, com motivos e impactos.
-- **[docs/visao-dominio-pdv.md](visao-dominio-pdv.md)**: visão de domínio do PDV — o **norte de longo prazo** (entidades por contexto, MVP × futuro) e os **princípios Geitus**. Não é o escopo do MVP; orienta cada módulo a nascer alinhado.
-- **[docs/technical-debt.md](technical-debt.md)**: registro de pendências e dívidas técnicas não bloqueantes, com prioridade e momento de revisão.
-- **[docs/modules/](modules/)**: especificação detalhada de cada módulo do sistema (Produtos, Clientes, PDV, Caixa, Financeiro, etc.). Cada módulo terá seu próprio documento.
-
----
-
-## Princípios da documentação
-
-- **Português do Brasil:** todo o conteúdo é escrito em português, exceto nomes técnicos inevitáveis (ex.: Java, Spring Boot, React, PostgreSQL).
-- **Incremental:** a documentação cresce junto com o produto. Um módulo é documentado quando entra em desenvolvimento.
-- **Objetiva:** foco em regras de negócio, decisões e o "porquê", evitando repetir o que o código já expressa.
-- **Rastreável:** mudanças relevantes de regra ou escopo devem ser refletidas aqui e versionadas via Git.
-
----
-
-## Convenções
-
-- Documentos em formato Markdown (`.md`).
-- Nomes de arquivo em minúsculas, separados por hífen (ex.: `produtos.md`, `pdv.md`).
-- Cada documento de módulo segue uma estrutura semelhante para facilitar a leitura (ver [docs/modules/README.md](modules/README.md)).
+O histórico (specs antigas, planos executados, versões longas do registro de decisões e das pendências) fica no Git.

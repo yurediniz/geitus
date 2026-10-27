@@ -1,6 +1,6 @@
 # Produtos: Listagem (Fase E da evolução de Produtos)
 
-> **Status:** implementado em 2026-10-23 (migration V10 aplicada). Ajustes das revisões em §9. Quinta das 6 fases da DEC-030; decisões desta fase na **DEC-035**. Depende da Fase D ([produtos-estoque.md](produtos-estoque.md)). Fecha a DT-020 para Produtos. Registro de design: [`docs/superpowers/specs/2026-10-23-produtos-fase-e-design.md`](../superpowers/specs/2026-10-23-produtos-fase-e-design.md).
+> **Status:** implementado em 2026-10-23 (migration V10 aplicada). Ajustes das revisões em §9. Quinta das 6 fases da DEC-030; decisões desta fase na **DEC-035**. Depende da Fase D ([produtos-estoque.md](produtos-estoque.md)). Fecha a DT-020 para Produtos.
 
 ## 1. Visão geral
 
