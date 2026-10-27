@@ -19,8 +19,8 @@ import java.util.UUID;
 
 /**
  * Arvore de UM cadastro de UMA empresa (Categorias ou Marcas), montada em
- * memoria a partir da lista completa (docs/modules/categorias-e-unidades.md,
- * 4.2, e fornecedores-e-marcas.md, 3.1 — volume esperado: dezenas a poucas
+ * memoria a partir da lista completa (docs/modules/produtos.md e
+ * fornecedores-e-marcas.md — volume esperado: dezenas a poucas
  * centenas).
  *
  * <p>Objeto de dominio puro (sem Spring, sem repositorio): responde caminho,

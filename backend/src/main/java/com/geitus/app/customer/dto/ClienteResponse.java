@@ -8,7 +8,7 @@ import com.geitus.app.customer.Cliente;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Representacao publica de um {@link Cliente} (docs/modules/clientes.md, secao 6).
+ * Representacao publica de um {@link Cliente} (docs/modules/clientes.md).
  *
  * <p>O {@code id} e o UUID publico (DEC-019/029); a PK numerica e o
  * {@code empresaId} nunca saem na API, e a entidade JPA nao e exposta.

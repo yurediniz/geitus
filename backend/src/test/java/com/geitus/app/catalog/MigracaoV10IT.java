@@ -33,7 +33,7 @@ import com.geitus.app.shared.busca.TextoDeBusca;
  * formatacao do plano basico do Unicode e para os 30 produtos do catalogo de
  * exemplo do banco de desenvolvimento —, que as colunas ficam {@code NOT NULL}
  * e com collation {@code "C"} (a mesma ordem em todo ambiente) e que os
- * indices existem (docs/modules/produtos-listagem.md, 3 e 4.1).
+ * indices existem (docs/modules/produtos.md).
  *
  * <p>Requer Docker disponivel no ambiente.
  */

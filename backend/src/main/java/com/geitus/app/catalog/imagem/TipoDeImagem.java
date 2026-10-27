@@ -3,7 +3,7 @@ package com.geitus.app.catalog.imagem;
 import java.util.Arrays;
 
 /**
- * Tipos de imagem aceitos (docs/modules/produtos-imagem.md, 3 e 4.1). O tipo e
+ * Tipos de imagem aceitos (docs/modules/produtos.md). O tipo e
  * o mesmo nas duas versoes da imagem e e gravado como o MIME (coluna
  * {@code tipo}, CHECK da V15), que tambem e o {@code Content-Type} da leitura.
  */

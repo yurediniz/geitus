@@ -7,7 +7,7 @@ import com.geitus.app.catalog.ProdutoEmbalagem;
 
 /**
  * Linha com o preco, a origem, os valores e as quantidades calculados
- * (docs/modules/pdv.md, 3.2 e 3.3). Valores em reais com 2 casas; quantidades
+ * (docs/modules/pdv.md). Valores em reais com 2 casas; quantidades
  * com 3. {@code valorLiquido = valorBruto - descontoItem - descontoRateado}.
  *
  * @param quantidade na unidade da linha (3 CX, 1,250 KG)

@@ -10,7 +10,7 @@ function primeiroCodigoDeBarras(produto: Produto): string | null {
 }
 
 /**
- * Linha secundaria da lista (spec B2 §6): "Nº 15 · Cód. 542 · SKU", com as
+ * Linha secundaria da lista (spec de Produtos): "Nº 15 · Cód. 542 · SKU", com as
  * partes que existirem (o Nº sempre existe; o codigo sai sem zeros). Nos cards,
  * sem SKU, entra o primeiro codigo de barras no lugar.
  */

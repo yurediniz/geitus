@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
 import type { UnidadeMedida, UnidadeMedidaRequest } from '@/types/catalogo'
 
-// Espelha as regras do backend (spec §3.3); o backend continua validando.
+// Espelha as regras do backend (spec de Produtos); o backend continua validando.
 const unidadeSchema = z.object({
   sigla: z.string().trim()
     .min(1, 'Informe a sigla.')

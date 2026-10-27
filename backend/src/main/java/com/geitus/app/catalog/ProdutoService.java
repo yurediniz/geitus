@@ -85,19 +85,19 @@ import com.geitus.app.shared.paginacao.Paginacao;
  * {@code empresaId} sao de uso interno (package-private) e concentram a regra
  * de isolamento por tenant.
  *
- * <p>Fase B (docs/modules/produtos-identificacao-e-formulario.md, secao 4):
+ * <p>Fase B (docs/modules/produtos.md):
  * codigos de barras multiplos, nome curto, SKU sugerido e exclusao fisica
  * condicionada ao estoque (ver {@link #excluir}). As sugestoes de marca e
  * fornecedor em texto sairam na Fase B5 (viraram cadastros).
  *
- * <p>Fase C (docs/modules/produtos-precos.md, 4.3 e 4.4): promocao e atacado
+ * <p>Fase C (docs/modules/produtos.md): promocao e atacado
  * validados contra o preco de venda, o preco minimo e a unidade de venda; a
  * situacao da promocao usa a data do {@link Clock} da aplicacao
  * ({@code America/Sao_Paulo}), lida uma vez por requisicao. O historico de
- * custo e preco de venda (4.6) e gravado na mesma transacao do produto, com o
+ * custo e preco de venda e gravado na mesma transacao do produto, com o
  * usuario autenticado, so para o que realmente mudou.
  *
- * <p>Fase D (docs/modules/produtos-estoque.md, 4.1, 4.4, 4.6 a 4.8): o
+ * <p>Fase D (docs/modules/estoque.md): o
  * produto liga ou desliga o controle de estoque; o estoque inicial do cadastro
  * vira a primeira entrada, na mesma transacao; a resposta traz o saldo e a
  * situacao; os niveis seguem minimo <= ponto <= maximo; produto movimentado nao
@@ -106,17 +106,17 @@ import com.geitus.app.shared.paginacao.Paginacao;
  * {@link UsoDoProdutoNoEstoque} e {@link RegistroDeEstoqueInicial}, implementadas
  * no pacote {@code inventory}: o catalogo nao depende dele.
  *
- * <p>Fase E (docs/modules/produtos-listagem.md): a listagem e paginada no
+ * <p>Fase E (docs/modules/produtos.md): a listagem e paginada no
  * servidor, com busca sem acento, filtros e ordenacao feitos no banco pela
  * {@link ConsultaDeProdutos}.
  *
- * <p>Fase B5 (docs/modules/fornecedores-e-marcas.md, 3.3 e 5): a marca e um
+ * <p>Fase B5 (docs/modules/fornecedores-e-marcas.md): a marca e um
  * item da arvore de marcas (como a categoria) e a lista de fornecedores, com o
  * da ultima compra, segue as regras do {@link FornecedoresDoProduto}; os nomes
  * dos fornecedores chegam pela {@link NomesDeFornecedores}, sem depender do
  * pacote {@code supplier}.
  *
- * <p>Fase B4 (docs/modules/produtos-custo-entrada.md, 3 e 4): o custo que muda
+ * <p>Fase B4 (docs/modules/estoque.md): o custo que muda
  * no cadastro ou na edicao marca a origem {@code EDICAO} no produto e no
  * historico; o mesmo custo nao mexe na origem. A resposta do detalhe traz a
  * ultima entrada por compra, e o historico traz a entrada ligada a cada linha
@@ -196,7 +196,7 @@ public class ProdutoService {
     static final String MENSAGEM_CODIGO_DE_BARRAS_EM_USO_SEM_NOME =
             "Este código de barras já está em uso em outro produto.";
 
-    /** SKU no padrao da sugestao automatica: {@code P} + 6 ou mais digitos (spec 4.2). */
+    /** SKU no padrao da sugestao automatica: {@code P} + 6 ou mais digitos (spec de Produtos). */
     private static final Pattern SKU_NO_PADRAO = Pattern.compile("P([0-9]{6,})");
     private static final String PREFIXO_SKU_SUGERIDO = "P";
     private static final String FORMATO_NUMERO_SKU_SUGERIDO = "%06d";
@@ -407,7 +407,7 @@ public class ProdutoService {
     }
 
     /**
-     * Exclusao fisica (spec 4.5, DEC-030; Fase D, 4.7): so sem movimentos de
+     * Exclusao fisica (spec de Produtos; DEC-030): so sem movimentos de
      * estoque ou so com o estoque inicial do cadastro, que e apagado junto com
      * a linha de saldo; senao 409. Os codigos de barras e o historico de precos
      * saem junto (cascade).
@@ -497,7 +497,7 @@ public class ProdutoService {
     }
 
     /**
-     * Proximo SKU no padrao {@code P} + 6 digitos (spec 4.2): o maior numero
+     * Proximo SKU no padrao {@code P} + 6 digitos (spec de Produtos): o maior numero
      * entre os SKUs da empresa que seguem exatamente o padrao, mais 1. SKUs
      * fora do padrao sao ignorados; passando de 999999 o numero cresce. Nao
      * reserva: a unicidade e conferida ao salvar.
@@ -547,7 +547,7 @@ public class ProdutoService {
     }
 
     /**
-     * Listagem paginada (docs/modules/produtos-listagem.md, 4 e 5), em duas
+     * Listagem paginada (docs/modules/produtos.md), em duas
      * etapas: a {@link ConsultaDeProdutos} filtra, ordena e recorta a pagina
      * no banco (ids e total); depois os produtos desses ids sao carregados com
      * as relacoes e devolvidos NA MESMA ORDEM. As arvores de categorias (que
@@ -631,7 +631,7 @@ public class ProdutoService {
 
     /**
      * Historico de custo e preco de venda do produto, do mais recente para o
-     * mais antigo (spec 5). Leitura para qualquer autenticado; produto de
+     * mais antigo (spec de Produtos). Leitura para qualquer autenticado; produto de
      * outra empresa responde 404 (DEC-016); pagina ou tamanho fora dos
      * limites, 400. Fase B4: as entradas por compra ligadas as linhas de custo
      * da pagina vem em uma consulta so.
@@ -656,7 +656,7 @@ public class ProdutoService {
         return sugerirSku(resolverEmpresaId(idUsuario));
     }
 
-    // ---------- Codigos de barras (spec 4.3) ----------
+    // ---------- Codigos de barras (spec de Produtos) ----------
 
     /**
      * Codigos da unidade de venda (ate {@value #MAXIMO_CODIGOS_POR_PRODUTO}),
@@ -671,7 +671,7 @@ public class ProdutoService {
                 produtoAtual == null ? null : produtoAtual.getId());
     }
 
-    // ---------- Codigo do produto e balanca (docs/modules/produtos-codigo-e-balanca.md, 2) ----------
+    // ---------- Codigo do produto e balanca (docs/modules/produtos.md) ----------
 
     /**
      * Regras do codigo do produto, nesta ordem: de 1 a 999999 (400); "Vendido
@@ -814,7 +814,7 @@ public class ProdutoService {
 
     /**
      * Resolve unidade e categoria pelo UUID dentro da empresa (404 se de outra
-     * empresa) e aplica as regras da spec 5.1. {@code produtoAtual} e
+     * empresa) e aplica as regras da spec de Produtos. {@code produtoAtual} e
      * {@code null} no cadastro; na edicao, permite manter uma
      * unidade/categoria que foi inativada depois (Review Focus 4).
      */
@@ -866,7 +866,7 @@ public class ProdutoService {
     }
 
     /**
-     * Fase B5 (spec 3.3): como a categoria, a marca nao selecionavel (inativa
+     * Fase B5 (spec de Fornecedores e marcas): como a categoria, a marca nao selecionavel (inativa
      * ou sob ancestral inativo) so e aceita se ja for a do produto.
      */
     private void exigirMarcaSelecionavelOuAtual(Long empresaId, Marca escolhida, Marca atual) {
@@ -886,7 +886,7 @@ public class ProdutoService {
         return atual != null && Objects.equals(atual.getId(), idEscolhido);
     }
 
-    // ---------- Promocao e atacado (docs/modules/produtos-precos.md, 4.3 e 4.4) ----------
+    // ---------- Promocao e atacado (docs/modules/produtos.md) ----------
 
     /**
      * Preco especial (promocional ou de atacado) e as mensagens dele: maior que
@@ -925,7 +925,7 @@ public class ProdutoService {
      * (que o formulario reenvia) da 400 em {@code promocao.preco}.
      *
      * <p>Promocao encerrada ou com datas no passado e aceita: nao se valida
-     * "fim >= hoje", para nao bloquear a edicao de outros campos (spec 4.3).
+     * "fim >= hoje", para nao bloquear a edicao de outros campos (spec de Produtos).
      */
     private static void validarPromocaoEAtacado(ProdutoRequest request, UnidadeMedida unidade) {
         if (request.promocao() != null) {
@@ -971,7 +971,7 @@ public class ProdutoService {
         }
     }
 
-    // ---------- Estoque (docs/modules/produtos-estoque.md, 4.4 e 4.8) ----------
+    // ---------- Estoque (docs/modules/estoque.md) ----------
 
     /**
      * Estoque inicial do cadastro (opcional): exige o controle de estoque
@@ -1034,7 +1034,7 @@ public class ProdutoService {
                 vendidoNaBalanca(request));
     }
 
-    /** {@code vendidoBalanca} ausente no request vale {@code false} (spec 8). */
+    /** {@code vendidoBalanca} ausente no request vale {@code false} (spec de Produtos). */
     private static boolean vendidoNaBalanca(ProdutoRequest request) {
         return Boolean.TRUE.equals(request.vendidoBalanca());
     }
@@ -1154,7 +1154,7 @@ public class ProdutoService {
         if (estoqueMaximo != null && estoqueMinimo != null && estoqueMaximo.compareTo(estoqueMinimo) < 0) {
             throw new RegraDeNegocioException("Estoque máximo não pode ser menor que o estoque mínimo.");
         }
-        // Fase D (spec 4.6): minimo <= ponto de reposicao <= maximo, quando os dois lados existem.
+        // Fase D (spec de Estoque): minimo <= ponto de reposicao <= maximo, quando os dois lados existem.
         if (pontoReposicao != null && estoqueMinimo != null && pontoReposicao.compareTo(estoqueMinimo) < 0) {
             throw new RegraDeNegocioException(MENSAGEM_PONTO_MENOR_QUE_MINIMO, CAMPO_PONTO_REPOSICAO);
         }

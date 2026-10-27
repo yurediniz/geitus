@@ -17,7 +17,7 @@ import com.geitus.app.sales.carrinho.CodigoInterpretado.Busca;
 import com.geitus.app.sales.carrinho.CodigoInterpretado.CodigoComQuantidade;
 import com.geitus.app.sales.carrinho.CodigoInterpretado.Etiqueta;
 
-/** Interpretacao do texto lido no PDV (docs/modules/pdv.md, 3.1 e 8, "Interpretador"). */
+/** Interpretacao do texto lido no PDV (docs/modules/pdv.md, "Interpretador"). */
 class InterpretadorDeCodigoTest {
 
     private static final ConfiguracaoEtiqueta PADRAO = ConfiguracaoEtiqueta.padrao();

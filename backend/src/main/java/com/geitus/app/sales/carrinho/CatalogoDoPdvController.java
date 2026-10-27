@@ -21,7 +21,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
- * Catalogo do PDV antes de digitar (docs/modules/pdv.md, 3.1 e 5.3; DEC-044).
+ * Catalogo do PDV antes de digitar (docs/modules/pdv.md; DEC-044).
  * Controller fino: delega a {@link CatalogoDoPdv}.
  */
 @RestController

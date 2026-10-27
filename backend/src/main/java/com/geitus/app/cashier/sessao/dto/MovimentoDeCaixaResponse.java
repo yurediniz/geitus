@@ -13,8 +13,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * Movimento da sessao na API: valor sempre positivo (o sinal sai do tipo),
  * forma, quem lancou e quando. O {@code valor} e {@code null} para o OPERADOR
  * no modo cego, com a sessao aberta, quando o lancamento e de outra pessoa ou
- * e um recebimento ou estorno de venda (docs/modules/caixa.md, 3.6;
- * docs/modules/pdv.md, 3.9). {@code vendaNumero}: o numero da venda do
+ * e um recebimento ou estorno de venda (docs/modules/caixa.md;
+ * docs/modules/pdv.md). {@code vendaNumero}: o numero da venda do
  * recebimento ou do estorno ({@code null} nos movimentos da gaveta).
  */
 @Schema(description = "Movimento de caixa")

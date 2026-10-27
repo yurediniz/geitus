@@ -62,7 +62,7 @@ function calcularSecaoAtiva(ordem: readonly SecaoProduto[]): SecaoProduto | null
 }
 
 /**
- * Scroll-spy da tela unica (spec B2 §4). O `IntersectionObserver` avisa quando
+ * Scroll-spy da tela unica (spec de Produtos). O `IntersectionObserver` avisa quando
  * uma secao entra ou sai da tela, e a rolagem avisa o fim da pagina; nos dois
  * casos a secao ativa e recalculada pela posicao (`calcularSecaoAtiva`).
  *

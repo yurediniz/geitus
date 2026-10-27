@@ -38,7 +38,7 @@ import com.geitus.app.supplier.listagem.ConsultaDeFornecedores;
 import com.geitus.app.supplier.listagem.FiltroDeFornecedores;
 
 /**
- * Regras de negocio dos fornecedores (docs/modules/fornecedores-e-marcas.md, 4).
+ * Regras de negocio dos fornecedores (docs/modules/fornecedores-e-marcas.md).
  *
  * <p>Mesmo desenho do {@code ClienteService}: os metodos {@code *ParaUsuario}
  * recebem o {@code idUsuario} do JWT e resolvem a empresa internamente
@@ -102,7 +102,7 @@ public class FornecedorService {
     // ---------- API publica (empresa sempre resolvida do usuario do JWT) ----------
 
     /**
-     * Listagem paginada por nome (spec 4.7), em duas etapas como a de
+     * Listagem paginada por nome (spec de Fornecedores e marcas), em duas etapas como a de
      * produtos: a {@link ConsultaDeFornecedores} filtra e recorta a pagina no
      * banco; depois os fornecedores da pagina vem com os representantes e as
      * contagens de produtos em lote. O numero de comandos SQL nao depende do
@@ -186,7 +186,7 @@ public class FornecedorService {
 
     /**
      * Exclusao fisica so sem produtos ligados e sem entradas registradas
-     * (spec 4.5); representantes e marcas saem junto. Se um vinculo surgir
+     * (spec de Fornecedores e marcas); representantes e marcas saem junto. Se um vinculo surgir
      * entre a contagem e o {@code DELETE}, a FK RESTRICT da V14 recusa e o
      * handler responde 409.
      */
@@ -203,7 +203,7 @@ public class FornecedorService {
         fornecedorRepository.flush();
     }
 
-    // ---------- Produtos que vende (spec 4.4) ----------
+    // ---------- Produtos que vende (spec de Fornecedores e marcas) ----------
 
     @Transactional(readOnly = true)
     public PaginaResponse<ProdutoDoFornecedorResponse> produtosParaUsuario(Long idUsuario, UUID id, int pagina,
@@ -282,7 +282,7 @@ public class FornecedorService {
     }
 
     /**
-     * Ids internos das marcas do request, sem repeticao e na ordem (spec 4.3):
+     * Ids internos das marcas do request, sem repeticao e na ordem (spec de Fornecedores e marcas):
      * ate {@value #MAXIMO_DE_MARCAS}; marca fora da arvore da empresa e 404; a
      * nao selecionavel so e aceita se ja estava em {@code atuais}.
      */

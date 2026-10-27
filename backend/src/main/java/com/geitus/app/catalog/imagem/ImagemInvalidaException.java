@@ -4,7 +4,7 @@ import com.geitus.app.catalog.RegraDeNegocioException;
 
 /**
  * Imagem do produto recusada pelas conferencias do servidor
- * (docs/modules/produtos-imagem.md, 4.1): partes ausentes, formato, tamanho
+ * (docs/modules/produtos.md): partes ausentes, formato, tamanho
  * ou dimensoes. A mensagem e sempre uma das fixas da spec, sem eco do arquivo.
  *
  * <p>E uma {@link RegraDeNegocioException}: o {@code GlobalExceptionHandler}

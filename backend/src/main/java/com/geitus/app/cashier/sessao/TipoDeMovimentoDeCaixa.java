@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 /**
  * Tipo do movimento de caixa. O valor gravado e sempre positivo; o sinal no
  * esperado sai do tipo (sangria e estorno subtraem). Recebimento e estorno
- * sao do PDV (V17; docs/modules/pdv.md, 3.9): ligados a uma venda, em
+ * sao do PDV (V17; docs/modules/pdv.md): ligados a uma venda, em
  * qualquer forma de pagamento.
  */
 public enum TipoDeMovimentoDeCaixa {

@@ -115,7 +115,7 @@ function BotaoStatus({
 
 /**
  * Lista de fornecedores: tabela a partir de 1.024 px e cards abaixo disso (so
- * por CSS, como a lista de produtos). Colunas da spec B5 §8.2: Nº, Nome (com o
+ * por CSS, como a lista de produtos). Colunas da spec de Fornecedores e marcas: Nº, Nome (com o
  * fantasia abaixo), CNPJ/CPF, telefone, representante, produtos e status.
  */
 export function ListaDeFornecedores({

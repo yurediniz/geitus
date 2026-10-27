@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Testa a regra pura do {@code @WhatsappCoerente}: o WhatsApp so e validado
- * quando o cliente declara um WhatsApp proprio (docs/modules/clientes.md, secao 4).
+ * quando o cliente declara um WhatsApp proprio (docs/modules/clientes.md).
  */
 class WhatsappCoerenteValidatorTest {
 

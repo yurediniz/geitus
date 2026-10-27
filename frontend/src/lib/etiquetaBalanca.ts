@@ -1,9 +1,9 @@
 /**
- * Regras da etiqueta de balanca (spec produtos-codigo-e-balanca §3).
+ * Regras da etiqueta de balanca (spec de Produtos).
  *
  * `lerEtiqueta` espelha o `LeitorEtiquetaBalanca` do backend (mesmos casos de
  * teste), para o PDV no futuro; hoje a tela usa so `pareceEtiqueta` (aviso de
- * codigo de barras com formato de etiqueta, §3.4), a previa e o exemplo. Quem
+ * codigo de barras com formato de etiqueta), a previa e o exemplo. Quem
  * decide a leitura de verdade e o backend (teste de etiqueta).
  */
 import { digitoVerificadorValido } from '@/lib/codigoBarras'
@@ -127,7 +127,7 @@ export function descreverFormatoEtiqueta(config: ConfiguracaoEtiqueta): string {
 
 /**
  * Se o numero tem o formato da etiqueta configurada: 13 digitos comecando pelo
- * prefixo (§3.4). Nao confere o digito verificador: e so um aviso.
+ * prefixo. Nao confere o digito verificador: e so um aviso.
  */
 export function pareceEtiqueta(codigo: string, config: ConfiguracaoEtiqueta | null): boolean {
   if (!config || config.prefixo === '') {

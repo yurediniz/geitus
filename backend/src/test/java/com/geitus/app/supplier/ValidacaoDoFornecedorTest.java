@@ -15,7 +15,7 @@ import com.geitus.app.supplier.dto.RepresentanteRequest;
 
 /**
  * Normalizacao e validacao do cadastro do fornecedor
- * (docs/modules/fornecedores-e-marcas.md, 4.1, 4.2 e 4.6), objeto puro: as
+ * (docs/modules/fornecedores-e-marcas.md), objeto puro: as
  * mensagens exatas da spec e o campo de cada erro.
  */
 class ValidacaoDoFornecedorTest {

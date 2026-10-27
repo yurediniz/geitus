@@ -1,5 +1,5 @@
 /**
- * Regras puras das embalagens de venda (Fase B3, docs/modules/produtos-embalagens.md):
+ * Regras puras das embalagens de venda (Fase B3, docs/modules/produtos.md):
  * rotulo, preco calculado, preco vigente da unidade, preco minimo por unidade,
  * conversao do saldo e embalagem principal. Dinheiro e quantidade sao contados
  * em inteiros (centavos e milesimos), como o `NUMERIC` do backend, sem erro de
@@ -91,7 +91,7 @@ export function valorPorUnidade(preco: string, quantidade: string): string | nul
 }
 
 /**
- * Preco proprio abaixo do minimo da unidade (spec §3.3): compara preco < minimo
+ * Preco proprio abaixo do minimo da unidade (spec de Produtos): compara preco < minimo
  * x quantidade, sem divisao. Abaixo, devolve o valor por unidade truncado a
  * centavos (nunca mostra um valor igual ao minimo: 209,99 / 3 -> "69.99");
  * senao, ou faltando algum valor, null.
@@ -112,7 +112,7 @@ export function valorPorUnidadeAbaixoDoMinimo(preco: string, quantidade: string,
 }
 
 /**
- * O saldo em embalagens (spec §5.2): "18 CX + 1 UN" ou "18 CX", com a parte
+ * O saldo em embalagens (spec de Produtos): "18 CX + 1 UN" ou "18 CX", com a parte
  * inteira de embalagens e o resto (com ate 3 casas na unidade fracionada).
  * Null com saldo <= 0 ou menor que 1 embalagem.
  */
@@ -152,7 +152,7 @@ export function textoEmEmbalagens(quantidadeDeEmbalagens: number, rotulo: string
   return `${quantidadeDeEmbalagens.toLocaleString('pt-BR')} ${rotulo}`
 }
 
-/** Embalagem principal (spec §2.2): a de compra, se houver; senao, a primeira da lista. */
+/** Embalagem principal (spec de Produtos): a de compra, se houver; senao, a primeira da lista. */
 export function embalagemPrincipal<T extends { deCompra: boolean }>(lista: readonly T[]): T | undefined {
   return lista.find((embalagem) => embalagem.deCompra) ?? lista[0]
 }

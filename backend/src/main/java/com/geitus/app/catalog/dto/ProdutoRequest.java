@@ -26,8 +26,8 @@ import jakarta.validation.constraints.Size;
  * reativar.
  *
  * <p>Unidade de venda, categoria e marca sao referenciadas pelo UUID publico do
- * cadastro correspondente (docs/modules/categorias-e-unidades.md, 5.2, e
- * fornecedores-e-marcas.md, 3.3); o service confirma que pertencem a empresa do
+ * cadastro correspondente (docs/modules/produtos.md e
+ * fornecedores-e-marcas.md); o service confirma que pertencem a empresa do
  * usuario (404 se nao).
  *
  * <p>Os tamanhos maximos e a precisao numerica espelham as colunas das
@@ -42,25 +42,25 @@ import jakarta.validation.constraints.Size;
  * substitui a lista inteira ({@code []} remove todos) e o campo ausente ou
  * {@code null} MANTEM os codigos atuais; no cadastro, {@code null} e "sem
  * codigos". Normalizacao, formato, repeticao e unicidade na empresa ficam no
- * service (spec 4.3).
+ * service (spec de Produtos).
  *
- * <p>Fase C (docs/modules/produtos-precos.md, 5): {@code promocao} e
+ * <p>Fase C (docs/modules/produtos.md): {@code promocao} e
  * {@code atacado} nulos ou ausentes significam "sem promocao" e "sem atacado",
  * como os demais opcionais (a excecao de {@code codigosBarras} nao vale aqui).
  * Os blocos sao validados em cascata ({@code @Valid}), com os erros nas chaves
  * aninhadas ({@code promocao.preco}, {@code atacado.quantidadeMinima}...).
  *
- * <p>Fase D (docs/modules/produtos-estoque.md, 5): {@code controlaEstoque} e
+ * <p>Fase D (docs/modules/estoque.md): {@code controlaEstoque} e
  * obrigatorio no POST e no PATCH. {@code estoqueInicial} so vale no POST (no
  * PATCH, 400): vira a primeira entrada de estoque. O saldo nunca e editado por
  * aqui; muda so por movimentos ({@code /api/produtos/{id}/estoque/ajustes}).
  *
- * <p>Fase B3 (docs/modules/produtos-embalagens.md, 7): {@code embalagens} e a
+ * <p>Fase B3 (docs/modules/produtos.md): {@code embalagens} e a
  * lista completa, com o mesmo comportamento de {@code codigosBarras} (no PATCH,
  * ausente mantem as atuais). A antiga unidade de compra + fator virou a
  * embalagem "de compra".
  *
- * <p>Fase B2 (docs/modules/produtos-codigo-e-balanca.md, 2 e 8): {@code codigo}
+ * <p>Fase B2 (docs/modules/produtos.md): {@code codigo}
  * e o codigo do produto (inteiro de 1 a 999999, opcional; no JSON, numero — o
  * frontend remove os zeros a esquerda) e {@code vendidoBalanca} ({@code null} =
  * {@code false}) exige o codigo. O {@code numero} de registro NUNCA e aceito:

@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 import com.geitus.app.catalog.CodigoBarras;
 
 /**
- * Normalizacao do texto de busca (docs/modules/produtos-listagem.md, 4.1): sem
+ * Normalizacao do texto de busca (docs/modules/produtos.md): sem
  * acento, minusculas, espacos Unicode colapsados e pontas aparadas.
  */
 class TextoDeBuscaTest {

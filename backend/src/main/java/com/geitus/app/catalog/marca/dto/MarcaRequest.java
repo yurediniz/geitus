@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size;
 
 /**
  * Dados de entrada para cadastrar, renomear ou mover uma marca
- * (docs/modules/fornecedores-e-marcas.md, 3.2). {@code parentId} nulo coloca a
+ * (docs/modules/fornecedores-e-marcas.md). {@code parentId} nulo coloca a
  * marca na raiz. Sem {@code empresaId}: a empresa vem do JWT (DEC-016).
  */
 @Schema(description = "Dados para cadastro ou edicao (renomear/mover) de uma marca")

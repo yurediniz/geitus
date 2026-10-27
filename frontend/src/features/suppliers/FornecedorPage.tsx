@@ -152,7 +152,7 @@ function focarCampo(caminho: string) {
 }
 
 /**
- * Pagina do fornecedor (`/produtos/fornecedores/novo` e `/:id`, spec B5 §8.3).
+ * Pagina do fornecedor (`/produtos/fornecedores/novo` e `/:id`, spec de Fornecedores e marcas).
  * A `key` remonta tudo ao trocar de fornecedor.
  */
 export function FornecedorPage() {

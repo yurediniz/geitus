@@ -1,5 +1,5 @@
 /**
- * Imagem do produto no navegador (spec Fase F §2): decodifica a foto (com a
+ * Imagem do produto no navegador (spec de Produtos): decodifica a foto (com a
  * orientacao do EXIF), aplica o giro e gera as duas versoes que sobem para a
  * API, a grande e a miniatura, em WebP (ou JPEG, se o navegador nao codifica
  * WebP), dentro dos tetos de tamanho. O servidor nao recomprime: os limites aqui sao os mesmos dele.
@@ -12,7 +12,7 @@ export const LIMITES = {
   originalBytes: 15 * 1024 * 1024,
 } as const
 
-/** Mensagens da spec §2. */
+/** Mensagens da spec de Produtos. */
 export const MENSAGENS_DA_IMAGEM = {
   ilegivel: 'Não foi possível ler esta imagem. Use JPG, PNG ou WebP.',
   grandeDemais: 'A imagem deve ter no máximo 15 MB.',

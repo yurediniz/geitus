@@ -11,8 +11,8 @@ import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.company.Empresa;
 
 /**
- * Origem do custo do produto (Fase B4, docs/modules/produtos-custo-entrada.md,
- * 4), mantida pela propria entidade: a entrada por compra define o custo e
+ * Origem do custo do produto (Fase B4, docs/modules/estoque.md),
+ * mantida pela propria entidade: a entrada por compra define o custo e
  * marca {@code ENTRADA_COMPRA}; o cadastro ou a edicao que muda o custo marca
  * {@code EDICAO}; o mesmo custo mantem a origem; sem custo, sem origem.
  */

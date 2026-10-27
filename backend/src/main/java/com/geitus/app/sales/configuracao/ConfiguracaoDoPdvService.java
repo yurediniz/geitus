@@ -18,7 +18,7 @@ import com.geitus.app.sales.configuracao.dto.ConfiguracaoDoPdvRequest;
 import com.geitus.app.sales.configuracao.dto.ConfiguracaoDoPdvResponse;
 
 /**
- * Configuracao do PDV (docs/modules/pdv.md, 3.10): todos leem (a tela do PDV
+ * Configuracao do PDV (docs/modules/pdv.md): todos leem (a tela do PDV
  * precisa das duas regras); so o ADMIN altera, conferido no
  * {@code SecurityConfig} pelo token e aqui pelo perfil do banco (um ADMIN
  * rebaixado com token antigo recebe 403). A alteracao registra quem e quando.

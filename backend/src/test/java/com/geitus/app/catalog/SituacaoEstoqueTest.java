@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 
 import org.junit.jupiter.api.Test;
 
-/** Situacao calculada do estoque (docs/modules/produtos-estoque.md, 4.6). */
+/** Situacao calculada do estoque (docs/modules/estoque.md). */
 class SituacaoEstoqueTest {
 
     private static BigDecimal q(String valor) {

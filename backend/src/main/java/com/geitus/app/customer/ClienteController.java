@@ -27,7 +27,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 
 /**
- * Endpoints do modulo Clientes (docs/modules/clientes.md, secao 6).
+ * Endpoints do modulo Clientes (docs/modules/clientes.md).
  *
  * <p>Controller fino: valida a entrada (Bean Validation) e delega as regras ao
  * {@link ClienteService}. Recebe apenas o {@code idUsuario} do JWT — nunca um

@@ -7,7 +7,7 @@ import java.util.UUID;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * O produto como o PDV precisa (docs/modules/pdv.md, 5.3): codigo, unidade,
+ * O produto como o PDV precisa (docs/modules/pdv.md): codigo, unidade,
  * preco vigente (sem atacado), saldo, miniatura e as embalagens com o preco
  * efetivo. Nunca traz o custo.
  */

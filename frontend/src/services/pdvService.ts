@@ -13,7 +13,7 @@ import type {
 import type { PaginaResponse } from '@/types/produto'
 
 /**
- * Servico do PDV (spec `docs/modules/pdv.md` §5.3). Centraliza as chamadas de
+ * Servico do PDV (spec `docs/modules/pdv.md`). Centraliza as chamadas de
  * /api/pdv. Empresa, usuario e perfil vem sempre do token; o servidor
  * recalcula preco, desconto, total e troco (nada do navegador e gravado).
  */

@@ -9,7 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Representacao publica de uma {@link UnidadeMedida}
- * (docs/modules/categorias-e-unidades.md, secao 3.4).
+ * (docs/modules/produtos.md).
  *
  * <p>O {@code id} e o UUID publico; a PK numerica e o {@code empresaId} nunca
  * saem na API. {@code emUso} e a quantidade de produtos que usam a unidade

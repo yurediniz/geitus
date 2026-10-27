@@ -11,7 +11,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import com.geitus.app.catalog.RegraDeNegocioException;
 
 /**
- * Allow-list dos parametros de texto da listagem (spec 4.2 e 4.3): cada valor
+ * Allow-list dos parametros de texto da listagem (spec de Produtos): cada valor
  * da API vira um enum; ausente vale o padrao; qualquer outro texto e 400 com o
  * campo, sem nunca chegar ao SQL.
  */

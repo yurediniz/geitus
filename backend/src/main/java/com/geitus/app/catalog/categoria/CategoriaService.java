@@ -22,7 +22,7 @@ import com.geitus.app.iam.UsuarioRepository;
 
 /**
  * Regras de negocio das categorias em arvore
- * (docs/modules/categorias-e-unidades.md, secao 4).
+ * (docs/modules/produtos.md).
  *
  * <p>Mesmo desenho do {@code ClienteService}: os metodos {@code *ParaUsuario}
  * recebem o {@code idUsuario} do JWT e resolvem a empresa internamente
@@ -92,7 +92,7 @@ public class CategoriaService {
         return CategoriaResponse.de(categoria, CategoriaArvore.de(todas), 0L);
     }
 
-    /** Renomeia e move (spec 4.2): {@code parentId} nulo leva para a raiz. */
+    /** Renomeia e move (spec de Produtos): {@code parentId} nulo leva para a raiz. */
     @Transactional
     public CategoriaResponse atualizarParaUsuario(Long idUsuario, UUID id, CategoriaRequest request) {
         Long empresaId = resolverEmpresaId(idUsuario);

@@ -17,8 +17,8 @@ import com.geitus.app.sales.CenarioDoPdv.NovoProduto;
 import com.geitus.app.sales.IntegracaoDoPdv;
 
 /**
- * {@code POST /api/pdv/vendas/{id}/cancelamento} (docs/modules/pdv.md, 3.8 e
- * 8): so com o caixa da venda aberto, pelo dono da sessao ou pelo ADMIN, com
+ * {@code POST /api/pdv/vendas/{id}/cancelamento} (docs/modules/pdv.md):
+ * so com o caixa da venda aberto, pelo dono da sessao ou pelo ADMIN, com
  * os estornos de estoque e de caixa na mesma transacao.
  */
 class CancelarVendaIT extends IntegracaoDoPdv {

@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Validacao fail-fast do segredo das URLs assinadas de imagem na subida da
- * aplicacao (docs/modules/produtos-imagem.md, 4.2), no mesmo padrao do
+ * aplicacao (docs/modules/produtos.md), no mesmo padrao do
  * {@code JwtSecretValidator}.
  *
  * <p>O HMAC-SHA256 pede uma chave de pelo menos 256 bits (32 bytes). Se

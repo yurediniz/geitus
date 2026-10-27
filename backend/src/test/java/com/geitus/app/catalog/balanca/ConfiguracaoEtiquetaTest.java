@@ -11,8 +11,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import com.geitus.app.catalog.RegraDeNegocioException;
 
 /**
- * Regras da configuracao da etiqueta (docs/modules/produtos-codigo-e-balanca.md,
- * 3.1). Duas camadas:
+ * Regras da configuracao da etiqueta (docs/modules/produtos.md).
+ * Duas camadas:
  * <ul>
  *   <li>{@link ConfiguracaoEtiqueta#validada}: o que vem da tela, com as mensagens
  *       de usuario (400 com o campo; a soma de 13 digitos com a mensagem da spec);</li>

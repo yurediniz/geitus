@@ -5,7 +5,7 @@ import java.math.RoundingMode;
 
 /**
  * Preco efetivo de uma embalagem e a origem dele
- * (docs/modules/produtos-embalagens.md, 3.1).
+ * (docs/modules/produtos.md).
  *
  * <p>Com preco proprio, vale o proprio (a promocao da unidade nao o altera).
  * Sem ele, vale a quantidade x o preco vigente da unidade (o promocional,

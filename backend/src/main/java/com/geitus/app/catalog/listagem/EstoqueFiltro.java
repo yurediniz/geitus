@@ -3,7 +3,7 @@ package com.geitus.app.catalog.listagem;
 import com.geitus.app.catalog.RegraDeNegocioException;
 
 /**
- * Filtro de estoque da listagem (spec 4.2), so para produtos que controlam
+ * Filtro de estoque da listagem (spec de Produtos), so para produtos que controlam
  * estoque; o saldo vem do {@code LEFT JOIN estoque_saldos s} (sem linha = 0).
  * Cada valor guarda o fragmento SQL FIXO do {@code WHERE}, coerente com
  * {@code SituacaoEstoque}: {@link #BAIXO} inclui os sem estoque.

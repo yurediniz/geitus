@@ -26,7 +26,7 @@ import com.geitus.app.iam.UsuarioAutenticado;
 /**
  * Implementacao, no caixa, das interfaces que o PDV usa
  * ({@link RecebimentosDoCaixa} e {@link SessoesParaVendas};
- * docs/modules/pdv.md, 3.6, 3.8 e 3.9). O caixa so conhece o id da venda.
+ * docs/modules/pdv.md). O caixa so conhece o id da venda.
  *
  * <p>As escritas exigem a transacao de quem chama ({@code MANDATORY}) e a
  * sessao ja travada por um dos metodos de trava: o esperado lido aqui nao muda

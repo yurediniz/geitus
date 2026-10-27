@@ -3,7 +3,7 @@ package com.geitus.app.catalog.listagem;
 import com.geitus.app.catalog.RegraDeNegocioException;
 
 /**
- * Ordenacao da listagem (spec 4.3). Cada valor guarda o fragmento FIXO do
+ * Ordenacao da listagem (spec de Produtos). Cada valor guarda o fragmento FIXO do
  * {@code ORDER BY}; o texto do parametro so escolhe o valor, nunca chega ao SQL.
  *
  * <p>Todo fragmento termina no desempate por {@code p.nome_normalizado, p.id},

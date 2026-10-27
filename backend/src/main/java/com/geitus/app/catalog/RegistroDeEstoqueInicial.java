@@ -3,8 +3,8 @@ package com.geitus.app.catalog;
 import java.math.BigDecimal;
 
 /**
- * Escritas do catalogo no estoque (docs/modules/produtos-estoque.md, 4.4 e
- * 4.7). Declarada aqui e implementada no pacote {@code inventory}. Os dois
+ * Escritas do catalogo no estoque (docs/modules/estoque.md).
+ * Declarada aqui e implementada no pacote {@code inventory}. Os dois
  * metodos rodam na transacao de quem chama (o {@code ProdutoService}).
  */
 public interface RegistroDeEstoqueInicial {

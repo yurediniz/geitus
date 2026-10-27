@@ -27,7 +27,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 /**
- * Endpoints das unidades de medida (docs/modules/categorias-e-unidades.md, 3.4).
+ * Endpoints das unidades de medida (docs/modules/produtos.md).
  *
  * <p>Controller fino: valida a entrada e delega ao {@link UnidadeMedidaService}.
  * Recebe so o {@code idUsuario} do JWT, nunca a empresa (DEC-016). O

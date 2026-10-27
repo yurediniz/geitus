@@ -1,7 +1,7 @@
 package com.geitus.app.supplier;
 
 /**
- * Endereco do fornecedor (docs/modules/fornecedores-e-marcas.md, 4.1), todo
+ * Endereco do fornecedor (docs/modules/fornecedores-e-marcas.md), todo
  * opcional: CEP so com digitos e UF em maiusculas quando informados; os demais
  * textos aparados, com vazio como {@code null}.
  */

@@ -12,7 +12,7 @@ import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.company.Empresa;
 
 /**
- * Regra do preco aplicado na venda (docs/modules/produtos-precos.md, 4.5):
+ * Regra do preco aplicado na venda (docs/modules/produtos.md):
  * candidatos normal, promocional vigente e atacado atingido; vence o menor,
  * empate entre promocional e atacado da {@code PROMOCIONAL}.
  *

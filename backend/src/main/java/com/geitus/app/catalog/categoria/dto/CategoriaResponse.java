@@ -9,7 +9,7 @@ import com.geitus.app.catalog.categoria.CategoriaArvore;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Representacao publica de uma {@link Categoria} (docs/modules/categorias-e-unidades.md, 4.3).
+ * Representacao publica de uma {@link Categoria} (docs/modules/produtos.md).
  *
  * <p>Lista plana: o frontend monta a arvore pelo {@code parentId}. Ids sao
  * UUIDs publicos; a PK numerica e o {@code empresaId} nunca saem na API.

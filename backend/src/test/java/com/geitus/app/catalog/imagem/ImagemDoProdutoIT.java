@@ -67,7 +67,7 @@ import com.geitus.app.iam.UsuarioRepository;
 
 /**
  * Envio, remocao e leitura assinada da imagem do produto de ponta a ponta
- * (docs/modules/produtos-imagem.md, 4 e 8): filtro JWT, {@code SecurityConfig},
+ * (docs/modules/produtos.md): filtro JWT, {@code SecurityConfig},
  * controllers, handler de erros e um PostgreSQL real (Testcontainers, V15).
  *
  * <p>Servidor em porta aleatoria: o limite do multipart (413) so existe no
@@ -182,7 +182,7 @@ class ImagemDoProdutoIT {
                 .andExpect(content().bytes(grande));
     }
 
-    /** Spec 4.1: o produto inativo tambem pode ter a imagem trocada. */
+    /** Spec de Produtos: o produto inativo tambem pode ter a imagem trocada. */
     @Test
     void produtoInativoAceitaAImagem() throws Exception {
         Loja loja = novaLoja();
@@ -192,7 +192,7 @@ class ImagemDoProdutoIT {
         enviar(loja.admin(), produto, GRANDE, MINIATURA).andExpect(status().isOk());
     }
 
-    // ---------- Conferencias (tabela da spec 4.1) ----------
+    // ---------- Conferencias (tabela da spec de Produtos) ----------
 
     @Test
     void faltaUmaDasPartes() throws Exception {
@@ -302,7 +302,7 @@ class ImagemDoProdutoIT {
                 .andExpect(jsonPath("$.mensagem").value("A miniatura deve ter no máximo 200 px no maior lado."));
     }
 
-    /** Spec 4.1: acima do limite do multipart (512 KB por parte) o Tomcat recusa, e a resposta e 413. */
+    /** Spec de Produtos: acima do limite do multipart (512 KB por parte) o Tomcat recusa, e a resposta e 413. */
     @Test
     void parteAcimaDoLimiteDoServidorResponde413() {
         Loja loja = novaLoja();
@@ -319,7 +319,7 @@ class ImagemDoProdutoIT {
     }
 
     /**
-     * Spec 4.1: cada parte cabe no limite por parte (512 KB), mas a soma passa
+     * Spec de Produtos: cada parte cabe no limite por parte (512 KB), mas a soma passa
      * de 1 MB por requisicao: 413. Partes de 524 287 bytes (1 abaixo do limite
      * por parte) mais os cabecalhos do multipart passam de 1 048 576 bytes.
      */
@@ -435,7 +435,7 @@ class ImagemDoProdutoIT {
         mockMvc.perform(get(imagem.get("grandeUrl").asText())).andExpect(status().isNotFound());
     }
 
-    // ---------- No produto (spec 4.3) ----------
+    // ---------- No produto (spec de Produtos) ----------
 
     /** O detalhe, a listagem e as respostas de gravacao trazem a imagem (nula sem imagem), tambem ao OPERADOR. */
     @Test

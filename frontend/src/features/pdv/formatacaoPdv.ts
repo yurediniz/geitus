@@ -3,7 +3,7 @@ import { formatarPercentual } from '@/lib/percentual'
 import { quantidadeParaTexto } from '@/lib/quantidade'
 import type { DescontoInformado, OrigemPrecoDaVenda } from '@/types/pdv'
 
-/** Selo do preco unitario (spec do PDV §6.2); o preco normal e o da embalagem ficam sem selo. */
+/** Selo do preco unitario (spec do PDV); o preco normal e o da embalagem ficam sem selo. */
 export const SELO_DA_ORIGEM: Readonly<Partial<Record<OrigemPrecoDaVenda, string>>> = {
   PROMOCIONAL: 'Promoção',
   ATACADO: 'Atacado',

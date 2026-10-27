@@ -69,7 +69,7 @@ function emCentavos(valor: number): number {
 }
 
 /**
- * Pagamento (F10; spec do PDV §3.4 e §6.3): 1 Dinheiro, 2 Debito, 3 Credito e
+ * Pagamento (F10; spec do PDV): 1 Dinheiro, 2 Debito, 3 Credito e
  * 4 PIX escolhem a forma e preenchem o que falta; Enter adiciona. Com o pago
  * cobrindo o total, Enter finaliza. A chave de idempotencia nasce na primeira
  * tentativa e fica com o carrinho; so e trocada depois de sucesso ou de uma

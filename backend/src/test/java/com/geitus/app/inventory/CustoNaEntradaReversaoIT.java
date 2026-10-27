@@ -29,8 +29,8 @@ import com.geitus.app.catalog.dto.ProdutoResponse;
 import com.geitus.app.inventory.dto.AjusteEstoqueRequest;
 
 /**
- * Transacao unica da entrada por compra (Fase B4, docs/modules/produtos-custo-entrada.md,
- * 2.2): uma falha depois do INSERT do movimento e da troca do custo no produto
+ * Transacao unica da entrada por compra (Fase B4, docs/modules/estoque.md):
+ * uma falha depois do INSERT do movimento e da troca do custo no produto
  * (aqui, ao gravar a linha do historico) desfaz tudo. Classe propria porque o
  * {@code @MockitoSpyBean} muda o contexto Spring.
  *

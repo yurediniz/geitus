@@ -71,7 +71,7 @@ export function SecaoCodigos({
   // So se ha embalagem: digitar na quantidade ou no preco de uma embalagem nao renderiza esta secao.
   const temEmbalagem = useWatch({ control, name: 'embalagens', compute: (lista) => lista.length > 0 })
   const digitosNaEtiqueta = useConfiguracaoEtiqueta().data?.digitosCodigo ?? null
-  // Atalho so na edicao: no cadastro o numero ainda nao existe (spec B2 §2).
+  // Atalho so na edicao: no cadastro o numero ainda nao existe (spec de Produtos).
   const pedeNumero = vendidoBalanca && codigo.trim() === '' && produto !== null && !somenteLeitura
   const numeroNaoCabe = pedeNumero ? motivoNumeroNaoCabe(produto.numero, digitosNaEtiqueta) : null
   const ajudaCodigo =

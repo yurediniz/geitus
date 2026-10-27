@@ -41,7 +41,7 @@ public record PlanoDeEmbalagens(List<EmbalagemPlanejada> embalagens, List<Embala
     }
 
     /**
-     * Precos proprios antes e depois (spec 3.4): embalagem criada (vazio →
+     * Precos proprios antes e depois (spec de Produtos): embalagem criada (vazio →
      * preco), preco alterado ou apagado, e embalagem com preco removida
      * (preco → vazio). Mudar so a unidade ou a quantidade nao muda o preco.
      */

@@ -5,12 +5,12 @@ import java.util.Set;
 
 /**
  * Motivo do movimento de estoque ({@code movimentos_estoque.motivo}, V9;
- * docs/modules/produtos-estoque.md, 4.3). Os nomes sao gravados como texto e
+ * docs/modules/estoque.md). Os nomes sao gravados como texto e
  * espelham o CHECK {@code ck_movimento_estoque_motivo}.
  *
  * <p>Cada motivo vale para um conjunto de tipos. Os motivos de sistema
  * ({@link #ESTOQUE_INICIAL}, so do cadastro, e {@link #VENDA} e
- * {@link #CANCELAMENTO_VENDA}, do PDV; docs/modules/pdv.md, 4.5) nunca sao
+ * {@link #CANCELAMENTO_VENDA}, do PDV; docs/modules/pdv.md) nunca sao
  * aceitos num ajuste manual.
  */
 public enum MotivoMovimento {

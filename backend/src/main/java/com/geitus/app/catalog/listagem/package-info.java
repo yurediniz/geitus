@@ -1,5 +1,5 @@
 /**
- * Listagem paginada de produtos (docs/modules/produtos-listagem.md, DEC-035).
+ * Listagem paginada de produtos (docs/modules/produtos.md, DEC-035).
  *
  * <p>Etapa 1 da consulta: {@link com.geitus.app.catalog.listagem.ConsultaDeProdutos}
  * devolve os ids da pagina e o total, em SQL nativo de leitura montado SO com

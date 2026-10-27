@@ -42,7 +42,7 @@ import com.geitus.app.iam.Usuario;
 import com.geitus.app.shared.error.GlobalExceptionHandler;
 
 /**
- * Contrato HTTP de {@code /api/etiqueta-balanca} (spec 8): RBAC (leitura e
+ * Contrato HTTP de {@code /api/etiqueta-balanca} (spec de Produtos): RBAC (leitura e
  * teste para autenticados, salvar so ADMIN, qualquer outra rota sob o caminho
  * ADMIN), Bean Validation e mapeamento dos erros. Fatia web: o
  * {@link EtiquetaBalancaService} e mockado; o banco e exercido no

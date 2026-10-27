@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 
 /**
  * Situacao calculada do estoque do produto, para a listagem e a aba Estoque
- * (docs/modules/produtos-estoque.md, 4.6). Nao e coluna: deriva do saldo e dos
+ * (docs/modules/estoque.md). Nao e coluna: deriva do saldo e dos
  * niveis de referencia.
  */
 public enum SituacaoEstoque {

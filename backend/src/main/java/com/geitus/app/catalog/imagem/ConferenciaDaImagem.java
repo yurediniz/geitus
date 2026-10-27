@@ -4,7 +4,7 @@ import com.geitus.app.catalog.imagem.CabecalhoDeImagem.Leitura;
 
 /**
  * Conferencias do servidor sobre a imagem enviada, na ordem da tabela da spec
- * (docs/modules/produtos-imagem.md, 4.1): as duas partes, o tipo real (o mesmo
+ * (docs/modules/produtos.md): as duas partes, o tipo real (o mesmo
  * nas duas), os bytes de cada uma, as dimensoes legiveis e o maior lado. O
  * servidor nao recomprime: a imagem que passa e gravada como veio.
  *

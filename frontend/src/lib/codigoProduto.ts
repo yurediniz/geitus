@@ -1,5 +1,5 @@
 /**
- * Regra do codigo do produto (spec produtos-codigo-e-balanca §2): inteiro de
+ * Regra do codigo do produto (spec de Produtos): inteiro de
  * 1 a 999999, guardado como numero (000542 = 0542 = 542) e exibido sem zeros
  * a esquerda. Na digitacao, os zeros a esquerda sao aceitos e ignorados.
  */

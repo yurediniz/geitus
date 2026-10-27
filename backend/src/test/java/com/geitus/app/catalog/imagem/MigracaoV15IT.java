@@ -28,7 +28,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * Teste de migracao da V15 (imagem do produto, Fase F) contra um PostgreSQL
  * real (Testcontainers), <b>sem Spring</b>: as CHECKs de tipo, tamanho e
  * dimensoes, a {@code versao} unica, as FKs compostas por empresa (DEC-016) e
- * a cascata na exclusao do produto (docs/modules/produtos-imagem.md, 3 e 8).
+ * a cascata na exclusao do produto (docs/modules/produtos.md).
  *
  * <p>Cada teste parte de um banco limpo ate a V15. Requer Docker.
  */

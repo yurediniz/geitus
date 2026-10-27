@@ -9,7 +9,7 @@ import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * Abertura de caixa (docs/modules/caixa.md, 3.2 e 5.3). A {@code chave} e
+ * Abertura de caixa (docs/modules/caixa.md). A {@code chave} e
  * gerada pela tela ao abrir a janela: repetir o mesmo pedido devolve a sessao
  * ja aberta (200), sem abrir outra.
  */

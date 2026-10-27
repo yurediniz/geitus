@@ -9,7 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Resumo da marca embutido na resposta do produto
- * (docs/modules/fornecedores-e-marcas.md, 3.3), com o caminho completo na
+ * (docs/modules/fornecedores-e-marcas.md), com o caminho completo na
  * arvore de marcas. O {@code id} e o UUID publico.
  */
 @Schema(description = "Resumo da marca do produto")

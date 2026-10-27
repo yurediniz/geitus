@@ -12,9 +12,9 @@ import org.springframework.stereotype.Component;
 
 /**
  * Regras de uma lista de codigos de barras
- * (docs/modules/produtos-identificacao-e-formulario.md, 4.3), usadas pela
+ * (docs/modules/produtos.md), usadas pela
  * lista da unidade de venda e pela de cada embalagem
- * (docs/modules/produtos-embalagens.md, 2.1). O limite, a mensagem do limite
+ * (docs/modules/produtos.md). O limite, a mensagem do limite
  * e o campo do erro vem de quem chama.
  *
  * <p>A unicidade e conferida dentro da empresa (DEC-016): o nome devolvido na

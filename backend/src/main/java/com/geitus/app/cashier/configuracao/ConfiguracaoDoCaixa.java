@@ -10,7 +10,7 @@ import jakarta.persistence.Table;
 /**
  * Configuracao do caixa da empresa (tabela {@code configuracoes_caixa}, V16):
  * uma linha por empresa, criada na primeira alteracao. Sem linha vale o
- * padrao, fechamento cego ligado (docs/modules/caixa.md, 3.9). A gravacao e
+ * padrao, fechamento cego ligado (docs/modules/caixa.md). A gravacao e
  * feita pelo upsert do {@link ConfiguracaoDoCaixaRepository}; a entidade so e
  * lida.
  */

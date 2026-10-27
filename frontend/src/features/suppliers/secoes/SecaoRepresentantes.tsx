@@ -18,7 +18,7 @@ interface SecaoRepresentantesProps {
 }
 
 /**
- * Representantes de venda (spec B5 §4.2 e §8.3, secao 4): ate 10, na ordem da
+ * Representantes de venda (spec de Fornecedores e marcas): ate 10, na ordem da
  * tela (o primeiro aparece na listagem). Adicionar leva o foco ao nome do novo;
  * remover leva o foco ao proximo (ou ao botao de adicionar).
  */

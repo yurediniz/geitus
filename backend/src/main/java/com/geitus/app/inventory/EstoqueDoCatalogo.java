@@ -22,7 +22,7 @@ import com.geitus.app.catalog.UsoDoProdutoNoEstoque;
 /**
  * Implementacao, no estoque, das interfaces que o catalogo declara
  * ({@link UsoDoProdutoNoEstoque} e {@link RegistroDeEstoqueInicial};
- * docs/modules/produtos-estoque.md, 4.4, 4.7 e 4.8). Assim o catalogo nao
+ * docs/modules/estoque.md). Assim o catalogo nao
  * depende deste pacote: so este pacote depende do catalogo.
  *
  * <p>Os ids recebidos sao os internos, ja resolvidos dentro da empresa do

@@ -36,7 +36,7 @@ const MENSAGEM_FALHA = 'Não foi possível abrir o caixa. Confira a conexão e t
 const MENSAGEM_PONTO_REMOVIDO = 'Este ponto de caixa não existe mais. A lista foi atualizada.'
 
 /**
- * Janela "Abrir caixa" (spec §6.2): o fundo de troco, sugerido pela abertura
+ * Janela "Abrir caixa" (spec do Caixa): o fundo de troco, sugerido pela abertura
  * anterior do ponto, com o foco no campo; Enter confirma. O conteudo monta a
  * cada abertura, e com ele a chave de idempotencia: a nova tentativa depois de
  * uma falha de rede reenvia a mesma chave e o backend nao abre duas vezes.

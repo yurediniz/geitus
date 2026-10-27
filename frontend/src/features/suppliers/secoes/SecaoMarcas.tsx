@@ -26,7 +26,7 @@ interface Chip {
 }
 
 /**
- * Marcas que vende (spec B5 §4.3 e §8.3, secao 5): itens da arvore de marcas
+ * Marcas que vende (spec de Fornecedores e marcas): itens da arvore de marcas
  * (qualquer nivel), ate 200, sem repeticao, como chips com o caminho. O
  * seletor oferece so as selecionaveis e esconde as ja escolhidas; as inativas
  * ja ligadas continuam, marcadas "(inativa)". Escolher um fabricante nao inclui

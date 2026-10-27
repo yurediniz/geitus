@@ -23,7 +23,7 @@ import jakarta.persistence.Table;
 /**
  * Unidade de medida de uma empresa (ex.: UN, KG, CX), usada como unidade de
  * venda e nas embalagens do produto
- * (docs/modules/categorias-e-unidades.md, secao 3).
+ * (docs/modules/produtos.md).
  *
  * <p>Pertence a uma empresa (DEC-016); empresa e {@code uuid} sao imutaveis. O
  * {@code id} e a PK interna (DEC-015), nunca exposta; o identificador publico
@@ -88,7 +88,7 @@ public class UnidadeMedida {
     }
 
     /**
-     * Regra de dominio para o PDV (spec 3.3): a quantidade deve ser positiva e,
+     * Regra de dominio para o PDV (spec de Produtos): a quantidade deve ser positiva e,
      * se a unidade nao for fracionada, inteira ({@code 1.000} conta como
      * inteira; {@code 1.5} nao). Ainda sem consumidor nesta fase.
      */

@@ -266,7 +266,7 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
     List<String> skusNoPadrao(@Param("empresaId") Long empresaId);
 
     /**
-     * Etapa 2 da listagem (docs/modules/produtos-listagem.md, 5): os produtos
+     * Etapa 2 da listagem (docs/modules/produtos.md): os produtos
      * da empresa com estes ids internos (vindos da {@code ConsultaDeProdutos}),
      * com os vinculos e os codigos no mesmo SELECT. Sem ordem nem paginacao:
      * a pagina ja foi recortada na etapa 1 e o service reconstroi a ordem pelos

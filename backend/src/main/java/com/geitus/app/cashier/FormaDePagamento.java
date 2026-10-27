@@ -1,7 +1,7 @@
 package com.geitus.app.cashier;
 
 /**
- * Forma de pagamento (docs/modules/pdv.md, 3.4 e 3.9): a do pagamento da
+ * Forma de pagamento (docs/modules/pdv.md): a do pagamento da
  * venda e a do movimento de caixa. Os nomes sao gravados como texto e
  * espelham os CHECKs da V17 ({@code ck_movimento_caixa_forma},
  * {@code ck_pagamento_venda_forma}). Abertura, suprimento e sangria sao sempre

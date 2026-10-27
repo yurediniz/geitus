@@ -24,7 +24,7 @@ import com.geitus.app.cashier.ponto.dto.SituacaoDoPontoResponse;
 import com.geitus.app.iam.ResolvedorDoUsuarioAutenticado;
 
 /**
- * Regras dos pontos de caixa (docs/modules/caixa.md, 3.1).
+ * Regras dos pontos de caixa (docs/modules/caixa.md).
  *
  * <p>A empresa vem sempre do usuario do JWT (DEC-016); ponto de outra empresa
  * responde 404. O perfil ADMIN da escrita e exigido no {@code SecurityConfig}.

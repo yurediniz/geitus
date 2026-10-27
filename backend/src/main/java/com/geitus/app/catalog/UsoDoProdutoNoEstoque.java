@@ -5,8 +5,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Consultas do catalogo ao estoque (docs/modules/produtos-estoque.md, 4.7 e
- * 4.8). Declarada aqui e implementada no pacote {@code inventory}, para que o
+ * Consultas do catalogo ao estoque (docs/modules/estoque.md).
+ * Declarada aqui e implementada no pacote {@code inventory}, para que o
  * catalogo nao dependa do estoque. O {@code empresaId} e sempre o da empresa do
  * usuario autenticado (DEC-016).
  */

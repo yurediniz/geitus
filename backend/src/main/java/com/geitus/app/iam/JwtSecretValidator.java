@@ -23,7 +23,7 @@ public class JwtSecretValidator implements InitializingBean {
     private static final int MINIMO_BYTES = 32;
     /** O valor de exemplo do {@code .env.example}: publico no repositorio, nunca serve como segredo. */
     static final String SEGREDO_DO_ENV_EXAMPLE = "defina-um-segredo-forte-com-no-minimo-32-bytes";
-    /** O valor de exemplo publicado em {@code docs/modules/autenticacao.md} (e antes no {@code backend/README.md}): copiavel. */
+    /** O valor de exemplo que ja foi publicado na documentacao (spec de Autenticacao e {@code backend/README.md}; segue no historico do Git): copiavel. */
     static final String SEGREDO_DA_DOCUMENTACAO = "um-segredo-forte-com-no-minimo-32-bytes-aqui";
     private static final Set<String> SEGREDOS_DE_EXEMPLO = Set.of(SEGREDO_DO_ENV_EXAMPLE, SEGREDO_DA_DOCUMENTACAO);
 

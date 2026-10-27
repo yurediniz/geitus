@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Configuration;
  * relogio fixo nos testes.
  *
  * <p>Fuso fixo {@code America/Sao_Paulo} no MVP; fuso por empresa fica para
- * quando houver cliente fora dele (docs/modules/produtos-precos.md, 9).
+ * quando houver cliente fora dele (docs/modules/produtos.md).
  */
 @Configuration
 public class RelogioConfig {

@@ -6,7 +6,7 @@ import { useFeedbackDaTela } from '@/hooks/useFeedbackDaTela'
 /**
  * Configuracoes da empresa (/configuracoes, so ADMIN: rota sob o AdminRoute e
  * escrita protegida no backend). Pagina com secoes: o Caixa (spec
- * `docs/modules/caixa.md` §6.7) e o PDV (spec `docs/modules/pdv.md` §6.6).
+ * `docs/modules/caixa.md`) e o PDV (spec `docs/modules/pdv.md`).
  */
 export function ConfiguracoesPage() {
   const { sucesso, erro, avisos } = useFeedbackDaTela()

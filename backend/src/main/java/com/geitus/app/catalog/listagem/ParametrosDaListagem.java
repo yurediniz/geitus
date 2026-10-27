@@ -7,7 +7,7 @@ import com.geitus.app.catalog.RegraDeNegocioException;
 import com.geitus.app.shared.paginacao.Paginacao;
 
 /**
- * Parametros de {@code GET /api/produtos} ja validados (spec 4.2 a 4.4): status,
+ * Parametros de {@code GET /api/produtos} ja validados (spec de Produtos): status,
  * estoque, promocao e ordem convertidos pela allow-list, a busca dentro do teto
  * e pagina/tamanho dentro dos limites do {@link Paginacao}. Os padroes ficam SO
  * aqui. Construir um valor invalido lanca {@link RegraDeNegocioException} (400
@@ -27,7 +27,7 @@ public record ParametrosDaListagem(String busca, StatusFiltro status, UUID categ
 
     /** Pagina quando o cliente nao informa. */
     public static final int PAGINA_PADRAO = 0;
-    /** Itens por pagina quando o cliente nao informa (spec 4.4). */
+    /** Itens por pagina quando o cliente nao informa (spec de Produtos). */
     public static final int TAMANHO_PADRAO = 25;
     /** Teto do termo de busca, em caracteres. */
     public static final int TAMANHO_MAXIMO_DA_BUSCA = 200;

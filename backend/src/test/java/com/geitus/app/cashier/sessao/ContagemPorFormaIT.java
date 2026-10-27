@@ -28,7 +28,7 @@ import com.geitus.app.cashier.RecebimentosDoCaixa;
 import com.geitus.app.iam.ResolvedorDoUsuarioAutenticado;
 
 /**
- * Caixa conferido por forma de pagamento (docs/modules/pdv.md, 3.8, 3.9 e 8):
+ * Caixa conferido por forma de pagamento (docs/modules/pdv.md):
  * esperado por forma, formas da contagem, contagem com o contrato novo,
  * conferencia com diferenca so no cartao, modo cego por forma e as travas e
  * estornos que o PDV usa. Os recebimentos entram pelo {@link RecebimentosDoCaixa}

@@ -24,7 +24,7 @@ import com.geitus.app.cashier.sessao.dto.AbrirCaixaRequest;
 import com.geitus.app.cashier.sessao.dto.MovimentoDeCaixaRequest;
 
 /**
- * Concorrencia do caixa (docs/modules/caixa.md, 3.8), com pedidos simultaneos
+ * Concorrencia do caixa (docs/modules/caixa.md), com pedidos simultaneos
  * de verdade ({@link CyclicBarrier}, como no {@code EstoqueServiceIT}) e
  * varias rodadas para dar chance real a corrida:
  * <ul>

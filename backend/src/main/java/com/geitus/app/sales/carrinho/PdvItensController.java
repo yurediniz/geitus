@@ -24,7 +24,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
- * Leitura de codigo e busca por nome no PDV (docs/modules/pdv.md, 3.1 e 5.3).
+ * Leitura de codigo e busca por nome no PDV (docs/modules/pdv.md).
  * Controller fino: delega a {@link ResolucaoDeItens}. Uma rota, dois usos pelo
  * parametro: {@code ?codigo=} ou {@code ?busca=}, um ou outro. Os dois juntos,
  * ou nenhum, respondem 400. Texto longo demais e recusado (400), nunca

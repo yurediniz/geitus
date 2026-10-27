@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Testa a {@link Arvore} generica, usada por Categorias e Marcas
- * (docs/modules/fornecedores-e-marcas.md, 3.1), com um no de teste simples,
+ * (docs/modules/fornecedores-e-marcas.md), com um no de teste simples,
  * sem JPA.
  *
  * <p>Arvore usada nos testes:

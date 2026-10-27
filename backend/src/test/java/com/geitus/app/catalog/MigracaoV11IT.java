@@ -30,7 +30,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * clientes como existem hoje, aplica a V11 e confere via JDBC a numeracao por
  * empresa e por ordem de cadastro, a tabela {@code numeracoes} com o maximo de
  * cada tipo, os CHECKs e as unicidades
- * (docs/modules/produtos-codigo-e-balanca.md, 7 e 9).
+ * (docs/modules/produtos.md).
  *
  * <p>Requer Docker disponivel no ambiente.
  */

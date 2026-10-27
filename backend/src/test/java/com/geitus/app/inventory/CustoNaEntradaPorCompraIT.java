@@ -46,12 +46,12 @@ import com.geitus.app.inventory.dto.MovimentoEstoqueResponse;
 import jakarta.persistence.EntityManagerFactory;
 
 /**
- * Custo na entrada por compra (Fase B4, docs/modules/produtos-custo-entrada.md;
+ * Custo na entrada por compra (Fase B4, docs/modules/estoque.md;
  * DEC-038) com o contexto Spring completo e um PostgreSQL real
  * (Testcontainers, Flyway com as migrations de producao, V13 inclusa).
  *
  * <p>Cobre: o custo no movimento e no produto (com e sem embalagem), as regras
- * e mensagens do ajuste (spec 2.3), a transacao unica (nada gravado na falha,
+ * e mensagens do ajuste (spec de Estoque), a transacao unica (nada gravado na falha,
  * Review Focus 1), a idempotencia com o custo (Review Focus 4), a origem do
  * custo no produto pelo cadastro e pela edicao (Review Focus 2), o historico
  * com a origem e a entrada, e o isolamento por empresa (DEC-016).
@@ -261,7 +261,7 @@ class CustoNaEntradaPorCompraIT {
         assertThat(historico.get(0).valorNovo()).isEqualByComparingTo("10.00");
     }
 
-    // ---------- Regras e mensagens (spec 2.3) ----------
+    // ---------- Regras e mensagens (spec de Estoque) ----------
 
     @Test
     void compraSemCusto400() {

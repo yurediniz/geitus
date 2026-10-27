@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size;
 
 /**
  * Dados de entrada para cadastrar, renomear ou mover uma categoria
- * (docs/modules/categorias-e-unidades.md, 4.3). {@code parentId} nulo coloca a
+ * (docs/modules/produtos.md). {@code parentId} nulo coloca a
  * categoria na raiz. Sem {@code empresaId}: a empresa vem do JWT (DEC-016).
  */
 @Schema(description = "Dados para cadastro ou edicao (renomear/mover) de uma categoria")

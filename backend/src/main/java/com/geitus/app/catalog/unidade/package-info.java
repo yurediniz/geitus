@@ -1,5 +1,5 @@
 /**
- * Unidades de medida do catalogo (docs/modules/categorias-e-unidades.md, secao 3).
+ * Unidades de medida do catalogo (docs/modules/produtos.md).
  *
  * <p>Cadastro por empresa (DEC-016), identificado publicamente pelo
  * {@code uuid} (DEC-019/029). Toda empresa recebe as unidades padrao

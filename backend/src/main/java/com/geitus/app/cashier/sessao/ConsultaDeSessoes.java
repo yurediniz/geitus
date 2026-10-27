@@ -11,7 +11,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
 
 /**
- * Historico das sessoes de caixa (docs/modules/caixa.md, 5.2): a pagina, da
+ * Historico das sessoes de caixa (docs/modules/caixa.md): a pagina, da
  * sessao aberta mais recente para a mais antiga, e o total que passa nos
  * filtros.
  *

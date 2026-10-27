@@ -16,7 +16,7 @@ import com.geitus.app.cashier.CenarioDeCaixa.EmpresaDeCaixa;
 import com.geitus.app.cashier.IntegracaoDoCaixa;
 
 /**
- * Modo cego (docs/modules/caixa.md, 3.6 e 7): com o fechamento cego ligado (o
+ * Modo cego (docs/modules/caixa.md): com o fechamento cego ligado (o
  * padrao) e a sessao ABERTA, nenhuma resposta ao OPERADOR traz o esperado da
  * gaveta, nem a mensagem da sangria. O ADMIN sempre ve; depois da contagem,
  * todos veem.
@@ -70,7 +70,7 @@ class ModoCegoIT extends IntegracaoDoCaixa {
     }
 
     /**
-     * Spec 3.6: no modo cego a operadora so ve os valores que ela mesma
+     * Spec do Caixa: no modo cego a operadora so ve os valores que ela mesma
      * lancou. A sangria de R$ 157,00 do ADMIN aparece na lista (tipo, motivo,
      * quem e quando) sem o valor, ate a contagem.
      */

@@ -8,7 +8,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 
-/** Alteracao da configuracao do PDV (ADMIN; docs/modules/pdv.md, 3.10). */
+/** Alteracao da configuracao do PDV (ADMIN; docs/modules/pdv.md). */
 @Schema(description = "Configuracao do PDV")
 public record ConfiguracaoDoPdvRequest(
         @Schema(description = "Quando ligado, a venda passa mesmo sem saldo e o estoque fica negativo", example = "true")

@@ -32,7 +32,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * saldo; aplica a V17 e confere a carga ({@code DINHEIRO} nos movimentos
  * atuais), os {@code CHECK}, as FKs compostas e os gatilhos de vendas, itens,
  * pagamentos, contagens por forma, estornos e da conferencia
- * (docs/modules/pdv.md, 4 e 8).
+ * (docs/modules/pdv.md).
  *
  * <p>A venda e conferida no commit ({@code tg_venda_coerente}, deferida): os
  * atalhos gravam a venda, os itens e o pagamento num comando so. Constraints e

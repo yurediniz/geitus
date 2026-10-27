@@ -10,7 +10,7 @@ import jakarta.validation.constraints.Size;
 
 /**
  * Dados de entrada para cadastro ou atualizacao de um cliente
- * (docs/modules/clientes.md, secao 6).
+ * (docs/modules/clientes.md).
  *
  * <p>Nao inclui {@code empresaId} nem {@code ativo}: a empresa e sempre
  * derivada do usuario autenticado (DEC-016) e o status so muda pelos endpoints
@@ -21,7 +21,7 @@ import jakarta.validation.constraints.Size;
  *
  * <p>O {@code whatsapp} e validado no nivel da classe ({@link WhatsappCoerente}):
  * so importa quando {@code telefoneEWhatsapp = false}; caso contrario e
- * descartado sem validar (docs/modules/clientes.md, secao 4).
+ * descartado sem validar (docs/modules/clientes.md).
  */
 @Schema(description = "Dados para cadastro ou atualizacao de um cliente")
 @WhatsappCoerente

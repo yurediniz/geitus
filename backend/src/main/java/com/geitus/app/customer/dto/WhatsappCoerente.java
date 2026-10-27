@@ -12,7 +12,7 @@ import jakarta.validation.Payload;
 
 /**
  * Valida o {@code whatsapp} de um {@link ClienteRequest} apenas quando ele e
- * relevante (docs/modules/clientes.md, secao 4):
+ * relevante (docs/modules/clientes.md):
  *
  * <ul>
  *   <li>{@code telefoneEWhatsapp = false}: o {@code whatsapp}, se informado,

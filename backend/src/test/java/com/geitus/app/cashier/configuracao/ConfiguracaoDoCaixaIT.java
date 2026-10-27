@@ -17,7 +17,7 @@ import com.geitus.app.cashier.CenarioDeCaixa.EmpresaDeCaixa;
 import com.geitus.app.cashier.IntegracaoDoCaixa;
 
 /**
- * Configuracao do caixa (docs/modules/caixa.md, 3.9): fechamento cego ligado
+ * Configuracao do caixa (docs/modules/caixa.md): fechamento cego ligado
  * por padrao, so o ADMIN altera, a alteracao registra quem e quando, e todos
  * os autenticados leem.
  */

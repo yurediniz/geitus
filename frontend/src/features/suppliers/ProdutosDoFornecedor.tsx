@@ -64,7 +64,7 @@ function mensagemDeErro(erro: unknown, acao: 'adicionar' | 'remover'): string {
 }
 
 /**
- * Produtos que vende (spec B5 §4.4 e §8.3, secao 6), so na edicao: busca de
+ * Produtos que vende (spec de Fornecedores e marcas), so na edicao: busca de
  * produto por nome ou codigo com "Adicionar" e a lista paginada (Nº, nome,
  * codigo) com "Remover". E a mesma lista que aparece no produto. Remover o
  * fornecedor da ultima compra de um produto pede confirmacao (o backend limpa

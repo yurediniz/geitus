@@ -7,7 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 /**
  * Resposta do PUT da configuracao: a configuracao gravada e os produtos
  * "Vendidos na balanca" com codigo grande demais para ela (o aviso nao bloqueia
- * o salvamento; spec 3.3).
+ * o salvamento; spec de Produtos).
  */
 @Schema(description = "Configuracao gravada e produtos com codigo grande demais para ela")
 public record SalvarEtiquetaResponse(

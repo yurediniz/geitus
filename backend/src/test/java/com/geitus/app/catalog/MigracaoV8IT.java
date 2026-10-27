@@ -205,7 +205,7 @@ class MigracaoV8IT {
                 "ck_historico_preco_venda_nao_nulo", VIOLACAO_DE_CHECK);
     }
 
-    /** Usuario com historico nao pode ser excluido fisicamente: FK RESTRICT (spec 3.2). */
+    /** Usuario com historico nao pode ser excluido fisicamente: FK RESTRICT (spec de Produtos). */
     @Test
     void rejeitaExcluirUsuarioComHistorico() throws SQLException {
         long empresa = inserirEmpresa("Empresa A");

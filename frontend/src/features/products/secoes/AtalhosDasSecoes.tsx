@@ -15,7 +15,7 @@ export interface AtalhosDasSecoesProps {
 }
 
 /**
- * Barra de atalhos da tela unica do produto (spec B2 §4), dentro do contêiner
+ * Barra de atalhos da tela unica do produto (spec de Produtos), dentro do contêiner
  * fixo no topo da pagina: leva a cada secao, destaca a visivel (`aria-current`)
  * e mostra os erros de cada uma (numero + texto para leitor de tela, nunca so
  * a cor). No celular, rola para o lado.

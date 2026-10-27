@@ -38,7 +38,7 @@ export interface ListaDeLinhasProps {
 }
 
 /**
- * A lista de linhas do PDV (spec §6.2): miniatura, nome, quantidade com − e +,
+ * A lista de linhas do PDV (spec do PDV): miniatura, nome, quantidade com − e +,
  * "UN ▾" quando ha embalagens, preco unitario com o selo, desconto e valor. Os
  * valores sao os do servidor; os erros e avisos aparecem na propria linha.
  */

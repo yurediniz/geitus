@@ -6,7 +6,7 @@ import type { ImagemDoProduto } from '@/types/produto'
 
 export interface MiniaturaDoProdutoProps {
   imagem: ImagemDoProduto | null
-  /** Tabela: quadro de 40 px; card: 56 px (spec Fase F §5.2). */
+  /** Tabela: quadro de 40 px; card: 56 px (spec de Produtos). */
   tamanho: 'tabela' | 'card'
 }
 

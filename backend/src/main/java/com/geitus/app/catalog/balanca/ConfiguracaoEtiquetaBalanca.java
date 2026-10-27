@@ -20,7 +20,7 @@ import jakarta.persistence.Table;
 
 /**
  * Configuracao da etiqueta de balanca gravada por uma empresa
- * (docs/modules/produtos-codigo-e-balanca.md, 3.1; tabela
+ * (docs/modules/produtos.md; tabela
  * {@code configuracoes_etiqueta_balanca}, V11). No maximo uma por empresa
  * ({@code uq_etiqueta_empresa}); empresa sem linha usa
  * {@link ConfiguracaoEtiqueta#padrao()}.

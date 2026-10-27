@@ -19,7 +19,7 @@ import com.geitus.app.sales.CenarioDoPdv.NovoProduto;
 import com.geitus.app.sales.IntegracaoDoPdv;
 
 /**
- * {@code GET /api/pdv/catalogo} (docs/modules/pdv.md, 3.1 e 5.3; DEC-044): os
+ * {@code GET /api/pdv/catalogo} (docs/modules/pdv.md; DEC-044): os
  * produtos ativos da empresa, os mais vendidos primeiro (vendas concluidas) e
  * o resto por nome, com o filtro de categoria e a paginacao.
  */

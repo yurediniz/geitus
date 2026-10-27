@@ -3,8 +3,8 @@ package com.geitus.app.catalog.unidade;
 import java.util.List;
 
 /**
- * Unidades de medida que toda empresa recebe (docs/modules/categorias-e-unidades.md,
- * secao 3.2). A migration V6 cria as mesmas para as empresas existentes; esta
+ * Unidades de medida que toda empresa recebe (docs/modules/produtos.md).
+ * A migration V6 cria as mesmas para as empresas existentes; esta
  * lista atende as empresas criadas depois, via
  * {@link UnidadeMedidaService#criarPadroes}. Manter as duas fontes iguais.
  */

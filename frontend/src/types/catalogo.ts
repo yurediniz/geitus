@@ -2,7 +2,7 @@
  * Tipos compartilhados do catalogo: Unidades de medida, Categorias e Marcas.
  *
  * Refletem o contrato da API do backend em /api/unidades, /api/categorias e
- * /api/marcas (ver docs/modules/categorias-e-unidades.md e
+ * /api/marcas (ver docs/modules/produtos.md e
  * fornecedores-e-marcas.md). O `id` e sempre o UUID publico;
  * a empresa nunca trafega aqui: e derivada do usuario autenticado.
  */

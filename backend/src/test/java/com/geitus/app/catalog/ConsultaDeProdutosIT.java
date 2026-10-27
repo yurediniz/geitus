@@ -49,7 +49,7 @@ import com.geitus.app.shared.busca.TextoDeBusca;
 /**
  * {@link ConsultaDeProdutos} contra um PostgreSQL real (Testcontainers, V1-V10):
  * a etapa 1 da listagem (ids da pagina e total) com a busca sem acento, cada
- * filtro, cada ordem e a paginacao (docs/modules/produtos-listagem.md, 4 e 5).
+ * filtro, cada ordem e a paginacao (docs/modules/produtos.md).
  *
  * <p>Fica no pacote {@code catalog} para montar os produtos com o
  * {@link ProdutoTesteBuilder}. O saldo de estoque e gravado direto em
@@ -108,7 +108,7 @@ class ConsultaDeProdutosIT {
         empresa = novaEmpresa("Empresa Lista");
     }
 
-    // ---------- Busca (spec 4.1) ----------
+    // ---------- Busca (spec de Produtos) ----------
 
     @Test
     void buscaSemAcento() {
@@ -267,7 +267,7 @@ class ConsultaDeProdutosIT {
         assertThat(pagina.total()).isZero();
     }
 
-    // ---------- Estoque (spec 4.2) ----------
+    // ---------- Estoque (spec de Produtos) ----------
 
     @Test
     void estoqueSem() {
@@ -347,7 +347,7 @@ class ConsultaDeProdutosIT {
         assertThat(nomes(todos)).containsExactly("Ração Golden promo zerada");
     }
 
-    // ---------- Ordem (spec 4.3) ----------
+    // ---------- Ordem (spec de Produtos) ----------
 
     @Test
     void ordemPorNomeIgnoraAcentoEMaiusculas() {
@@ -554,7 +554,7 @@ class ConsultaDeProdutosIT {
         assertThat(nomes(new Filtro(outra.getId()).busca("arroz"))).containsExactly("Arroz da B");
     }
 
-    // ---------- Fase B2: busca por numero e codigo do produto (spec 6) ----------
+    // ---------- Fase B2: busca por numero e codigo do produto (spec de Produtos) ----------
 
     /** Review Focus 2: "542", "0542" e "000542" sao o mesmo codigo; a comparacao e exata (5420 fica fora). */
     @Test

@@ -13,13 +13,13 @@ import { cn } from '@/lib/utils'
 import { criarPonto, inativarPonto, listarPontos, reativarPonto, renomearPonto } from '@/services/caixaService'
 import type { PontoDeCaixa } from '@/types/caixa'
 
-/** Limite do nome no backend (spec §3.1). */
+/** Limite do nome no backend (spec do Caixa). */
 const TAMANHO_MAXIMO_DO_NOME = 40
 const ALTURA_DO_CONTROLE = 'h-11 md:h-9'
 const MENSAGEM_NOME_VAZIO = 'Informe o nome do ponto.'
 
 /**
- * Pontos de caixa (spec §6.7): lista com nome e situacao, "Adicionar ponto",
+ * Pontos de caixa (spec do Caixa): lista com nome e situacao, "Adicionar ponto",
  * renomear em linha e inativar/reativar. Conflitos (nome repetido, limite,
  * caixa aberto no ponto) mostram a mensagem do servidor.
  */

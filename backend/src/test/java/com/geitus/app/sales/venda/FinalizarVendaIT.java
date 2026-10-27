@@ -22,7 +22,7 @@ import com.geitus.app.sales.CenarioDoPdv.NovoProduto;
 import com.geitus.app.sales.IntegracaoDoPdv;
 
 /**
- * {@code POST /api/pdv/vendas} (docs/modules/pdv.md, 3.6 e 8): venda atomica
+ * {@code POST /api/pdv/vendas} (docs/modules/pdv.md): venda atomica
  * no caixa aberto do usuario, com o recalculo no servidor, a idempotencia pela
  * chave, o estoque baixado (inclusive negativo com "Vender sem estoque") e os
  * recebimentos por forma no caixa.

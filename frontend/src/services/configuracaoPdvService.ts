@@ -2,7 +2,7 @@ import { apiGet, apiPut } from '@/services/httpClient'
 import type { ConfiguracaoDoPdv, ConfiguracaoDoPdvRequest } from '@/types/pdv'
 
 /**
- * Configuracao do PDV (/api/configuracoes/pdv, spec do PDV §3.10). Leitura
+ * Configuracao do PDV (/api/configuracoes/pdv, spec do PDV). Leitura
  * para todos os autenticados (a tela do PDV precisa das duas opcoes); alterar
  * so ADMIN (403, conferido tambem pelo perfil do banco).
  */

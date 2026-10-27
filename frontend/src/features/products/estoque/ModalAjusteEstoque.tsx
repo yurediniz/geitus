@@ -55,17 +55,17 @@ export interface ModalAjusteEstoqueProps {
   /** Se a unidade de venda aceita quantidade fracionada. */
   fracionada: boolean
   /**
-   * Embalagens gravadas do produto (spec B3 §6): com elas, Entrada e Saida
+   * Embalagens gravadas do produto (spec de Produtos): com elas, Entrada e Saida
    * ganham o seletor "Em" e a quantidade pode ser informada em embalagens.
    */
   embalagens?: readonly EmbalagemDoAjuste[]
   /**
    * Custo atual do produto (por unidade de venda), para a dica "Último custo"
-   * e a previa da entrada por compra (spec B4 §7.1). Null/ausente = sem custo.
+   * e a previa da entrada por compra (spec de Estoque). Null/ausente = sem custo.
    */
   custo?: number | null
   /**
-   * Fornecedor que a entrada por compra traz preenchido (spec B5 §6): o da
+   * Fornecedor que a entrada por compra traz preenchido (spec de Fornecedores e marcas): o da
    * ultima compra, se ativo. Null/ausente = o campo comeca vazio.
    */
   fornecedorDaCompra?: FornecedorDoProduto | null
@@ -80,8 +80,8 @@ export interface ModalAjusteEstoqueProps {
 }
 
 /**
- * Modal "Ajustar estoque" (spec 6.2): tipo, quantidade, o custo da entrada por
- * compra (spec B4 §7.1), motivo, observacao, a previa do saldo e o atalho
+ * Modal "Ajustar estoque" (spec de Estoque): tipo, quantidade, o custo da entrada por
+ * compra, motivo, observacao, a previa do saldo e o atalho
  * "Zerar estoque". O conteudo monta a cada
  * abertura, e com ele a `chave` de idempotencia: novas tentativas na mesma
  * abertura (ex.: depois de um erro de rede) reaproveitam a chave, e o backend
@@ -189,10 +189,10 @@ function ConteudoAjuste({
     motivo: motivoPadrao('ENTRADA'),
     observacao: '',
     embalagemId: embalagemPadrao('ENTRADA', motivoPadrao('ENTRADA'), embalagens),
-    // Comeca vazio (spec B4 §7.1): o ultimo custo aparece so como dica.
+    // Comeca vazio (spec de Estoque): o ultimo custo aparece so como dica.
     custo: '',
   }))
-  // Fornecedor da compra (spec B5 §6): so vai no envio da Entrada com Compra.
+  // Fornecedor da compra (spec de Fornecedores e marcas): so vai no envio da Entrada com Compra.
   const [fornecedor, setFornecedor] = useState<FornecedorDoProduto | null>(fornecedorDaCompra)
   // Ainda o que veio preenchido (o da ultima compra): a ajuda diz de onde ele veio.
   const [fornecedorIntocado, setFornecedorIntocado] = useState(true)
@@ -300,7 +300,7 @@ function ConteudoAjuste({
       if (campo !== 'motivo') {
         return novos
       }
-      // Fora da compra o campo de custo some, e o valor digitado com ele (spec B4 §7.1).
+      // Fora da compra o campo de custo some, e o valor digitado com ele (spec de Estoque).
       const custo = exigeCusto(novos.tipo, novos.motivo) ? novos.custo : ''
       // O motivo muda o padrao do seletor (Compra traz a embalagem de compra), ate o usuario escolher.
       const embalagemId = embalagemEscolhida ? novos.embalagemId : embalagemPadrao(novos.tipo, novos.motivo, embalagens)
@@ -322,7 +322,7 @@ function ConteudoAjuste({
       const motivo =
         atuais.motivo !== '' && motivosDoTipo(tipo).includes(atuais.motivo) ? atuais.motivo : motivoPadrao(tipo)
       const embalagemId = embalagemEscolhida ? atuais.embalagemId : embalagemPadrao(tipo, motivo, embalagens)
-      // Trocar o tipo descarta o custo digitado (spec B4 §7.1).
+      // Trocar o tipo descarta o custo digitado (spec de Estoque).
       const custo = tipo === atuais.tipo ? atuais.custo : ''
       return { ...atuais, tipo, motivo, embalagemId, custo }
     })
@@ -534,7 +534,7 @@ function ConteudoAjuste({
           )}
         </div>
 
-        {/* Custo da compra (spec B4 §7.1): so na Entrada com Compra, logo abaixo da quantidade. */}
+        {/* Custo da compra (spec de Estoque): so na Entrada com Compra, logo abaixo da quantidade. */}
         {comCusto && (
           <div className="space-y-1.5">
             <label htmlFor={ID_CAMPO.custo} className="text-sm font-medium">
@@ -563,7 +563,7 @@ function ConteudoAjuste({
           </div>
         )}
 
-        {/* Fornecedor da compra (spec B5 §6): opcional, abaixo do custo, so dos ativos. */}
+        {/* Fornecedor da compra (spec de Fornecedores e marcas): opcional, abaixo do custo, so dos ativos. */}
         {comCusto && (
           <div className="space-y-1.5">
             <span id={`${ID_CAMPO.fornecedorId}-rotulo`} className="block text-sm font-medium">
@@ -606,7 +606,7 @@ function ConteudoAjuste({
             {previa?.confere && <p className="text-muted-foreground">{previa.confere}</p>}
             {previaDoSaldo && !erroQuantidade && <p className="font-medium">{previaDoSaldo}</p>}
           </div>
-          {/* O custo na previa (spec B4 §7.1), fora da regiao viva: anunciar a cada digito do custo atrapalharia. */}
+          {/* O custo na previa (spec de Estoque), fora da regiao viva: anunciar a cada digito do custo atrapalharia. */}
           {custoDaPrevia && !erroQuantidade && (
             <p id={ID_PREVIA_CUSTO} className="text-sm font-medium tabular-nums">
               {custoDaPrevia}

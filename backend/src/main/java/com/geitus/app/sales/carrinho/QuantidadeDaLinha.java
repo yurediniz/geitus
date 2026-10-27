@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.util.Optional;
 
 /**
- * Regras da quantidade de uma linha (docs/modules/pdv.md, 3.1): maior que
+ * Regras da quantidade de uma linha (docs/modules/pdv.md): maior que
  * zero, ate 99.999, ate 3 casas e decimal so em unidade fracionada (a
  * embalagem e sempre inteira). Devolve a mensagem da recusa, se houver.
  */

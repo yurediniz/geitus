@@ -487,7 +487,7 @@ describe('ajusteEstoque', () => {
       expect(textoMovimento(MOVIMENTO, 'UN').custo).toBeNull()
     })
 
-    it('o movimento de compra com fornecedor mostra "Fornecedor: {nome}" (spec B5 §6)', () => {
+    it('o movimento de compra com fornecedor mostra "Fornecedor: {nome}" (spec de Fornecedores e marcas)', () => {
       const compra: MovimentoEstoque = {
         ...MOVIMENTO,
         tipo: 'ENTRADA',

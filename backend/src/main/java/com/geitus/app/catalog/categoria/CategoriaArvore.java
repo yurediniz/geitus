@@ -8,8 +8,8 @@ import java.util.UUID;
 import com.geitus.app.catalog.arvore.Arvore;
 
 /**
- * Arvore de categorias de UMA empresa (docs/modules/categorias-e-unidades.md,
- * 4.2). Fachada tipada sobre a {@link Arvore} generica, que tambem serve as
+ * Arvore de categorias de UMA empresa (docs/modules/produtos.md).
+ * Fachada tipada sobre a {@link Arvore} generica, que tambem serve as
  * Marcas: as regras (caminho, nivel, ramo selecionavel, subarvore, ciclo,
  * nome entre irmaos e ordenacao) vivem la.
  *

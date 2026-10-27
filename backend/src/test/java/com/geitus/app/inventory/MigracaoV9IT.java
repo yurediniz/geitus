@@ -27,7 +27,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * produtos existentes passam a controlar estoque, as tabelas novas comecam
  * vazias e as constraints (saldo nao negativo, coerencia do movimento, motivos,
  * FKs RESTRICT para o produto, FK composta do usuario — DEC-016 — e
- * unicidades) rejeitam dado invalido (docs/modules/produtos-estoque.md, 3).
+ * unicidades) rejeitam dado invalido (docs/modules/estoque.md).
  *
  * <p>Requer Docker disponivel no ambiente.
  */
@@ -246,7 +246,7 @@ class MigracaoV9IT {
         executar(arroz.movimento("ENTRADA", "COMPRA", "AJUSTE_MANUAL", "1", "5", "6"));
     }
 
-    /** Matriz tipo x motivo da spec 4.3, tambem no banco. */
+    /** Matriz tipo x motivo da spec de Estoque, tambem no banco. */
     @Test
     void rejeitaMotivoDeOutroTipo() throws SQLException {
         Cenario cenario = cenarioComUmProduto();

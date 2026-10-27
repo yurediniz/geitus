@@ -12,7 +12,7 @@ import com.geitus.app.cashier.sessao.dto.MensagensDeValor;
 
 /**
  * Valores contados por forma, conferidos contra as formas da sessao
- * (docs/modules/pdv.md, 3.9): o dinheiro sempre e as outras formas quando
+ * (docs/modules/pdv.md): o dinheiro sempre e as outras formas quando
  * tiveram movimento. Cada problema e um 400 com o campo
  * {@code contagens.{FORMA}}, na ordem das formas.
  */

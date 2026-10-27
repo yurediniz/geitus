@@ -7,7 +7,7 @@ import jakarta.persistence.Embeddable;
 
 /**
  * Uma marca que o fornecedor vende (linha de {@code fornecedor_marcas}, V14;
- * docs/modules/fornecedores-e-marcas.md, 4.3).
+ * docs/modules/fornecedores-e-marcas.md).
  *
  * <p>Elemento da colecao do {@link Fornecedor} ({@code @ElementCollection}) e
  * nao um {@code @ManyToMany}: a tabela de ligacao tem a {@code empresa_id} na

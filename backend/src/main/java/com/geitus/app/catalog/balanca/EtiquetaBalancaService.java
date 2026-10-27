@@ -27,8 +27,8 @@ import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 
 /**
- * Regras da etiqueta de balanca (docs/modules/produtos-codigo-e-balanca.md, 3
- * e 8): a configuracao por empresa (ou o padrao), o salvamento com o aviso dos
+ * Regras da etiqueta de balanca (docs/modules/produtos.md):
+ * a configuracao por empresa (ou o padrao), o salvamento com o aviso dos
  * produtos com codigo grande demais e o teste de etiqueta.
  *
  * <p>Como nos demais services, a API publica recebe o {@code idUsuario} do JWT e
@@ -75,7 +75,7 @@ public class EtiquetaBalancaService implements TamanhoDoCodigoNaEtiqueta {
     /**
      * Valida (400) e grava a configuracao da empresa, criando a linha na
      * primeira vez. Devolve tambem os produtos "Vendidos na balanca" cujo
-     * codigo nao cabe no novo tamanho: o aviso nao bloqueia (spec 3.3), e
+     * codigo nao cabe no novo tamanho: o aviso nao bloqueia (spec de Produtos), e
      * esses produtos so voltam a salvar com um codigo menor (Review Focus 3).
      *
      * <p><b>Rastro provisorio</b> ate existir a auditoria: log {@code INFO} so

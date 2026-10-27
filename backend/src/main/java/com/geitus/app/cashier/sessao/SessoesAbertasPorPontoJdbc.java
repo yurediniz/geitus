@@ -17,7 +17,7 @@ import com.geitus.app.cashier.ponto.SituacaoDoPonto;
  * {@code usuario}) que alimentam a lista de pontos. Fica no pacote de sessao,
  * dono da tabela; o de ponto so conhece a interface. O {@link JdbcTemplate}
  * participa da transacao JPA corrente. Toda consulta filtra pela empresa
- * (DEC-016) e nenhuma devolve valores do esperado (modo cego, spec 3.6).
+ * (DEC-016) e nenhuma devolve valores do esperado (modo cego, spec do Caixa).
  */
 @Component
 class SessoesAbertasPorPontoJdbc implements SessoesAbertasPorPonto {

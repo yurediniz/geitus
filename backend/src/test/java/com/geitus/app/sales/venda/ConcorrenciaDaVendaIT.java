@@ -29,7 +29,7 @@ import com.geitus.app.sales.venda.dto.CancelamentoRequest;
 import com.geitus.app.sales.venda.dto.FinalizarVendaRequest;
 
 /**
- * Concorrencia do PDV (docs/modules/pdv.md, 3.6, 3.8 e 8; DT-032), com
+ * Concorrencia do PDV (docs/modules/pdv.md; DT-032), com
  * pedidos simultaneos de verdade ({@link CyclicBarrier}) e varias rodadas:
  * <ul>
  *   <li>duas vendas do ultimo item com "Vender sem estoque" desligada: a trava

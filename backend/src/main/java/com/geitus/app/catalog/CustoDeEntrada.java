@@ -9,7 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Aplica no produto o custo de uma entrada por compra (Fase B4,
- * docs/modules/produtos-custo-entrada.md, 2.2; DEC-038). Fica no catalogo e e
+ * docs/modules/estoque.md; DEC-038). Fica no catalogo e e
  * chamado pelo estoque depois de gravar o movimento, na mesma transacao: o
  * catalogo nao depende do estoque, e uma falha desfaz o movimento, o saldo e o
  * custo juntos.
@@ -37,7 +37,7 @@ public class CustoDeEntrada {
 
     /**
      * O custo do produto passa a ser o {@link #custoDoProduto} da compra, com a
-     * origem {@code ENTRADA_COMPRA} e a data do movimento (spec 4), mesmo sem
+     * origem {@code ENTRADA_COMPRA} e a data do movimento (spec de Estoque), mesmo sem
      * mudar o valor; o historico ganha a linha do custo ligada ao movimento so
      * se o valor mudou. Exige o produto travado e o movimento ja gravado por
      * quem chama.

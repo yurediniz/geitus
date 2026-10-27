@@ -13,7 +13,7 @@ import jakarta.validation.constraints.Size;
 
 /**
  * O carrinho do navegador, corpo do {@code POST /api/pdv/calculo}
- * (docs/modules/pdv.md, 5.3). Regras de quantidade, desconto e pagamento sao
+ * (docs/modules/pdv.md). Regras de quantidade, desconto e pagamento sao
  * conferidas no calculo, que responde 200 com os erros por campo; aqui so o
  * formato ({@link LimitesDoCarrinho}): o limite de 300 linhas e do calculo, e
  * o corpo aceita uma a mais para a mensagem sair de la; acima disso, 400.

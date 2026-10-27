@@ -10,7 +10,7 @@ interface SecaoContatoProps {
   aoAlterarCampo: () => void
 }
 
-/** Contato (spec B5 §8.3, secao 3): telefone, e-mail e observacoes, todos opcionais. */
+/** Contato (spec de Fornecedores e marcas): telefone, e-mail e observacoes, todos opcionais. */
 export function SecaoContato({ desabilitado, aoAlterarCampo }: SecaoContatoProps) {
   const {
     register,

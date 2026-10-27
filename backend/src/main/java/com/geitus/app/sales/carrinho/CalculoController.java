@@ -20,7 +20,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
-/** Calculo do carrinho (docs/modules/pdv.md, 5.3). Controller fino: delega ao {@link CalculoDoCarrinho}. */
+/** Calculo do carrinho (docs/modules/pdv.md). Controller fino: delega ao {@link CalculoDoCarrinho}. */
 @RestController
 @RequestMapping("/api/pdv/calculo")
 @Tag(name = "PDV", description = "Venda no balcao: itens, calculo, vendas e cancelamento")

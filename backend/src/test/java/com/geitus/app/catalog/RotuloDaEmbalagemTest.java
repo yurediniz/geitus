@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 
 import org.junit.jupiter.api.Test;
 
-/** Rotulo da embalagem (docs/modules/produtos-embalagens.md, 2.2): o mesmo texto no backend e no frontend. */
+/** Rotulo da embalagem (docs/modules/produtos.md): o mesmo texto no backend e no frontend. */
 class RotuloDaEmbalagemTest {
 
     @Test

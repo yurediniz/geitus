@@ -38,7 +38,7 @@ import com.geitus.app.shared.paginacao.PaginaResponse;
 import com.geitus.app.shared.paginacao.Paginacao;
 
 /**
- * Regras do estoque do produto (docs/modules/produtos-estoque.md, 4.1 a 4.5;
+ * Regras do estoque do produto (docs/modules/estoque.md;
  * DEC-034).
  *
  * <p>O saldo so muda por {@link #registrarMovimento}, que garante a linha de
@@ -52,15 +52,15 @@ import com.geitus.app.shared.paginacao.Paginacao;
  * e resolve a empresa (DEC-016); produto de outra empresa responde 404. O
  * usuario do movimento e sempre o autenticado.
  *
- * <p>Fase B3 (docs/modules/produtos-embalagens.md, 6): a entrada e a saida
+ * <p>Fase B3 (docs/modules/produtos.md): a entrada e a saida
  * podem ser informadas em embalagens do produto ({@code embalagemId}); o
  * movimento continua em unidades de venda e guarda o retrato da embalagem.
  *
- * <p>Fase B4 (docs/modules/produtos-custo-entrada.md, 2; DEC-038): a entrada
+ * <p>Fase B4 (docs/modules/estoque.md; DEC-038): a entrada
  * por compra exige o custo, gravado no movimento; o {@link CustoDeEntrada} do
  * catalogo o aplica no produto, na mesma transacao.
  *
- * <p>Fase B5 (docs/modules/fornecedores-e-marcas.md, 6; DEC-039): a entrada
+ * <p>Fase B5 (docs/modules/fornecedores-e-marcas.md; DEC-039): a entrada
  * por compra aceita o fornecedor (opcional, ativo, da empresa), gravado no
  * movimento; o {@link FornecedoresDoProduto} do catalogo o liga ao produto, se
  * faltar, e o marca como o da ultima compra, na mesma transacao.
@@ -128,7 +128,7 @@ public class EstoqueService {
     // ---------- API publica (empresa sempre resolvida do usuario do JWT) ----------
 
     /**
-     * Ajuste manual (spec 4.2 a 4.5), numa transacao propria. A mesma chave
+     * Ajuste manual (spec de Estoque), numa transacao propria. A mesma chave
      * na mesma empresa nao grava outro movimento: com os mesmos dados devolve o
      * gravado ({@code criado = false}); com outros, 409.
      *
@@ -151,7 +151,7 @@ public class EstoqueService {
     }
 
     /**
-     * Movimentos do produto, do mais recente para o mais antigo (spec 5).
+     * Movimentos do produto, do mais recente para o mais antigo (spec de Estoque).
      * Leitura para qualquer autenticado; mesmos limites de paginacao do
      * historico de precos; produto de outra empresa, 404. Com o controle
      * desligado, os movimentos guardados continuam aparecendo.
@@ -222,7 +222,7 @@ public class EstoqueService {
     }
 
     /**
-     * PDV (docs/modules/pdv.md, 3.6 e 3.8): a baixa ({@code SAIDA}/{@code VENDA})
+     * PDV (docs/modules/pdv.md): a baixa ({@code SAIDA}/{@code VENDA})
      * ou o estorno ({@code ENTRADA}/{@code CANCELAMENTO_VENDA}) de um item de
      * venda, com a linha de saldo travada. A baixa pode deixar o saldo
      * negativo (a regra "Vender sem estoque" e do PDV); o ajuste manual
@@ -289,7 +289,7 @@ public class EstoqueService {
     }
 
     /**
-     * Fornecedor da compra (spec 6), depois das regras da B4, nesta ordem: so
+     * Fornecedor da compra (spec de Estoque), depois das regras da B4, nesta ordem: so
      * na entrada por compra (400), da empresa (404, DEC-016) e ativo (400).
      * {@code null} sem fornecedor.
      */
@@ -371,7 +371,7 @@ public class EstoqueService {
     }
 
     /**
-     * Custo da compra (spec 2.1 e 2.3), nesta ordem: so na entrada por compra
+     * Custo da compra (spec de Estoque), nesta ordem: so na entrada por compra
      * (400 nos demais), obrigatorio nela (400) e maior que zero, no digitado e
      * no custo que o produto recebe, em centavos (400). {@code null} fora da
      * entrada por compra.
@@ -402,7 +402,7 @@ public class EstoqueService {
         }
     }
 
-    // ---------- Idempotencia (spec 4.5) ----------
+    // ---------- Idempotencia (spec de Estoque) ----------
 
     /** O movimento ja gravado com a chave, se houver; 409 se ele nao for este mesmo pedido. */
     private Optional<ResultadoAjuste> repeticao(Long empresaId, UUID produtoId, AjusteEstoqueRequest request) {

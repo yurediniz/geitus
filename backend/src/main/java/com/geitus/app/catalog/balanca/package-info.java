@@ -1,6 +1,6 @@
 /**
- * Etiqueta de balanca do catalogo (docs/modules/produtos-codigo-e-balanca.md,
- * secao 3; DEC-036).
+ * Etiqueta de balanca do catalogo (docs/modules/produtos.md;
+ * DEC-036).
  *
  * <p>Configuracao por empresa (DEC-016, uma linha no maximo; sem linha vale o
  * padrao), leitor da etiqueta como regra de dominio pura

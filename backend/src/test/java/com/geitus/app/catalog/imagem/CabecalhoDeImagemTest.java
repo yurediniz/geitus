@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 import com.geitus.app.catalog.imagem.CabecalhoDeImagem.Leitura;
 
 /**
- * Leitor de cabecalho (docs/modules/produtos-imagem.md, 4.1 e 8): o tipo real
+ * Leitor de cabecalho (docs/modules/produtos.md): o tipo real
  * pelos primeiros bytes e as dimensoes pelo SOF do JPEG ou pelos blocos do
  * WebP, sem biblioteca nova. Os bytes sao montados no teste.
  */

@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * Promocao do produto no cadastro (docs/modules/produtos-precos.md, 4.3 e 5):
+ * Promocao do produto no cadastro (docs/modules/produtos.md):
  * preco, inicio e fim juntos. O bloco nulo ou ausente no request significa
  * "sem promocao". As comparacoes com o preco de venda, o preco minimo e o
  * periodo ficam no {@code ProdutoService}.

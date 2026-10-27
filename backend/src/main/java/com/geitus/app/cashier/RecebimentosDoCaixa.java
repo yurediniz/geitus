@@ -8,7 +8,7 @@ import com.geitus.app.cashier.sessao.StatusDaSessao;
 import com.geitus.app.iam.UsuarioAutenticado;
 
 /**
- * O que o PDV grava no caixa (docs/modules/pdv.md, 3.6, 3.8 e 5.1): a trava da
+ * O que o PDV grava no caixa (docs/modules/pdv.md): a trava da
  * sessao, os recebimentos da venda e os estornos do cancelamento. Declarada
  * aqui e implementada no proprio {@code cashier}, para que o caixa nao conheca
  * a venda alem do id.

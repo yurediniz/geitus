@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 
 /**
  * Dados de entrada para cadastro ou edicao de uma unidade de medida
- * (docs/modules/categorias-e-unidades.md, secao 3.4).
+ * (docs/modules/produtos.md).
  *
  * <p>Nao inclui {@code empresaId} nem {@code ativo}: a empresa vem do usuario
  * autenticado (DEC-016) e o status so muda por inativar/reativar. A sigla e

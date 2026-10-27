@@ -3,7 +3,7 @@ package com.geitus.app.sales.configuracao;
 import java.math.BigDecimal;
 
 /**
- * O que a configuracao do PDV decide na venda (docs/modules/pdv.md, 3.10):
+ * O que a configuracao do PDV decide na venda (docs/modules/pdv.md):
  * vender sem estoque (padrao ligado) e o desconto maximo do OPERADOR em
  * percentual (padrao 10,00).
  */

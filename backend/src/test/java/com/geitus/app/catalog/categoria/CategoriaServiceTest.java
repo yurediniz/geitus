@@ -38,7 +38,7 @@ import com.geitus.app.iam.UsuarioRepository;
  * Testa as regras do {@link CategoriaService}: isolamento por empresa
  * (DEC-016), nome unico entre irmaos sem diferenciar maiusculas, bloqueio de
  * ciclos ao mover, bloqueio de exclusao com vinculos (mensagens fixas) e
- * inativacao sem cascata (docs/modules/categorias-e-unidades.md, 4.2).
+ * inativacao sem cascata (docs/modules/produtos.md).
  */
 @ExtendWith(MockitoExtension.class)
 class CategoriaServiceTest {

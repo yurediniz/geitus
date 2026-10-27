@@ -29,7 +29,7 @@ import jakarta.persistence.Table;
  * <p>O {@code id} e a PK interna (DEC-015) e nunca sai na API; o identificador
  * publico e o {@code uuid}, gerado aqui na criacao (DEC-019/029).
  *
- * <p>WhatsApp derivado (docs/modules/clientes.md, secao 4): com
+ * <p>WhatsApp derivado (docs/modules/clientes.md): com
  * {@code telefoneEWhatsapp = true} o WhatsApp e o proprio telefone e a coluna
  * {@code whatsapp} deve ficar {@code null}; ela so guarda um numero diferente.
  * A entidade recebe os dados ja normalizados (o service descarta o
@@ -37,7 +37,7 @@ import jakarta.persistence.Table;
  * banco e a ultima barreira. Use {@link #getWhatsappResolvido()} para expor o
  * numero.
  *
- * <p>Fase B2 (V11, docs/modules/produtos-codigo-e-balanca.md, 2.1): o
+ * <p>Fase B2 (V11, docs/modules/produtos.md): o
  * {@code numero} e o numero de registro 1, 2, 3... por empresa, gerado pelo
  * {@code Numerador} na criacao e imutavel ({@code updatable = false}; nao e a PK).
  *

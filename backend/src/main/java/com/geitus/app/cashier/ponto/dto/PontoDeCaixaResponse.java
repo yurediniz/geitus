@@ -6,7 +6,7 @@ import java.util.UUID;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Ponto de caixa na API (docs/modules/caixa.md, 5.3). {@code id} e o UUID
+ * Ponto de caixa na API (docs/modules/caixa.md). {@code id} e o UUID
  * publico (DEC-019). {@code ultimoFundoTroco} e o fundo da abertura anterior
  * (a sugestao da tela; {@code null} sem abertura) e {@code situacao}, o caixa
  * aberto no ponto ({@code null} quando livre).

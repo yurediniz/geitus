@@ -57,7 +57,7 @@ interface Opcao {
 
 /**
  * Combobox de fornecedor com busca no servidor (sem acento, por nome,
- * fantasia, documento, Nº ou representante), so dos ativos (spec B5 §5 e §6).
+ * fantasia, documento, Nº ou representante), so dos ativos (spec de Fornecedores e marcas).
  * Teclado: setas abrem e percorrem a lista, Enter escolhe, Esc fecha.
  */
 export function BuscaDeFornecedor({

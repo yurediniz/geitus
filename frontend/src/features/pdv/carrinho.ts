@@ -1,5 +1,5 @@
 /**
- * O carrinho do PDV (spec `docs/modules/pdv.md` §2, §3.1 e §6.2): a venda em
+ * O carrinho do PDV (spec `docs/modules/pdv.md`): a venda em
  * andamento, que vive so no navegador ate finalizar. Regras puras, sem React:
  * soma na mesma linha, etiqueta sempre em linha nova, limites e o saldo com
  * "Vender sem estoque" desligada. Preco, desconto e total sao sempre do
@@ -301,7 +301,7 @@ export type TravaDaTentativa = 'REDE' | 'OUTROS_DADOS'
 
 /**
  * A tentativa pendente de finalizar a venda (decisao do CTO sobre a spec do
- * PDV §6.3): a chave de idempotencia nasce na primeira tentativa e fica com o
+ * PDV): a chave de idempotencia nasce na primeira tentativa e fica com o
  * carrinho, para ser reenviada igual depois de fechar a janela ou recarregar.
  */
 export interface TentativaDeVenda {

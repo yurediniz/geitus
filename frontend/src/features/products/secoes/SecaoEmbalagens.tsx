@@ -36,7 +36,7 @@ const ID_ADICIONAR = 'embalagens-adicionar'
 const SEM_UNIDADES: readonly UnidadeMedida[] = []
 
 /**
- * Secao Embalagens (spec B3 §5.1): outras formas de vender ou comprar o mesmo
+ * Secao Embalagens (spec de Produtos): outras formas de vender ou comprar o mesmo
  * produto, com estoque unico na unidade de venda. Cada embalagem e um bloco
  * (`BlocoEmbalagem`); "Adicionar embalagem" fica depois da lista, ate 10. No
  * cadastro novo, as embalagens sao gravadas junto com o produto.

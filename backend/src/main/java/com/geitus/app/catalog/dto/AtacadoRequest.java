@@ -7,8 +7,8 @@ import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * Preco de atacado do produto, uma unica faixa (docs/modules/produtos-precos.md,
- * 4.4 e 5): preco e quantidade minima juntos. O bloco nulo ou ausente no
+ * Preco de atacado do produto, uma unica faixa (docs/modules/produtos.md):
+ * preco e quantidade minima juntos. O bloco nulo ou ausente no
  * request significa "sem atacado". As demais regras (maior que 1, fracao pela
  * unidade de venda, comparacoes de preco) ficam no {@code ProdutoService}.
  *

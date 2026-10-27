@@ -25,7 +25,7 @@ interface PontosParaAbrirProps {
 }
 
 /**
- * `/caixa` sem caixa aberto (spec §6.2): os pontos ativos com a situacao e
+ * `/caixa` sem caixa aberto (spec do Caixa): os pontos ativos com a situacao e
  * "Abrir caixa" nos livres. Com um unico ponto ativo e livre, a escolha e
  * pulada ("Abrir o Caixa 1"). O ADMIN ve e abre os caixas de outras pessoas.
  */

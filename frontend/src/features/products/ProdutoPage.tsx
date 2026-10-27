@@ -119,7 +119,7 @@ interface ProdutoSalvo {
 }
 
 /**
- * Grava a mudanca da imagem depois do produto (spec Fase F §5.1): PUT da nova
+ * Grava a mudanca da imagem depois do produto (spec de Produtos): PUT da nova
  * ou DELETE da removida. O 404 no DELETE e a imagem que ja tinha saido.
  * Devolve o produto com a imagem atualizada, ou null se a imagem falhou.
  */
@@ -176,7 +176,7 @@ function mensagemErroSalvar(erro: unknown): string {
   return 'Não foi possível salvar o produto. Tente novamente.'
 }
 
-/** Orientacao somada ao 409 de SKU: a sugestao nao reserva o SKU (spec 4.2). */
+/** Orientacao somada ao 409 de SKU: a sugestao nao reserva o SKU (spec de Produtos). */
 const ORIENTACAO_SKU_DUPLICADO = 'Gere outro SKU ou informe um diferente.'
 
 /** Resumo no topo quando o erro foi levado ao campo (que pode estar numa secao mais abaixo). */
@@ -378,7 +378,7 @@ const SECOES_DO_CADASTRO = SECOES_PRODUTO.filter((secao) => secao !== 'historico
 
 /**
  * Pagina do produto (`/produtos/novo` e `/produtos/:id`): formulario em tela
- * unica, com as secoes empilhadas e a barra de atalhos (spec B2 §4).
+ * unica, com as secoes empilhadas e a barra de atalhos (spec de Produtos).
  * A `key` remonta tudo ao trocar de produto, sem estado herdado do anterior.
  */
 export function ProdutoPage() {
@@ -472,7 +472,7 @@ interface CarregamentoProdutoProps {
 function CarregamentoProduto({ id, voltarPara, somenteLeitura }: CarregamentoProdutoProps) {
   const location = useLocation()
   const navigate = useNavigate()
-  // Cadastro novo salvo sem a imagem (spec Fase F §5.1): a rota so traz a marca, e a imagem esta
+  // Cadastro novo salvo sem a imagem (spec de Produtos): a rota so traz a marca, e a imagem esta
   // na memoria. Lida uma vez ao montar (antes de o produto carregar); depois de recarregar a
   // pagina, a memoria esta vazia e nao ha pendencia.
   const [imagemNaoEnviada] = useState<ImagemNova | null>(() =>
@@ -692,7 +692,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura, imagemNaoEnvia
     return () => assinatura.unsubscribe()
   }, [camposDoErroSalvar, watch])
 
-  // O custo gravado mudou com a pagina aberta (entrada por compra pelo modal de estoque, spec B4):
+  // O custo gravado mudou com a pagina aberta (entrada por compra pelo modal de estoque, spec de Estoque):
   // com o campo intocado, ele passa a mostrar o custo novo (salvar nao o desfaz como "editado");
   // alterado pelo usuario, o valor digitado fica, e a secao Precos avisa a diferenca.
   const custoGravado = produto?.custo ?? null
@@ -854,7 +854,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura, imagemNaoEnvia
       if (acao === 'cadastrarOutro') {
         reset(valoresParaCadastrarOutro(valores))
         setMensagemSucesso(mensagemCadastradoOutro(salvo))
-        // O proximo produto comeca pelo Nome, no topo da tela (spec B2 §4).
+        // O proximo produto comeca pelo Nome, no topo da tela (spec de Produtos).
         irParaCampo({ secao: 'geral', campo: 'nome' })
         return
       }
@@ -1321,7 +1321,7 @@ function FormularioProduto({ produto, voltarPara, somenteLeitura, imagemNaoEnvia
           descricao={
             <>
               <p>Esta ação não pode ser desfeita. Os códigos de barras do produto também serão excluídos.</p>
-              {/* Excluir com saldo so e possivel quando o unico movimento e o estoque inicial (spec 4.7). */}
+              {/* Excluir com saldo so e possivel quando o unico movimento e o estoque inicial (spec de Produtos). */}
               {produto.estoqueAtual > 0 && (
                 <p>{`O estoque inicial de ${formatarQuantidade(produto.estoqueAtual, produto.unidade.sigla)} também será apagado.`}</p>
               )}

@@ -14,7 +14,7 @@ import com.geitus.app.shared.busca.TextoDeBusca;
 
 /**
  * Recalcula a busca dos produtos de uma marca renomeada
- * (docs/modules/fornecedores-e-marcas.md, 3.3; Review Focus 3): os produtos
+ * (docs/modules/fornecedores-e-marcas.md; Review Focus 3): os produtos
  * passam a ser achados pelo nome novo e deixam de ser pelo antigo.
  *
  * <p>Sem carregar entidades e sem N+1 por produto: os textos dos produtos da

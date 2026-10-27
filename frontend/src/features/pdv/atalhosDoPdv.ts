@@ -1,5 +1,5 @@
 /**
- * Atalhos do PDV (spec `docs/modules/pdv.md` §6.2). O campo "Código ou nome"
+ * Atalhos do PDV (spec `docs/modules/pdv.md`). O campo "Código ou nome"
  * tem sempre o foco: as teclas de funcao valem sempre; `+`, `−` e `Del` so
  * com o campo vazio, porque fazem parte do texto lido (`542*-1`).
  */

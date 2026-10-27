@@ -30,7 +30,7 @@ import jakarta.persistence.Table;
  * edicao preserva o formato com que foi gravado (inclusive {@code OUTRO} vindo
  * da migracao). Apenas a ordem e atualizada.
  *
- * <p>Fase B3 (V12, docs/modules/produtos-embalagens.md, 4): o codigo pode ser
+ * <p>Fase B3 (V12, docs/modules/produtos.md): o codigo pode ser
  * de uma {@link ProdutoEmbalagem} do produto ({@code embalagem} preenchida) ou
  * da unidade de venda ({@code embalagem} nula). O codigo da embalagem tambem
  * guarda o produto: a FK composta {@code (empresa_id, produto_id, embalagem_id)}

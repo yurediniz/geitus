@@ -42,7 +42,7 @@ import com.geitus.app.iam.UsuarioRepository;
  * Testa as regras do {@link UnidadeMedidaService}: normalizacao da sigla,
  * sigla unica por empresa, bloqueio de exclusao de unidade em uso (venda ou
  * compra), unidades padrao idempotentes e a regra de quantidade por unidade
- * (docs/modules/categorias-e-unidades.md, 3.2–3.3).
+ * (docs/modules/produtos.md).
  */
 @ExtendWith(MockitoExtension.class)
 class UnidadeMedidaServiceTest {
@@ -166,7 +166,7 @@ class UnidadeMedidaServiceTest {
                 .isInstanceOf(CatalogoNaoEncontradoException.class);
     }
 
-    // ---------- Fase D: unidade usada por produto movimentado (produtos-estoque.md, 4.8) ----------
+    // ---------- Fase D: unidade usada por produto movimentado (estoque.md) ----------
 
     private UnidadeMedida existenteFracionada(String sigla) {
         UnidadeMedida unidade = existente(sigla);

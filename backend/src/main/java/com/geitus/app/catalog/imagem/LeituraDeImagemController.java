@@ -17,8 +17,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
- * Leitura publica da imagem por URL assinada (docs/modules/produtos-imagem.md,
- * 4.2; DEC-040). Sem JWT: a tag {@code <img>} nao o envia, e quem autoriza e a
+ * Leitura publica da imagem por URL assinada (docs/modules/produtos.md;
+ * DEC-040). Sem JWT: a tag {@code <img>} nao o envia, e quem autoriza e a
  * assinatura, conferida antes de qualquer acesso ao banco.
  *
  * <ul>

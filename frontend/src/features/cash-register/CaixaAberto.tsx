@@ -44,7 +44,7 @@ export interface CaixaAbertoProps {
 type Janela = TipoDeLancamento | 'FECHAR' | null
 
 /**
- * `/caixa` com caixa aberto (spec §6.3 e §6.5): cabecalho, aviso do caixa
+ * `/caixa` com caixa aberto (spec do Caixa): cabecalho, aviso do caixa
  * aberto em outro dia, o dinheiro na gaveta (ou a frase do modo cego), as
  * acoes e os movimentos. Em conferencia, a acao e terminar o fechamento.
  */
@@ -63,7 +63,7 @@ export function CaixaAberto({
   const hoje = new Date()
   const emConferencia = sessao.status === 'EM_CONFERENCIA'
   const quem = deOutraPessoa ? sessao.abertaPorNome : 'você'
-  // Caixa esquecido aberto: o titulo fica sem a hora e o aviso diz desde quando (spec §3.5).
+  // Caixa esquecido aberto: o titulo fica sem a hora e o aviso diz desde quando (spec do Caixa).
   const esquecido = abertoEmOutroDia(sessao.abertaEm, hoje)
   const titulo = esquecido
     ? `${sessao.ponto.nome} · aberto por ${quem}`
@@ -247,7 +247,7 @@ function ValoresDaConferencia({
   )
 }
 
-/** ADMIN no proprio caixa: os caixas abertos por outras pessoas, com "Ver caixa" (spec §6.5). */
+/** ADMIN no proprio caixa: os caixas abertos por outras pessoas, com "Ver caixa" (spec do Caixa). */
 function OutrosCaixasAbertos({
   sessaoPropriaId,
   aoVerCaixa,

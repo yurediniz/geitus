@@ -18,7 +18,7 @@ export interface JanelaTotalMudouProps {
 }
 
 /**
- * "O total da venda mudou" (spec do PDV §6.3): um preco ou uma promocao mudou
+ * "O total da venda mudou" (spec do PDV): um preco ou uma promocao mudou
  * entre o calculo e o finalizar. Mostra o total anterior e o novo; confirmar
  * reenvia a venda com o novo total e a mesma chave.
  */

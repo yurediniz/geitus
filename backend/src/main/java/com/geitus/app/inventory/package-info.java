@@ -1,6 +1,6 @@
 /**
  * Modulo de estoque do Geitus (Fase D da evolucao de Produtos; DEC-034,
- * docs/modules/produtos-estoque.md).
+ * docs/modules/estoque.md).
  *
  * <p>O saldo de cada produto e derivado de movimentos imutaveis:
  * <ul>

@@ -8,9 +8,9 @@ import java.util.UUID;
 import com.geitus.app.cashier.DadosDoCaixaInvalidosException;
 
 /**
- * Filtros do historico de sessoes (docs/modules/caixa.md, 5.2), todos
+ * Filtros do historico de sessoes (docs/modules/caixa.md), todos
  * opcionais. O periodo usa as datas de abertura no fuso do negocio
- * ({@code America/Sao_Paulo}, spec 4.5): {@code de} inclui o dia inteiro a
+ * ({@code America/Sao_Paulo}, spec do Caixa): {@code de} inclui o dia inteiro a
  * partir da meia-noite, e {@code ate} tambem, ate a meia-noite do dia
  * seguinte (exclusiva).
  */

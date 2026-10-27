@@ -5,8 +5,8 @@ import java.util.regex.Pattern;
 import com.geitus.app.catalog.RegraDeNegocioException;
 
 /**
- * Formato da etiqueta de balanca de uma empresa (docs/modules/produtos-codigo-e-balanca.md,
- * 3.1): prefixo, digitos do codigo do produto, zeros de preenchimento, o que a
+ * Formato da etiqueta de balanca de uma empresa (docs/modules/produtos.md):
+ * prefixo, digitos do codigo do produto, zeros de preenchimento, o que a
  * informacao traz (valor ou peso), os digitos e as casas decimais dela e se ha
  * o digito verificador EAN-13 no fim.
  *

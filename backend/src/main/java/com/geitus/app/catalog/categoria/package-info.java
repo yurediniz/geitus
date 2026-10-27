@@ -1,5 +1,5 @@
 /**
- * Categorias de produtos em arvore (docs/modules/categorias-e-unidades.md, secao 4).
+ * Categorias de produtos em arvore (docs/modules/produtos.md).
  *
  * <p>Cadastro por empresa (DEC-016), identificado pelo {@code uuid}
  * (DEC-019/029), com profundidade ilimitada. A arvore inteira da empresa e

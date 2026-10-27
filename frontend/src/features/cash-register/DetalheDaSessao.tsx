@@ -16,7 +16,7 @@ interface DetalheDaSessaoProps {
 }
 
 /**
- * Painel lateral do historico (spec §6.6): os movimentos e a fotografia do
+ * Painel lateral do historico (spec do Caixa): os movimentos e a fotografia do
  * fechamento de uma sessao, buscados pelo id (a lista vem sem movimentos).
  */
 export function DetalheDaSessao({ sessao, aoFechar }: DetalheDaSessaoProps) {

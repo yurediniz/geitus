@@ -32,7 +32,7 @@ const MENSAGEM_VALOR = 'Informe um valor maior que zero.'
 const MENSAGEM_PERCENTUAL = 'Informe um percentual de 0 a 100, com até 2 casas.'
 
 /**
- * Desconto do item (F4) e do total (Shift+F4), em R$ ou % (spec do PDV §3.3).
+ * Desconto do item (F4) e do total (Shift+F4), em R$ ou % (spec do PDV).
  * O limite do operador e o preco minimo sao conferidos pelo servidor: o erro
  * aparece na linha ou no total, e o pagamento fica bloqueado ate corrigir.
  */

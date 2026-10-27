@@ -61,7 +61,7 @@ function arrastaArquivos(event: DragEvent<HTMLDivElement>): boolean {
 }
 
 /**
- * Quadro da imagem do produto na secao Geral (spec Fase F §5.1): a foto
+ * Quadro da imagem do produto na secao Geral (spec de Produtos): a foto
  * inteira (sem cortar), "Sem imagem" sem ela, e as acoes Adicionar ou
  * Trocar, Girar e Remover. A mudanca so grava com o Salvar da tela. O
  * arrastar e soltar no quadro tem o botao como equivalente; o andamento e

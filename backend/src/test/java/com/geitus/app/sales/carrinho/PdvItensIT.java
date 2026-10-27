@@ -22,7 +22,7 @@ import com.geitus.app.sales.CenarioDoPdv.NovoProduto;
 import com.geitus.app.sales.IntegracaoDoPdv;
 
 /**
- * {@code GET /api/pdv/itens} (docs/modules/pdv.md, 3.1 e 5.3): codigo do
+ * {@code GET /api/pdv/itens} (docs/modules/pdv.md): codigo do
  * produto, codigo de barras da unidade e da embalagem, etiqueta de balanca,
  * recusas e a busca por nome, sempre na empresa do usuario e sem o custo.
  */

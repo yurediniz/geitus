@@ -4,7 +4,7 @@ import { camposParaMensagens } from '@/features/pdv/mensagensDoCalculo'
 import { HttpError } from '@/services/httpClient'
 import type { MensagemDoCalculo } from '@/types/pdv'
 
-/** Mensagens do servidor (spec do PDV §3.6) que dizem que o caixa do usuario mudou. */
+/** Mensagens do servidor (spec do PDV) que dizem que o caixa do usuario mudou. */
 export const MENSAGEM_ABRA_O_CAIXA = 'Abra o caixa para vender.'
 export const MENSAGEM_TERMINE_O_FECHAMENTO = 'Termine o fechamento do caixa antes de vender.'
 export const MENSAGEM_TOTAL_MUDOU = 'O total da venda mudou. Confira os valores.'

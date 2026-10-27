@@ -38,7 +38,7 @@ import com.geitus.app.shared.busca.TextoDeBusca;
 import com.geitus.app.shared.formato.FormatoBrasileiro;
 
 /**
- * Resolve o que o operador leu ou buscou (docs/modules/pdv.md, 3.1 e 5.3):
+ * Resolve o que o operador leu ou buscou (docs/modules/pdv.md):
  * {@code GET /api/pdv/itens?codigo=} devolve o item para o carrinho (unidade,
  * embalagem ou etiqueta) e {@code ?busca=} ate 20 produtos ativos. Sempre na
  * empresa do usuario (DEC-016); nunca o custo.

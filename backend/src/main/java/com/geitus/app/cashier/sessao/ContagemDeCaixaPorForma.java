@@ -16,7 +16,7 @@ import jakarta.persistence.Table;
 /**
  * Contagem de uma forma que nao e dinheiro (Debito, Credito ou PIX) no
  * fechamento da sessao (tabela {@code contagens_caixa}, V17;
- * docs/modules/pdv.md, 3.9 e 4.4). O dinheiro continua nas colunas da propria
+ * docs/modules/pdv.md). O dinheiro continua nas colunas da propria
  * {@link SessaoDeCaixa}.
  *
  * <p>Fotografia imutavel: gravada uma vez, junto com a contagem e antes de a

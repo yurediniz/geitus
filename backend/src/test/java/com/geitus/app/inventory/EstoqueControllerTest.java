@@ -41,7 +41,7 @@ import com.geitus.app.shared.error.GlobalExceptionHandler;
 import com.geitus.app.shared.paginacao.PaginaResponse;
 
 /**
- * Contrato HTTP dos endpoints de estoque do produto (spec 5): ajuste so para
+ * Contrato HTTP dos endpoints de estoque do produto (spec de Estoque): ajuste so para
  * ADMIN (regra {@code POST /api/produtos/**} do {@code SecurityConfig}),
  * leitura dos movimentos para qualquer autenticado, 201 x 200 pela chave e os
  * erros de entrada. Fatia web sem banco; o {@link EstoqueService} e mockado.

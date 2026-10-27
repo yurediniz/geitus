@@ -10,7 +10,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /**
- * Contagem do caixa por forma de pagamento (docs/modules/pdv.md, 3.9 e 5.3):
+ * Contagem do caixa por forma de pagamento (docs/modules/pdv.md):
  * {@code { "contagens": { "DINHEIRO": 318.00, "DEBITO": 120.00 }, "justificativa": null }}.
  * O dinheiro e sempre contado; Debito, Credito e PIX, quando tiveram movimento
  * na sessao ({@code formasDaContagem} da sessao). Cada valor (de 0 a

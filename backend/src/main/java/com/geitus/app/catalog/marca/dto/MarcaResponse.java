@@ -9,7 +9,7 @@ import com.geitus.app.catalog.arvore.Arvore;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Representacao publica de uma {@link Marca} (docs/modules/fornecedores-e-marcas.md, 3.2).
+ * Representacao publica de uma {@link Marca} (docs/modules/fornecedores-e-marcas.md).
  *
  * <p>Lista plana: o frontend monta a arvore pelo {@code parentId}. Ids sao
  * UUIDs publicos; a PK numerica e o {@code empresaId} nunca saem na API.

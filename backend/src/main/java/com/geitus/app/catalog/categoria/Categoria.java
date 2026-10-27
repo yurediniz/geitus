@@ -20,8 +20,8 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 /**
- * Categoria de produtos em arvore (docs/modules/categorias-e-unidades.md,
- * secao 4). {@code pai == null} indica categoria raiz.
+ * Categoria de produtos em arvore (docs/modules/produtos.md).
+ * {@code pai == null} indica categoria raiz.
  *
  * <p>Pertence a uma empresa (DEC-016); empresa e {@code uuid} sao imutaveis, e
  * o pai deve ser sempre da mesma empresa (verificado aqui como defesa extra,

@@ -19,8 +19,8 @@ import com.geitus.app.shared.paginacao.PaginaResponse;
 import com.geitus.app.shared.paginacao.Paginacao;
 
 /**
- * Regras da lista de fornecedores do produto (docs/modules/fornecedores-e-marcas.md,
- * 4.4, 5 e 6), a mesma lista vista pelo produto e pelo fornecedor. Implementa
+ * Regras da lista de fornecedores do produto (docs/modules/fornecedores-e-marcas.md),
+ * a mesma lista vista pelo produto e pelo fornecedor. Implementa
  * a visao do fornecedor ({@link ProdutosDoFornecedor}) e e usada pelo
  * {@code ProdutoService} (lista no cadastro) e pelo estoque (entrada por
  * compra).
@@ -65,7 +65,7 @@ public class FornecedoresDoProduto implements ProdutosDoFornecedor {
         this.nomesDeFornecedores = nomesDeFornecedores;
     }
 
-    // ---------- Pelo produto (spec 5) ----------
+    // ---------- Pelo produto (spec de Fornecedores e marcas) ----------
 
     /**
      * Valida a lista do request antes de gravar o produto, nesta ordem: ate
@@ -118,7 +118,7 @@ public class FornecedoresDoProduto implements ProdutosDoFornecedor {
         produto.definirFornecedorDaUltimaCompra(plano.ultimaCompraId());
     }
 
-    // ---------- Pela entrada por compra (spec 6) ----------
+    // ---------- Pela entrada por compra (spec de Fornecedores e marcas) ----------
 
     /**
      * Na transacao do ajuste, com o produto travado: o fornecedor (ja
@@ -132,7 +132,7 @@ public class FornecedoresDoProduto implements ProdutosDoFornecedor {
         produto.definirFornecedorDaUltimaCompra(fornecedorId);
     }
 
-    // ---------- Pelo fornecedor (spec 4.4) ----------
+    // ---------- Pelo fornecedor (spec de Fornecedores e marcas) ----------
 
     @Override
     @Transactional(readOnly = true)

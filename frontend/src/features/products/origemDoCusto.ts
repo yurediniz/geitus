@@ -1,6 +1,6 @@
 /**
- * Textos da origem do custo do produto (Fase B4, docs/modules/produtos-custo-entrada.md
- * §3 e §4): a nota da secao Precos e a origem nas linhas de custo do Historico.
+ * Textos da origem do custo do produto (Fase B4, docs/modules/estoque.md):
+ * a nota da secao Precos e a origem nas linhas de custo do Historico.
  * Sem React: testavel isolado.
  */
 import { formatarData, formatarMoeda } from '@/features/products/formatacaoProduto'
@@ -18,10 +18,10 @@ function embalagensDaCompra(compra: {
 }
 
 /**
- * Nota abaixo do campo Custo (spec B4 §4): "Último custo de entrada: R$ 10,00
+ * Nota abaixo do campo Custo (spec de Estoque): "Último custo de entrada: R$ 10,00
  * por UN, em 24/10/2026 (compra de 2 CX c/ 18 UN)." (a compra so quando foi em
  * embalagem) ou "Custo editado manualmente em 24/10/2026.". Com o fornecedor da
- * compra (spec B5 §6), ele vem no fim: "..., de Distribuidora Sul.". Null sem
+ * compra (spec de Fornecedores e marcas), ele vem no fim: "..., de Distribuidora Sul.". Null sem
  * origem (produto anterior a Fase B4) ou sem custo.
  */
 export function notaDaOrigemDoCusto(

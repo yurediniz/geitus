@@ -16,7 +16,7 @@ interface CamposFornecedoresDoProdutoProps {
 const NENHUM = ''
 
 /**
- * "Fornecedores" e "Fornecedor da última compra" na secao Geral (spec B5 §5):
+ * "Fornecedores" e "Fornecedor da última compra" na secao Geral (spec de Fornecedores e marcas):
  * a lista com busca (so ativos; os inativos ja ligados ficam marcados
  * "(inativo)"), ate 20, e o da ultima compra escolhido entre os da lista. Tirar
  * da lista o fornecedor da ultima compra limpa esse campo.
@@ -41,7 +41,7 @@ export function CamposFornecedoresDoProduto({ desabilitado, aoAlterarCampo }: Ca
   const definirLista = (proxima: ProdutoFormValues['fornecedores']) => {
     setValue('fornecedores', proxima, { shouldDirty: true, shouldValidate: true })
     if (ultimaCompraId !== null && !proxima.some((fornecedor) => fornecedor.id === ultimaCompraId)) {
-      // O da ultima compra saiu da lista: o campo e limpo (spec B5 §5, Review Focus 1).
+      // O da ultima compra saiu da lista: o campo e limpo (spec de Fornecedores e marcas, Review Focus 1).
       setValue('fornecedorUltimaCompraId', null, { shouldDirty: true })
       clearErrors('fornecedorUltimaCompraId')
       setUltimaCompraSaiu(true)

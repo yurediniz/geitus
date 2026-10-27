@@ -13,7 +13,7 @@ import com.geitus.app.sales.venda.StatusDaVenda;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Venda na API (docs/modules/pdv.md, 5.3). Horarios em ISO-8601 no fuso
+ * Venda na API (docs/modules/pdv.md). Horarios em ISO-8601 no fuso
  * {@code America/Sao_Paulo}. Nunca traz o custo.
  *
  * <ul>

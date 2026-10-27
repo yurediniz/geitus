@@ -372,7 +372,7 @@ class EstoqueServiceIT {
         assertThat(cenario.contarMovimentos(produtoDaB)).isEqualTo(1);
     }
 
-    // ---------- Em embalagens (Fase B3, docs/modules/produtos-embalagens.md, 6) ----------
+    // ---------- Em embalagens (Fase B3, docs/modules/produtos.md) ----------
 
     /** Fase B4: a entrada por compra leva o custo (de 1 caixa); os demais, nenhum. */
     private static AjusteEstoqueRequest emCaixas(TipoMovimento tipo, String caixas, MotivoMovimento motivo,

@@ -1,5 +1,5 @@
 /**
- * Regras do ajuste de estoque na tela (spec 4.2 e 4.3), sem React: motivos
+ * Regras do ajuste de estoque na tela (spec de Estoque), sem React: motivos
  * por tipo, previa do saldo, validacao do modal e o texto de uma linha do
  * historico. O backend aplica as mesmas regras; aqui elas evitam o envio.
  */
@@ -50,7 +50,7 @@ export function motivosDoTipo(tipo: TipoMovimento): MotivoMovimento[] {
   return [...MOTIVOS_POR_TIPO[tipo]]
 }
 
-/** Motivo ja escolhido ao trocar para o tipo: Compra na entrada e Contagem na contagem; a saida abre sem motivo (spec 6.2). */
+/** Motivo ja escolhido ao trocar para o tipo: Compra na entrada e Contagem na contagem; a saida abre sem motivo (spec de Estoque). */
 export function motivoPadrao(tipo: TipoMovimento): MotivoMovimento | '' {
   if (tipo === 'ENTRADA') {
     return 'COMPRA'
@@ -110,7 +110,7 @@ export interface QuantidadeEmEmbalagem {
 
 /**
  * "Saldo: 12 UN → 10 UN"; na contagem, com a diferenca: "Saldo: 12 UN → 10 UN
- * (−2 UN)"; em embalagens (spec B3 §6): "2 CX c/ 18 UN = +36 UN · saldo 10 → 46".
+ * (−2 UN)"; em embalagens (spec de Produtos): "2 CX c/ 18 UN = +36 UN · saldo 10 → 46".
  * Null sem movimento.
  */
 export function textoDaPrevia(
@@ -162,7 +162,7 @@ export function rotuloConfirmar(
 /**
  * Mensagem da tela depois do ajuste gravado. Na entrada por compra, com o
  * custo do produto antes do ajuste (`custoAnterior`), avisa o custo novo
- * quando ele mudou: "... Custo atualizado para R$ 10,00." (spec B4 §7.1).
+ * quando ele mudou: "... Custo atualizado para R$ 10,00." (spec de Estoque).
  */
 export function mensagemDeSucesso(movimento: MovimentoEstoque, sigla: string, custoAnterior?: number | null): string {
   const saldoNovo = formatarQuantidade(movimento.saldoNovo, sigla)
@@ -220,7 +220,7 @@ export interface ContextoAjuste {
 export type CampoAjuste = 'tipo' | 'quantidade' | 'embalagemId' | 'custo' | 'fornecedorId' | 'motivo' | 'observacao'
 
 /**
- * Embalagem que o seletor "Em" traz ao trocar o tipo ou o motivo (spec B3 §6):
+ * Embalagem que o seletor "Em" traz ao trocar o tipo ou o motivo (spec de Produtos):
  * a de compra na Entrada com motivo Compra; senao, a unidade de venda ('').
  */
 export function embalagemPadrao(
@@ -292,7 +292,7 @@ function erroDaQuantidade(
   return { valor, erro: previa.erro, confere: previa.confere !== null }
 }
 
-/** Quantidade em embalagens com fracao, zero ou negativa (a mensagem da API, spec B3 §6). */
+/** Quantidade em embalagens com fracao, zero ou negativa (a mensagem da API, spec de Produtos). */
 export const MENSAGEM_EMBALAGENS_INTEIRAS = 'Informe um número inteiro de embalagens.'
 
 /**
@@ -330,12 +330,12 @@ export function validarAjuste(dados: DadosAjuste, contexto: ContextoAjuste): Res
   return { quantidade: valor, erros, confere }
 }
 
-// --- Custo da entrada por compra (Fase B4, docs/modules/produtos-custo-entrada.md) ---
+// --- Custo da entrada por compra (Fase B4, docs/modules/estoque.md) ---
 
 export const MENSAGEM_CUSTO_OBRIGATORIO = 'Informe o custo da compra.'
 export const MENSAGEM_CUSTO_POSITIVO = 'O custo deve ser maior que zero.'
 
-/** So a Entrada com motivo Compra/recebimento exige (e aceita) o custo (spec B4 §2.1). */
+/** So a Entrada com motivo Compra/recebimento exige (e aceita) o custo (spec de Estoque). */
 export function exigeCusto(tipo: TipoMovimento, motivo: MotivoMovimento | ''): boolean {
   return tipo === 'ENTRADA' && motivo === 'COMPRA'
 }
@@ -412,7 +412,7 @@ export function textoDoCustoPorUnidade(custoUnidade: string, sigla: string): str
 }
 
 /**
- * O custo na previa do ajuste (spec B4 §7.1), numa linha propria abaixo da do
+ * O custo na previa do ajuste (spec de Estoque), numa linha propria abaixo da do
  * saldo: "Custo: R$ 9,50 → R$ 10,00 por UN", "Custo: R$ 10,00 por UN (sem
  * mudança)" com o custo igual ao atual e "Custo: R$ 10,00 por UN" no produto
  * ainda sem custo. Null sem custo digitado.
@@ -464,7 +464,7 @@ export interface TextoMovimento {
   saldosFalados: string
   /** Custo da entrada por compra: "R$ 180,00 por CX (R$ 10,00 por UN)"; null nos demais movimentos. */
   custo: string | null
-  /** "Fornecedor: Distribuidora Sul" da entrada por compra com fornecedor (spec B5 §6); null sem. */
+  /** "Fornecedor: Distribuidora Sul" da entrada por compra com fornecedor (spec de Fornecedores e marcas); null sem. */
   fornecedor: string | null
 }
 

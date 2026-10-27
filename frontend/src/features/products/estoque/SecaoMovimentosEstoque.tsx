@@ -57,7 +57,7 @@ function LinhaMovimento({ movimento, sigla }: { movimento: MovimentoEstoque; sig
           <span aria-hidden="true"> · </span>
           <span className="sr-only">, por </span>
           <span>{movimento.usuarioNome}</span>
-          {/* Na entrada por compra com fornecedor (spec B5 §6): "· Fornecedor: Distribuidora Sul". */}
+          {/* Na entrada por compra com fornecedor (spec de Fornecedores e marcas): "· Fornecedor: Distribuidora Sul". */}
           {fornecedor && (
             <>
               <span aria-hidden="true"> · </span>
@@ -71,7 +71,7 @@ function LinhaMovimento({ movimento, sigla }: { movimento: MovimentoEstoque; sig
       <div className="flex flex-wrap items-baseline justify-end gap-x-3 gap-y-0.5 text-sm tabular-nums">
         <span>
           <span className="font-semibold">{quantidade}</span>
-          {/* Na entrada por compra, o custo (spec B4 §7.2): "· R$ 180,00 por CX (R$ 10,00 por UN)". */}
+          {/* Na entrada por compra, o custo (spec de Estoque): "· R$ 180,00 por CX (R$ 10,00 por UN)". */}
           {custo && <span className="text-muted-foreground">{` · ${custo}`}</span>}
         </span>
         <span className="text-muted-foreground">

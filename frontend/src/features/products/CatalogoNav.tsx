@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 
 import { cn } from '@/lib/utils'
 
-/** Abas na ordem da spec B5 §2. `subrotas`: a aba continua ativa nas paginas dentro dela (ex.: um fornecedor). */
+/** Abas na ordem da spec de Fornecedores e marcas. `subrotas`: a aba continua ativa nas paginas dentro dela (ex.: um fornecedor). */
 const ABAS = [
   { rotulo: 'Produtos', to: '/produtos', subrotas: false },
   { rotulo: 'Categorias', to: '/produtos/categorias', subrotas: false },

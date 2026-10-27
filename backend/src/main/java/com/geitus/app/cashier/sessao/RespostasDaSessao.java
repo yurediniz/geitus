@@ -33,9 +33,9 @@ import com.geitus.app.iam.UsuarioRepository;
 
 /**
  * Monta a {@link SessaoDeCaixaResponse} para quem consulta, num lugar so,
- * para que o modo cego valha em todas as rotas (docs/modules/caixa.md, 3.6 e
- * 7): com o fechamento cego ligado e a sessao {@code ABERTA}, o OPERADOR nao
- * recebe o esperado de nenhuma forma (docs/modules/pdv.md, 3.9). Depois da
+ * para que o modo cego valha em todas as rotas (docs/modules/caixa.md):
+ * com o fechamento cego ligado e a sessao {@code ABERTA}, o OPERADOR nao
+ * recebe o esperado de nenhuma forma (docs/modules/pdv.md). Depois da
  * contagem, o esperado e a fotografia gravada e todos o veem.
  *
  * <p>Nos movimentos vale a mesma regra: com a sessao aberta e o modo cego, o

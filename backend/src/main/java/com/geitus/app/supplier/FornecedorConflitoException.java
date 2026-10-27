@@ -5,7 +5,7 @@ import java.util.Optional;
 /**
  * Conflito no cadastro do fornecedor: documento ja usado por outro fornecedor
  * da empresa ou exclusao de fornecedor com produtos ou entradas
- * (docs/modules/fornecedores-e-marcas.md, 4.5 e 4.6). Mapeada para 409, com o
+ * (docs/modules/fornecedores-e-marcas.md). Mapeada para 409, com o
  * campo quando o conflito e de um campo.
  */
 public class FornecedorConflitoException extends RuntimeException {

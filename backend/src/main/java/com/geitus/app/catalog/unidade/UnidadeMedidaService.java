@@ -24,7 +24,7 @@ import com.geitus.app.iam.UsuarioRepository;
 
 /**
  * Regras de negocio das unidades de medida
- * (docs/modules/categorias-e-unidades.md, secao 3).
+ * (docs/modules/produtos.md).
  *
  * <p>Mesmo desenho do {@code ClienteService}: a API publica para o controller
  * e composta pelos metodos {@code *ParaUsuario}, que recebem o
@@ -163,7 +163,7 @@ public class UnidadeMedidaService {
     /**
      * Unidade usada por produto com movimentos de estoque nao deixa de ser
      * fracionada: as quantidades fracionadas ja gravadas ficariam invalidas
-     * (docs/modules/produtos-estoque.md, 4.8; DEC-031). Tambem nao deixa
+     * (docs/modules/estoque.md; DEC-031). Tambem nao deixa
      * quando um produto com esta unidade de venda tem embalagem com quantidade
      * fracionada (Fase B3): a embalagem ficaria invalida. As duas regras
      * respondem 400 no campo {@code fracionada}. Ligar a fracao e livre.
@@ -186,7 +186,7 @@ public class UnidadeMedidaService {
     }
 
     /**
-     * Sigla sem espacos nas pontas e em maiusculas (spec 3.1). O tamanho e
+     * Sigla sem espacos nas pontas e em maiusculas (spec de Produtos). O tamanho e
      * conferido de novo DEPOIS de normalizar: a caixa alta pode aumentar o
      * texto (ex.: "ß" vira "SS"), e o {@code @Size} do request so viu o valor
      * original — sem isto, o banco recusaria com erro generico.

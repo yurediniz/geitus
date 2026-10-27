@@ -45,27 +45,27 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * {@code atacado} saem {@code null} quando nao existem; {@code emPromocao} e
  * {@code true} so com a promocao vigente.
  *
- * <p>Fase D (docs/modules/produtos-estoque.md, 5): {@code estoqueAtual} e o
+ * <p>Fase D (docs/modules/estoque.md): {@code estoqueAtual} e o
  * saldo guardado, mesmo com o controle desligado; {@code situacaoEstoque} e
  * calculada e vem {@code null} sem controle.
  *
- * <p>Fase B3 (docs/modules/produtos-embalagens.md, 7): {@code embalagens} na
+ * <p>Fase B3 (docs/modules/produtos.md): {@code embalagens} na
  * ordem, com o preco efetivo na data de {@code hoje}; {@code codigosBarras}
  * continua so com os codigos da unidade de venda.
  *
- * <p>Fase B2 (docs/modules/produtos-codigo-e-balanca.md, 8): {@code numero}
+ * <p>Fase B2 (docs/modules/produtos.md): {@code numero}
  * (numero de registro na empresa), {@code codigo} (sem zeros a esquerda, ou
  * {@code null}) e {@code vendidoBalanca}.
  *
- * <p>Fase B4 (docs/modules/produtos-custo-entrada.md, 4): {@code custoOrigem}
+ * <p>Fase B4 (docs/modules/estoque.md): {@code custoOrigem}
  * diz de onde veio o custo atual ({@code null} sem origem); a quantidade e a
  * embalagem da ultima compra so vem no detalhe e nas respostas de gravacao.
  *
- * <p>Fase B5 (docs/modules/fornecedores-e-marcas.md, 3.3 e 5): {@code marca}
+ * <p>Fase B5 (docs/modules/fornecedores-e-marcas.md): {@code marca}
  * com o caminho, {@code fornecedores} por nome e {@code fornecedorUltimaCompra}
  * (um deles, ou {@code null}); a origem do custo cita o fornecedor da compra.
  *
- * <p>Fase F (docs/modules/produtos-imagem.md, 4.3): {@code imagem} com as URLs
+ * <p>Fase F (docs/modules/produtos.md): {@code imagem} com as URLs
  * relativas ja assinadas e as dimensoes da versao grande, ou {@code null}.
  */
 @Schema(description = "Dados publicos de um produto")

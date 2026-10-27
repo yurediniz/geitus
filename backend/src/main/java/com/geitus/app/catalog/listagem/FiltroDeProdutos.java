@@ -8,7 +8,7 @@ import java.util.Set;
 import com.geitus.app.shared.busca.TextoDeBusca;
 
 /**
- * Filtros ja resolvidos da listagem (spec 4.1 e 4.2), todos combinados com E.
+ * Filtros ja resolvidos da listagem (spec de Produtos), todos combinados com E.
  *
  * @param empresaId     empresa do usuario autenticado (DEC-016), obrigatoria
  * @param palavras      palavras normalizadas do termo ({@link TextoDeBusca#palavras}); vazia = sem busca por texto

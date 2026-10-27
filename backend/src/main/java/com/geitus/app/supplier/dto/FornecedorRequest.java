@@ -12,7 +12,7 @@ import jakarta.validation.constraints.Size;
 
 /**
  * Dados de entrada para cadastrar ou atualizar um fornecedor
- * (docs/modules/fornecedores-e-marcas.md, 4.1 e 4.7).
+ * (docs/modules/fornecedores-e-marcas.md).
  *
  * <p>Sem {@code empresaId}, {@code numero} nem {@code ativo}: a empresa vem do
  * JWT (DEC-016), o numero e gerado e o status muda so por inativar/reativar.

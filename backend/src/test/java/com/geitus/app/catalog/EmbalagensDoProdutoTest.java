@@ -25,8 +25,8 @@ import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 import com.geitus.app.company.Empresa;
 
 /**
- * Regras das embalagens do produto (docs/modules/produtos-embalagens.md, 2 e
- * 3.3): uma asserção por mensagem da spec 2.3, com o campo indexado, e a
+ * Regras das embalagens do produto (docs/modules/produtos.md):
+ * uma asserção por mensagem da spec de Produtos, com o campo indexado, e a
  * reconciliacao por {@code id}.
  */
 @ExtendWith(MockitoExtension.class)
@@ -187,7 +187,7 @@ class EmbalagensDoProdutoTest {
                 "O preço da embalagem deve ser maior que zero.", "embalagens[0].preco");
     }
 
-    /** Spec 3.3: preco &lt; minimo x quantidade, sem divisao; o valor por unidade e truncado. */
+    /** Spec de Produtos: preco &lt; minimo x quantidade, sem divisao; o valor por unidade e truncado. */
     @Test
     void precoAbaixoDoMinimoPorUnidade() {
         assertThatCode(() -> planejar(un, "70.00", embalagem(cx, "3", "210.00", false))).doesNotThrowAnyException();

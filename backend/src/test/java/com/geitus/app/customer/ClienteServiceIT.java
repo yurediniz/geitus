@@ -34,7 +34,7 @@ import com.geitus.app.iam.UsuarioRepository;
 
 /**
  * Teste de integracao do numero de registro dos clientes (Fase B2,
- * docs/modules/produtos-codigo-e-balanca.md, 2.1 e 2.2) com o contexto Spring
+ * docs/modules/produtos.md) com o contexto Spring
  * completo, transacoes reais e um PostgreSQL real (Testcontainers).
  *
  * <p>Sem {@code @Transactional} na classe: cada chamada abre e confirma a propria

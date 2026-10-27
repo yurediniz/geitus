@@ -6,7 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Um produto que o fornecedor vende, na lista da tela do fornecedor
- * (docs/modules/fornecedores-e-marcas.md, 4.4 e 8.3): Nº, nome e codigos, e se
+ * (docs/modules/fornecedores-e-marcas.md): Nº, nome e codigos, e se
  * este fornecedor e o da ultima compra do produto (a tela avisa antes de
  * remover).
  */

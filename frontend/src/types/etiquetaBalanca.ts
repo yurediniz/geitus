@@ -1,5 +1,5 @@
 /**
- * Tipos da etiqueta de balanca (spec produtos-codigo-e-balanca §3 e §8).
+ * Tipos da etiqueta de balanca (spec de Produtos).
  *
  * Refletem o contrato de /api/etiqueta-balanca: uma configuracao por empresa
  * (sem configuracao gravada, a API devolve o padrao com `padrao: true`).

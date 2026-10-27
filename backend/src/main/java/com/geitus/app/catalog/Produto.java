@@ -49,35 +49,35 @@ import jakarta.persistence.Table;
  * setters individuais), garantindo que as alteracoes passem pelas regras do
  * {@code ProdutoService}.
  *
- * <p>Unidade de venda (obrigatoria) e categoria sao cadastros da mesma empresa (docs/modules/categorias-e-unidades.md, secao 5);
+ * <p>Unidade de venda (obrigatoria) e categoria sao cadastros da mesma empresa (docs/modules/produtos.md);
  * o service valida a empresa e a V6 garante no banco com FKs compostas
  * {@code (empresa_id, id)}.
  *
- * <p>Fase B (V7, docs/modules/produtos-identificacao-e-formulario.md): o
+ * <p>Fase B (V7, docs/modules/produtos.md): o
  * produto tem de 0 a 20 {@link ProdutoCodigoBarras} — parte do cadastro, por
  * isso {@code cascade} e {@code orphanRemoval} — e nome curto.
  *
- * <p>Fase D (V9, docs/modules/produtos-estoque.md): o produto tem a flag
+ * <p>Fase D (V9, docs/modules/estoque.md): o produto tem a flag
  * {@code controlaEstoque}; o saldo fica no pacote {@code inventory}, derivado
  * de movimentos, e nunca e um campo do produto.
  *
- * <p>Fase E (V10, docs/modules/produtos-listagem.md): {@code buscaNormalizada}
+ * <p>Fase E (V10, docs/modules/produtos.md): {@code buscaNormalizada}
  * e {@code nomeNormalizado} sao derivadas do cadastro e recalculadas a cada
  * {@link #atualizarDadosBasicos}, para a busca sem acento e a ordenacao da lista.
  *
- * <p>Fase B2 (V11, docs/modules/produtos-codigo-e-balanca.md): o {@code numero}
+ * <p>Fase B2 (V11, docs/modules/produtos.md): o {@code numero}
  * e o numero de registro 1, 2, 3... por empresa, gerado pelo {@code Numerador}
  * na criacao e imutavel ({@code updatable = false}; nao e a PK). O
  * {@code codigo} (1 a 999999, opcional) e o "vendido na balanca" sao dados do
  * cadastro.
  *
- * <p>Fase B3 (V12, docs/modules/produtos-embalagens.md): o produto tem de 0 a
+ * <p>Fase B3 (V12, docs/modules/produtos.md): o produto tem de 0 a
  * 10 {@link ProdutoEmbalagem} (cascade e orphanRemoval), que substituem a
  * antiga unidade de compra + fator. A colecao {@code codigosBarras} so traz os
  * codigos da unidade de venda ({@code embalagem_id IS NULL}); os das
  * embalagens ficam em cada embalagem.
  *
- * <p>Fase B4 (V13, docs/modules/produtos-custo-entrada.md): o produto guarda a
+ * <p>Fase B4 (V13, docs/modules/estoque.md): o produto guarda a
  * origem do custo atual ({@link OrigemDoCusto}) e quando ela foi registrada.
  *
  * <p>Fase B5 (V14, docs/modules/fornecedores-e-marcas.md): a marca e um item
@@ -309,7 +309,7 @@ public class Produto {
     }
 
     /**
-     * Invariante da origem do custo (spec 4; V13): sem custo, sem origem; o
+     * Invariante da origem do custo (spec de Estoque; V13): sem custo, sem origem; o
      * custo que mudou pelo cadastro (inclusive vazio -> valor) vira
      * {@code EDICAO} em {@code agora}; o mesmo custo (10 = 10,00) mantem a
      * origem e a data, mesmo a de uma entrada por compra (Review Focus 2).
@@ -328,7 +328,7 @@ public class Produto {
 
     /**
      * Colunas da busca (V10) sempre coerentes com o nome, o nome curto, o SKU e
-     * o nome da marca (nao o caminho, spec 3.3). Renomear a marca recalcula a
+     * o nome da marca (nao o caminho, spec de Fornecedores e marcas). Renomear a marca recalcula a
      * busca dos produtos dela em lote, fora daqui ({@code MarcaService}).
      */
     private void recalcularTextosDeBusca() {
@@ -491,8 +491,8 @@ public class Produto {
     // ---------- Origem do custo (Fase B4) ----------
 
     /**
-     * Custo vindo de uma entrada por compra (docs/modules/produtos-custo-entrada.md,
-     * 2.2): o custo do produto ja arredondado a centavos pelo
+     * Custo vindo de uma entrada por compra (docs/modules/estoque.md):
+     * o custo do produto ja arredondado a centavos pelo
      * {@link CustoDeEntrada}, a origem {@code ENTRADA_COMPRA} e a data do
      * movimento, mesmo que o valor nao mude.
      */
@@ -503,7 +503,7 @@ public class Produto {
     }
 
     /**
-     * Nome usado por cupom e PDV (spec 4.1): o nome curto, ou os 30 primeiros
+     * Nome usado por cupom e PDV (spec de Produtos): o nome curto, ou os 30 primeiros
      * caracteres do nome, aparados.
      */
     public String nomeCurtoEfetivo() {
@@ -677,7 +677,7 @@ public class Produto {
     }
 
     /**
-     * Se o produto controla estoque (spec 4.1 da Fase D). Desligado, o saldo e o
+     * Se o produto controla estoque (spec de Estoque). Desligado, o saldo e o
      * historico ficam guardados, mas nao se aceitam ajustes.
      */
     public boolean isControlaEstoque() {

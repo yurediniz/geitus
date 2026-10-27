@@ -6,8 +6,8 @@ import java.math.RoundingMode;
 import com.geitus.app.catalog.CustoDeEntrada;
 
 /**
- * Custo de uma entrada por compra (Fase B4, docs/modules/produtos-custo-entrada.md,
- * 2.1; V13): o valor digitado, em centavos, e o custo por unidade de venda com
+ * Custo de uma entrada por compra (Fase B4, docs/modules/estoque.md;
+ * V13): o valor digitado, em centavos, e o custo por unidade de venda com
  * 4 casas. Em unidades, o por unidade e o proprio digitado; em embalagens, o
  * digitado e o de 1 embalagem e o por unidade e a divisao pelas unidades dela,
  * meio para cima (a mesma conta da CHECK {@code ck_movimento_estoque_custo_unitario}).

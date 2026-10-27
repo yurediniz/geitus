@@ -21,7 +21,7 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 /**
- * Fabricante ou marca em arvore (docs/modules/fornecedores-e-marcas.md, 3.1):
+ * Fabricante ou marca em arvore (docs/modules/fornecedores-e-marcas.md):
  * o mesmo modelo das categorias. {@code pai == null} indica item na raiz; o
  * primeiro nivel costuma ser o fabricante, mas o sistema nao diferencia os
  * niveis.

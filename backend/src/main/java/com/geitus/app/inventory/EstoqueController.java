@@ -30,7 +30,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 /**
- * Endpoints de estoque do produto (docs/modules/produtos-estoque.md, 5).
+ * Endpoints de estoque do produto (docs/modules/estoque.md).
  *
  * <p>Controller fino: valida a entrada e delega ao {@link EstoqueService}. Recebe
  * so o {@code idUsuario} do JWT; a empresa e o usuario do movimento sao

@@ -25,8 +25,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  *
  * <p>Cada teste parte de um banco limpo no schema da V13, insere produtos com
  * a marca e o fornecedor em texto, aplica a V14 e confere via JDBC a migracao
- * do texto e as constraints novas (docs/modules/fornecedores-e-marcas.md, 7 e
- * 10; DEC-039).
+ * do texto e as constraints novas (docs/modules/fornecedores-e-marcas.md;
+ * DEC-039).
  *
  * <p>Requer Docker disponivel no ambiente.
  */

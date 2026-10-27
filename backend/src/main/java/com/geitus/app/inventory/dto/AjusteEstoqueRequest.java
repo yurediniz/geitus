@@ -13,7 +13,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /**
- * Ajuste manual de estoque (docs/modules/produtos-estoque.md, 4.2 a 4.5 e 5).
+ * Ajuste manual de estoque (docs/modules/estoque.md).
  *
  * <p>Nao tem empresa nem usuario: os dois vem sempre do usuario autenticado. A
  * {@code quantidade} e a informada na tela: a quantidade da entrada ou da

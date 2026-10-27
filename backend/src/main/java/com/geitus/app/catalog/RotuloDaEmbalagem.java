@@ -3,7 +3,7 @@ package com.geitus.app.catalog;
 import java.math.BigDecimal;
 
 /**
- * Rotulo de uma embalagem (docs/modules/produtos-embalagens.md, 2.2):
+ * Rotulo de uma embalagem (docs/modules/produtos.md):
  * {@code {sigla} c/ {quantidade} {sigla de venda}}, com a quantidade sem zeros
  * a direita e virgula decimal ("CX c/ 3 UN", "SC c/ 25,5 KG"). Derivado: nao
  * tem coluna; o historico e o movimento guardam o rotulo do momento. O

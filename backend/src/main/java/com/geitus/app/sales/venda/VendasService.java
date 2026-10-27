@@ -59,8 +59,7 @@ import com.geitus.app.shared.paginacao.PaginaResponse;
 import com.geitus.app.shared.paginacao.Paginacao;
 
 /**
- * Finalizacao, consulta e cancelamento das vendas (docs/modules/pdv.md, 3.6,
- * 3.8 e 5.3).
+ * Finalizacao, consulta e cancelamento das vendas (docs/modules/pdv.md).
  *
  * <p><b>Finalizar</b>, num pedido atomico, nesta ordem: resolver o usuario
  * (empresa e perfil do banco); conferir a chave (a repeticao do mesmo pedido
@@ -149,7 +148,7 @@ public class VendasService {
     public record ResultadoDaVenda(VendaResponse venda, boolean criada) {
     }
 
-    // ---------- Finalizar (3.6) ----------
+    // ---------- Finalizar ----------
 
     public ResultadoDaVenda finalizarParaUsuario(Long idUsuario, FinalizarVendaRequest request) {
         UsuarioAutenticado usuario = resolvedor.resolver(idUsuario);
@@ -334,7 +333,7 @@ public class VendasService {
         return new PaginaResponse<>(respostas.resumos(vendas.vendas(), usuario), pagina, tamanho, vendas.total());
     }
 
-    // ---------- Cancelar (3.8) ----------
+    // ---------- Cancelar ----------
 
     @Transactional
     public VendaResponse cancelarParaUsuario(Long idUsuario, UUID vendaId, CancelamentoRequest request) {

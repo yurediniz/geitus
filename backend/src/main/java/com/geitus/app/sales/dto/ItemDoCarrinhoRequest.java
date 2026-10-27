@@ -10,7 +10,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /**
- * Uma linha do carrinho (docs/modules/pdv.md, 5.3). Na etiqueta
+ * Uma linha do carrinho (docs/modules/pdv.md). Na etiqueta
  * ({@code etiqueta: true}), o servidor le de novo os 13 digitos de
  * {@code codigoLido} e ignora a {@code quantidade} enviada.
  * {@code embalagemRotulo} e opcional e so serve para a mensagem quando a

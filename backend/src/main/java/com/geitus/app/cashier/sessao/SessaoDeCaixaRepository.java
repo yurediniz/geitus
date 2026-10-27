@@ -28,13 +28,13 @@ public interface SessaoDeCaixaRepository extends Repository<SessaoDeCaixa, Long>
     /**
      * A sessao com a linha travada ({@code SELECT ... FOR UPDATE}): lancamentos,
      * contagem e fechamento da mesma sessao ficam em fila, e o esperado lido
-     * depois da trava nao muda ate o fim da transacao (spec 3.8).
+     * depois da trava nao muda ate o fim da transacao (spec do Caixa).
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM SessaoDeCaixa s WHERE s.empresaId = :empresaId AND s.uuid = :uuid")
     Optional<SessaoDeCaixa> travarPorUuid(@Param("empresaId") Long empresaId, @Param("uuid") UUID uuid);
 
-    /** A sessao travada pelo id interno (cancelamento de venda; docs/modules/pdv.md, 3.8). */
+    /** A sessao travada pelo id interno (cancelamento de venda; docs/modules/pdv.md). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM SessaoDeCaixa s WHERE s.empresaId = :empresaId AND s.id = :id")
     Optional<SessaoDeCaixa> travarPorId(@Param("empresaId") Long empresaId, @Param("id") Long id);
@@ -43,7 +43,7 @@ public interface SessaoDeCaixaRepository extends Repository<SessaoDeCaixa, Long>
      * A sessao ABERTA ou EM_CONFERENCIA do usuario com a linha travada: a venda
      * e o fechamento da mesma sessao ficam em fila. Se um fechamento confirmar
      * antes, o PostgreSQL reavalia o filtro depois da espera e a sessao fechada
-     * nao volta (docs/modules/pdv.md, 3.6; DT-039).
+     * nao volta (docs/modules/pdv.md; DT-039).
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""

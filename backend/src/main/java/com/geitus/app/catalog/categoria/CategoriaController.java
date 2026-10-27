@@ -27,7 +27,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 /**
- * Endpoints das categorias (docs/modules/categorias-e-unidades.md, 4.3).
+ * Endpoints das categorias (docs/modules/produtos.md).
  *
  * <p>Controller fino: valida a entrada e delega ao {@link CategoriaService}.
  * Recebe so o {@code idUsuario} do JWT, nunca a empresa (DEC-016). O

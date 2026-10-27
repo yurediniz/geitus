@@ -23,12 +23,12 @@ import jakarta.persistence.Table;
 
 /**
  * Movimento de estoque de um {@link Produto} (tabela {@code movimentos_estoque},
- * V9; docs/modules/produtos-estoque.md, 3.3).
+ * V9; docs/modules/estoque.md).
  *
  * <p>Fonte de verdade do saldo e so de insercao: nenhuma coluna e atualizavel
  * e a aplicacao nunca altera um movimento; a correcao e um novo ajuste. A unica
  * remocao e a do estoque inicial na exclusao de produto cadastrado por engano
- * (spec 4.7). A empresa e copiada do produto; no banco, as FKs compostas
+ * (spec de Estoque). A empresa e copiada do produto; no banco, as FKs compostas
  * {@code (empresa_id, produto_id)} e {@code (empresa_id, usuario_id)} garantem
  * que produto e usuario sao da mesma empresa (DEC-016).
  */

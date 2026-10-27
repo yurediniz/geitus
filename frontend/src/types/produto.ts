@@ -46,7 +46,7 @@ export interface AtacadoProduto {
 export type PromocaoRequest = Omit<PromocaoProduto, 'situacao'>
 
 /**
- * De onde vem o preco efetivo da embalagem (spec B3 §3.1): o preco proprio, a
+ * De onde vem o preco efetivo da embalagem (spec de Produtos): o preco proprio, a
  * quantidade x preco de venda da unidade ou x preco promocional vigente dela.
  */
 export type OrigemPrecoEmbalagem = 'PROPRIO' | 'UNIDADE' | 'PROMOCAO_DA_UNIDADE'
@@ -99,7 +99,7 @@ export interface EmbalagemRequest {
  */
 export type OrigemDoCusto = 'ENTRADA_COMPRA' | 'EDICAO'
 
-/** Origem do custo atual do produto (spec B4 §4). */
+/** Origem do custo atual do produto (spec de Estoque). */
 export interface CustoOrigem {
   tipo: OrigemDoCusto
   /** Quando a origem foi registrada (yyyy-mm-ddThh:mm:ss, horario do servidor). */

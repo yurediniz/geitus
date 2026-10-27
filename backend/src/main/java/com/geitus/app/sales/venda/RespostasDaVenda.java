@@ -22,7 +22,7 @@ import com.geitus.app.sales.venda.dto.VendaResponse.ItemDaVendaResponse;
 import com.geitus.app.sales.venda.dto.VendaResponse.PagamentoResponse;
 
 /**
- * Monta a {@link VendaResponse} para quem consulta (docs/modules/pdv.md, 5.3):
+ * Monta a {@link VendaResponse} para quem consulta (docs/modules/pdv.md):
  * o ponto e a situacao da sessao (para o {@code podeCancelar}), os nomes e os
  * pagamentos em lote (uma consulta de cada, qualquer que seja a pagina) e, no
  * detalhe, os itens. O custo nunca sai. Exige a transacao de quem chama.
@@ -90,7 +90,7 @@ class RespostasDaVenda {
                 podeCancelar(venda, sessao, quemVe));
     }
 
-    /** Concluida, com o caixa da venda aberto, e quem consulta e o dono da sessao ou ADMIN (3.8). */
+    /** Concluida, com o caixa da venda aberto, e quem consulta e o dono da sessao ou ADMIN. */
     static boolean podeCancelar(Venda venda, SessaoParaVenda sessao, UsuarioAutenticado quemVe) {
         return !venda.cancelada() && sessao.aberta()
                 && (quemVe.ehAdmin() || sessao.abertaPor().equals(quemVe.usuarioId()));

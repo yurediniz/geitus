@@ -20,7 +20,7 @@ import com.geitus.app.shared.validation.Documentos;
 import com.geitus.app.shared.validation.Telefones;
 
 /**
- * Regras de negocio do modulo Clientes (docs/modules/clientes.md, secoes 4–6).
+ * Regras de negocio do modulo Clientes (docs/modules/clientes.md).
  *
  * <p>Mesmo desenho do {@code ProdutoService}: a API publica e composta apenas
  * pelos metodos {@code *ParaUsuario}, que recebem o {@code idUsuario} do JWT e

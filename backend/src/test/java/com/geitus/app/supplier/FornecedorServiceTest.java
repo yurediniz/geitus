@@ -40,7 +40,7 @@ import com.geitus.app.supplier.listagem.ConsultaDeFornecedores;
 
 /**
  * Regras do {@link FornecedorService} que dependem do banco, com dubles
- * (docs/modules/fornecedores-e-marcas.md, 4): documento unico por empresa
+ * (docs/modules/fornecedores-e-marcas.md): documento unico por empresa
  * (mensagem com o nome do outro), representantes da lista completa, marcas
  * (limite, outra empresa, inativa so se ja ligada), numeracao, exclusao com
  * produtos ou entradas e o PATCH que mantem as listas ausentes. A

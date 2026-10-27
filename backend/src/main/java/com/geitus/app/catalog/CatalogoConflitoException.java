@@ -6,7 +6,7 @@ package com.geitus.app.catalog;
  * registro ainda em uso (produtos/subcategorias vinculados).
  *
  * <p>Mapeada para HTTP 409 (Conflict) pelo {@code GlobalExceptionHandler}. A
- * mensagem e fixa e segura para o cliente (docs/modules/categorias-e-unidades.md).
+ * mensagem e fixa e segura para o cliente (docs/modules/produtos.md).
  */
 public class CatalogoConflitoException extends RuntimeException {
 

@@ -21,7 +21,7 @@ import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.sales.carrinho.ProdutosDeTeste.Precos;
 
 /**
- * Regras da {@link CalculadoraDaVenda} (docs/modules/pdv.md, 3.1 a 3.4 e 8,
+ * Regras da {@link CalculadoraDaVenda} (docs/modules/pdv.md
  * "Dominio"): etiqueta, preco da unidade com atacado pela soma das linhas,
  * embalagem, descontos com a reparticao e os limites, pagamento e troco.
  */
@@ -33,7 +33,7 @@ class CalculadoraDaVendaTest {
     private final UnidadeMedida kg = unidade("KG", true);
     private final UnidadeMedida cx = unidade("CX", false);
 
-    // ---------- Etiqueta de balanca (3.1) ----------
+    // ---------- Etiqueta de balanca ----------
 
     @Test
     void etiquetaDeValorEmKgViraQuantidadePeloPreco() {
@@ -148,7 +148,7 @@ class CalculadoraDaVendaTest {
                 "Etiqueta de peso para produto que não é vendido por peso."));
     }
 
-    // ---------- Preco da linha (3.2) ----------
+    // ---------- Preco da linha ----------
 
     @Test
     void atacadoPelaSomaDasLinhasDeUnidade() {
@@ -199,7 +199,7 @@ class CalculadoraDaVendaTest {
                 "UN não aceita quantidade fracionada. Informe um número inteiro."));
     }
 
-    // ---------- Desconto (3.3) ----------
+    // ---------- Desconto ----------
 
     @Test
     void descontoDoItemEmPercentualEEmReais() {
@@ -468,7 +468,7 @@ class CalculadoraDaVendaTest {
         assertThat(noDiaSeguinte.total()).isEqualByComparingTo("10.00");
     }
 
-    // ---------- Pagamento (3.4) ----------
+    // ---------- Pagamento ----------
 
     @Test
     void cartaoAcimaDoTotalRecusado() {

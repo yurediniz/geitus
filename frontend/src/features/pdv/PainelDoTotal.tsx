@@ -56,7 +56,7 @@ function Atalho({ children, claro = false }: { children: string; claro?: boolean
 }
 
 /**
- * O resumo e o total da venda (spec §6.2), no pe da coluna da direita: o
+ * O resumo e o total da venda (spec do PDV), no pe da coluna da direita: o
  * TOTAL, o maior texto da tela e anunciado ao mudar, com subtotal e
  * descontos; a ultima venda com o troco; e as acoes de fechamento com o
  * atalho. Enquanto calcula, um indicador discreto, sem esconder o valor anterior.

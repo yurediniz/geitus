@@ -48,7 +48,7 @@ function gravarNoNavegador(chave: string, guardado: CarrinhoGuardado, empresaId:
 }
 
 /**
- * O carrinho da venda em andamento (spec do PDV §6.2), guardado no
+ * O carrinho da venda em andamento (spec do PDV), guardado no
  * `localStorage` por empresa e usuario com a tentativa pendente de finalizar
  * (a chave de idempotencia): recarregar a pagina mantem a venda e a chave.
  * As mudancas partem sempre do estado mais recente (uma referencia sincrona),

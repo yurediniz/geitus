@@ -9,7 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Resumo da categoria embutido na resposta do produto
- * (docs/modules/categorias-e-unidades.md, 5.2), com o caminho completo na
+ * (docs/modules/produtos.md), com o caminho completo na
  * arvore. O {@code id} e o UUID publico.
  */
 @Schema(description = "Resumo da categoria do produto")

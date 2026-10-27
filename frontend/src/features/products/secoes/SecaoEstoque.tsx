@@ -101,7 +101,7 @@ export function SecaoEstoque({
   const ajusteBloqueado = Boolean(dirtyFields.controlaEstoque || dirtyFields.unidadeId || embalagensAlteradas)
   // O saldo e da unidade gravada (produto com movimento nao troca de unidade).
   const saldoTexto = produto ? formatarQuantidade(produto.estoqueAtual, produto.unidade.sigla) : null
-  // Com embalagem gravada, o saldo tambem em embalagens: "55 UN (18 CX + 1 UN)" (spec B3 §5.2).
+  // Com embalagem gravada, o saldo tambem em embalagens: "55 UN (18 CX + 1 UN)" (spec de Produtos).
   const principal = produto ? embalagemPrincipal(produto.embalagens) : undefined
   const saldoEmEmbalagens =
     produto && principal

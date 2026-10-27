@@ -33,7 +33,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 /**
- * Vendas do PDV (docs/modules/pdv.md, 5.3). Controller fino: recebe so o
+ * Vendas do PDV (docs/modules/pdv.md). Controller fino: recebe so o
  * {@code idUsuario} do JWT e delega ao {@link VendasService}. O {@code {id}} e
  * o UUID publico da venda; a regra "dono da sessao ou ADMIN" fica no service.
  */

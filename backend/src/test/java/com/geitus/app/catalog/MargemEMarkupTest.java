@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 
 /**
- * Formulas de margem e markup (docs/modules/produtos-codigo-e-balanca.md, 5),
+ * Formulas de margem e markup (docs/modules/produtos.md),
  * usadas pelo produto e pelas embalagens (Fase B3, 3.2).
  */
 class MargemEMarkupTest {

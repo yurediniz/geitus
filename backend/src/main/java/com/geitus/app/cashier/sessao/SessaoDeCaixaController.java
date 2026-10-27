@@ -35,7 +35,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 /**
- * Sessoes de caixa (docs/modules/caixa.md, 5.2). Controller fino: recebe so o
+ * Sessoes de caixa (docs/modules/caixa.md). Controller fino: recebe so o
  * {@code idUsuario} do JWT e delega ao {@link SessoesDeCaixaService}. O
  * {@code {id}} e o UUID publico da sessao. Todas as rotas valem para qualquer
  * autenticado; a regra "dono ou ADMIN" fica no service (OPERADOR em sessao de

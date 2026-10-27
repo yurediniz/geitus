@@ -13,7 +13,7 @@ export interface FornecedoresGravados {
 }
 
 /**
- * O fornecedor que o modal de ajuste traz na entrada por compra (spec B5 §6):
+ * O fornecedor que o modal de ajuste traz na entrada por compra (spec de Fornecedores e marcas):
  * o da ultima compra, se ainda estiver ativo (o inativo nao e oferecido).
  */
 export function fornecedorParaACompra(produto: Produto): FornecedorDoProduto | null {

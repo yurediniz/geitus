@@ -5,8 +5,8 @@ import java.util.regex.Pattern;
 import com.geitus.app.shared.busca.TextoDeBusca;
 
 /**
- * Regra pura do codigo de barras (docs/modules/produtos-identificacao-e-formulario.md,
- * secao 4.3), sem dependencia de banco ou Spring.
+ * Regra pura do codigo de barras (docs/modules/produtos.md),
+ * sem dependencia de banco ou Spring.
  *
  * <p>Codigo so com digitos e tamanho 8, 12 ou 13 e candidato GS1
  * (EAN-8, UPC-A, EAN-13) e precisa de digito verificador mod 10 valido para

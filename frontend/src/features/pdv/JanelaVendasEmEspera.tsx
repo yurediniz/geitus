@@ -20,7 +20,7 @@ export interface JanelaVendasEmEsperaProps {
 
 type Pergunta = { tipo: 'RETOMAR'; id: string } | { tipo: 'DESCARTAR'; id: string }
 
-/** Vendas em espera (F7; spec do PDV §6.4): hora, itens e total, com Retomar e Descartar. */
+/** Vendas em espera (F7; spec do PDV): hora, itens e total, com Retomar e Descartar. */
 export function JanelaVendasEmEspera({ aberta, aoFechar, ...props }: JanelaVendasEmEsperaProps) {
   return (
     <Dialog open={aberta} onOpenChange={(abrir) => !abrir && aoFechar()}>

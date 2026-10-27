@@ -18,7 +18,7 @@ import com.geitus.app.cashier.CenarioDeCaixa.EmpresaDeCaixa;
 import com.geitus.app.cashier.IntegracaoDoCaixa;
 
 /**
- * Sessoes de caixa pela API (docs/modules/caixa.md, 3.2 a 3.7 e 8
+ * Sessoes de caixa pela API (docs/modules/caixa.md
  * "Backend"): abertura, sangria e suprimento, limite do caixa, contagem e
  * fechamento nos dois modos, idempotencia, regra do dono e isolamento.
  */
@@ -184,7 +184,7 @@ class SessoesDeCaixaIT extends IntegracaoDoCaixa {
                 .andExpect(jsonPath("$.diferenca").value(0.0));
     }
 
-    /** Spec 3.7: a chave identifica o pedido; a repeticao depois do fechamento devolve o que foi gravado. */
+    /** Spec do Caixa: a chave identifica o pedido; a repeticao depois do fechamento devolve o que foi gravado. */
     @Test
     void sangriaRepetidaPelaChaveDepoisDoFechamento200() throws Exception {
         fechamentoCego(empresa, false);
@@ -382,7 +382,7 @@ class SessoesDeCaixaIT extends IntegracaoDoCaixa {
         detalhe(empresa.operadora(), sessao).andExpect(jsonPath("$.status").value("ABERTA"));
     }
 
-    /** O modo que vale e o do momento da contagem, nas duas direcoes (spec 3.4). */
+    /** O modo que vale e o do momento da contagem, nas duas direcoes (spec do Caixa). */
     @Test
     void modoTrocadoAntesDaContagemValeOModoDaContagem() throws Exception {
         UUID abertaNoCego = abrirCaixa(empresa.operadora(), caixa1, "100.00");
@@ -511,7 +511,7 @@ class SessoesDeCaixaIT extends IntegracaoDoCaixa {
         atual(empresa.operadora()).andExpect(status().isNoContent());
     }
 
-    /** Spec 3.5: usuario inativado com caixa aberto; o ADMIN fecha no lugar dele. */
+    /** Spec do Caixa: usuario inativado com caixa aberto; o ADMIN fecha no lugar dele. */
     @Test
     void adminFechaCaixaDeUsuarioInativado() throws Exception {
         String tokenDaAna = cenario.token(empresa.operadora());

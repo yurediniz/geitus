@@ -23,8 +23,8 @@ import com.geitus.app.iam.UsuarioRepository;
 
 /**
  * Regras de negocio dos fabricantes e marcas em arvore
- * (docs/modules/fornecedores-e-marcas.md, 3.1): as mesmas das categorias
- * (categorias-e-unidades.md, 4.2), com os textos de marca.
+ * (docs/modules/fornecedores-e-marcas.md): as mesmas das categorias
+ * (produtos.md), com os textos de marca.
  *
  * <p>Mesmo desenho do {@code CategoriaService}: os metodos {@code *ParaUsuario}
  * recebem o {@code idUsuario} do JWT e resolvem a empresa internamente
@@ -149,7 +149,7 @@ public class MarcaService {
 
     /**
      * Exclusao fisica (marca e cadastro, nao historico), bloqueada se houver
-     * submarcas, produtos ou fornecedores ligados — ativos ou nao (409, spec 3.1).
+     * submarcas, produtos ou fornecedores ligados — ativos ou nao (409, spec de Fornecedores e marcas).
      */
     @Transactional
     public void excluirParaUsuario(Long idUsuario, UUID id) {
@@ -224,7 +224,7 @@ public class MarcaService {
     }
 
     /**
-     * Mensagem fixa da spec 3.1 omitindo as partes zeradas: "a", "a e b" ou
+     * Mensagem fixa da spec de Fornecedores e marcas omitindo as partes zeradas: "a", "a e b" ou
      * "a, b e c".
      */
     private static String mensagemExclusaoBloqueada(long submarcas, long produtos, long fornecedores) {

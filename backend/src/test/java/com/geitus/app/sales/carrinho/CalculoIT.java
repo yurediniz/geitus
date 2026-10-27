@@ -18,7 +18,7 @@ import com.geitus.app.sales.CenarioDoPdv.NovoProduto;
 import com.geitus.app.sales.IntegracaoDoPdv;
 
 /**
- * {@code POST /api/pdv/calculo} (docs/modules/pdv.md, 3, 5.3 e 7): o servidor
+ * {@code POST /api/pdv/calculo} (docs/modules/pdv.md): o servidor
  * rele a etiqueta, resolve tudo na empresa do usuario, aplica o limite de
  * desconto pelo perfil do banco e devolve as regras violadas em {@code erros}.
  */

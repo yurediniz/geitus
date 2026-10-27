@@ -10,7 +10,7 @@ import com.geitus.app.catalog.balanca.TipoInformacaoEtiqueta;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Resultado do teste de etiqueta (spec 3.3 e 8): a leitura ({@code null} se o
+ * Resultado do teste de etiqueta (spec de Produtos): a leitura ({@code null} se o
  * numero nao for uma etiqueta no formato), o produto da empresa com o codigo
  * lido ({@code null} se nao houver) e a mensagem pronta para a tela.
  */

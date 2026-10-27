@@ -26,7 +26,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * <p>Cada teste parte de um banco limpo no schema da V12, insere dados como
  * existem hoje, aplica a V13 e confere via JDBC o preenchimento da origem nas
  * linhas antigas de custo e as constraints novas do movimento, do produto e do
- * historico (docs/modules/produtos-custo-entrada.md, 5 e 9; DEC-038).
+ * historico (docs/modules/estoque.md; DEC-038).
  *
  * <p>Requer Docker disponivel no ambiente.
  */

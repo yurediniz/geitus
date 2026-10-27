@@ -17,7 +17,7 @@ import type { FormatoCodigoBarras } from '@/types/produto'
 
 const AVISO_FORMATO_OUTRO =
   'Formato não reconhecido (não é EAN-8, EAN-13 nem UPC-A). Confira antes de salvar.'
-/** Aviso (nao bloqueia) do codigo com cara de etiqueta de balanca: alguns fabricantes usam o prefixo 2 (spec B2 §3.4). */
+/** Aviso (nao bloqueia) do codigo com cara de etiqueta de balanca: alguns fabricantes usam o prefixo 2 (spec de Produtos). */
 const AVISO_FORMATO_ETIQUETA =
   'Parece uma etiqueta da balança. Se você leu a etiqueta de um produto pesado, use o código do produto em vez dela. Se é o código do fabricante, pode manter.'
 

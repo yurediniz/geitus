@@ -17,7 +17,7 @@ import com.geitus.app.sales.dto.CalculoResponse;
 import com.geitus.app.sales.dto.CarrinhoRequest;
 
 /**
- * O {@code POST /api/pdv/calculo} (docs/modules/pdv.md, 5.2 e 5.3): monta o
+ * O {@code POST /api/pdv/calculo} (docs/modules/pdv.md): monta o
  * carrinho na empresa do usuario, calcula com o perfil do banco (o limite de
  * desconto e so do OPERADOR) e as regras do PDV, e confere o estoque com o
  * saldo atual (sem trava: a trava e da finalizacao). Regras violadas voltam em

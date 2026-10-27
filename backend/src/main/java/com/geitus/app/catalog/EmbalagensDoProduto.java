@@ -25,7 +25,7 @@ import com.geitus.app.catalog.unidade.UnidadeMedidaService;
 
 /**
  * Regras e reconciliacao das embalagens do produto
- * (docs/modules/produtos-embalagens.md, 2, 3.3 e 7; DEC-037), fora do
+ * (docs/modules/produtos.md; DEC-037), fora do
  * {@code ProdutoService} para nao engorda-lo.
  *
  * <p>{@link #planejar} valida a lista inteira antes de qualquer gravacao e
@@ -244,7 +244,7 @@ public class EmbalagensDoProduto {
 
     /**
      * Preco proprio maior que zero e, com preco minimo, nao abaixo dele por
-     * unidade (spec 3.3). A comparacao e {@code preco < minimo x quantidade},
+     * unidade (spec de Produtos). A comparacao e {@code preco < minimo x quantidade},
      * sem divisao; o valor por unidade da mensagem e truncado a centavos, para
      * nunca exibir um valor igual ao minimo. O preco calculado nao e conferido.
      */

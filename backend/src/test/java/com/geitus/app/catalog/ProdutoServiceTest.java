@@ -93,9 +93,9 @@ import com.geitus.app.shared.paginacao.PaginacaoInvalidaException;
  * Testa as regras do {@link ProdutoService}: validacoes de cadastro/atualizacao
  * (incluindo os campos cadastrais da V4 e as regras cruzadas), normalizacao de
  * texto, isolamento por empresa (DEC-016), os vinculos com unidade de venda,
- * categoria e unidade de compra (docs/modules/categorias-e-unidades.md, 5.1) e a
+ * categoria e unidade de compra (docs/modules/produtos.md) e a
  * identificacao da Fase B (codigos de barras, nome curto, SKU sugerido,
- * e exclusao — docs/modules/produtos-identificacao-e-formulario.md, 4).
+ * e exclusao — docs/modules/produtos.md).
  */
 @ExtendWith(MockitoExtension.class)
 class ProdutoServiceTest {
@@ -496,7 +496,7 @@ class ProdutoServiceTest {
                 .isInstanceOf(ProdutoNaoEncontradoException.class);
     }
 
-    // ---------- Codigos de barras (spec 4.3) ----------
+    // ---------- Codigos de barras (spec de Produtos) ----------
 
     @Test
     void codigoNovoComDigitoInvalidoLanca400ComMensagemFixa() {
@@ -719,7 +719,7 @@ class ProdutoServiceTest {
         assertThat(atualizado.getCodigosBarras()).isEmpty();
     }
 
-    // ---------- Nome curto (spec 4.1) ----------
+    // ---------- Nome curto (spec de Produtos) ----------
 
     @Test
     void nomeCurtoEfetivoUsaNomeCurtoOuTrunca() {
@@ -749,7 +749,7 @@ class ProdutoServiceTest {
         assertThat(emBranco.getNomeCurto()).isNull();
     }
 
-    // ---------- SKU sugerido (spec 4.2) ----------
+    // ---------- SKU sugerido (spec de Produtos) ----------
 
     @Test
     void sugerirSkuUsaMaiorDoPadraoMaisUm() {
@@ -793,7 +793,7 @@ class ProdutoServiceTest {
         assertThat(produtoService.sugerirSku(EMPRESA_ID)).isEqualTo("P100000000000000000000");
     }
 
-    // ---------- Exclusao (spec 4.5) ----------
+    // ---------- Exclusao (spec de Produtos) ----------
 
     @Test
     void excluirRemoveQuandoPodeExcluir() {
@@ -851,7 +851,7 @@ class ProdutoServiceTest {
         verify(produtoRepository, never()).delete(any());
     }
 
-    // ---------- Colunas normalizadas da busca (Fase E, spec 4.1) ----------
+    // ---------- Colunas normalizadas da busca (Fase E, spec de Produtos) ----------
 
     @Test
     void cadastrarPreencheColunasNormalizadas() {
@@ -879,7 +879,7 @@ class ProdutoServiceTest {
         assertThat(produto.getBuscaNormalizada()).isEqualTo("feijao preto feijao sku-2 camil");
     }
 
-    // ---------- Listagem (docs/modules/produtos-listagem.md, 4 e 5) ----------
+    // ---------- Listagem (docs/modules/produtos.md) ----------
 
     private static final LocalDate HOJE_DO_RELOGIO = LocalDate.of(2020, 3, 8);
 
@@ -1239,7 +1239,7 @@ class ProdutoServiceTest {
         verify(produtoRepository, never()).save(any());
     }
 
-    // ---------- Unidade, categoria e conversao de compra (spec 5.1) ----------
+    // ---------- Unidade, categoria e conversao de compra (spec de Produtos) ----------
 
     @Test
     void unidadeDeOutraEmpresaLanca404() {
@@ -1333,7 +1333,7 @@ class ProdutoServiceTest {
         assertThat(produto.getCategoria()).isSameAs(bebidas);
     }
 
-    // ---------- Promocao e atacado (spec 4.3 e 4.4) ----------
+    // ---------- Promocao e atacado (spec de Produtos) ----------
 
     private ProdutoRequestBuilder comPromocao(String preco) {
         return requestComUN().promocao(preco, INICIO_PROMOCAO, FIM_PROMOCAO);
@@ -1481,7 +1481,7 @@ class ProdutoServiceTest {
 
     @Test
     void cadastroComPromocaoJaEncerradaEPermitido() {
-        // Nao se valida "fim >= hoje" (spec 4.3): datas antes do RELOGIO sao aceitas no cadastro.
+        // Nao se valida "fim >= hoje" (spec de Produtos): datas antes do RELOGIO sao aceitas no cadastro.
         cadastroPermitido();
 
         Produto produto = cadastrar(requestComUN().promocao("8.90", LocalDate.of(2020, 2, 1),
@@ -1607,7 +1607,7 @@ class ProdutoServiceTest {
     }
 
 
-    // ---------- Historico de precos (spec 4.6) ----------
+    // ---------- Historico de precos (spec de Produtos) ----------
 
     /** Linhas de historico gravadas, na ordem em que o service as salvou. */
     private List<HistoricoPreco> historicoGravado() {
@@ -1853,7 +1853,7 @@ class ProdutoServiceTest {
         verify(produtoRepository, never()).save(any());
     }
 
-    // ---------- Fase D: estoque (docs/modules/produtos-estoque.md) ----------
+    // ---------- Fase D: estoque (docs/modules/estoque.md) ----------
 
     private static final String MENSAGEM_EXCLUSAO_COM_MOVIMENTO =
             "Este produto já teve movimentação de estoque e não pode ser excluído. Inative-o.";

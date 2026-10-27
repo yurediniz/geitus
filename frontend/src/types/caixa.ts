@@ -1,5 +1,5 @@
 /**
- * Tipos do modulo Caixa (spec `docs/modules/caixa.md` §5.3). Os ids sao os
+ * Tipos do modulo Caixa (spec `docs/modules/caixa.md`). Os ids sao os
  * UUIDs publicos; os horarios chegam em ISO-8601 com deslocamento
  * (`2026-10-24T08:02:00-03:00`) e os valores em reais (numero com 2 casas).
  */
@@ -10,7 +10,7 @@ export type StatusDaSessao = 'ABERTA' | 'EM_CONFERENCIA' | 'FECHADA'
 export const STATUS_DA_SESSAO = ['ABERTA', 'EM_CONFERENCIA', 'FECHADA'] as const satisfies readonly StatusDaSessao[]
 
 /**
- * Formas de pagamento (spec `docs/modules/pdv.md` §3.4 e §3.9). Abertura,
+ * Formas de pagamento (spec `docs/modules/pdv.md`). Abertura,
  * suprimento e sangria sao sempre em dinheiro; recebimentos e estornos de
  * venda podem ser de qualquer forma.
  */
@@ -64,7 +64,7 @@ export interface MovimentoDeCaixaRequest {
 }
 
 /**
- * Contagem por forma (spec do PDV §3.9): o dinheiro sempre; debito, credito e
+ * Contagem por forma (spec do PDV): o dinheiro sempre; debito, credito e
  * PIX so quando a forma teve movimento na sessao (`formasDaContagem`).
  */
 export interface ContagemRequest {

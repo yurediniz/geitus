@@ -165,7 +165,7 @@ class CatalogoServiceIT {
     // ---------- Edicao com vinculos inativados depois do cadastro ----------
 
     /**
-     * Regra "manter o vinculo atual mesmo inativo" (spec 5.1) com proxies LAZY
+     * Regra "manter o vinculo atual mesmo inativo" (spec de Produtos) com proxies LAZY
      * reais: o produto carregado na transacao do service compara o id da
      * unidade/categoria escolhida com o do proxy atual. Trocar para OUTRA
      * unidade inativa continua bloqueado.
@@ -462,7 +462,7 @@ class CatalogoServiceIT {
                 Long.class, idInterno)).isZero();
     }
 
-    /** Fase B3 (spec 4): a unidade usada so numa embalagem conta 1 produto e nao pode ser excluida. */
+    /** Fase B3 (spec de Produtos): a unidade usada so numa embalagem conta 1 produto e nao pode ser excluida. */
     @Test
     void unidadeUsadaSoEmEmbalagemNaoPodeSerExcluida() {
         Empresa empresa = novaEmpresa();
@@ -569,7 +569,7 @@ class CatalogoServiceIT {
                 new BigDecimal(novo));
     }
 
-    /** Review Focus 5 + spec 4.6: cadastro e edicoes gravam so o que mudou, com o usuario, na ordem certa. */
+    /** Review Focus 5 + spec de Produtos: cadastro e edicoes gravam so o que mudou, com o usuario, na ordem certa. */
     @Test
     void historicoGravadoNoBancoDoMaisRecenteParaOMaisAntigo() {
         Empresa empresa = novaEmpresa();
@@ -802,7 +802,7 @@ class CatalogoServiceIT {
                 .numero()).isEqualTo(2L);
     }
 
-    /** Spec 2: o numero nunca e reaproveitado; excluir o ultimo deixa o numero vago. */
+    /** Spec de Produtos: o numero nunca e reaproveitado; excluir o ultimo deixa o numero vago. */
     @Test
     void numeroDeProdutoExcluidoNaoEReaproveitado() {
         Empresa empresa = novaEmpresa();

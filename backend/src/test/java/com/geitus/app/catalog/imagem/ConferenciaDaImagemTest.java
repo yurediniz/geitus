@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Conferencias do servidor na ordem da tabela da spec
- * (docs/modules/produtos-imagem.md, 4.1): partes, tipo real e o mesmo nas
+ * (docs/modules/produtos.md): partes, tipo real e o mesmo nas
  * duas, bytes, dimensoes legiveis e o maior lado. Cada caso tambem viola as
  * conferencias seguintes, para provar a ordem.
  */

@@ -1,5 +1,5 @@
 /**
- * Fornecedores da empresa (docs/modules/fornecedores-e-marcas.md, 4; DEC-039).
+ * Fornecedores da empresa (docs/modules/fornecedores-e-marcas.md; DEC-039).
  *
  * <p>Cadastro por empresa (DEC-016), identificado pelo {@code uuid} (DEC-019)
  * e numerado pelo {@code Numerador} (tipo {@code FORNECEDOR}): dados do

@@ -381,7 +381,7 @@ class ProdutoRepositoryIT {
         assertThat(contarDaEmpresa(empresaB)).isEqualTo(1);
     }
 
-    // ---------- SKU sugerido (spec 4.2) ----------
+    // ---------- SKU sugerido (spec de Produtos) ----------
 
     @Test
     void skusNoPadraoSoDaEmpresaESoNoFormatoExato() {

@@ -10,7 +10,7 @@ import com.geitus.app.iam.UsuarioAutenticado;
 
 /**
  * Leituras das sessoes de caixa que o PDV mostra nas vendas
- * (docs/modules/pdv.md, 5.3): o ponto, a situacao (para o {@code podeCancelar})
+ * (docs/modules/pdv.md): o ponto, a situacao (para o {@code podeCancelar})
  * e a sessao atual do usuario (o filtro padrao da lista). Declarada aqui e
  * implementada no {@code cashier}; o {@code empresaId} e sempre o do usuario
  * autenticado (DEC-016).

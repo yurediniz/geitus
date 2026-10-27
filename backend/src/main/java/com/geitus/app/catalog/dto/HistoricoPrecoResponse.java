@@ -11,10 +11,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Uma alteracao de custo ou preco de venda na aba Historico
- * (docs/modules/produtos-precos.md, 5): so o nome do usuario sai, nunca o id
+ * (docs/modules/produtos.md): so o nome do usuario sai, nunca o id
  * interno ou o e-mail.
  *
- * <p>Fase B4 (docs/modules/produtos-custo-entrada.md, 3 e 6): as linhas de
+ * <p>Fase B4 (docs/modules/estoque.md): as linhas de
  * custo trazem a {@code origem} e, na entrada por compra, a {@code entrada}
  * ligada (quantidade e embalagem). O id do movimento nunca sai.
  */

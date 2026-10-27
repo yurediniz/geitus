@@ -30,7 +30,7 @@ const ALTURA_DO_CONTROLE = 'h-11 md:h-9'
 const SEM_VALOR = '—'
 
 /**
- * Historico do caixa (/caixa/historico, spec §6.6): as sessoes da mais recente
+ * Historico do caixa (/caixa/historico, spec do Caixa): as sessoes da mais recente
  * para a mais antiga, com filtros de ponto, situacao e periodo na URL,
  * paginacao no servidor e o detalhe num painel lateral. O OPERADOR ve so as
  * sessoes que abriu (filtrado no backend).

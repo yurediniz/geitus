@@ -42,7 +42,7 @@ import com.geitus.app.shared.paginacao.PaginaResponse;
  * as consultas reais do {@link MarcaRepository} (contagens nativas de produtos
  * e de fornecedores), a marca no produto (isolamento, inativa so se ja for a
  * atual, caminho na resposta e busca pelo nome) e o renomear que recalcula a
- * busca dos produtos (docs/modules/fornecedores-e-marcas.md, 3; Review Focus 3).
+ * busca dos produtos (docs/modules/fornecedores-e-marcas.md; Review Focus 3).
  *
  * <p>Sem {@code @Transactional} na classe: cada chamada de service confirma a
  * propria transacao, como em producao. Cada teste usa uma empresa nova.

@@ -5,7 +5,7 @@ import java.math.RoundingMode;
 
 /**
  * O que o catalogo precisa saber do estoque de um produto
- * (docs/modules/produtos-estoque.md, 4.7): o saldo guardado e quantos
+ * (docs/modules/estoque.md): o saldo guardado e quantos
  * movimentos ele tem, separando o estoque inicial do cadastro dos demais.
  *
  * @param saldo saldo atual (0 sem movimentos), mesmo com o controle desligado;

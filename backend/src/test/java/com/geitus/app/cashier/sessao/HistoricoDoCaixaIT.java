@@ -25,7 +25,7 @@ import com.geitus.app.cashier.CenarioDeCaixa.EmpresaDeCaixa;
 import com.geitus.app.cashier.IntegracaoDoCaixa;
 
 /**
- * Historico das sessoes (docs/modules/caixa.md, 5.2 e 6.6): o OPERADOR so ve
+ * Historico das sessoes (docs/modules/caixa.md): o OPERADOR so ve
  * as suas, filtros por ponto, situacao e periodo (datas em
  * {@code America/Sao_Paulo}), da mais recente para a mais antiga e sem os
  * movimentos.

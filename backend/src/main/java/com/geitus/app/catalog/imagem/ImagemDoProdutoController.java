@@ -19,7 +19,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
- * Envio e remocao da imagem do produto (docs/modules/produtos-imagem.md, 4.1).
+ * Envio e remocao da imagem do produto (docs/modules/produtos.md).
  *
  * <p>Controller fino: recebe as duas partes do multipart e delega ao
  * {@link ImagensDoProduto}. A empresa vem do usuario do JWT, nunca da

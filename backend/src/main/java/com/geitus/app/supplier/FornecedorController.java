@@ -30,7 +30,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 /**
- * Endpoints dos fornecedores (docs/modules/fornecedores-e-marcas.md, 4.7).
+ * Endpoints dos fornecedores (docs/modules/fornecedores-e-marcas.md).
  *
  * <p>Controller fino: valida a entrada e delega ao {@link FornecedorService}.
  * Recebe so o {@code idUsuario} do JWT, nunca a empresa (DEC-016). O

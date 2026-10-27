@@ -51,7 +51,7 @@ import jakarta.persistence.EntityManagerFactory;
  * a lista completa de representantes, a numeracao, a busca sem acento por
  * cada criterio, status e paginacao, o documento unico por empresa, a
  * exclusao com produtos ou entradas e o isolamento entre empresas
- * (docs/modules/fornecedores-e-marcas.md, 4 e 10).
+ * (docs/modules/fornecedores-e-marcas.md).
  *
  * <p>Sem {@code @Transactional} na classe: cada chamada de service confirma a
  * propria transacao, como em producao. Ligacoes com produto e movimentos sao

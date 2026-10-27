@@ -3,7 +3,7 @@ package com.geitus.app.catalog.listagem;
 import com.geitus.app.catalog.RegraDeNegocioException;
 
 /**
- * Filtro de status da listagem (spec 4.2). Cada valor guarda o fragmento SQL
+ * Filtro de status da listagem (spec de Produtos). Cada valor guarda o fragmento SQL
  * FIXO que acrescenta ao {@code WHERE}; o texto do parametro nunca chega ao SQL.
  */
 public enum StatusFiltro {

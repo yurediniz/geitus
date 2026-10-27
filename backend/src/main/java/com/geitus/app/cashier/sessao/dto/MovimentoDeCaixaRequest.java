@@ -12,7 +12,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * Sangria ou suprimento (docs/modules/caixa.md, 3.3 e 5.3). O motivo e
+ * Sangria ou suprimento (docs/modules/caixa.md). O motivo e
  * aparado no service e conferido ali (ate 200 caracteres). A {@code chave}
  * torna o pedido repetido inofensivo.
  */

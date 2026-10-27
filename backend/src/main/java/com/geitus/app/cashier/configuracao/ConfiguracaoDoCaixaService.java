@@ -16,7 +16,7 @@ import com.geitus.app.iam.UsuarioAutenticado;
 import com.geitus.app.iam.UsuarioRepository;
 
 /**
- * Configuracao do caixa (docs/modules/caixa.md, 3.9): fechamento cego ligado
+ * Configuracao do caixa (docs/modules/caixa.md): fechamento cego ligado
  * por padrao; so o ADMIN altera (no {@code SecurityConfig}) e a alteracao
  * registra quem e quando; todos os autenticados leem, porque a tela do caixa
  * precisa do modo.

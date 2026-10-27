@@ -5,7 +5,7 @@ import java.util.Optional;
 
 /**
  * Le o tipo real e as dimensoes de uma imagem so pelo cabecalho
- * (docs/modules/produtos-imagem.md, 4.1), sem biblioteca nova: o Java nao le
+ * (docs/modules/produtos.md), sem biblioteca nova: o Java nao le
  * WebP sozinho e o servidor nao decodifica nem recomprime a imagem.
  *
  * <ul>

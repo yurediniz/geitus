@@ -21,7 +21,7 @@ export interface JanelaClienteProps {
   aoEscolher: (cliente: ClienteDaVenda | null) => void
 }
 
-/** Cliente da venda (F3; spec do PDV §3.5): opcional, entre os clientes ativos, por nome, CPF ou telefone. */
+/** Cliente da venda (F3; spec do PDV): opcional, entre os clientes ativos, por nome, CPF ou telefone. */
 export function JanelaCliente({ aberta, clienteAtual, aoFechar, aoEscolher }: JanelaClienteProps) {
   return (
     <Dialog open={aberta} onOpenChange={(abrir) => !abrir && aoFechar()}>

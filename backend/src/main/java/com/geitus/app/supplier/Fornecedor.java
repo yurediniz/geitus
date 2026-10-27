@@ -37,7 +37,7 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 /**
- * Fornecedor da empresa (docs/modules/fornecedores-e-marcas.md, 4): os dados
+ * Fornecedor da empresa (docs/modules/fornecedores-e-marcas.md): os dados
  * do emitente da NF-e de compra, os representantes de venda e as marcas que
  * vende. Os produtos que vende sao a ligacao {@code produto_fornecedores}, que
  * pertence ao catalogo.
@@ -187,7 +187,7 @@ public class Fornecedor {
     }
 
     /**
-     * Lista completa de representantes, na ordem (spec 4.2): {@code id}
+     * Lista completa de representantes, na ordem (spec de Fornecedores e marcas): {@code id}
      * presente mantem o representante (o service ja conferiu que e deste
      * fornecedor), sem {@code id} cria, e o ausente sai ({@code orphanRemoval}).
      */
@@ -212,7 +212,7 @@ public class Fornecedor {
         carimbarSeMudou(!antes.equals(retratoDosRepresentantes()));
     }
 
-    /** Marcas que vende (spec 4.3), ids internos ja conferidos na empresa e sem repeticao. */
+    /** Marcas que vende (spec de Fornecedores e marcas), ids internos ja conferidos na empresa e sem repeticao. */
     public void substituirMarcas(Collection<Long> marcaIds) {
         Set<MarcaDoFornecedor> finais = marcaIds.stream()
                 .map(marcaId -> new MarcaDoFornecedor(getEmpresaId(), marcaId))

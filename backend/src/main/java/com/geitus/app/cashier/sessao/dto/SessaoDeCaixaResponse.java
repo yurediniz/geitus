@@ -13,18 +13,18 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Sessao de caixa na API, resposta de todas as rotas de sessao
- * (docs/modules/caixa.md, 5.3). Horarios em ISO-8601 no fuso
+ * (docs/modules/caixa.md). Horarios em ISO-8601 no fuso
  * {@code America/Sao_Paulo}.
  *
  * <ul>
  *   <li>{@code dinheiroNaGaveta}: o esperado atual em dinheiro; {@code null}
  *       para o OPERADOR no modo cego enquanto a sessao esta {@code ABERTA}
- *       (3.6);</li>
+ *       (spec do Caixa);</li>
  *   <li>{@code valorEsperado}, {@code valorContado} e {@code diferenca}: os do
  *       dinheiro (as outras formas estao em {@code porForma});</li>
  *   <li>{@code formasDaContagem}: o que a contagem pede (DINHEIRO e as formas
  *       com movimento, na ordem); {@code porForma}: os valores de cada uma
- *       (docs/modules/pdv.md, 3.9);</li>
+ *       (docs/modules/pdv.md);</li>
  *   <li>{@code fechamentoCego}: com a sessao {@code ABERTA}, o modo atual da
  *       empresa; depois da contagem, o modo gravado;</li>
  *   <li>{@code movimentos}: do mais recente para o mais antigo; ausente nos

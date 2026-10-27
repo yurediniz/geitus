@@ -42,7 +42,7 @@ import com.geitus.app.shared.paginacao.PaginaResponse;
 import com.geitus.app.shared.paginacao.Paginacao;
 
 /**
- * Regras das sessoes de caixa (docs/modules/caixa.md, 3.2 a 3.8).
+ * Regras das sessoes de caixa (docs/modules/caixa.md).
  *
  * <p>Lancamento, contagem e fechamento seguem sempre a mesma ordem: resolver
  * o usuario (empresa e perfil do banco), travar a sessao por
@@ -51,7 +51,7 @@ import com.geitus.app.shared.paginacao.Paginacao;
  * estado, calcular o esperado, validar e gravar. A trava poe em fila tudo o
  * que mexe na mesma sessao: o esperado lido nao muda ate o fim da transacao.
  *
- * <p>Idempotencia (spec 3.7): abertura e lancamentos pela chave, como no
+ * <p>Idempotencia (spec do Caixa): abertura e lancamentos pela chave, como no
  * {@code EstoqueService} (busca antes de gravar; a corrida que chega a
  * {@code uq_movimento_caixa_chave} e tratada como repeticao numa transacao
  * nova); contagem e fechamento pelo estado gravado. As corridas de abertura
@@ -167,7 +167,7 @@ public class SessoesDeCaixaService {
         return new PaginaResponse<>(respostas.resumos(sessoes.sessoes(), usuario), pagina, tamanho, sessoes.total());
     }
 
-    // ---------- Abertura (spec 3.2) ----------
+    // ---------- Abertura (spec do Caixa) ----------
 
     public ResultadoDaOperacao abrirParaUsuario(Long idUsuario, AbrirCaixaRequest request) {
         UsuarioAutenticado usuario = resolvedor.resolver(idUsuario);
@@ -255,7 +255,7 @@ public class SessoesDeCaixaService {
         return new CaixaConflitoException(MENSAGEM_USUARIO_COM_CAIXA.formatted(sessao.getPonto().getNome()));
     }
 
-    // ---------- Sangria e suprimento (spec 3.3) ----------
+    // ---------- Sangria e suprimento (spec do Caixa) ----------
 
     public ResultadoDaOperacao lancarParaUsuario(Long idUsuario, UUID sessaoId, MovimentoDeCaixaRequest request) {
         UsuarioAutenticado usuario = resolvedor.resolver(idUsuario);
@@ -317,7 +317,7 @@ public class SessoesDeCaixaService {
                 });
     }
 
-    /** O valor da gaveta so aparece para o ADMIN ou no modo nao cego (spec 3.3 e 3.6). */
+    /** O valor da gaveta so aparece para o ADMIN ou no modo nao cego (spec do Caixa). */
     private CaixaConflitoException sangriaAcimaDaGaveta(UsuarioAutenticado usuario, BigDecimal esperado) {
         boolean podeVerOEsperado = usuario.ehAdmin() || !configuracaoService.fechamentoCego(usuario.empresaId());
         String mensagem = podeVerOEsperado
@@ -326,10 +326,10 @@ public class SessoesDeCaixaService {
         return new CaixaConflitoException(mensagem, CAMPO_VALOR);
     }
 
-    // ---------- Contagem e fechamento (spec 3.4) ----------
+    // ---------- Contagem e fechamento (spec do Caixa) ----------
 
     /**
-     * Grava a contagem uma vez, por forma (docs/modules/pdv.md, 3.9): o
+     * Grava a contagem uma vez, por forma (docs/modules/pdv.md): o
      * dinheiro sempre e as outras formas que tiveram movimento. Repetir com os
      * mesmos valores devolve o resultado gravado (a rede caiu depois da
      * contagem, Review Focus 1); outros valores, 409. No modo cego a

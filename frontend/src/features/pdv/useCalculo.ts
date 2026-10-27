@@ -7,7 +7,7 @@ import { HttpError } from '@/services/httpClient'
 import { calcular } from '@/services/pdvService'
 import type { CalculoDaVenda, CarrinhoRequest, MensagemDoCalculo, PagamentoInformado } from '@/types/pdv'
 
-/** Espera depois da ultima mudanca antes de pedir o calculo (spec do PDV §6.2). */
+/** Espera depois da ultima mudanca antes de pedir o calculo (spec do PDV). */
 export const ATRASO_DO_CALCULO_MS = 150
 
 const SEM_PAGAMENTOS: readonly PagamentoInformado[] = []
@@ -84,7 +84,7 @@ export interface OpcoesDoCalculo {
 }
 
 /**
- * O calculo do servidor para o carrinho (spec do PDV §6.2): cada mudanca pede
+ * O calculo do servidor para o carrinho (spec do PDV): cada mudanca pede
  * `POST /api/pdv/calculo` depois de 150 ms sem mudar, e o pedido anterior e
  * cancelado (Review Focus 1). Enquanto calcula, so o ultimo resultado da mesma
  * venda continua na tela (nunca o de outra). A tela mostra sempre o calculo do servidor.

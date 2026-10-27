@@ -20,7 +20,7 @@ import type {
 } from '@/types/fornecedor'
 
 /**
- * Formulario do fornecedor (spec B5 §4): schema com as mensagens de §4.6,
+ * Formulario do fornecedor (spec de Fornecedores e marcas): schema com as mensagens da spec,
  * valores a partir da API e o request normalizado. Espelha as regras do
  * backend, que continua validando.
  */

@@ -32,7 +32,7 @@ import com.geitus.app.cashier.IntegracaoDoCaixa;
 import com.geitus.app.cashier.ponto.dto.PontoDeCaixaResponse;
 
 /**
- * Pontos de caixa (docs/modules/caixa.md, 3.1 e 5.2): o "Caixa 1" automatico
+ * Pontos de caixa (docs/modules/caixa.md): o "Caixa 1" automatico
  * so para empresa sem nenhum ponto, o cadastro so por ADMIN, o nome unico sem
  * diferenciar maiusculas, o limite de 50, a inativacao so sem caixa aberto, a
  * situacao e o ultimo fundo de troco na lista e o isolamento por empresa.

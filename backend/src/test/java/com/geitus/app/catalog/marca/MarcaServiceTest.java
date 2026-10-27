@@ -36,8 +36,8 @@ import com.geitus.app.iam.UsuarioRepository;
 
 /**
  * Testa as regras do {@link MarcaService}, as mesmas das categorias com os
- * textos de marca (docs/modules/fornecedores-e-marcas.md, 3.1;
- * categorias-e-unidades.md, 4.2): isolamento por empresa (DEC-016), nome unico
+ * textos de marca (docs/modules/fornecedores-e-marcas.md;
+ * produtos.md): isolamento por empresa (DEC-016), nome unico
  * entre irmaos sem diferenciar maiusculas, bloqueio de ciclos ao mover,
  * bloqueio de exclusao com submarcas, produtos ou fornecedores (mensagens
  * fixas), inativacao sem cascata e o recalculo da busca dos produtos ao

@@ -12,7 +12,7 @@ import type {
 import type { PaginaResponse } from '@/types/produto'
 
 /**
- * Servico do Caixa (spec `docs/modules/caixa.md` §5.2). Centraliza as chamadas
+ * Servico do Caixa (spec `docs/modules/caixa.md`). Centraliza as chamadas
  * de /api/caixa. Empresa e usuario vem sempre do token; os ids sao os UUIDs
  * publicos. Escrita de pontos so ADMIN; lancar, contar e fechar so o dono da
  * sessao ou um ADMIN (o backend responde 404 ao OPERADOR na sessao de outro).

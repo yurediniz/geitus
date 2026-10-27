@@ -5,7 +5,7 @@ import java.time.LocalDate;
 
 /**
  * Situacao calculada de uma promocao (nao e coluna;
- * docs/modules/produtos-precos.md, 4.3). Inicio e fim sao inclusivos.
+ * docs/modules/produtos.md). Inicio e fim sao inclusivos.
  */
 public enum SituacaoPromocao {
     /** Hoje e antes do inicio. */

@@ -28,7 +28,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * a unidade de compra como existe hoje, aplica a V12 e confere via JDBC a
  * conversao da unidade de compra em embalagem de compra, a parada com erro nos
  * casos inconvertiveis, a saida das colunas antigas e as constraints novas
- * (docs/modules/produtos-embalagens.md, 4 e 9).
+ * (docs/modules/produtos.md).
  *
  * <p>Requer Docker disponivel no ambiente.
  */

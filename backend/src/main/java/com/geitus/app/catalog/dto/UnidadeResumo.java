@@ -8,7 +8,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Resumo de uma unidade de medida embutido na resposta do produto
- * (docs/modules/categorias-e-unidades.md, 5.2). O {@code id} e o UUID publico.
+ * (docs/modules/produtos.md). O {@code id} e o UUID publico.
  */
 @Schema(description = "Resumo de uma unidade de medida")
 public record UnidadeResumo(

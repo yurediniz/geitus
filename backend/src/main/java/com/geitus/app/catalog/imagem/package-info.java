@@ -1,5 +1,5 @@
 /**
- * Imagem do produto (Fase F; docs/modules/produtos-imagem.md, DEC-040).
+ * Imagem do produto (Fase F; docs/modules/produtos.md, DEC-040).
  *
  * <p>Uma imagem por produto, comprimida no navegador em duas versoes (grande
  * e miniatura) e guardada no PostgreSQL numa tabela separada de

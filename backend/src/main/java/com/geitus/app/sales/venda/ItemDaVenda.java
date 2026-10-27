@@ -16,7 +16,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 /**
- * Item da venda (tabela {@code itens_venda}, V17; docs/modules/pdv.md, 4.2):
+ * Item da venda (tabela {@code itens_venda}, V17; docs/modules/pdv.md):
  * a fotografia do que foi vendido, com o produto (FK {@code RESTRICT}), o
  * retrato da embalagem sem FK, o preco, a origem, os descontos e o custo na
  * data. Imutavel: todas as colunas sao {@code updatable = false} e o gatilho

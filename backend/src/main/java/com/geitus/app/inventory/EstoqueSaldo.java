@@ -10,7 +10,7 @@ import jakarta.persistence.Table;
 
 /**
  * Saldo atual de um produto (tabela {@code estoque_saldos}, V9;
- * docs/modules/produtos-estoque.md, 3.2).
+ * docs/modules/estoque.md).
  *
  * <p>A linha nasce no banco pelo {@code INSERT ... ON CONFLICT DO NOTHING} de
  * {@link EstoqueSaldoRepository#garantirLinha} (nunca por {@code persist}) e e

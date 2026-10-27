@@ -8,7 +8,7 @@ import com.geitus.app.sales.carrinho.CalculoDaVenda;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Resultado do {@code POST /api/pdv/calculo} (docs/modules/pdv.md, 5.3): 200
+ * Resultado do {@code POST /api/pdv/calculo} (docs/modules/pdv.md): 200
  * mesmo com regras violadas, que vem em {@code erros} com o campo. Os
  * {@code avisos} nao impedem a venda ("Estoque insuficiente (saldo 2 UN)" com
  * "Vender sem estoque" ligada). Nunca traz o custo.

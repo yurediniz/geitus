@@ -12,7 +12,7 @@ import jakarta.validation.constraints.Size;
 
 /**
  * Uma embalagem na lista completa do produto
- * (docs/modules/produtos-embalagens.md, 2 e 7). {@code id} identifica a
+ * (docs/modules/produtos.md). {@code id} identifica a
  * embalagem que continua; sem {@code id}, a embalagem e nova. As regras que
  * dependem do produto (unidade diferente da de venda, quantidade &gt; 1,
  * fracao, repeticao, uma de compra, preco minimo e unicidade dos codigos)

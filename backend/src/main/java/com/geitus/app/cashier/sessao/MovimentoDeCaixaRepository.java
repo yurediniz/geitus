@@ -28,7 +28,7 @@ public interface MovimentoDeCaixaRepository extends Repository<MovimentoDeCaixa,
     /**
      * Dinheiro esperado na gaveta: abertura + suprimentos + recebimentos -
      * sangrias - estornos, so em dinheiro. Nao e coluna: e sempre esta soma
-     * (spec 2; docs/modules/pdv.md, 3.9).
+     * (spec do Caixa; docs/modules/pdv.md).
      */
     @Query(value = """
             SELECT COALESCE(SUM(CASE WHEN tipo IN ('SANGRIA', 'ESTORNO') THEN -valor ELSE valor END), 0)

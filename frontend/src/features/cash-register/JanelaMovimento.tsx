@@ -57,7 +57,7 @@ const TEXTOS: Readonly<
 }
 
 /**
- * Janela pequena de sangria e suprimento (spec §6.3): Valor (foco inicial) e
+ * Janela pequena de sangria e suprimento (spec do Caixa): Valor (foco inicial) e
  * Motivo; Enter confirma e o botao fica desabilitado durante o envio. A chave
  * e gerada a cada abertura e reaproveitada na nova tentativa.
  */

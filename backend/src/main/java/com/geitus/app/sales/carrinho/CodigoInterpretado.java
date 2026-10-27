@@ -6,7 +6,7 @@ import com.geitus.app.catalog.balanca.LeituraEtiqueta;
 
 /**
  * O que o texto lido no campo "Codigo ou nome" significa
- * ({@link InterpretadorDeCodigo}; docs/modules/pdv.md, 3.1 e 5.2).
+ * ({@link InterpretadorDeCodigo}; docs/modules/pdv.md).
  */
 public sealed interface CodigoInterpretado {
 

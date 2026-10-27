@@ -17,7 +17,7 @@ import com.geitus.app.sales.IntegracaoDoPdv;
 
 /**
  * {@code GET /api/pdv/vendas} e {@code GET /api/pdv/vendas/{id}}
- * (docs/modules/pdv.md, 5.3): o OPERADOR so ve as vendas das proprias
+ * (docs/modules/pdv.md): o OPERADOR so ve as vendas das proprias
  * sessoes; sem sessao e sem periodo vale a sessao atual; filtros de situacao,
  * periodo e numero; {@code podeCancelar} coerente; outra empresa, 404.
  */

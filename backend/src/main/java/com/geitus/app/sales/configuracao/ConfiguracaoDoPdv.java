@@ -10,7 +10,7 @@ import jakarta.persistence.Table;
 
 /**
  * Configuracao do PDV da empresa (tabela {@code configuracoes_pdv}, V17;
- * docs/modules/pdv.md, 3.10): uma linha por empresa, criada na primeira
+ * docs/modules/pdv.md): uma linha por empresa, criada na primeira
  * alteracao. Sem linha valem os padroes ({@link RegrasDoPdv#PADRAO}). A
  * gravacao e pelo upsert do {@link ConfiguracaoDoPdvRepository}; a entidade so
  * e lida.

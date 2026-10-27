@@ -82,7 +82,7 @@ interface LinhaRemovida {
 }
 
 /**
- * A venda com o caixa aberto (spec do PDV §6.2): a barra com o caixa e o
+ * A venda com o caixa aberto (spec do PDV): a barra com o caixa e o
  * operador; a esquerda, o campo "Código ou nome" no topo (foco permanente)
  * com a busca ao vivo; a direita, o cliente, os itens e o total. O carrinho
  * fica no navegador; o calculo exibido e sempre o do servidor.

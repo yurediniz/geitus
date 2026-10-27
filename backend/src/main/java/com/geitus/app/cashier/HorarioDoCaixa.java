@@ -6,7 +6,7 @@ import java.time.OffsetDateTime;
 /**
  * Horarios do caixa nas respostas: no fuso do {@link Clock} da aplicacao
  * ({@code America/Sao_Paulo}), para sair {@code 2026-10-24T08:02:00-03:00}
- * qualquer que seja o fuso da JVM (docs/modules/caixa.md, 4.5).
+ * qualquer que seja o fuso da JVM (docs/modules/caixa.md).
  */
 public final class HorarioDoCaixa {
 

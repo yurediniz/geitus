@@ -2,7 +2,7 @@
  * Tipos do modulo Fornecedores (Fase B5).
  *
  * Refletem o contrato da API em /api/fornecedores (ver
- * docs/modules/fornecedores-e-marcas.md §4.7). O `id` e o UUID publico; a
+ * docs/modules/fornecedores-e-marcas.md). O `id` e o UUID publico; a
  * empresa nunca trafega aqui: e derivada do usuario autenticado. Documento,
  * CEP e telefone vem so com digitos.
  */

@@ -24,7 +24,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * <p>Cada teste parte de um banco limpo no schema da V15, com duas empresas e
  * um usuario em cada, aplica a V16 e confere a carga do "Caixa 1", as
  * unicidades (indices parciais de sessao aberta), os {@code CHECK} de coerencia
- * por estado e os gatilhos de imutabilidade (docs/modules/caixa.md, 4 e 8).
+ * por estado e os gatilhos de imutabilidade (docs/modules/caixa.md).
  *
  * <p>O {@link JdbcTemplate} traduz o erro do banco para a hierarquia do Spring:
  * constraints e gatilhos (que usam o SQLSTATE 23000) viram

@@ -18,7 +18,7 @@ import jakarta.persistence.Table;
 
 /**
  * Alteracao de custo ou de preco de venda de um {@link Produto} (tabela
- * {@code produto_historico_precos}, V8; docs/modules/produtos-precos.md, 4.6).
+ * {@code produto_historico_precos}, V8; docs/modules/produtos.md).
  * Desde a V13 (Fase B4), as linhas de custo trazem a origem e, na entrada por
  * compra, o id do movimento de estoque.
  *

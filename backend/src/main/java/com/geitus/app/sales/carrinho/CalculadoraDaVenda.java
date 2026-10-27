@@ -20,7 +20,7 @@ import com.geitus.app.catalog.balanca.TipoInformacaoEtiqueta;
 import com.geitus.app.shared.formato.FormatoBrasileiro;
 
 /**
- * Calculo do carrinho (docs/modules/pdv.md, 3.1 a 3.4 e 5.2): preco de cada
+ * Calculo do carrinho (docs/modules/pdv.md): preco de cada
  * linha, descontos (do item e do total, com a reparticao), total, pagamento,
  * troco e o recebido por forma. Regra pura, sem banco: e a mesma no
  * {@code POST /api/pdv/calculo} e na finalizacao.
@@ -107,7 +107,7 @@ public final class CalculadoraDaVenda {
                 List.of());
     }
 
-    // ---------- Preco e desconto do item (3.1, 3.2 e 3.3) ----------
+    // ---------- Preco e desconto do item ----------
 
     /** Linha com preco, valores e quantidades, antes da reparticao do desconto do total. */
     private record LinhaPrecificada(LinhaParaCalculo linha, BigDecimal quantidade, BigDecimal quantidadeEstoque,
@@ -139,7 +139,7 @@ public final class CalculadoraDaVenda {
     /**
      * Soma das quantidades validas das linhas de unidade (sem embalagem) e das
      * etiquetas de UN aceitas (1 cada) de cada produto: decide o atacado de
-     * todas elas (3.2). A etiqueta de produto fracionado nao entra.
+     * todas elas. A etiqueta de produto fracionado nao entra.
      */
     private static Map<Long, BigDecimal> quantidadesDasUnidades(List<LinhaParaCalculo> linhas) {
         Map<Long, BigDecimal> somas = new HashMap<>();
@@ -190,7 +190,7 @@ public final class CalculadoraDaVenda {
     }
 
     /**
-     * Etiqueta de balanca (3.1).
+     * Etiqueta de balanca.
      * <ul>
      *   <li>Produto fracionado: valor, a quantidade e valor / preco vigente sem
      *       atacado (3 casas) e o valor e o da etiqueta; peso, o valor e peso x
@@ -259,7 +259,7 @@ public final class CalculadoraDaVenda {
                 MENSAGEM_DESCONTO_ACIMA_DO_ITEM), erros);
     }
 
-    // ---------- Desconto do total e reparticao (3.3) ----------
+    // ---------- Desconto do total e reparticao ----------
 
     private static BigDecimal descontoDoTotal(DescontoInformado informado, BigDecimal base,
             List<ErroDoCalculo> erros) {
@@ -354,7 +354,7 @@ public final class CalculadoraDaVenda {
                 linha.liquidoDoItem().subtract(descontoRateado));
     }
 
-    // ---------- Limites do desconto (3.3) ----------
+    // ---------- Limites do desconto ----------
 
     /** (descontos dos itens + desconto do total) / subtotal x 100 <= limite, so para o OPERADOR. */
     private static void conferirLimiteDoOperador(boolean ehAdmin, BigDecimal limite, BigDecimal subtotal,
@@ -394,7 +394,7 @@ public final class CalculadoraDaVenda {
         }
     }
 
-    // ---------- Pagamento (3.4) ----------
+    // ---------- Pagamento ----------
 
     /** Pago, troco, falta, os pagamentos validos (normalizados) e o recebido por forma (no dinheiro, sem o troco). */
     private record Pagamento(BigDecimal pago, BigDecimal troco, BigDecimal faltaPagar,

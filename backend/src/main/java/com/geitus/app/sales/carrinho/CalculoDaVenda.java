@@ -10,7 +10,7 @@ import java.util.Map;
 import com.geitus.app.cashier.FormaDePagamento;
 
 /**
- * Resultado da {@link CalculadoraDaVenda} (docs/modules/pdv.md, 5.2): as
+ * Resultado da {@link CalculadoraDaVenda} (docs/modules/pdv.md): as
  * linhas calculadas, os totais, o pagamento, os pagamentos validos por forma
  * (na escala do dinheiro: o que a venda grava), o recebido por forma (o que
  * vai para o caixa: no dinheiro, ja sem o troco) e as regras violadas em

@@ -6,8 +6,8 @@ import com.geitus.app.catalog.imagem.AssinaturaDeImagem;
 import com.geitus.app.catalog.imagem.ResumoDaImagem;
 
 /**
- * As imagens dos produtos de uma resposta (docs/modules/produtos-imagem.md,
- * 4.3): os resumos sem bytes, por id interno do produto, carregados numa
+ * As imagens dos produtos de uma resposta (docs/modules/produtos.md):
+ * os resumos sem bytes, por id interno do produto, carregados numa
  * consulta so (na listagem, para a pagina inteira), e a assinatura que monta
  * as URLs.
  */

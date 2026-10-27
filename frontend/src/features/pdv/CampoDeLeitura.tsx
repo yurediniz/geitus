@@ -32,7 +32,7 @@ function codigoDoTexto(lido: string): string {
   return lido.split('*')[0] || lido
 }
 
-/** A mensagem da leitura recusada (spec do PDV §3.1), com o codigo lido e sem detalhe tecnico. */
+/** A mensagem da leitura recusada (spec do PDV), com o codigo lido e sem detalhe tecnico. */
 function mensagemDaLeitura(erro: unknown, lido: string): string {
   if (erro instanceof HttpError) {
     if (erro.status === 0) {
@@ -84,7 +84,7 @@ export interface CampoDeLeituraProps {
 }
 
 /**
- * O campo "Código ou nome" no topo da venda (spec do PDV §3.1 e §6.2), com o
+ * O campo "Código ou nome" no topo da venda (spec do PDV), com o
  * foco permanente, e a busca ao vivo logo abaixo. Enter com um codigo limpa o
  * campo na hora e o texto vai para a fila: a resolucao e pedida em seguida
  * (sem esperar as anteriores), com tempo maximo, e o resultado entra no

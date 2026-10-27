@@ -49,7 +49,7 @@ import jakarta.persistence.EntityManagerFactory;
 
 /**
  * Integracao entre o catalogo e o estoque com o contexto Spring completo e um
- * PostgreSQL real (docs/modules/produtos-estoque.md, 4.1, 4.4, 4.7 e 4.8): o
+ * PostgreSQL real (docs/modules/estoque.md): o
  * estoque inicial no cadastro, a exclusao condicionada a movimentacao (com a
  * concorrencia entre exclusao e ajuste — Review Focus 2), a unidade de produto
  * movimentado, o controle desligado mantendo o saldo (Review Focus 4) e a
@@ -127,7 +127,7 @@ class EstoqueCatalogoIT {
                 Long.class, idInterno);
     }
 
-    // ---------- Estoque inicial (spec 4.4) ----------
+    // ---------- Estoque inicial (spec de Estoque) ----------
 
     @Test
     void cadastroComEstoqueInicialGravaAEntradaDoCadastro() {
@@ -173,7 +173,7 @@ class EstoqueCatalogoIT {
                 Long.class, empresa.empresa().getId())).isZero();
     }
 
-    // ---------- Exclusao (spec 4.7) ----------
+    // ---------- Exclusao (spec de Estoque) ----------
 
     @Test
     void excluirSemMovimentoApagaOProduto() {
@@ -269,7 +269,7 @@ class EstoqueCatalogoIT {
         };
     }
 
-    // ---------- Unidade de produto movimentado (spec 4.8) ----------
+    // ---------- Unidade de produto movimentado (spec de Estoque) ----------
 
     @Test
     void trocarUnidadeDeProdutoMovimentado_400() {

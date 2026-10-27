@@ -30,7 +30,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 /**
  * Teste de integracao do {@link Numerador} contra um PostgreSQL real
  * (Testcontainers, Flyway com as migrations de producao), com transacoes reais
- * (docs/modules/produtos-codigo-e-balanca.md, 2.2 e 9; Review Focus 1).
+ * (docs/modules/produtos.md; Review Focus 1).
  *
  * <p>Cada teste usa uma empresa nova, criada via JDBC. Requer Docker.
  */

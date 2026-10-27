@@ -10,8 +10,8 @@ import com.geitus.app.catalog.Produto;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Origem do custo atual do produto (Fase B4, docs/modules/produtos-custo-entrada.md,
- * 4): "Ultimo custo de entrada ... (2 CX c/ 18 UN)" ou "Custo editado
+ * Origem do custo atual do produto (Fase B4, docs/modules/estoque.md):
+ * "Ultimo custo de entrada ... (2 CX c/ 18 UN)" ou "Custo editado
  * manualmente em ...". A quantidade e a embalagem vem da ultima entrada por
  * compra e so na origem {@code ENTRADA_COMPRA}; na listagem de produtos nao
  * sao consultadas e saem nulas.

@@ -48,7 +48,7 @@ function tituloDaLista(total: number | undefined, filtrado: boolean): string {
 }
 
 /**
- * Lista de fornecedores (/produtos/fornecedores, spec B5 §8.2): paginada no
+ * Lista de fornecedores (/produtos/fornecedores, spec de Fornecedores e marcas): paginada no
  * servidor, com busca enquanto se digita e filtro de status guardados na URL.
  */
 export function FornecedoresPage() {

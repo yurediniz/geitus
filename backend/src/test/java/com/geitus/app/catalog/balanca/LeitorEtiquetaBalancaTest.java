@@ -12,11 +12,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 import com.geitus.app.catalog.CodigoBarras;
 
 /**
- * Regra de leitura da etiqueta de balanca (docs/modules/produtos-codigo-e-balanca.md,
- * 3.2 e 9): so 13 digitos com o prefixo, codigo sem zeros, informacao dividida
+ * Regra de leitura da etiqueta de balanca (docs/modules/produtos.md):
+ * so 13 digitos com o prefixo, codigo sem zeros, informacao dividida
  * por 10^casas e, com DV, EAN-13 valido.
  *
- * <p>Os modelos prontos (spec 3.3) foram lidos assim, com prefixo "2":
+ * <p>Os modelos prontos (spec de Produtos) foram lidos assim, com prefixo "2":
  * <ul>
  *   <li>"Toledo, codigo 6 + valor 6 (3 casas), sem DV": 2 + 6 + 0 + 6 = 13 (o padrao);</li>
  *   <li>"Toledo, codigo 4 + 0 + valor 6 (2 casas) + DV": 2 + 4 + 1 zero + 6 + DV = 13;</li>
@@ -76,7 +76,7 @@ class LeitorEtiquetaBalancaTest {
                 .contains(new LeituraEtiqueta(542, TipoInformacaoEtiqueta.PESO, new BigDecimal("0.750")));
     }
 
-    /** Spec 3.1: o preenchimento sao zeros entre o codigo e a informacao; outro digito nao e etiqueta. */
+    /** Spec de Produtos: o preenchimento sao zeros entre o codigo e a informacao; outro digito nao e etiqueta. */
     @Test
     void preenchimentoDeveSerZero() {
         ConfiguracaoEtiqueta comDoisDePreenchimento =

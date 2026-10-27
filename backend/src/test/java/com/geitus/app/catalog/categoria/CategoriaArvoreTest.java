@@ -16,7 +16,7 @@ import com.geitus.app.company.Empresa;
 /**
  * Testa o objeto de dominio puro {@link CategoriaArvore} (sem Spring e sem
  * mocks): caminho, nivel, subarvore, deteccao de ciclo, selecionabilidade do
- * ramo e ordenacao pelo caminho (docs/modules/categorias-e-unidades.md, 4.2).
+ * ramo e ordenacao pelo caminho (docs/modules/produtos.md).
  *
  * <p>Arvore usada nos testes:
  * <pre>

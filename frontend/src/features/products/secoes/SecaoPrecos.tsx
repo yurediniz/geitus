@@ -124,7 +124,7 @@ interface MargemEMarkupDoPrecoProps {
 
 /**
  * Margem e markup de um preco especial (promocional ou de atacado), calculados
- * sobre o custo como os do preco de venda (spec B2 §5). Sem custo ou preco, "—".
+ * sobre o custo como os do preco de venda (spec de Produtos). Sem custo ou preco, "—".
  */
 function MargemEMarkupDoPreco({ nome, preco, custo }: MargemEMarkupDoPrecoProps) {
   const { margem, markup } = calcularMargemMarkup(preco, custo)
@@ -143,7 +143,7 @@ function MargemEMarkupDoPreco({ nome, preco, custo }: MargemEMarkupDoPrecoProps)
 }
 
 /**
- * O que sao margem e markup, com o mesmo exemplo para os dois (spec B2 §5).
+ * O que sao margem e markup, com o mesmo exemplo para os dois (spec de Produtos).
  * Sempre visivel em tela larga; no celular, recolhida atras de um botao.
  */
 function ExplicacaoMargemMarkup() {
@@ -269,7 +269,7 @@ export function SecaoPrecos({
   const valorPrecoVenda = numeroValido(precoVenda)
   const avisoPrecoVenda = textoAbaixoDoCusto(precoVenda, custo)
   const siglaVenda = siglaPorId.get(unidadeId)
-  // De onde veio o custo gravado (spec B4 §4): vem do backend, entao so muda depois de salvar ou ajustar.
+  // De onde veio o custo gravado (spec de Estoque): vem do backend, entao so muda depois de salvar ou ajustar.
   const notaDoCusto = produto ? notaDaOrigemDoCusto(produto.custo, produto.custoOrigem, produto.unidade.sigla) : null
   const avisoDoCusto = produto ? textoDoCustoAlterado(custo, produto.custo, custoDaCompraNaoAplicado) : null
 
@@ -464,7 +464,7 @@ export function SecaoPrecos({
         {ajudaAtacado && <p className="text-sm text-muted-foreground">{ajudaAtacado}</p>}
       </BlocoComInterruptor>
 
-      {/* Regra do PDV (spec 4.5): entre os precos que valem, o menor. */}
+      {/* Regra do PDV (spec de Produtos): entre os precos que valem, o menor. */}
       {promocaoAtiva && atacadoAtivo && (
         <p className="text-sm text-muted-foreground">
           Se a promoção e o atacado valerem juntos, a venda usa o menor preço.
@@ -532,7 +532,7 @@ function motivoSemCalculo(base: BaseDoCalculo, custo: string, percentual: string
 }
 
 /**
- * Calculadora do preco de venda (spec 4.2 e B2 §5), pela margem ou pelo markup
+ * Calculadora do preco de venda (spec de Produtos), pela margem ou pelo markup
  * desejado: o percentual nao e gravado, so gera o preco de venda, que passa a
  * contar como alterado. Fica no estado da secao (e um auxilio de calculo, nao
  * um dado do produto).

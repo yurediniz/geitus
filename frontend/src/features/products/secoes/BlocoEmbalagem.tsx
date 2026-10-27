@@ -70,7 +70,7 @@ function quantidadeDaDica(quantidade: string): string | null {
 }
 
 /**
- * Ajuda do preco (spec B3 §5.1). Vazio: "Vazio, vende por 3 × R$ 89,90 = R$
+ * Ajuda do preco (spec de Produtos). Vazio: "Vazio, vende por 3 × R$ 89,90 = R$
  * 269,70." (com "(promoção)" quando vale a promocional) ou, faltando a
  * quantidade ou o preco da unidade, como a conta e feita. Com preco proprio:
  * "Sai a R$ 69,97 por UN (avulso: R$ 269,70)."; null enquanto falta a quantidade.
@@ -367,7 +367,7 @@ function CodigosBarrasDaEmbalagem({
       ajuda={`Até ${MAXIMO_CODIGOS_POR_EMBALAGEM} códigos.`}
       rotuloLista={`Códigos de barras da embalagem ${titulo}`}
       mostrarPrincipal={false}
-      // Um codigo pertence a uma lista so (spec B3 §2.2): a unidade e as outras embalagens, lidas ao adicionar.
+      // Um codigo pertence a uma lista so (spec de Produtos): a unidade e as outras embalagens, lidas ao adicionar.
       localizador={(codigo) => localizarCodigoForaDaLista(getValues(), indice, siglaPorId)(codigo)}
       valor={lista.value}
       onChange={(codigos) => {

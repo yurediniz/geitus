@@ -9,8 +9,8 @@ import org.junit.jupiter.api.Test;
 import com.geitus.app.catalog.CustoDeEntrada;
 
 /**
- * Conta do custo da compra (Fase B4, docs/modules/produtos-custo-entrada.md,
- * 2.1): o por unidade e o digitado em unidades, ou a divisao pela embalagem
+ * Conta do custo da compra (Fase B4, docs/modules/estoque.md):
+ * o por unidade e o digitado em unidades, ou a divisao pela embalagem
  * com 4 casas, meio para cima; as escalas sao as das colunas da V13.
  */
 class CustoDaCompraTest {

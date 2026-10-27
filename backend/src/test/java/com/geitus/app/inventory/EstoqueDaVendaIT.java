@@ -30,7 +30,7 @@ import com.geitus.app.sales.CenarioDoPdv.NovoProduto;
 import com.geitus.app.sales.IntegracaoDoPdv;
 
 /**
- * Estoque por venda (docs/modules/pdv.md, 3.6, 3.8 e 4.5; DT-032): baixa com
+ * Estoque por venda (docs/modules/pdv.md; DT-032): baixa com
  * saldo negativo permitido so pela venda, estorno no cancelamento, produto sem
  * controle sem movimento e a trava dos produtos em ordem de id. As vendas e os
  * itens sao gravados por JDBC (a FK do movimento exige o item); o

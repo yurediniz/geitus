@@ -8,8 +8,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Normalizacao unica do texto de busca (docs/modules/produtos-listagem.md,
- * 4.1): a mesma funcao alimenta as colunas {@code busca_normalizada} e
+ * Normalizacao unica do texto de busca (docs/modules/produtos.md):
+ * a mesma funcao alimenta as colunas {@code busca_normalizada} e
  * {@code nome_normalizado} do produto e trata o termo digitado, entao "Açúcar",
  * "acucar" e "ACUCAR" se encontram.
  *
@@ -89,7 +89,7 @@ public final class TextoDeBusca {
     }
 
     /**
-     * Fase B2 (docs/modules/produtos-codigo-e-balanca.md, 6): o termo como
+     * Fase B2 (docs/modules/produtos.md): o termo como
      * numero, para comparar com o numero de registro e o codigo do produto. Parte
      * do {@link #termoDeCodigo} (sem espacos nem invisiveis), que precisa ser so
      * de digitos ASCII; os zeros a esquerda sao ignorados ("0542" = 542). Nao

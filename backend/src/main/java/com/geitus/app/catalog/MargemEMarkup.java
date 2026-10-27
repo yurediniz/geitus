@@ -5,8 +5,8 @@ import java.math.RoundingMode;
 
 /**
  * Margem e markup de um preco sobre um custo, em % com 2 casas e
- * arredondamento {@code HALF_UP} (docs/modules/produtos-codigo-e-balanca.md,
- * 5). Valem para o produto e para as embalagens (Fase B3, 3.2). Sao derivados:
+ * arredondamento {@code HALF_UP} (docs/modules/produtos.md).
+ * Valem para o produto e para as embalagens (Fase B3). Sao derivados:
  * nunca tem coluna.
  */
 public final class MargemEMarkup {

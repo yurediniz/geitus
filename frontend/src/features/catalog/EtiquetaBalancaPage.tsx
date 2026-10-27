@@ -68,7 +68,7 @@ function semPadrao({ padrao: _padrao, ...configuracao }: ConfiguracaoEtiquetaRes
 }
 
 /**
- * Tela "Balança" do catalogo (/produtos/balanca, spec B2 §3.3): o formato da
+ * Tela "Balança" do catalogo (/produtos/balanca, spec de Produtos): o formato da
  * etiqueta que a balanca imprime, com modelos prontos, a previa e o teste de
  * uma etiqueta. Leitura e teste para todos; salvar so ADMIN (o backend tambem barra).
  */

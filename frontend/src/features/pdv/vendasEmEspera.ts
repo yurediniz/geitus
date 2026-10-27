@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { chaveDoCarrinho, ehCarrinho, higienizarCarrinho, type Carrinho } from '@/features/pdv/carrinho'
 
 /**
- * Vendas em espera (spec do PDV §3.7): no navegador, por empresa e usuario,
+ * Vendas em espera (spec do PDV): no navegador, por empresa e usuario,
  * ate 5. Cada uma guarda o carrinho, a hora, a quantidade de itens e o total
  * do ultimo calculo (so para a lista): ao retomar, preco e estoque sao os de
  * agora, porque o calculo e refeito.

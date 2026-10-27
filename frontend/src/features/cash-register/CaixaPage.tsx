@@ -21,7 +21,7 @@ import { buscarSessao, sessaoAtual } from '@/services/caixaService'
 import type { MovimentoDeCaixaRequest, SessaoDeCaixa } from '@/types/caixa'
 
 /**
- * Tela do caixa (/caixa, spec §6.2 a §6.5). Mostra, nesta ordem:
+ * Tela do caixa (/caixa, spec do Caixa). Mostra, nesta ordem:
  * - o caixa de outra pessoa que o ADMIN escolheu ver ("Ver caixa"), aberto ou
  *   ja fechado por ele (resumo com "Voltar");
  * - o resumo do caixa que o usuario acabou de fechar ("Abrir novo caixa");
@@ -223,7 +223,7 @@ export function CaixaPage() {
   )
 }
 
-/** Resumo de um caixa fechado (spec §6.4), com a acao seguinte. O titulo recebe o foco ao aparecer. */
+/** Resumo de um caixa fechado (spec do Caixa), com a acao seguinte. O titulo recebe o foco ao aparecer. */
 function CaixaFechado({
   sessao,
   acao,

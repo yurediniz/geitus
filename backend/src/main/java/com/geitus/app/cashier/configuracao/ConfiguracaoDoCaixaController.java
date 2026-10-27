@@ -22,7 +22,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 /**
- * Configuracao do caixa (docs/modules/caixa.md, 5.2). Leitura para qualquer
+ * Configuracao do caixa (docs/modules/caixa.md). Leitura para qualquer
  * autenticado; o {@code PUT} exige ADMIN no {@code SecurityConfig}.
  */
 @RestController

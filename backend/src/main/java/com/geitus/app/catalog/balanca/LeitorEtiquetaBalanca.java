@@ -8,13 +8,13 @@ import java.util.regex.Pattern;
 import com.geitus.app.catalog.CodigoBarras;
 
 /**
- * Le uma etiqueta de balanca (docs/modules/produtos-codigo-e-balanca.md, 3.2):
+ * Le uma etiqueta de balanca (docs/modules/produtos.md):
  * regra de dominio pura, usada pelo teste de etiqueta agora e pelo PDV depois.
  *
  * <p>So ha leitura com exatamente 13 digitos ASCII comecando pelo prefixo e,
  * com digito verificador, EAN-13 valido. O codigo e lido sem zeros (000542 =
  * 542) e tem de ser um codigo de produto (de 1 a 999999); os digitos de
- * preenchimento tem de ser zeros (spec 3.1); a informacao e dividida por
+ * preenchimento tem de ser zeros (spec de Produtos); a informacao e dividida por
  * 10^casas, mantendo a escala (010000 com 3 casas = 10.000).
  */
 public final class LeitorEtiquetaBalanca {

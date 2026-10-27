@@ -63,8 +63,8 @@ import jakarta.persistence.EntityManagerFactory;
 
 /**
  * Embalagens no cadastro do produto de ponta a ponta (filtro JWT, controller,
- * service, Hibernate e PostgreSQL real; docs/modules/produtos-embalagens.md,
- * 2, 3, 7 e 9): o ciclo da lista, os precos e o historico, os conflitos de
+ * service, Hibernate e PostgreSQL real; docs/modules/produtos.md):
+ * o ciclo da lista, os precos e o historico, os conflitos de
  * codigo, o isolamento e os Review Focus 1 a 4 da Fase B3.
  *
  * <p>Sem {@code @Transactional} na classe: cada requisicao abre e confirma a

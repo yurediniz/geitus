@@ -16,7 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * URLs assinadas da imagem do produto (docs/modules/produtos-imagem.md, 4.2;
+ * URLs assinadas da imagem do produto (docs/modules/produtos.md;
  * DEC-040). A tag {@code <img>} nao envia o JWT, entao quem autoriza a
  * leitura e a assinatura da URL, gerada so para quem ja leu o produto.
  *

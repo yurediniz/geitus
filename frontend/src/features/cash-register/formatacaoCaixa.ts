@@ -9,8 +9,8 @@ import type {
 
 /**
  * Formatacao do caixa. Os horarios chegam com deslocamento (ISO-8601) e sao
- * sempre mostrados e comparados no fuso da empresa, America/Sao_Paulo (spec
- * §4.5), independentemente do fuso do navegador. O dinheiro e contado em
+ * sempre mostrados e comparados no fuso da empresa, America/Sao_Paulo (spec do
+ * Caixa), independentemente do fuso do navegador. O dinheiro e contado em
  * centavos inteiros para nao acumular erro de ponto flutuante.
  */
 
@@ -63,7 +63,7 @@ function formatarDiaEHora(valor: string): string {
   return partes ? `${partes.dia}/${partes.mes} às ${partes.hora}:${partes.minuto}` : valor
 }
 
-/** "Aberto desde 23/10 às 08:02" (aviso do caixa esquecido aberto, spec §3.5). */
+/** "Aberto desde 23/10 às 08:02" (aviso do caixa esquecido aberto, spec do Caixa). */
 export function textoAbertoDesde(abertaEm: string): string {
   return `Aberto desde ${formatarDiaEHora(abertaEm)}`
 }
@@ -116,7 +116,7 @@ export function diferencaEntre(contado: number, esperado: number): number {
   return (emCentavos(contado) - emCentavos(esperado)) / 100
 }
 
-/** Zero confere (verde); sobra ou falta em ambar (spec §6.4). */
+/** Zero confere (verde); sobra ou falta em ambar (spec do Caixa). */
 export function formatarDiferenca(valor: number): { texto: string; tom: 'ok' | 'alerta' } {
   const centavos = emCentavos(valor)
   if (centavos === 0) {

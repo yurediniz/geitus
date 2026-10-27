@@ -14,17 +14,17 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Um movimento de estoque, na resposta do ajuste e na aba Historico
- * (docs/modules/produtos-estoque.md, 5). O {@code id} e o UUID publico do
+ * (docs/modules/estoque.md). O {@code id} e o UUID publico do
  * movimento; do usuario so sai o nome, nunca o id interno ou o e-mail.
  *
- * <p>Fase B3 (docs/modules/produtos-embalagens.md, 6): {@code embalagem} traz o
+ * <p>Fase B3 (docs/modules/produtos.md): {@code embalagem} traz o
  * retrato da embalagem quando o ajuste foi informado em embalagens; senao
  * {@code null}. A {@code quantidade} continua em unidades de venda.
  *
- * <p>Fase B4 (docs/modules/produtos-custo-entrada.md, 6): a entrada por compra
+ * <p>Fase B4 (docs/modules/estoque.md): a entrada por compra
  * traz {@code custoInformado} e {@code custoUnitario}.
  *
- * <p>Fase B5 (docs/modules/fornecedores-e-marcas.md, 6): a entrada por compra
+ * <p>Fase B5 (docs/modules/fornecedores-e-marcas.md): a entrada por compra
  * com fornecedor traz {@code fornecedor: {id, nome}}.
  */
 @Schema(description = "Movimento de estoque do produto")

@@ -10,7 +10,7 @@ import com.geitus.app.catalog.Produto;
 import com.geitus.app.shared.formato.FormatoBrasileiro;
 
 /**
- * Saldo de estoque das linhas (docs/modules/pdv.md, 3.1 e 3.6): para cada
+ * Saldo de estoque das linhas (docs/modules/pdv.md): para cada
  * produto que controla estoque, a soma das quantidades de estoque das linhas
  * dele contra o saldo atual. Com "Vender sem estoque" ligada, o saldo menor e
  * um aviso em cada linha do produto; desligada, um erro (409 ao finalizar).

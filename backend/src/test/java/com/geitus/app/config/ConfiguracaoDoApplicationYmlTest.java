@@ -11,7 +11,7 @@ import org.springframework.core.io.FileSystemResource;
 /**
  * Le o {@code application.yml} PRINCIPAL direto do disco: no classpath dos
  * testes ele e substituido pelo de teste, entao os ITs nao exercitam estes
- * valores de producao (Fase F, docs/modules/produtos-imagem.md, 4.1 e 6).
+ * valores de producao (Fase F, docs/modules/produtos.md).
  */
 class ConfiguracaoDoApplicationYmlTest {
 

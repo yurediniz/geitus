@@ -18,7 +18,7 @@ import jakarta.persistence.Transient;
 
 /**
  * Imagem de um produto (tabela {@code produto_imagens}, V15;
- * docs/modules/produtos-imagem.md, 3), uma por produto.
+ * docs/modules/produtos.md), uma por produto.
  *
  * <p>Fica fora da entidade {@code Produto} de proposito: nenhuma consulta de
  * produto carrega os bytes. A PK e o id interno do produto (sem relacao JPA:

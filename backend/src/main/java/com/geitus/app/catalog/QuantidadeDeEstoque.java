@@ -6,7 +6,7 @@ import com.geitus.app.catalog.unidade.UnidadeMedida;
 
 /**
  * Regras de uma quantidade de estoque informada pelo usuario
- * (docs/modules/produtos-estoque.md, 4.2 e 4.4), comuns ao estoque inicial do
+ * (docs/modules/estoque.md), comuns ao estoque inicial do
  * cadastro e ao ajuste manual: nao negativa, maior que zero quando o zero nao
  * vale, ate 9 digitos inteiros e 3 casas ({@code NUMERIC(12,3)}, V9) e fracao so em unidade
  * fracionada. O erro aponta o campo do request ({@code campos}).

@@ -30,7 +30,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 /**
- * Pontos de caixa (docs/modules/caixa.md, 5.2). Controller fino: recebe so o
+ * Pontos de caixa (docs/modules/caixa.md). Controller fino: recebe so o
  * {@code idUsuario} do JWT e delega ao {@link PontosDeCaixaService}. O
  * {@code {id}} e o UUID publico do ponto. RBAC no {@code SecurityConfig}: a
  * leitura vale para qualquer autenticado; cadastrar, renomear, inativar e

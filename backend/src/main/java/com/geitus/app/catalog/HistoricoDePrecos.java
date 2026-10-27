@@ -5,8 +5,8 @@ import java.math.BigDecimal;
 import org.springframework.stereotype.Component;
 
 /**
- * Grava o historico de precos do produto (docs/modules/produtos-precos.md,
- * 4.6): uma linha por campo que realmente mudou, comparando numericamente
+ * Grava o historico de precos do produto (docs/modules/produtos.md):
+ * uma linha por campo que realmente mudou, comparando numericamente
  * (10,00 = 10,0) e tratando nulo. Chamado depois do {@code save} (o produto
  * novo ja tem id), na mesma transacao: se o produto nao for gravado, nada e
  * registrado.

@@ -26,7 +26,7 @@ export interface JanelaFecharCaixaProps {
   aberto: boolean
   /** A sessao como esta na tela (recarregada quando o cache do caixa e invalidado). */
   sessao: SessaoDeCaixa
-  /** ADMIN fechando o caixa aberto por outra pessoa: aviso no topo (spec §6.4). */
+  /** ADMIN fechando o caixa aberto por outra pessoa: aviso no topo (spec do Caixa). */
   deOutraPessoa: boolean
   aoFechar: () => void
   /** Sessao FECHADA (direto pela contagem ou depois da justificativa). */
@@ -127,7 +127,7 @@ function normalizarErroDoServidor(erro: unknown): unknown {
 }
 
 /**
- * Janela "Fechar caixa" (spec §6.4). O modo vem de `sessao.fechamentoCego`:
+ * Janela "Fechar caixa" (spec do Caixa). O modo vem de `sessao.fechamentoCego`:
  * - nao cego: o contado com o esperado e a diferenca ao vivo; com diferenca, a
  *   justificativa obrigatoria vai junto com a contagem;
  * - cego: so o contado e "Conferir"; depois, o resultado e, com diferenca, a

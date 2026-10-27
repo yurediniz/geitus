@@ -1,5 +1,5 @@
 /**
- * Tipos do modulo PDV (spec `docs/modules/pdv.md` §5.3). Os ids sao os UUIDs
+ * Tipos do modulo PDV (spec `docs/modules/pdv.md`). Os ids sao os UUIDs
  * publicos; os horarios chegam em ISO-8601 com deslocamento e os valores em
  * reais (2 casas), as quantidades com ate 3 casas. O custo nunca vem da API.
  */

@@ -6,7 +6,7 @@ import com.geitus.app.sales.carrinho.ErroDoCalculo;
 
 /**
  * Base das excecoes do PDV: a mensagem principal e os erros por campo do
- * carrinho (docs/modules/pdv.md, 5.4). A resposta traz a primeira mensagem e,
+ * carrinho (docs/modules/pdv.md). A resposta traz a primeira mensagem e,
  * quando ha campo, {@code campos: [{campo, mensagem}]} com todos.
  */
 public abstract class ErroDaVenda extends RuntimeException {

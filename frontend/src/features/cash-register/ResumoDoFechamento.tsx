@@ -43,7 +43,7 @@ function reaisOuTraco(valor: number | null): string {
   return valor === null ? '—' : formatarReais(valor)
 }
 
-/** Esperado, contado e diferenca de cada forma (spec do PDV §6.5). */
+/** Esperado, contado e diferenca de cada forma (spec do PDV). */
 function TabelaPorForma({ porForma }: { porForma: readonly ValoresPorForma[] }) {
   return (
     <table className="w-full text-sm">
@@ -85,7 +85,7 @@ function TabelaPorForma({ porForma }: { porForma: readonly ValoresPorForma[] }) 
 }
 
 /**
- * Fotografia do fechamento (spec do Caixa §6.4 e do PDV §6.5): fundo,
+ * Fotografia do fechamento (spec do Caixa e do PDV): fundo,
  * suprimentos, sangrias, vendas em dinheiro, esperado, contado, diferenca e
  * justificativa. Com mais de uma forma contada, a tabela por forma. Numa sessao ainda nao contada,
  * mostra o que existe; no modo cego sem o esperado, so o aviso (os totais

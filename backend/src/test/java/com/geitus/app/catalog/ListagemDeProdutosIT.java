@@ -61,7 +61,7 @@ import jakarta.persistence.EntityManagerFactory;
 
 /**
  * Listagem paginada de ponta a ponta no service, com o contexto Spring completo
- * e um PostgreSQL real (docs/modules/produtos-listagem.md, 5): as duas etapas
+ * e um PostgreSQL real (docs/modules/produtos.md): as duas etapas
  * (ids da {@link ConsultaDeProdutos}, depois os produtos com as relacoes) na
  * mesma ordem, a categoria de outra empresa, a pagina alem do fim e o numero
  * constante de comandos SQL por pagina.
@@ -203,7 +203,7 @@ class ListagemDeProdutosIT {
     }
 
     /**
-     * Spec 5: o numero de comandos por pagina e constante, sem e com busca,
+     * Spec de Produtos: o numero de comandos por pagina e constante, sem e com busca,
      * categoria e estoque. Conta os comandos do Hibernate (usuario, arvore de
      * categorias, produtos com as relacoes e os resumos de estoque) pelas
      * estatisticas e confere que a etapa 1 (contagem e ids, via JDBC) e chamada
@@ -240,7 +240,7 @@ class ListagemDeProdutosIT {
     }
 
     /**
-     * Fase F (docs/modules/produtos-imagem.md, 4.3 e 8): as imagens da pagina
+     * Fase F (docs/modules/produtos.md): as imagens da pagina
      * vem numa consulta so, sem os bytes. A pagina com 3 itens e a com 25
      * executam o mesmo numero de comandos, com e sem imagens; sem imagem, o
      * campo {@code imagem} vem nulo.

@@ -17,7 +17,7 @@ export type SeletorMarcaProps = Omit<SeletorDaArvoreProps<Marca>, 'configuracao'
   marcas: Marca[]
 }
 
-/** Seletor de marca (produto e fornecedor, spec B5 §3.3): o `SeletorDaArvore` com as marcas. */
+/** Seletor de marca (produto e fornecedor, spec de Fornecedores e marcas): o `SeletorDaArvore` com as marcas. */
 export function SeletorMarca({ marcas, ...props }: SeletorMarcaProps) {
   return <SeletorDaArvore configuracao={CONFIGURACAO_MARCAS} itens={marcas} {...props} />
 }

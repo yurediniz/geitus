@@ -5,7 +5,7 @@ import java.time.OffsetDateTime;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Configuracao do caixa na API (docs/modules/caixa.md, 5.2). Sem alteracao
+ * Configuracao do caixa na API (docs/modules/caixa.md). Sem alteracao
  * gravada, {@code fechamentoCego} e o padrao ({@code true}) e os demais campos
  * sao {@code null}.
  */

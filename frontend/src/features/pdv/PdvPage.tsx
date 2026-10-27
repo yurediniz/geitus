@@ -32,7 +32,7 @@ function temVendaGuardada(empresaId: number, usuarioId: number): boolean {
 }
 
 /**
- * Tela do PDV (/pdv, spec `docs/modules/pdv.md` §6.2), em tela cheia com a
+ * Tela do PDV (/pdv, spec `docs/modules/pdv.md`), em tela cheia com a
  * barra propria. Sem caixa aberto, pede para abrir (a mesma janela do Caixa);
  * em conferencia, leva ao Caixa; com o caixa aberto, a venda. O carrinho fica
  * no navegador e sobrevive a troca de estado do caixa.

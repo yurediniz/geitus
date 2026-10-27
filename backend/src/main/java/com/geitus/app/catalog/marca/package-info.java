@@ -1,5 +1,5 @@
 /**
- * Fabricantes e marcas em arvore (docs/modules/fornecedores-e-marcas.md, 3;
+ * Fabricantes e marcas em arvore (docs/modules/fornecedores-e-marcas.md;
  * DEC-039): o mesmo modelo e as mesmas regras das categorias.
  *
  * <p>Cadastro por empresa (DEC-016), identificado pelo {@code uuid}

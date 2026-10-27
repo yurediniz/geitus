@@ -11,7 +11,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
 
 /**
- * Lista de vendas (docs/modules/pdv.md, 5.3), da mais recente: a pagina e o
+ * Lista de vendas (docs/modules/pdv.md), da mais recente: a pagina e o
  * total que passa nos filtros. Como a {@code ConsultaDeSessoes} do caixa, so
  * entram os filtros informados (o PostgreSQL nao infere o tipo de um
  * parametro nulo), o JPQL e montado so com as constantes desta classe e todo

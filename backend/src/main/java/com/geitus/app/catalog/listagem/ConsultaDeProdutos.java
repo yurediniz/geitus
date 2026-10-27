@@ -10,7 +10,7 @@ import org.springframework.stereotype.Repository;
 import com.geitus.app.shared.busca.PadraoLike;
 
 /**
- * Etapa 1 da listagem de produtos (docs/modules/produtos-listagem.md, 5): os
+ * Etapa 1 da listagem de produtos (docs/modules/produtos.md): os
  * ids da pagina, na ordem pedida, e o total que passa nos filtros. Leitura
  * nativa com {@link NamedParameterJdbcTemplate}; a etapa 2 (os produtos com as
  * relacoes) fica no {@code ProdutoService}.
@@ -107,7 +107,7 @@ public class ConsultaDeProdutos {
     }
 
     /**
-     * Spec 4.1: todas as palavras (E, em qualquer ordem) no texto normalizado,
+     * Spec de Produtos: todas as palavras (E, em qualquer ordem) no texto normalizado,
      * OU o termo sem espacos em qualquer codigo de barras, OU (Fase B2, termo so
      * de digitos) o numero ou o codigo do produto iguais ao termo sem zeros.
      */

@@ -16,7 +16,7 @@ import jakarta.persistence.Table;
 
 /**
  * Pagamento da venda (tabela {@code pagamentos_venda}, V17;
- * docs/modules/pdv.md, 4.3): uma linha por forma, com o valor entregue (no
+ * docs/modules/pdv.md): uma linha por forma, com o valor entregue (no
  * dinheiro, com o troco, que fica na venda). Imutavel.
  */
 @Entity

@@ -48,8 +48,8 @@ import jakarta.persistence.EntityManagerFactory;
  * Fornecedores no produto e produtos do fornecedor (Fase B5) com o contexto
  * Spring completo e um PostgreSQL real (Testcontainers, V14): a lista do
  * produto com o da ultima compra e a FK de tres colunas, as regras de
- * docs/modules/fornecedores-e-marcas.md, 5, a mesma lista vista pela tela do
- * fornecedor (4.4) e, em especial, a lista que perde o fornecedor da ultima
+ * docs/modules/fornecedores-e-marcas.md: a mesma lista vista pela tela do
+ * fornecedor e, em especial, a lista que perde o fornecedor da ultima
  * compra pelos dois lados sem nunca violar a FK (Review Focus 1).
  *
  * <p>Sem {@code @Transactional} na classe: cada chamada confirma a propria
@@ -98,7 +98,7 @@ class ProdutoFornecedoresIT {
     @Autowired
     private MarcaService marcaService;
 
-    // ---------- No produto (spec 5) ----------
+    // ---------- No produto (spec de Fornecedores e marcas) ----------
 
     @Test
     void cadastroComAListaEOUltimoOrdenadosPorNome() {
@@ -244,7 +244,7 @@ class ProdutoFornecedoresIT {
         assertThat(pagina.itens().get(2).fornecedores()).isEmpty();
     }
 
-    // ---------- Pelo fornecedor (spec 4.4) ----------
+    // ---------- Pelo fornecedor (spec de Fornecedores e marcas) ----------
 
     @Test
     void ligarDuasVezesFicaUmaLigacaoSo() {

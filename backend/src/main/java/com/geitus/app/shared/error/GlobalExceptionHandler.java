@@ -176,7 +176,7 @@ public class GlobalExceptionHandler {
 
     /**
      * Envio acima do limite do multipart do servidor (512 KB por parte, 1 MB
-     * por requisicao; docs/modules/produtos-imagem.md, 4.1) -> 413, com a
+     * por requisicao; docs/modules/produtos.md) -> 413, com a
      * mensagem da spec e sem os limites internos.
      */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
@@ -194,7 +194,7 @@ public class GlobalExceptionHandler {
     /**
      * Parte obrigatoria ausente no multipart, pedido que nao e multipart ou
      * multipart malformado -> 400. Hoje o unico envio multipart e o da imagem
-     * do produto, entao a mensagem e a dela (spec 4.1); nunca 500.
+     * do produto, entao a mensagem e a dela (spec de Produtos); nunca 500.
      */
     @ExceptionHandler({MissingServletRequestPartException.class, MultipartException.class})
     public ResponseEntity<ApiError> tratarPartesAusentes(Exception ex, HttpServletRequest request) {
@@ -477,7 +477,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(corpo);
     }
 
-    /** Dado invalido no cadastro do fornecedor (spec 4.6), com o campo quando houver. */
+    /** Dado invalido no cadastro do fornecedor (spec de Fornecedores e marcas), com o campo quando houver. */
     @ExceptionHandler(DadosFornecedorInvalidosException.class)
     public ResponseEntity<ApiError> tratarDadosFornecedorInvalidos(DadosFornecedorInvalidosException ex,
             HttpServletRequest request) {
@@ -496,7 +496,7 @@ public class GlobalExceptionHandler {
     /**
      * Ponto ou sessao de caixa nao encontrado na empresa do usuario, inclusive
      * o de outra empresa e, para o OPERADOR, a sessao de outra pessoa: resposta
-     * identica (DEC-016; docs/modules/caixa.md, 5.2). Mensagem fixa.
+     * identica (DEC-016; docs/modules/caixa.md). Mensagem fixa.
      */
     @ExceptionHandler(CaixaNaoEncontradoException.class)
     public ResponseEntity<ApiError> tratarCaixaNaoEncontrado(CaixaNaoEncontradoException ex,
@@ -525,7 +525,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(corpo);
     }
 
-    /** Regra do carrinho ou da venda violada (400), com todos os campos (docs/modules/pdv.md, 5.4). */
+    /** Regra do carrinho ou da venda violada (400), com todos os campos (docs/modules/pdv.md). */
     @ExceptionHandler(DadosDaVendaInvalidosException.class)
     public ResponseEntity<ApiError> tratarDadosDaVendaInvalidos(DadosDaVendaInvalidosException ex,
             HttpServletRequest request) {

@@ -9,7 +9,7 @@ import com.geitus.app.catalog.RegraDeNegocioException;
 import com.geitus.app.shared.paginacao.PaginacaoInvalidaException;
 
 /**
- * Padroes e limites dos parametros da listagem num lugar so (spec 4.2 e 4.4):
+ * Padroes e limites dos parametros da listagem num lugar so (spec de Produtos):
  * ausente vale o padrao, a busca tem teto e a promocao tem allow-list propria.
  */
 class ParametrosDaListagemTest {

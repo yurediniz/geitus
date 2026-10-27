@@ -8,7 +8,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;
 
 /**
- * Regra pura do codigo de barras (spec 4.3): normalizacao, candidato GS1,
+ * Regra pura do codigo de barras (spec de Produtos): normalizacao, candidato GS1,
  * digito verificador mod 10 e formato pelo conteudo. Os mesmos casos sao
  * usados no {@code codigoBarras.test.ts} do frontend.
  */

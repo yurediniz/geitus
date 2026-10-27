@@ -3,7 +3,7 @@ package com.geitus.app.cashier;
 import java.util.Optional;
 
 /**
- * Conflito com o estado do caixa (docs/modules/caixa.md, 3): ponto com nome
+ * Conflito com o estado do caixa (docs/modules/caixa.md): ponto com nome
  * repetido ou no limite, ponto ocupado ou inativo, caixa ja aberto, em
  * conferencia ou fechado, sangria acima do dinheiro na gaveta, contagem ja
  * registrada e chave de idempotencia com outros dados. Mapeada para 409, com

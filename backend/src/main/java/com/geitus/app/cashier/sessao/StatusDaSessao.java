@@ -1,7 +1,7 @@
 package com.geitus.app.cashier.sessao;
 
 /**
- * Situacao da sessao de caixa (docs/modules/caixa.md, 3.4):
+ * Situacao da sessao de caixa (docs/modules/caixa.md):
  * {@code ABERTA -> EM_CONFERENCIA -> FECHADA} ou {@code ABERTA -> FECHADA}
  * direto. Caixa fechado nao reabre (gatilho da V16).
  */

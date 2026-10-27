@@ -22,7 +22,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
 /**
- * Configuracao do PDV (docs/modules/pdv.md, 5.3). Leitura para qualquer
+ * Configuracao do PDV (docs/modules/pdv.md). Leitura para qualquer
  * autenticado; o {@code PUT} exige ADMIN no {@code SecurityConfig} e no perfil
  * do banco.
  */

@@ -47,7 +47,7 @@ interface SecaoDadosProps {
 }
 
 /**
- * Dados do emitente (spec B5 §8.3, secao 1): tipo PJ/PF, CNPJ/CPF, razao
+ * Dados do emitente (spec de Fornecedores e marcas): tipo PJ/PF, CNPJ/CPF, razao
  * social/nome, nome fantasia e inscricao estadual (so no PJ, com "Isento").
  * Trocar o tipo limpa o documento (o CNPJ nao vira CPF) e a inscricao estadual.
  */

@@ -21,7 +21,7 @@ public interface EstoqueSaldoRepository extends JpaRepository<EstoqueSaldo, Long
 
     /**
      * Cria a linha de saldo do produto com saldo 0, se ainda nao existir.
-     * Concorrencia (spec 4.5): os movimentos de um produto ja chegam em fila
+     * Concorrencia (spec de Estoque): os movimentos de um produto ja chegam em fila
      * pela trava do produto; se dois primeiros movimentos chegarem juntos por
      * outro caminho, um insere e o outro espera e nao faz nada (sem erro de
      * unicidade). Em seguida a linha e travada com {@link #buscarParaAtualizar}.

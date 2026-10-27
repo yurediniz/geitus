@@ -30,7 +30,7 @@ import jakarta.persistence.Table;
 
 /**
  * Embalagem de venda (ou de compra) de um {@link Produto} (tabela
- * {@code produto_embalagens}, V12; docs/modules/produtos-embalagens.md, 2).
+ * {@code produto_embalagens}, V12; docs/modules/produtos.md).
  *
  * <p>Uma forma de vender ou comprar o mesmo produto, com estoque unico na
  * unidade de venda: a embalagem contem {@code quantidade} unidades de venda,

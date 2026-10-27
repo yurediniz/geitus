@@ -10,7 +10,7 @@ import java.time.ZoneId;
 import org.junit.jupiter.api.Test;
 
 /**
- * Situacao calculada da promocao (docs/modules/produtos-precos.md, 4.3):
+ * Situacao calculada da promocao (docs/modules/produtos.md):
  * {@code AGENDADA} antes do inicio, {@code VIGENTE} de inicio a fim
  * (inclusive) e {@code ENCERRADA} depois do fim, pela data de Sao Paulo.
  */

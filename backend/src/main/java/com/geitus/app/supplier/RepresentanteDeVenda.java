@@ -14,7 +14,7 @@ import jakarta.persistence.Table;
 
 /**
  * Representante de venda do fornecedor (tabela {@code fornecedor_representantes},
- * V14; docs/modules/fornecedores-e-marcas.md, 4.2): nome obrigatorio, telefone
+ * V14; docs/modules/fornecedores-e-marcas.md): nome obrigatorio, telefone
  * (so digitos) e e-mail opcionais, na ordem da tela.
  *
  * <p>Parte do cadastro do fornecedor ({@code cascade} e {@code orphanRemoval}):

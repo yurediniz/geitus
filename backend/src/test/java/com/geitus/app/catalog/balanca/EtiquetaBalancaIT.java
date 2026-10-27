@@ -45,8 +45,8 @@ import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 
 /**
- * Teste de integracao da etiqueta de balanca (docs/modules/produtos-codigo-e-balanca.md,
- * 3 e 9) com o contexto Spring completo, transacoes reais e um PostgreSQL real
+ * Teste de integracao da etiqueta de balanca (docs/modules/produtos.md)
+ * com o contexto Spring completo, transacoes reais e um PostgreSQL real
  * (Testcontainers, Flyway com as migrations de producao): a configuracao por
  * empresa, o aviso de produtos com codigo grande demais (Review Focus 3), o
  * teste de etiqueta e o isolamento por empresa (DEC-016).

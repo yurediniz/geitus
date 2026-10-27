@@ -12,7 +12,7 @@ import type { MovimentoDeCaixa, TipoDeMovimentoDeCaixa } from '@/types/caixa'
 
 /**
  * Sangria e estorno em ambar; suprimento, abertura e recebimento neutros
- * (spec do Caixa §6.3). Sempre com icone, nunca so a cor.
+ * (spec do Caixa). Sempre com icone, nunca so a cor.
  */
 const ESTILO_DO_TIPO: Readonly<Record<TipoDeMovimentoDeCaixa, { icone: LucideIcon; classe: string }>> = {
   ABERTURA: { icone: Wallet, classe: 'bg-muted text-muted-foreground' },

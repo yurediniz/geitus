@@ -17,8 +17,8 @@ import com.geitus.app.supplier.dto.FornecedorRequest;
 import com.geitus.app.supplier.dto.RepresentanteRequest;
 
 /**
- * Normaliza e valida o cadastro do fornecedor (docs/modules/fornecedores-e-marcas.md,
- * 4.1, 4.2 e 4.6), antes de qualquer consulta: textos aparados e vazio como
+ * Normaliza e valida o cadastro do fornecedor (docs/modules/fornecedores-e-marcas.md),
+ * antes de qualquer consulta: textos aparados e vazio como
  * {@code null}; documento, CEP e telefones so com digitos; UF em maiusculas;
  * inscricao estadual so com digitos ou {@code ISENTO}, e so no PJ.
  *
@@ -89,7 +89,7 @@ final class ValidacaoDoFornecedor {
     }
 
     /**
-     * A lista completa de representantes, normalizada e na ordem (spec 4.2):
+     * A lista completa de representantes, normalizada e na ordem (spec de Fornecedores e marcas):
      * ate {@value #MAXIMO_DE_REPRESENTANTES}, nome obrigatorio e o mesmo
      * {@code id} no maximo uma vez.
      */

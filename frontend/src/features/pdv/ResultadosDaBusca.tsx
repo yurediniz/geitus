@@ -16,7 +16,7 @@ export interface ResultadosDaBuscaProps {
 }
 
 /**
- * Os produtos encontrados enquanto se digita (spec do PDV §3.1): cards com a
+ * Os produtos encontrados enquanto se digita (spec do PDV): cards com a
  * miniatura, o preco vigente e o saldo. O card ativo e o que o Enter lanca.
  */
 export function ResultadosDaBusca({

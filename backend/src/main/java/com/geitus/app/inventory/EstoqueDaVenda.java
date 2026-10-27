@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * O que o PDV faz no estoque (docs/modules/pdv.md, 3.6, 3.8 e 4.5): travar os
+ * O que o PDV faz no estoque (docs/modules/pdv.md): travar os
  * produtos da venda, baixar o estoque ao finalizar e devolver ao cancelar.
  * Publicada pelo {@code inventory} e implementada aqui mesmo; o {@code sales}
  * so conhece esta interface.

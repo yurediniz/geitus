@@ -8,7 +8,7 @@ import java.util.UUID;
 import com.geitus.app.sales.DadosDaVendaInvalidosException;
 
 /**
- * Filtros da lista de vendas (docs/modules/pdv.md, 5.3), todos opcionais. Sem
+ * Filtros da lista de vendas (docs/modules/pdv.md), todos opcionais. Sem
  * {@code sessaoId} e sem periodo, vale a sessao atual do usuario; com periodo
  * e sem sessao, todas as sessoes que ele pode ver. O periodo e de datas em
  * {@code America/Sao_Paulo}, {@code ate} inclusive.

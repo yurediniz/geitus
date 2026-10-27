@@ -27,7 +27,7 @@ import com.geitus.app.iam.Usuario;
 import com.geitus.app.iam.UsuarioRepository;
 
 /**
- * Regras da imagem do produto (docs/modules/produtos-imagem.md, 4; DEC-040).
+ * Regras da imagem do produto (docs/modules/produtos.md; DEC-040).
  *
  * <p>Envio e remocao: a empresa vem sempre do usuario do JWT e o produto e
  * buscado nela (DEC-016), com a trava de escrita da linha (a mesma da edicao),

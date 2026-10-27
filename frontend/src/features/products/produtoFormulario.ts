@@ -76,7 +76,7 @@ interface ValoresPrecoEspecial {
 type CampoPrecoEspecial = 'precoPromocional' | 'precoAtacado'
 
 /**
- * Regras comuns do preco promocional e do de atacado (spec 4.3 e 4.4), com as
+ * Regras comuns do preco promocional e do de atacado (spec de Produtos), com as
  * mensagens do backend: informado, > 0, < preco de venda e >= preco minimo.
  */
 function validarPrecoEspecial(
@@ -131,7 +131,7 @@ interface ValoresEstoque {
 }
 
 /**
- * Regras do estoque (spec 4.4 e 4.6): estoque inicial > 0 com ate 3 casas (so
+ * Regras do estoque (spec de Estoque): estoque inicial > 0 com ate 3 casas (so
  * com o controle ligado) e minimo <= ponto de reposicao <= maximo quando os
  * dois lados estao informados. Os niveis valem mesmo com o controle desligado:
  * eles sao enviados do mesmo jeito.
@@ -162,7 +162,7 @@ export const MENSAGEM_CODIGO_PRODUTO_INVALIDO = 'O código do produto deve ter d
 export const MENSAGEM_BALANCA_SEM_CODIGO = 'Informe o código do produto para vendê-lo na balança.'
 
 /**
- * Codigo do produto (spec B2 §2), com as mensagens da API: vazio e permitido,
+ * Codigo do produto (spec de Produtos), com as mensagens da API: vazio e permitido,
  * salvo com "Vendido na balança"; senao de 1 a 6 digitos (zeros a esquerda
  * aceitos e ignorados).
  */
@@ -183,7 +183,7 @@ export function textoTamanhoNaEtiqueta(digitosCodigo: number): string {
 
 /**
  * Codigo com "Vendido na balança" maior que a etiqueta configurada (a mensagem
- * do backend, spec B2 §2). Checado no envio, com a configuracao ja buscada;
+ * do backend, spec de Produtos). Checado no envio, com a configuracao ja buscada;
  * sem ela (null), o backend decide.
  */
 export function erroCodigoNaEtiqueta(
@@ -221,7 +221,7 @@ function validarAtacado(valores: ValoresPrecoEspecial, ctx: z.RefinementCtx) {
 
 // --- Embalagens (Fase B3) ------------------------------------------------------
 
-/** Limites da spec B3 §2 (o backend aplica os mesmos). */
+/** Limites da spec de Produtos (o backend aplica os mesmos). */
 export const MAXIMO_EMBALAGENS = 10
 export const MAXIMO_CODIGOS_POR_EMBALAGEM = 5
 
@@ -278,7 +278,7 @@ interface ValoresEmbalagens {
 }
 
 /**
- * Regras de cada embalagem (spec B3 §2 e §3.3), com as mensagens da API e na
+ * Regras de cada embalagem (spec de Produtos), com as mensagens da API e na
  * ordem do backend: unidade diferente da de venda, quantidade > 1, fracao pela
  * unidade de venda, repetida, uma so de compra e preco > 0 sem ficar, por
  * unidade, abaixo do minimo. Com a unidade de venda desconhecida (lista
@@ -356,7 +356,7 @@ function erroDoPrecoDaEmbalagem(embalagem: EmbalagemFormValues, precoMinimo: str
   return `O preço da embalagem dá ${formatarMoeda(Number(porUnidade))} por ${siglaDeVenda}, abaixo do preço mínimo (${formatarMoeda(Number(precoMinimo))}).`
 }
 
-/** Fornecedores por produto (spec B5 §5). */
+/** Fornecedores por produto (spec de Fornecedores e marcas). */
 export const MAXIMO_FORNECEDORES = 20
 export const MENSAGEM_ULTIMA_COMPRA_FORA_DA_LISTA =
   'O fornecedor da última compra precisa estar na lista de fornecedores.'
@@ -449,7 +449,7 @@ export const produtoSchema = produtoSchemaCom([])
 export type ProdutoFormValues = z.infer<typeof produtoSchema>
 
 /**
- * Secoes da pagina do produto (tela unica, spec B2 §4), na ordem de exibicao.
+ * Secoes da pagina do produto (tela unica, spec de Produtos), na ordem de exibicao.
  * Historico so existe na edicao.
  */
 export const SECOES_PRODUTO = ['geral', 'codigos', 'precos', 'embalagens', 'estoque', 'historico'] as const
@@ -762,7 +762,7 @@ export function mensagemCodigoEmOutraLista(onde: string): string {
 export type LocalizadorDeCodigo = (codigo: string) => string | null
 
 /**
- * Localizador dos codigos das outras listas do produto (spec B3 §2.2: um codigo
+ * Localizador dos codigos das outras listas do produto (spec de Produtos: um codigo
  * pertence a uma lista so), lido dos valores na hora de adicionar: a lista da
  * unidade ("na unidade (UN) deste produto") e as das embalagens ("na embalagem
  * CX c/ 3 UN", ou "na embalagem 2 (nova)" enquanto falta o rotulo). `lista` e a
@@ -1139,7 +1139,7 @@ export function textoAjudaAtacado(quantidade: string, preco: string, sigla: stri
 
 /**
  * Quantidade minima do atacado com fracao numa unidade de venda que nao e
- * fracionada (spec 4.4). Checada no envio, com a lista de unidades ja
+ * fracionada (spec de Produtos). Checada no envio, com a lista de unidades ja
  * carregada; unidade desconhecida fica para o backend.
  */
 export function erroFracaoAtacado(
@@ -1150,7 +1150,7 @@ export function erroFracaoAtacado(
   return erroDeFracao(quantidade, valores.unidadeId, unidades)
 }
 
-/** Estoque inicial com fracao numa unidade de venda que nao e fracionada (spec 4.4), checado no envio. */
+/** Estoque inicial com fracao numa unidade de venda que nao e fracionada (spec de Estoque), checado no envio. */
 export function erroFracaoEstoqueInicial(
   valores: Pick<ProdutoFormValues, 'controlaEstoque' | 'estoqueInicial' | 'unidadeId'>,
   unidades: readonly UnidadeComFracao[],

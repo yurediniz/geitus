@@ -48,8 +48,8 @@ import com.geitus.app.inventory.dto.AjusteEstoqueRequest;
 import com.geitus.app.shared.paginacao.PaginacaoInvalidaException;
 
 /**
- * Regras do ajuste manual de estoque (docs/modules/produtos-estoque.md, 4.2 a
- * 4.5): variacao por tipo, saldo nunca negativo, fracao conforme a unidade,
+ * Regras do ajuste manual de estoque (docs/modules/estoque.md):
+ * variacao por tipo, saldo nunca negativo, fracao conforme a unidade,
  * motivos por tipo, observacao obrigatoria em "Outro", produto sem controle e
  * idempotencia pela chave. A concorrencia real fica no {@code EstoqueServiceIT}.
  */
@@ -406,7 +406,7 @@ class EstoqueServiceTest {
         verify(movimentoRepository, never()).save(any());
     }
 
-    // ---------- Custo na entrada por compra (Fase B4, docs/modules/produtos-custo-entrada.md, 2) ----------
+    // ---------- Custo na entrada por compra (Fase B4, docs/modules/estoque.md) ----------
 
     private static AjusteEstoqueRequest comCusto(TipoMovimento tipo, String quantidade, MotivoMovimento motivo,
             String custo) {
@@ -414,7 +414,7 @@ class EstoqueServiceTest {
                 custo == null ? null : new BigDecimal(custo), null);
     }
 
-    /** Spec 4: a data da origem do custo e a do movimento (preenchida no persist, antes de aplicar o custo). */
+    /** Spec de Estoque: a data da origem do custo e a do movimento (preenchida no persist, antes de aplicar o custo). */
     @Test
     void compraGravaOCustoNoMovimentoEOAplicaNoProdutoDepois() {
         Produto produto = produtoComSaldo(un, "0");
@@ -509,7 +509,7 @@ class EstoqueServiceTest {
         verify(custoDeEntrada, never()).registrar(any(), any(), any());
     }
 
-    // ---------- Em embalagens (Fase B3, docs/modules/produtos-embalagens.md, 6) ----------
+    // ---------- Em embalagens (Fase B3, docs/modules/produtos.md) ----------
 
     private static AjusteEstoqueRequest emEmbalagens(TipoMovimento tipo, String quantidade, MotivoMovimento motivo,
             UUID embalagemId) {
@@ -582,7 +582,7 @@ class EstoqueServiceTest {
                 .isInstanceOf(ProdutoConflitoException.class);
     }
 
-    // ---------- Idempotencia (spec 4.5) ----------
+    // ---------- Idempotencia (spec de Estoque) ----------
 
     private MovimentoEstoque movimentoJaGravado(Produto produto, UUID chave) {
         MovimentoEstoque gravado = new MovimentoEstoque(produto, TipoMovimento.SAIDA, MotivoMovimento.PERDA_AVARIA,

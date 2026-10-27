@@ -21,7 +21,7 @@ const FRASE_DO_DESCONTO =
 const MENSAGEM_FALHA_AO_SALVAR = 'Não foi possível salvar a configuração. Tente de novo.'
 const MENSAGEM_PERCENTUAL_INVALIDO = 'Informe um percentual de 0 a 100, com até 2 casas.'
 
-/** Secao PDV das Configuracoes (spec do PDV §6.6): vender sem estoque e o desconto maximo do operador. */
+/** Secao PDV das Configuracoes (spec do PDV): vender sem estoque e o desconto maximo do operador. */
 export function SecaoPdv({ avisos }: { avisos: AvisosDaTela }) {
   const idTitulo = useId()
   const consulta = useQuery({ queryKey: CHAVE_DA_CONFIGURACAO_DO_PDV, queryFn: buscar })

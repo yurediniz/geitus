@@ -1,5 +1,5 @@
 /**
- * Bipe curto e discreto quando a leitura e recusada (spec do PDV §6.2), com
+ * Bipe curto e discreto quando a leitura e recusada (spec do PDV), com
  * Web Audio: sem arquivo de som e sem dependencia. Volume baixo (0,1). Se o
  * navegador nao tiver Web Audio ou recusar tocar, fica em silencio: o erro
  * continua no campo, em vermelho.

@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 /**
- * Regra do preco aplicado na venda (docs/modules/produtos-precos.md, 4.5;
+ * Regra do preco aplicado na venda (docs/modules/produtos.md;
  * DEC-033), pronta para o PDV consumir.
  *
  * <p>Candidatos: o preco de venda, sempre; o promocional, se a promocao estiver
@@ -36,7 +36,7 @@ public final class PrecoDeVenda {
     /**
      * Preco vigente da unidade sem o atacado: o promocional, se a promocao
      * estiver vigente na data; senao o de venda. Base do preco calculado das
-     * embalagens (docs/modules/produtos-embalagens.md, 3.1).
+     * embalagens (docs/modules/produtos.md).
      */
     public static PrecoAplicado vigenteSemAtacado(Produto produto, LocalDate data) {
         PrecoAplicado normal = new PrecoAplicado(produto.getPrecoVenda(), OrigemPreco.NORMAL);

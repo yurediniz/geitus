@@ -12,7 +12,7 @@ import { aoEncerrarSessao } from '@/services/tokenStorage'
 import type { ImagemDoProduto } from '@/types/produto'
 
 /**
- * Mudanca da imagem ainda nao salva (spec Fase F §5.1): ela segue o Salvar da
+ * Mudanca da imagem ainda nao salva (spec de Produtos): ela segue o Salvar da
  * tela. `nova` guarda o arquivo original e a rotacao acumulada, para cada giro
  * recomprimir a partir dele, e as versoes ja prontas para o envio.
  */
@@ -25,7 +25,7 @@ export type ImagemNova = Extract<ImagemPendente, { tipo: 'nova' }>
 
 export const SEM_MUDANCA_NA_IMAGEM: ImagemPendente = { tipo: 'nenhuma' }
 
-/** Mensagem quando o produto foi salvo e a imagem nao (spec §5.1). */
+/** Mensagem quando o produto foi salvo e a imagem nao (spec de Produtos). */
 export const MENSAGEM_IMAGEM_NAO_ENVIADA = 'Produto salvo, mas a imagem não foi enviada. Tente de novo.'
 
 /** Falha ao baixar a imagem gravada para girar (URL vencida, rede). */

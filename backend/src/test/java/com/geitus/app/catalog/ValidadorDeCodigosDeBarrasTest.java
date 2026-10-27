@@ -127,7 +127,7 @@ class ValidadorDeCodigosDeBarrasTest {
                 .satisfies(erro -> assertThat(((ProdutoConflitoException) erro).campo()).contains(CAMPO_DA_EMBALAGEM));
     }
 
-    /** Fase B3 (2.3): com o codigo numa embalagem de outro produto, a mensagem traz o rotulo. */
+    /** Fase B3: com o codigo numa embalagem de outro produto, a mensagem traz o rotulo. */
     @Test
     void codigoNaEmbalagemDeOutroProdutoDa409ComORotulo() {
         when(produtoRepository.produtoComCodigo(EMPRESA_ID, EAN13_VALIDO, PRODUTO_ID))

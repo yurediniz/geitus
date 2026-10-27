@@ -11,7 +11,7 @@ import java.util.Map;
 import com.geitus.app.cashier.FormaDePagamento;
 
 /**
- * O esperado de cada forma na sessao (docs/modules/pdv.md, 3.9): a soma dos
+ * O esperado de cada forma na sessao (docs/modules/pdv.md): a soma dos
  * movimentos com o sinal do tipo. Dinheiro = abertura + suprimentos +
  * recebimentos - sangrias - estornos; Debito, Credito e PIX = recebimentos -
  * estornos. So entram as formas que tiveram movimento (o dinheiro sempre tem a

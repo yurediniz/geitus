@@ -16,7 +16,7 @@ import com.geitus.app.sales.CenarioDoPdv.EmpresaDoPdv;
 import com.geitus.app.sales.IntegracaoDoPdv;
 
 /**
- * Configuracoes › PDV (docs/modules/pdv.md, 3.10 e 8): padroes, alteracao pelo
+ * Configuracoes › PDV (docs/modules/pdv.md): padroes, alteracao pelo
  * ADMIN com quem e quando, OPERADOR e ADMIN rebaixado recusados e os limites
  * do percentual.
  */

@@ -13,7 +13,7 @@ import com.geitus.app.sales.carrinho.CodigoInterpretado.CodigoComQuantidade;
 import com.geitus.app.sales.carrinho.CodigoInterpretado.Etiqueta;
 
 /**
- * Interpreta o texto lido no campo "Codigo ou nome" (docs/modules/pdv.md, 3.1),
+ * Interpreta o texto lido no campo "Codigo ou nome" (docs/modules/pdv.md),
  * nesta ordem:
  * <ol>
  *   <li>etiqueta de balanca: 13 digitos que o {@link LeitorEtiquetaBalanca}

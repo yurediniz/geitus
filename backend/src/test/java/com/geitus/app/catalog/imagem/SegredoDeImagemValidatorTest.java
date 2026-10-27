@@ -13,8 +13,8 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Validacao fail-fast do segredo das URLs de imagem (docs/modules/produtos-imagem.md,
- * 4.2 e 8): sem ele, curto ou igual ao do JWT, a aplicacao nao sobe, e a
+ * Validacao fail-fast do segredo das URLs de imagem (docs/modules/produtos.md):
+ * sem ele, curto ou igual ao do JWT, a aplicacao nao sobe, e a
  * mensagem nunca mostra o valor.
  */
 class SegredoDeImagemValidatorTest {
@@ -43,7 +43,7 @@ class SegredoDeImagemValidatorTest {
                 .hasMessageNotContaining(curto);
     }
 
-    /** Spec 4.2: o segredo das imagens e diferente do JWT_SECRET. */
+    /** Spec de Produtos: o segredo das imagens e diferente do JWT_SECRET. */
     @Test
     void igualAoDoJwtImpedeASubidaSemMostrarOValor() {
         assertThatThrownBy(() -> new SegredoDeImagemValidator(SEGREDO_DO_JWT, SEGREDO_DO_JWT).afterPropertiesSet())

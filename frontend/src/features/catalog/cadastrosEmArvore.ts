@@ -28,8 +28,8 @@ import {
 import type { Categoria, ItemDaArvore, ItemDaArvoreRequest, Marca } from '@/types/catalogo'
 
 /**
- * Cadastros em arvore do catalogo (Categorias e Fabricantes/marcas, spec B5
- * §3.1): o mesmo modelo, as mesmas regras e as mesmas telas, trocando os
+ * Cadastros em arvore do catalogo (Categorias e Fabricantes/marcas, spec de
+ * Fornecedores e marcas): o mesmo modelo, as mesmas regras e as mesmas telas, trocando os
  * textos e o servico. Os componentes da arvore recebem uma destas configuracoes.
  */
 export type TipoDaArvore = 'categoria' | 'marca'

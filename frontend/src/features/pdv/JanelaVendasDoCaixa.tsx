@@ -73,7 +73,7 @@ function mensagemDoCancelamento(venda: Venda): string {
 }
 
 /**
- * Vendas do caixa (F8; spec do PDV §6.4): as da sessao atual, com no, hora,
+ * Vendas do caixa (F8; spec do PDV): as da sessao atual, com no, hora,
  * cliente, formas, total e situacao. O detalhe mostra itens e pagamentos e
  * cancela com o motivo, so com o caixa da venda aberto (o servidor confere).
  * Busca pelo numero da venda e carrega mais paginas sob demanda; o ADMIN

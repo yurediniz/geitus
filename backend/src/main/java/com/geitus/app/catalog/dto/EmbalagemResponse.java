@@ -14,7 +14,7 @@ import com.geitus.app.catalog.ProdutoEmbalagem;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Embalagem do produto na resposta (docs/modules/produtos-embalagens.md, 7).
+ * Embalagem do produto na resposta (docs/modules/produtos.md).
  * O {@code id} e o UUID publico; {@code rotulo}, {@code precoEfetivo},
  * {@code custo}, {@code margem} e {@code markup} sao derivados.
  */

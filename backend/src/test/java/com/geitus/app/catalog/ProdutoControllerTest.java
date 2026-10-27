@@ -232,7 +232,7 @@ class ProdutoControllerTest {
         verifyNoInteractions(produtoService);
     }
 
-    // ---------- Listagem (docs/modules/produtos-listagem.md, 4 e 5) ----------
+    // ---------- Listagem (docs/modules/produtos.md) ----------
 
     private static PaginaResponse<ProdutoResponse> paginaVazia() {
         return new PaginaResponse<>(List.of(), 0, 25, 0);
@@ -1212,7 +1212,7 @@ class ProdutoControllerTest {
         assertThat(request.getValue().vendidoBalanca()).isTrue();
     }
 
-    /** Spec 9: "000542" vira 542 (o frontend envia numero; texto com zeros tambem e aceito). */
+    /** Spec de Produtos: "000542" vira 542 (o frontend envia numero; texto com zeros tambem e aceito). */
     @Test
     void codigoComZerosEmTextoViraNumero() throws Exception {
         when(produtoService.cadastrarParaUsuario(eq(1L), any(ProdutoRequest.class)))

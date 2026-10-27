@@ -18,7 +18,7 @@ import org.springframework.web.util.UriComponents;
 import org.springframework.web.util.UriComponentsBuilder;
 
 /**
- * URL assinada da imagem (docs/modules/produtos-imagem.md, 4.2): HMAC-SHA256
+ * URL assinada da imagem (docs/modules/produtos.md): HMAC-SHA256
  * de {@code produto|versao|tamanho|expira}, valida ate o fim do dia UTC
  * seguinte, com relogio fixo.
  */

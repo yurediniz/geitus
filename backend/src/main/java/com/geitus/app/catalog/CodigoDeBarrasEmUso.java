@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 
 /**
  * Dono de um codigo de barras na empresa: o produto e, se o codigo for de uma
- * embalagem, a embalagem (docs/modules/produtos-embalagens.md, 2.3 e 7).
+ * embalagem, a embalagem (docs/modules/produtos.md).
  * Montado direto pela consulta do {@link ProdutoRepository}; serve a mensagem
  * do 409 de codigo em uso, sempre com dados da mesma empresa (DEC-016).
  *

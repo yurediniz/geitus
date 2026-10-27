@@ -16,8 +16,8 @@ import com.geitus.app.catalog.Produto;
 import com.geitus.app.catalog.ProdutoRepository;
 
 /**
- * Implementacao do {@link EstoqueDaVenda} (docs/modules/pdv.md, 3.6, 3.8 e
- * 4.5). Os movimentos passam pelo {@link EstoqueService}, que trava a linha de
+ * Implementacao do {@link EstoqueDaVenda} (docs/modules/pdv.md).
+ * Os movimentos passam pelo {@link EstoqueService}, que trava a linha de
  * saldo e grava o movimento ligado ao item da venda; a idempotencia e a da
  * venda ({@code uq_movimento_estoque_item_venda} e a ultima barreira).
  */

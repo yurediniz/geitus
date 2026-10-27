@@ -3,7 +3,7 @@ import { buscarSessao } from '@/services/caixaService'
 import { HttpError } from '@/services/httpClient'
 import type { SessaoDeCaixa } from '@/types/caixa'
 
-/** Mensagens do backend (spec §3) que dizem que a sessao mudou de estado em outro lugar. */
+/** Mensagens do backend (spec do Caixa) que dizem que a sessao mudou de estado em outro lugar. */
 export const MENSAGEM_CAIXA_JA_FECHADO = 'Este caixa já foi fechado.'
 export const MENSAGEM_CAIXA_EM_CONFERENCIA = 'O caixa está em conferência. Termine o fechamento.'
 export const MENSAGEM_CONTAGEM_JA_REGISTRADA = 'A contagem deste caixa já foi registrada.'
@@ -19,7 +19,7 @@ export interface ErroDoServidor<C extends string> {
 /**
  * Traduz a falha de uma acao do caixa em erros por campo e uma mensagem geral,
  * sem vazar detalhe tecnico: 400 e 409 trazem a mensagem curada do backend
- * (spec §3); 403 e os demais casos usam textos fixos.
+ * (spec do Caixa); 403 e os demais casos usam textos fixos.
  */
 export function lerErroDoServidor<C extends string>(
   erro: unknown,
@@ -68,7 +68,7 @@ export function ehFalhaSemResposta(erro: unknown): boolean {
 
 const INDISPONIVEL: MudancaDeEstado = { situacao: 'INDISPONIVEL', mensagem: MENSAGEM_SESSAO_INDISPONIVEL }
 
-/** So quando nao foi possivel reler a sessao: decide pelo texto do 409 (spec §3). */
+/** So quando nao foi possivel reler a sessao: decide pelo texto do 409 (spec do Caixa). */
 function mudancaPeloTexto(mensagem: string): MudancaDeEstado | null {
   if (mensagem === MENSAGEM_CAIXA_JA_FECHADO) {
     return { situacao: 'FECHADA', sessao: null, mensagem }

@@ -120,7 +120,7 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
 
     /**
      * Apaga os movimentos da origem informada do produto (so o estoque inicial,
-     * na exclusao de produto cadastrado por engano; spec 4.7).
+     * na exclusao de produto cadastrado por engano; spec de Estoque).
      */
     @Modifying
     @Query("""

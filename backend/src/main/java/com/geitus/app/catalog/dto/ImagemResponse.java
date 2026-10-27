@@ -9,7 +9,7 @@ import com.geitus.app.catalog.imagem.TamanhoDaImagem;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * A imagem do produto na API (docs/modules/produtos-imagem.md, 4.3): as URLs
+ * A imagem do produto na API (docs/modules/produtos.md): as URLs
  * relativas ja assinadas (validas ate o fim do dia UTC seguinte) e as
  * dimensoes da versao grande. Nunca traz os bytes nem identificadores internos.
  */

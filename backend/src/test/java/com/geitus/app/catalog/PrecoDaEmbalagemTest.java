@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 import com.geitus.app.catalog.unidade.UnidadeMedida;
 import com.geitus.app.company.Empresa;
 
-/** Preco efetivo da embalagem (docs/modules/produtos-embalagens.md, 3.1). */
+/** Preco efetivo da embalagem (docs/modules/produtos.md). */
 class PrecoDaEmbalagemTest {
 
     private static final PrecoAplicado UNIDADE_NORMAL = new PrecoAplicado(new BigDecimal("89.90"), OrigemPreco.NORMAL);

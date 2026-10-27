@@ -7,7 +7,7 @@ import com.geitus.app.catalog.FornecedorResumido;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Fornecedor na resposta do produto (docs/modules/fornecedores-e-marcas.md, 5):
+ * Fornecedor na resposta do produto (docs/modules/fornecedores-e-marcas.md):
  * UUID publico, numero, nome (razao social) e status, para a tela marcar os
  * inativos ligados.
  */

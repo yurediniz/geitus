@@ -23,7 +23,7 @@ interface SecaoEnderecoProps {
 }
 
 /**
- * Endereco (spec B5 §8.3, secao 2), todo opcional. Ao completar os 8 digitos
+ * Endereco (spec de Fornecedores e marcas), todo opcional. Ao completar os 8 digitos
  * do CEP, a busca de CEP de Empresa preenche logradouro, bairro, municipio e
  * UF; se o CEP nao for encontrado, o endereco e digitado a mao.
  */

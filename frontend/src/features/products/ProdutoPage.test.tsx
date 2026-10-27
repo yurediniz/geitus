@@ -1189,7 +1189,7 @@ describe('ProdutoPage', () => {
         ),
       )
       expect(await screen.findByText('Produto "Sachê frango" cadastrado (Nº 15 · Cód. 542).')).toBeInTheDocument()
-      // O proximo produto comeca pelo Nome, no topo da tela (spec B2 §4).
+      // O proximo produto comeca pelo Nome, no topo da tela (spec de Produtos).
       await waitFor(() => expect(campoNome()).toHaveFocus())
       expect(rolados()).toContain(campoNome())
       expect(atalho(/geral/i)).toHaveAttribute('aria-current', 'true')
