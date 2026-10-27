@@ -256,3 +256,11 @@ Spec: [`pdv.md`](modules/pdv.md).
 - **Pagamento:** em tela inteira.
 - **Visual:** cores da marca.
 - **Comprovante não fiscal de 80 mm:** oferecido por botão ou F9 depois da venda e reimpresso em Vendas do caixa; impressão pelo navegador.
+
+## DEC-045 — Estoque: área própria e devolução de item (etapa 12)
+2026-10-26 · Aceita
+- **Escopo da etapa 12:** a área Estoque com a posição de todos os produtos (saldo, situação, valor em custo, filtro de negativos com "Regularizar") e as movimentações de todos os produtos. Entrada com vários itens, contagem em lote e a garantia do saldo no banco (DT-032/DT-041) ficaram para depois.
+- **Devolução de item** (requisito do PDV, última fatia): só ADMIN, sem prazo nem comprovante no MVP; reembolso pela forma original, registrado no caixa aberto de quem devolve; o destino do item (volta ao estoque ou avariado) é escolhido por linha; venda com devolução não é mais cancelada.
+- **Crédito em loja:** adiado para spec própria (com o Financeiro ou Clientes), porque exige saldo do cliente, nova forma de pagamento e regras de caixa e financeiro.
+
+Spec: [`estoque.md`](modules/estoque.md).

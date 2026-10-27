@@ -10,7 +10,7 @@ Uma spec por módulo, **viva**: descreve como o módulo funciona hoje e muda jun
 | Empresa | [empresa.md](empresa.md) | DEC-016, DEC-024 |
 | Usuários | [usuarios.md](usuarios.md) | DEC-024 |
 | Produtos (catálogo) | [produtos.md](produtos.md) | DEC-025, 028, 030–033, 035–037, 040 |
-| Estoque | [estoque.md](estoque.md) | DEC-034, DEC-037, DEC-038, DEC-039, DEC-042 |
+| Estoque | [estoque.md](estoque.md) | DEC-034, DEC-037, DEC-038, DEC-039, DEC-042, DEC-045 |
 | Fornecedores e marcas | [fornecedores-e-marcas.md](fornecedores-e-marcas.md) | DEC-039 |
 | Clientes | [clientes.md](clientes.md) | DEC-029 |
 | Caixa | [caixa.md](caixa.md) | DEC-041 |
