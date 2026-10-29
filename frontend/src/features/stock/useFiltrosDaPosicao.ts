@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { PAGINA_MAXIMA, type OpcoesDeAlteracao } from '@/features/products/listagem/useFiltrosDaListaDeProdutos'
-import { umDe } from '@/lib/listas'
+import { algunsDe, mesmoValor, umDe } from '@/lib/listas'
 import { ORDENS_POSICAO, SITUACOES_POSICAO, STATUS_POSICAO, type FiltrosDaPosicao } from '@/types/estoque'
 
 /** Valores padrao: nao aparecem na URL. */
@@ -10,7 +10,7 @@ export const FILTROS_PADRAO_DA_POSICAO: FiltrosDaPosicao = {
   busca: '',
   status: 'ativos',
   categoria: null,
-  situacao: null,
+  situacao: [],
   ordem: 'nome',
   pagina: 1,
 }
@@ -32,7 +32,7 @@ function lerFiltros(params: URLSearchParams): FiltrosDaPosicao {
     busca: (params.get('busca') ?? '').trim(),
     status: umDe(STATUS_POSICAO, params.get('status')) ?? FILTROS_PADRAO_DA_POSICAO.status,
     categoria: categoria !== null && UUID.test(categoria) ? categoria : null,
-    situacao: umDe(SITUACOES_POSICAO, params.get('situacao')),
+    situacao: algunsDe(SITUACOES_POSICAO, params.getAll('situacao')),
     ordem: umDe(ORDENS_POSICAO, params.get('ordem')) ?? FILTROS_PADRAO_DA_POSICAO.ordem,
     pagina: lerPagina(params.get('pagina')),
   }
@@ -50,8 +50,8 @@ function escreverFiltros(filtros: FiltrosDaPosicao): URLSearchParams {
   if (filtros.categoria) {
     params.set('categoria', filtros.categoria)
   }
-  if (filtros.situacao) {
-    params.set('situacao', filtros.situacao)
+  for (const situacao of filtros.situacao) {
+    params.append('situacao', situacao)
   }
   if (filtros.ordem !== FILTROS_PADRAO_DA_POSICAO.ordem) {
     params.set('ordem', filtros.ordem)
@@ -67,7 +67,7 @@ function contarFiltros(filtros: FiltrosDaPosicao): number {
   return [
     filtros.status !== FILTROS_PADRAO_DA_POSICAO.status,
     filtros.categoria !== FILTROS_PADRAO_DA_POSICAO.categoria,
-    filtros.situacao !== FILTROS_PADRAO_DA_POSICAO.situacao,
+    filtros.situacao.length > 0,
   ].filter(Boolean).length
 }
 
@@ -75,8 +75,9 @@ const CAMPOS = Object.keys(FILTROS_PADRAO_DA_POSICAO) as (keyof FiltrosDaPosicao
 
 /**
  * Estado da posicao de estoque guardado na URL (`?busca=&status=&categoria=
- * &situacao=&ordem=&pagina=`), com as mesmas regras da lista de produtos:
- * mudar qualquer coisa alem da pagina volta para a 1; a busca substitui a
+ * &situacao=&situacao=&ordem=&pagina=`, a situacao repetida por valor), com
+ * as mesmas regras da lista de produtos: mudar qualquer coisa alem da pagina
+ * volta para a 1; a busca substitui a
  * entrada do historico; alterar sem mudanca real nao mexe na URL.
  */
 export function useFiltrosDaPosicao() {
@@ -85,8 +86,14 @@ export function useFiltrosDaPosicao() {
 
   const alterar = useCallback(
     (parcial: Partial<FiltrosDaPosicao>, opcoes: OpcoesDeAlteracao = {}) => {
-      const pedido: FiltrosDaPosicao = { ...filtros, ...parcial, busca: (parcial.busca ?? filtros.busca).trim() }
-      const mudou = CAMPOS.filter((campo) => pedido[campo] !== filtros[campo])
+      const pedido: FiltrosDaPosicao = {
+        ...filtros,
+        ...parcial,
+        busca: (parcial.busca ?? filtros.busca).trim(),
+        // Na ordem da lista e sem repetidos, como a URL guarda: a comparacao abaixo e pelo conteudo.
+        situacao: algunsDe(SITUACOES_POSICAO, parcial.situacao ?? filtros.situacao),
+      }
+      const mudou = CAMPOS.filter((campo) => !mesmoValor(pedido[campo], filtros[campo]))
       if (mudou.length === 0) {
         return
       }

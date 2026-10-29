@@ -81,7 +81,7 @@ public class PosicaoDeEstoqueService {
     /** Mesma montagem da busca da listagem de produtos, sem filtro de estoque nem promocao. */
     private FiltroDeProdutos filtro(Long empresaId, String busca, StatusFiltro status, Set<Long> categorias) {
         return new FiltroDeProdutos(empresaId, TextoDeBusca.palavras(busca), TextoDeBusca.termoDeCodigo(busca),
-                TextoDeBusca.termoNumerico(busca), status, categorias, null, false, SituacaoPromocao.hoje(relogio));
+                TextoDeBusca.termoNumerico(busca), status, categorias, Set.of(), false, SituacaoPromocao.hoje(relogio));
     }
 
     /** Etapa 2: produtos, embalagens e saldos dos ids, na ordem dos ids (um id que sumiu fica fora). */

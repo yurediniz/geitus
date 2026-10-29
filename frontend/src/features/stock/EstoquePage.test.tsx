@@ -184,25 +184,27 @@ describe('EstoquePage', () => {
     expect(screen.queryByText(/inclui|também em/i)).not.toBeInTheDocument()
   })
 
-  it('o filtro "Situação" tem as mesmas opções da lista de produtos e vai para a URL', async () => {
+  it('o filtro "Situação" marca várias situações, que vão repetidas para a URL', async () => {
     const router = renderPagina()
     await carregada()
 
-    const situacao = screen.getByRole('combobox', { name: 'Situação' })
-    expect(within(situacao).getAllByRole('option').map((opcao) => (opcao as HTMLOptionElement).value)).toEqual([
-      '',
-      'repor',
-      'negativo',
-      'zerado',
-      'baixo',
-      'reposicao',
-      'regular',
-      'alto',
+    fireEvent.click(screen.getByRole('button', { name: 'Situação Todas' }))
+    const painel = await screen.findByRole('group', { name: 'Situação' })
+    expect(within(painel).getAllByRole('checkbox').map((caixa) => caixa.closest('label')?.textContent)).toEqual([
+      'Negativo',
+      'Zerado',
+      'Baixo',
+      'Reposição',
+      'Regular',
+      'Alto',
     ])
-    fireEvent.change(situacao, { target: { value: 'repor' } })
+    fireEvent.click(within(painel).getByRole('checkbox', { name: 'Zerado' }))
+    await waitFor(() => expect(router.state.location.search).toBe('?situacao=zerado'))
+    fireEvent.click(within(screen.getByRole('group', { name: 'Situação' })).getByRole('checkbox', { name: 'Negativo' }))
 
-    await waitFor(() => expect(router.state.location.search).toBe('?situacao=repor'))
-    await waitFor(() => expect(ultimosFiltros().situacao).toBe('repor'))
+    await waitFor(() => expect(router.state.location.search).toBe('?situacao=negativo&situacao=zerado'))
+    await waitFor(() => expect(ultimosFiltros().situacao).toEqual(['negativo', 'zerado']))
+    expect(screen.getByRole('button', { name: 'Situação Negativo +1' })).toBeInTheDocument()
   })
 
   it('o card de situação liga e desliga o filtro na URL', async () => {
@@ -212,25 +214,32 @@ describe('EstoquePage', () => {
     fireEvent.click(screen.getByRole('button', { name: /^negativo\s*\d/i }))
 
     await waitFor(() => expect(router.state.location.search).toBe('?situacao=negativo'))
-    await waitFor(() => expect(ultimosFiltros().situacao).toBe('negativo'))
+    await waitFor(() => expect(ultimosFiltros().situacao).toEqual(['negativo']))
     expect(screen.getByRole('button', { name: /^negativo\s*\d/i })).toHaveAttribute('aria-pressed', 'true')
     // O resumo nao depende da situacao: nao consulta de novo.
     expect(resumoMock).toHaveBeenCalledTimes(1)
 
+    // Outro card soma a situacao dele as marcadas.
+    fireEvent.click(screen.getByRole('button', { name: /^zerado\s*\d/i }))
+    await waitFor(() => expect(router.state.location.search).toBe('?situacao=negativo&situacao=zerado'))
+    expect(screen.getByRole('button', { name: /^zerado\s*\d/i })).toHaveAttribute('aria-pressed', 'true')
+
     fireEvent.click(screen.getByRole('button', { name: /^negativo\s*\d/i }))
+    await waitFor(() => expect(router.state.location.search).toBe('?situacao=zerado'))
+    fireEvent.click(screen.getByRole('button', { name: /^zerado\s*\d/i }))
 
     await waitFor(() => expect(router.state.location.search).toBe(''))
   })
 
   it('lê os filtros da URL e ignora valores inválidos', async () => {
-    renderPagina('/estoque?situacao=baixo&ordem=-valor&status=xyz&pagina=2')
+    renderPagina('/estoque?situacao=baixo&situacao=repor&ordem=-valor&status=xyz&pagina=2')
     await carregada()
 
     expect(ultimosFiltros()).toEqual({
       busca: '',
       status: 'ativos',
       categoria: null,
-      situacao: 'baixo',
+      situacao: ['baixo'],
       ordem: '-valor',
       pagina: 2,
     })

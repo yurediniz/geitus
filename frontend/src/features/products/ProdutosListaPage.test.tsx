@@ -192,7 +192,7 @@ describe('ProdutosListaPage', () => {
 
     await listaCarregada()
     expect(listarProdutosMock).toHaveBeenCalledWith(
-      { busca: '', status: 'ativos', categoria: null, estoque: null, promocao: false, ordem: 'nome', pagina: 1 },
+      { busca: '', status: 'ativos', categoria: null, estoque: [], promocao: false, ordem: 'nome', pagina: 1 },
       expect.any(AbortSignal),
     )
   })
@@ -291,7 +291,7 @@ describe('ProdutosListaPage', () => {
       fireEvent.click(within(vazio).getByRole('button', { name: 'Limpar filtros' }))
 
       await waitFor(() => expect(router.state.location.search).toBe(''))
-      await waitFor(() => expect(ultimosParametros()).toMatchObject({ busca: '', estoque: null, pagina: 1 }))
+      await waitFor(() => expect(ultimosParametros()).toMatchObject({ busca: '', estoque: [], pagina: 1 }))
       expect(campoBusca()).toHaveValue('')
     })
 
@@ -690,7 +690,6 @@ describe('ProdutosListaPage', () => {
 
     it.each([
       ['Status', 'inativos', { status: 'inativos' }, '?status=inativos'],
-      ['Estoque', 'reposicao', { estoque: 'reposicao' }, '?estoque=reposicao'],
       ['Ordenar por', '-preco', { ordem: '-preco' }, '?ordem=-preco'],
     ] as const)('%s chama a API com o parametro e volta para a pagina 1', async (rotulo, valor, esperado, search) => {
       const router = renderLista('/produtos?pagina=3')
@@ -728,25 +727,31 @@ describe('ProdutosListaPage', () => {
       }
     })
 
-    it('o filtro de estoque tem as situações da posição, com "Repor" primeiro', async () => {
-      renderLista()
+    it('o filtro de estoque tem as situações da posição e marca várias, que vão para a API e voltam à página 1', async () => {
+      const router = renderLista('/produtos?pagina=3')
       await screen.findByRole('searchbox')
 
-      const estoque = screen.getByRole('combobox', { name: 'Estoque' })
-      expect(
-        within(estoque)
-          .getAllByRole('option')
-          .map((opcao) => [opcao.textContent, (opcao as HTMLOptionElement).value]),
-      ).toEqual([
-        ['Todos', ''],
-        ['Repor (negativo, zerado, baixo ou reposição)', 'repor'],
-        ['Negativo', 'negativo'],
-        ['Zerado', 'zerado'],
-        ['Baixo', 'baixo'],
-        ['Reposição', 'reposicao'],
-        ['Regular', 'regular'],
-        ['Alto', 'alto'],
+      fireEvent.click(screen.getByRole('button', { name: 'Estoque Todos' }))
+      const painel = await screen.findByRole('group', { name: 'Estoque' })
+      expect(within(painel).getAllByRole('checkbox').map((caixa) => caixa.closest('label')?.textContent)).toEqual([
+        'Negativo',
+        'Zerado',
+        'Baixo',
+        'Reposição',
+        'Regular',
+        'Alto',
       ])
+      fireEvent.click(within(painel).getByRole('checkbox', { name: 'Reposição' }))
+      await waitFor(() => expect(router.state.location.search).toBe('?estoque=reposicao'))
+      expect(router.state.historyAction).toBe('PUSH')
+      fireEvent.click(within(screen.getByRole('group', { name: 'Estoque' })).getByRole('checkbox', { name: 'Baixo' }))
+
+      await waitFor(() => expect(ultimosParametros()).toMatchObject({ estoque: ['baixo', 'reposicao'], pagina: 1 }))
+      expect(router.state.location.search).toBe('?estoque=baixo&estoque=reposicao')
+      expect(screen.getByRole('button', { name: 'Estoque Baixo +1' })).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Limpar' }))
+      await waitFor(() => expect(router.state.location.search).toBe(''))
     })
 
     it('"Só em promoção" chama a API com promocao', async () => {
@@ -805,7 +810,7 @@ describe('ProdutosListaPage', () => {
       await estadoVazio('Nenhum produto encontrado para "arroz" com os filtros escolhidos.')
       expect(campoBusca()).toHaveValue('arroz')
       expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('todos')
-      expect(screen.getByRole('combobox', { name: 'Estoque' })).toHaveValue('zerado')
+      expect(screen.getByRole('button', { name: 'Estoque Zerado' })).toBeInTheDocument()
       expect(screen.getByRole('combobox', { name: 'Ordenar por' })).toHaveValue('-margem')
       expect(screen.getByRole('checkbox', { name: 'Só em promoção' })).toBeChecked()
       await waitFor(() => expect(gatilhoCategoria()).toHaveTextContent('Ração'))
@@ -1061,9 +1066,9 @@ describe('ProdutosListaPage', () => {
 
       expect(await screen.findByText('Produto salvo com sucesso.')).toBeInTheDocument()
       await cardDoProduto('Arroz 5kg')
-      expect(ultimosParametros()).toMatchObject({ busca: 'arroz', estoque: 'baixo', pagina: 2 })
+      expect(ultimosParametros()).toMatchObject({ busca: 'arroz', estoque: ['baixo'], pagina: 2 })
       expect(campoBusca()).toHaveValue('arroz')
-      expect(screen.getByRole('combobox', { name: 'Estoque' })).toHaveValue('baixo')
+      expect(screen.getByRole('button', { name: 'Estoque Baixo' })).toBeInTheDocument()
       expect(screen.getByText('Página 2 de 3')).toBeInTheDocument()
     })
 

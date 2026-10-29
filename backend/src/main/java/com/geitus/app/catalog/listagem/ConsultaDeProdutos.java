@@ -96,9 +96,7 @@ public class ConsultaDeProdutos {
             sql.append(CATEGORIAS);
             parametros.addValue("categoriaIds", filtro.categoriaIds().toArray(Long[]::new));
         }
-        if (filtro.estoque() != null) {
-            sql.append(filtro.estoque().condicao());
-        }
+        sql.append(EstoqueFiltro.condicao(filtro.estoque()));
         if (filtro.emPromocao()) {
             sql.append(PROMOCAO_VIGENTE);
             parametros.addValue("hoje", filtro.hoje());

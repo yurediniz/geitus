@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
@@ -957,12 +958,13 @@ class ProdutoServiceTest {
         consultaDevolve(0);
 
         produtoService.listarParaUsuario(9L,
-                ParametrosDaListagem.daRequisicao(null, "inativos", null, "zerado", "true", "-margem", 4, 10));
+                ParametrosDaListagem.daRequisicao(null, "inativos", null, List.of("zerado"), "true", "-margem", 4,
+                        10));
 
         ArgumentCaptor<FiltroDeProdutos> filtro = ArgumentCaptor.forClass(FiltroDeProdutos.class);
         verify(consultaDeProdutos).buscar(filtro.capture(), eq(OrdemDeProdutos.MARGEM_DESC), eq(4), eq(10));
         assertThat(filtro.getValue()).isEqualTo(new FiltroDeProdutos(EMPRESA_ID, List.of(), null, null,
-                StatusFiltro.INATIVOS, null, EstoqueFiltro.ZERADO, true, HOJE_DO_RELOGIO));
+                StatusFiltro.INATIVOS, null, Set.of(EstoqueFiltro.ZERADO), true, HOJE_DO_RELOGIO));
     }
 
     @Test

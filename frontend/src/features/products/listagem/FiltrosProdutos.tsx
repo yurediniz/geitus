@@ -2,15 +2,15 @@ import { useId, useState, type FormEvent } from 'react'
 import { Loader2, Search, SlidersHorizontal, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { FiltroMultiplo } from '@/components/ui/filtro-multiplo'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
-import { ROTULOS_DA_SITUACAO_DO_FILTRO } from '@/features/products/estoque/situacaoDoFiltro'
+import { OPCOES_DA_SITUACAO_DO_FILTRO } from '@/features/products/estoque/situacaoDoFiltro'
 import { SeletorCategoria } from '@/features/products/SeletorCategoria'
 import { umDe } from '@/lib/listas'
 import { cn } from '@/lib/utils'
 import type { Categoria } from '@/types/catalogo'
 import {
-  ESTOQUE_FILTRO,
   ORDENS_PRODUTOS,
   STATUS_FILTRO,
   type FiltrosDaListaDeProdutos,
@@ -200,20 +200,16 @@ export function FiltrosProdutos({
         </div>
 
         <div className="space-y-1.5">
-          <Rotulo htmlFor={`${id}-estoque`}>Estoque</Rotulo>
-          <NativeSelect
+          <Rotulo id={`${id}-estoque-rotulo`}>Estoque</Rotulo>
+          <FiltroMultiplo
             id={`${id}-estoque`}
-            value={filtros.estoque ?? ''}
-            onChange={(event) => alterar({ estoque: umDe(ESTOQUE_FILTRO, event.target.value) })}
+            idRotulo={`${id}-estoque-rotulo`}
+            opcoes={OPCOES_DA_SITUACAO_DO_FILTRO}
+            valores={filtros.estoque}
+            onChange={(estoque) => alterar({ estoque })}
+            rotuloTodos="Todos"
             className={ALTURA_DO_CONTROLE}
-          >
-            <option value="">Todos</option>
-            {ESTOQUE_FILTRO.map((estoque) => (
-              <option key={estoque} value={estoque}>
-                {ROTULOS_DA_SITUACAO_DO_FILTRO[estoque]}
-              </option>
-            ))}
-          </NativeSelect>
+          />
         </div>
 
         <div className="flex items-end">

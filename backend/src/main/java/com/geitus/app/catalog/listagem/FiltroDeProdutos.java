@@ -17,12 +17,12 @@ import com.geitus.app.shared.busca.TextoDeBusca;
  *                      comparado com o numero e o codigo do produto, ou {@code null}
  * @param status        filtro de status, obrigatorio
  * @param categoriaIds  categoria e descendentes; {@code null} = sem filtro, vazio = lista vazia
- * @param estoque       filtro de estoque, ou {@code null}
+ * @param estoque       situacoes do filtro de estoque, combinadas com OU; vazio (ou {@code null}) e sem filtro
  * @param emPromocao    so produtos com promocao vigente em {@code hoje}
  * @param hoje          data de referencia da promocao (relogio de Sao Paulo), obrigatoria
  */
 public record FiltroDeProdutos(Long empresaId, List<String> palavras, String termoDeCodigo, Long termoNumerico,
-        StatusFiltro status, Set<Long> categoriaIds, EstoqueFiltro estoque, boolean emPromocao, LocalDate hoje) {
+        StatusFiltro status, Set<Long> categoriaIds, Set<EstoqueFiltro> estoque, boolean emPromocao, LocalDate hoje) {
 
     public FiltroDeProdutos {
         Objects.requireNonNull(empresaId, "empresaId");
@@ -33,6 +33,7 @@ public record FiltroDeProdutos(Long empresaId, List<String> palavras, String ter
             throw new IllegalArgumentException("No maximo " + TextoDeBusca.MAXIMO_DE_PALAVRAS + " palavras.");
         }
         categoriaIds = categoriaIds == null ? null : Set.copyOf(categoriaIds);
+        estoque = estoque == null ? Set.of() : Set.copyOf(estoque);
     }
 
     /** Ha termo de busca (por texto, por codigo de barras, por numero ou codigo do produto). */

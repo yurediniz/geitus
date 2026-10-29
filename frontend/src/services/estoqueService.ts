@@ -69,8 +69,8 @@ export function listarPosicaoDeEstoque(
   signal?: AbortSignal,
 ): Promise<PaginaResponse<PosicaoDeEstoque>> {
   const searchParams = parametrosDaBusca(filtros)
-  if (filtros.situacao) {
-    searchParams.set('situacao', filtros.situacao)
+  for (const situacao of filtros.situacao) {
+    searchParams.append('situacao', situacao)
   }
   searchParams.set('ordem', filtros.ordem)
   searchParams.set('pagina', String(Math.max(0, filtros.pagina - 1)))

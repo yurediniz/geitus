@@ -279,6 +279,13 @@ Spec: [`estoque.md`](modules/estoque.md), seção 6.2.
 ## DEC-047 — Situação do estoque em seis níveis
 2026-10-29 · Aceita
 - **Níveis:** Negativo (< 0), Zerado (= 0), Baixo (≤ mínimo), Reposição (≤ ponto de reposição), Alto (> máximo) e Regular; vale o primeiro que se aplica, e cada nível só conta com o campo preenchido. Substitui `SEM_ESTOQUE`/`BAIXO`/`NORMAL`: o mínimo é a reserva de segurança e o ponto de reposição é a hora de pedir, e o máximo passa a acender o "Alto" (dinheiro parado).
-- **Filtros:** posição (`situacao`) e listagem de produtos (`estoque`) com os mesmos valores, mais `repor` (negativo, zerado, baixo ou reposição), que ocupa o lugar do antigo `baixo`; `sem` saiu. Os cards da posição passaram a contagens exclusivas.
+- **Filtros:** posição (`situacao`) e listagem de produtos (`estoque`) com os mesmos valores; `sem` saiu. Os cards da posição passaram a contagens exclusivas. (O grupo `repor` saiu com a DEC-048.)
 
 Spec: [`estoque.md`](modules/estoque.md), regras 16, 23 e 24.
+
+## DEC-048 — Filtros com multisseleção
+2026-10-29 · Aceita
+- **Situação:** `situacao` (posição) e `estoque` (produtos) aceitam várias situações (parâmetro repetido ou por vírgula), combinadas com OU por fragmentos SQL fixos; o grupo `repor` saiu, porque o usuário monta o próprio conjunto. Os cards da posição ligam e desligam a sua situação no filtro.
+- **Tela:** componente `FiltroMultiplo` (popover do `radix-ui` já instalado com caixas de seleção nativas, sem dependência nova).
+
+Spec: [`estoque.md`](modules/estoque.md), regra 23; [`produtos.md`](modules/produtos.md), regra 3.

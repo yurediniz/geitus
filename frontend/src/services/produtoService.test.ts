@@ -15,7 +15,7 @@ import {
   sugerirSku,
 } from '@/services/produtoService'
 import { apiDelete, apiGet, apiGetBlob, apiPatch, apiPost, apiPutMultipart } from '@/services/httpClient'
-import type { ProdutoRequest } from '@/types/produto'
+import type { EstoqueFiltro, ProdutoRequest } from '@/types/produto'
 
 vi.mock('@/services/httpClient', () => ({
   apiGet: vi.fn(),
@@ -69,7 +69,7 @@ describe('produtoService', () => {
       busca: '',
       status: 'ativos',
       categoria: null,
-      estoque: null,
+      estoque: [] as EstoqueFiltro[],
       promocao: false,
       ordem: 'nome',
       pagina: 1,
@@ -96,7 +96,7 @@ describe('produtoService', () => {
           busca: ' café & leite ',
           status: 'todos',
           categoria: '3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e5f',
-          estoque: 'baixo',
+          estoque: ['zerado', 'baixo'],
           promocao: true,
           ordem: '-preco',
           pagina: 3,
@@ -106,7 +106,7 @@ describe('produtoService', () => {
       )
 
       expect(apiGetMock).toHaveBeenCalledWith(
-        '/produtos?busca=caf%C3%A9+%26+leite&status=todos&categoria=3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e5f&estoque=baixo&promocao=true&ordem=-preco&pagina=2&tamanho=10',
+        '/produtos?busca=caf%C3%A9+%26+leite&status=todos&categoria=3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e5f&estoque=zerado&estoque=baixo&promocao=true&ordem=-preco&pagina=2&tamanho=10',
         { autenticada: true, signal: controle.signal },
       )
     })

@@ -52,7 +52,7 @@ function tituloDaLista(total: number | undefined, filtrado: boolean): string {
 
 /** Algum filtro que restringe alem da busca (o status "todos" nao restringe). */
 function temRestricao(filtros: FiltrosDaListaDeProdutos): boolean {
-  return filtros.status === 'inativos' || filtros.categoria !== null || filtros.estoque !== null || filtros.promocao
+  return filtros.status === 'inativos' || filtros.categoria !== null || filtros.estoque.length > 0 || filtros.promocao
 }
 
 /**

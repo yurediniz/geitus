@@ -36,18 +36,20 @@ function produtosSemCusto(quantidade: number): string {
 export interface CardsDoResumoProps {
   /** Undefined enquanto carrega (ou se falhou): os numeros ficam em "—". */
   resumo: ResumoDaPosicao | undefined
-  situacao: SituacaoDaPosicao | null
-  /** Clicar no card da situacao ja escolhida tira o filtro. */
-  aoEscolher: (situacao: SituacaoDaPosicao | null) => void
+  /** As situacoes marcadas no filtro (multisselecao). */
+  situacoes: readonly SituacaoDaPosicao[]
+  /** Liga ou desliga a situacao do card no filtro, mantendo as outras. */
+  aoAlternar: (situacao: SituacaoDaPosicao) => void
 }
 
 /**
  * Cards do resumo da posicao (spec de Estoque, regra 24): cinco botoes
- * (negativo, zerado, baixo, reposicao e alto) que ligam e desligam o filtro de
- * situacao (`aria-pressed`) e o valor do estoque a custo. Os numeros valem para
+ * (negativo, zerado, baixo, reposicao e alto) que ligam e desligam a sua
+ * situacao no filtro de multisselecao (`aria-pressed`; as outras marcadas
+ * continuam) e o valor do estoque a custo. Os numeros valem para
  * a busca, o status e a categoria, sem a situacao.
  */
-export function CardsDoResumo({ resumo, situacao, aoEscolher }: CardsDoResumoProps) {
+export function CardsDoResumo({ resumo, situacoes, aoAlternar }: CardsDoResumoProps) {
   return (
     // Celular: as cinco situacoes em duas linhas de tres e o valor na linha inteira (o valor em reais
     // nao cabe num terco); a partir de 640 px, o valor ocupa a vaga da segunda linha (grade 3 x 2); a
@@ -55,14 +57,14 @@ export function CardsDoResumo({ resumo, situacao, aoEscolher }: CardsDoResumoPro
     <div className="grid grid-cols-3 gap-2 sm:gap-3 xl:grid-cols-[repeat(5,minmax(0,1fr))_minmax(0,1.5fr)]">
       {CARDS.map((card) => {
         const quantidade = resumo ? card.quantidade(resumo) : null
-        const escolhido = situacao === card.situacao
+        const escolhido = situacoes.includes(card.situacao)
         const comAtencao = quantidade !== null && quantidade > 0
         return (
           <button
             key={card.situacao}
             type="button"
             aria-pressed={escolhido}
-            onClick={() => aoEscolher(escolhido ? null : card.situacao)}
+            onClick={() => aoAlternar(card.situacao)}
             className={cn(
               'flex min-w-0 flex-col items-start gap-1 rounded-xl border bg-card p-3 text-left shadow-xs transition-colors outline-none sm:p-4',
               'hover:bg-muted/60 focus-visible:ring-[3px] focus-visible:ring-ring/50',

@@ -1,5 +1,6 @@
 package com.geitus.app.inventory;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,7 @@ import com.geitus.app.shared.paginacao.PaginaResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -44,8 +46,8 @@ public class PosicaoDeEstoqueController {
 
     @Operation(summary = "Posicao de estoque dos produtos que controlam estoque",
             description = "Saldo, situacao, niveis, custo e valor em custo, paginados (25 por padrao, ate 100). "
-                    + "Busca e categoria como na listagem de produtos; situacao repor, negativo, zerado, baixo, "
-                    + "reposicao, regular ou alto; ordem nome, "
+                    + "Busca e categoria como na listagem de produtos; situacoes negativo, zerado, baixo, "
+                    + "reposicao, regular ou alto, combinadas com OU; ordem nome, "
                     + "saldo ou valor (com - para decrescente).",
             security = @SecurityRequirement(name = "bearer-jwt"))
     @ApiResponses({
@@ -64,9 +66,10 @@ public class PosicaoDeEstoqueController {
             @RequestParam(required = false) String status,
             @Parameter(description = "UUID da categoria; inclui as descendentes")
             @RequestParam(required = false) UUID categoria,
-            @Parameter(description = "repor (negativo, zerado, baixo ou reposicao), negativo, zerado, baixo, "
-                    + "reposicao, regular ou alto")
-            @RequestParam(required = false) String situacao,
+            @Parameter(description = "Situacoes, combinadas com OU (parametro repetido ou separado por virgula)",
+                    array = @ArraySchema(schema = @Schema(allowableValues = { "negativo", "zerado", "baixo",
+                            "reposicao", "regular", "alto" })))
+            @RequestParam(required = false) List<String> situacao,
             @Parameter(description = "nome (padrao), -nome, saldo, -saldo, valor ou -valor")
             @RequestParam(required = false) String ordem,
             @Parameter(description = "Pagina, a partir de 0")

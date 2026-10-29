@@ -300,13 +300,19 @@ class ConsultaDeProdutosIT {
     }
 
     @Test
-    void estoqueReporIncluiZerados() {
+    void variasSituacoesSaoAUniao() {
         salvar(produto("Zerado sem niveis"));
-        saldo(salvar(produto("Zerado com ponto").pontoReposicao("10")), "0");
-        saldo(salvar(produto("Com saldo sem niveis")), "3");
+        saldo(salvar(produto("Negativo")), "-1");
+        saldo(salvar(produto("Baixo").estoqueMinimo("5")), "2");
+        saldo(salvar(produto("Reposicao").pontoReposicao("10")), "8");
+        saldo(salvar(produto("Alto").estoqueMaximo("10")), "11");
+        saldo(salvar(produto("Regular")), "3");
 
-        assertThat(nomes(filtro().estoque(EstoqueFiltro.REPOR))).containsExactly("Zerado com ponto",
-                "Zerado sem niveis");
+        assertThat(nomes(filtro().estoque(EstoqueFiltro.ZERADO, EstoqueFiltro.NEGATIVO)))
+                .containsExactly("Negativo", "Zerado sem niveis");
+        assertThat(nomes(filtro().estoque(EstoqueFiltro.BAIXO, EstoqueFiltro.REPOSICAO, EstoqueFiltro.ALTO)))
+                .containsExactly("Alto", "Baixo", "Reposicao");
+        assertThat(nomes(filtro().estoque(EstoqueFiltro.values()))).hasSize(6);
     }
 
     @Test
@@ -314,7 +320,7 @@ class ConsultaDeProdutosIT {
         saldo(salvar(produto("Nao controla zerado").pontoReposicao("10").semControleDeEstoque()), "0");
         saldo(salvar(produto("Nao controla baixo").pontoReposicao("10").semControleDeEstoque()), "2");
 
-        assertThat(nomes(filtro().estoque(EstoqueFiltro.REPOR))).isEmpty();
+        assertThat(nomes(filtro().estoque(EstoqueFiltro.values()))).isEmpty();
         assertThat(nomes(filtro().estoque(EstoqueFiltro.ZERADO))).isEmpty();
     }
 
@@ -645,7 +651,7 @@ class ConsultaDeProdutosIT {
         private String termoDeCodigo;
         private StatusFiltro status = StatusFiltro.ATIVOS;
         private Set<Long> categoriaIds;
-        private EstoqueFiltro estoque;
+        private Set<EstoqueFiltro> estoque = Set.of();
         private boolean emPromocao;
         private Long termoNumerico;
 
@@ -679,8 +685,8 @@ class ConsultaDeProdutosIT {
             return this;
         }
 
-        Filtro estoque(EstoqueFiltro valor) {
-            this.estoque = valor;
+        Filtro estoque(EstoqueFiltro... valores) {
+            this.estoque = Set.of(valores);
             return this;
         }
 

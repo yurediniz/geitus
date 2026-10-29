@@ -34,7 +34,7 @@ describe('useFiltrosDaListaDeProdutos', () => {
       busca: '',
       status: 'ativos',
       categoria: null,
-      estoque: null,
+      estoque: [],
       promocao: false,
       ordem: 'nome',
       pagina: 1,
@@ -51,7 +51,7 @@ describe('useFiltrosDaListaDeProdutos', () => {
       busca: 'arroz',
       status: 'todos',
       categoria: CATEGORIA,
-      estoque: 'zerado',
+      estoque: ['zerado'],
       promocao: true,
       ordem: '-margem',
       pagina: 3,
@@ -62,9 +62,34 @@ describe('useFiltrosDaListaDeProdutos', () => {
   it('escreve so os valores diferentes do padrao', () => {
     const { router, hook } = montar()
 
-    act(() => hook().alterar({ status: 'ativos', estoque: 'baixo', ordem: 'nome', promocao: true }))
+    act(() => hook().alterar({ status: 'ativos', estoque: ['baixo'], ordem: 'nome', promocao: true }))
 
     expect(router.state.location.search).toBe('?estoque=baixo&promocao=1')
+  })
+
+  it('estoque com varios valores: repetido na URL, na ordem das situacoes e sem repetidos', () => {
+    const { router, hook } = montar()
+
+    act(() => hook().alterar({ estoque: ['alto', 'zerado', 'zerado'] }))
+
+    expect(router.state.location.search).toBe('?estoque=zerado&estoque=alto')
+    expect(hook().filtros.estoque).toEqual(['zerado', 'alto'])
+    expect(hook().quantidadeDeFiltros).toBe(1)
+  })
+
+  it('le o estoque repetido da URL e ignora os valores antigos (repor, sem)', () => {
+    const { hook } = montar('/produtos?estoque=alto&estoque=repor&estoque=sem&estoque=negativo&estoque=alto')
+
+    expect(hook().filtros.estoque).toEqual(['negativo', 'alto'])
+  })
+
+  it('a mesma lista em outra ordem nao mexe na URL', () => {
+    const { router, hook } = montar('/produtos?estoque=zerado&estoque=baixo')
+    const antes = router.state.location
+
+    act(() => hook().alterar({ estoque: ['baixo', 'zerado'] }))
+
+    expect(router.state.location).toBe(antes)
   })
 
   it('mudar um filtro volta para a pagina 1', () => {
@@ -141,9 +166,9 @@ describe('useFiltrosDaListaDeProdutos', () => {
     ['pagina=0', { pagina: 1 }],
     ['pagina=2.5', { pagina: 1 }],
     ['status=qualquer', { status: 'ativos' }],
-    ['estoque=muito', { estoque: null }],
+    ['estoque=muito', { estoque: [] }],
     // O valor antigo (antes dos seis niveis) cai em "sem filtro".
-    ['estoque=sem', { estoque: null }],
+    ['estoque=sem', { estoque: [] }],
     ['promocao=talvez', { promocao: false }],
     ['categoria=nao-e-uuid', { categoria: null }],
     ['busca=%20%20', { busca: '' }],

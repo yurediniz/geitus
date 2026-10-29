@@ -229,8 +229,8 @@ class ListagemDeProdutosIT {
                                     List.of("FD-" + i, "FD2-" + i))));
         }
         ParametrosDaListagem semFiltro = parametros(null, null, 0, 25);
-        ParametrosDaListagem comFiltros = ParametrosDaListagem.daRequisicao("produto", null, racao, "repor", null,
-                null, 0, 25);
+        ParametrosDaListagem comFiltros = ParametrosDaListagem.daRequisicao("produto", null, racao,
+                List.of("negativo", "zerado", "baixo", "reposicao"), null, null, 0, 25);
 
         for (ParametrosDaListagem parametros : List.of(semFiltro, comFiltros)) {
             long comandosComTres = comandosAoListar(loja, comTamanho(parametros, 3));
@@ -347,10 +347,16 @@ class ListagemDeProdutosIT {
         assertThat(promocaoPelosSelos).containsExactlyInAnyOrder("Promo comeca hoje", "Promo termina hoje");
         for (SituacaoEstoque situacao : SituacaoEstoque.values()) {
             Set<String> pelosSelos = nomesQue(todos, produto -> produto.situacaoEstoque() == situacao);
-            assertThat(nomes(listar(loja, porFiltro(situacao.name().toLowerCase(Locale.ROOT), null)))).as("filtro %s", situacao)
-                    .containsExactlyInAnyOrderElementsOf(pelosSelos);
+            assertThat(nomes(listar(loja, porFiltro(List.of(situacao.name().toLowerCase(Locale.ROOT)), null))))
+                    .as("filtro %s", situacao).containsExactlyInAnyOrderElementsOf(pelosSelos);
         }
-        assertThat(nomes(listar(loja, porFiltro("repor", null)))).containsExactlyInAnyOrderElementsOf(aReporPelosSelos);
+        assertThat(nomes(listar(loja, porFiltro(List.of("negativo", "zerado", "baixo", "reposicao"), null))))
+                .containsExactlyInAnyOrderElementsOf(aReporPelosSelos);
+        assertThat(nomes(listar(loja, porFiltro(List.of("alto", "zerado"), null))))
+                .containsExactlyInAnyOrder("Acima do maximo", "Zerado");
+        assertThat(nomes(listar(loja, porFiltro(List.of("negativo", "zerado", "baixo", "reposicao", "regular",
+                "alto"), null)))).containsExactlyInAnyOrderElementsOf(
+                        nomesQue(todos, produto -> produto.situacaoEstoque() != null));
         assertThat(nomes(listar(loja, porFiltro(null, "true"))))
                 .containsExactlyInAnyOrderElementsOf(promocaoPelosSelos);
     }
@@ -434,7 +440,7 @@ class ListagemDeProdutosIT {
     }
 
     /** Todos os status, com o filtro de estoque e/ou de promocao. */
-    private static ParametrosDaListagem porFiltro(String estoque, String promocao) {
+    private static ParametrosDaListagem porFiltro(List<String> estoque, String promocao) {
         return ParametrosDaListagem.daRequisicao(null, "todos", null, estoque, promocao, null, 0, 100);
     }
 

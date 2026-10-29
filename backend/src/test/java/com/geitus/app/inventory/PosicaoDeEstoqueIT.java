@@ -148,6 +148,29 @@ class PosicaoDeEstoqueIT {
     }
 
     @Test
+    void variasSituacoesPorParametroRepetidoOuPorVirgula() throws Exception {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        UUID negativo = cenario.novoProduto(empresa, "UN", "Negativo");
+        cenario.novoProduto(empresa, "UN", "Zerado");
+        UUID comSaldo = cenario.novoProduto(empresa, "UN", "Regular");
+        saldo(negativo, "-3");
+        saldo(comSaldo, "4");
+        String token = cenario.token(empresa.admin());
+
+        mockMvc.perform(get(POSICAO).param("situacao", "zerado", "negativo").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItens").value(2))
+                .andExpect(jsonPath("$.itens[*].nome").value(org.hamcrest.Matchers.contains("Negativo", "Zerado")));
+        mockMvc.perform(get(POSICAO).param("situacao", "zerado,negativo,zerado").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItens").value(2));
+        mockMvc.perform(get(POSICAO).param("situacao", "negativo,zerado,baixo,reposicao,regular,alto")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItens").value(3));
+    }
+
+    @Test
     void outraEmpresaNaoAparece() throws Exception {
         CenarioDeEstoque.EmpresaDeTeste minha = cenario.novaEmpresa();
         CenarioDeEstoque.EmpresaDeTeste outra = cenario.novaEmpresa();
@@ -167,6 +190,9 @@ class PosicaoDeEstoqueIT {
         String token = cenario.token(empresa.admin());
 
         mockMvc.perform(get(POSICAO).param("situacao", "sem").header("Authorization", token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("situacao"));
+        mockMvc.perform(get(POSICAO).param("situacao", "zerado", "repor").header("Authorization", token))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.campos[0].campo").value("situacao"));
         mockMvc.perform(get(POSICAO).param("ordem", "preco").header("Authorization", token))

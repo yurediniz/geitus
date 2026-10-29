@@ -103,13 +103,13 @@ class ConsultaDaPosicaoDeEstoqueIT {
         saldo(salvar(produto("Nao controla").semControleDeEstoque()), "9");
         salvar(produto("Controla sem linha de saldo"));
 
-        assertThat(nomes(null, OrdemDaPosicao.NOME)).containsExactly("Controla", "Controla sem linha de saldo");
+        assertThat(nomes(Set.of(), OrdemDaPosicao.NOME)).containsExactly("Controla", "Controla sem linha de saldo");
     }
 
     /**
      * Cada filtro em SQL traz exatamente os produtos que {@link SituacaoEstoque#de}
      * classifica naquela situacao (os dois lados da regra 16 nao divergem), com
-     * os limites iguais e os niveis ausentes; {@code repor} junta os quatro primeiros.
+     * os limites iguais e os niveis ausentes; varias situacoes juntas trazem a uniao.
      */
     @Test
     void cadaFiltroCasaComASituacaoCalculadaEmJava() {
@@ -118,14 +118,22 @@ class ConsultaDaPosicaoDeEstoqueIT {
         for (SituacaoEstoque situacao : SituacaoEstoque.values()) {
             List<String> doJava = esperada.entrySet().stream().filter(item -> item.getValue() == situacao)
                     .map(Map.Entry::getKey).sorted().toList();
-            assertThat(nomes(SituacaoDaPosicao.valueOf(situacao.name()), OrdemDaPosicao.NOME))
+            assertThat(nomes(Set.of(SituacaoDaPosicao.valueOf(situacao.name())), OrdemDaPosicao.NOME))
                     .as("filtro %s", situacao).containsExactlyInAnyOrderElementsOf(doJava);
         }
-        assertThat(nomes(SituacaoDaPosicao.REPOR, OrdemDaPosicao.NOME)).containsExactlyInAnyOrderElementsOf(
-                esperada.entrySet().stream()
-                        .filter(item -> Set.of(SituacaoEstoque.NEGATIVO, SituacaoEstoque.ZERADO, SituacaoEstoque.BAIXO,
-                                SituacaoEstoque.REPOSICAO).contains(item.getValue()))
-                        .map(Map.Entry::getKey).sorted().toList());
+        assertThat(nomes(Set.of(SituacaoDaPosicao.ZERADO, SituacaoDaPosicao.ALTO), OrdemDaPosicao.NOME))
+                .containsExactlyInAnyOrderElementsOf(nasSituacoes(esperada,
+                        Set.of(SituacaoEstoque.ZERADO, SituacaoEstoque.ALTO)));
+        assertThat(nomes(Set.of(SituacaoDaPosicao.NEGATIVO, SituacaoDaPosicao.BAIXO, SituacaoDaPosicao.REPOSICAO),
+                OrdemDaPosicao.NOME)).containsExactlyInAnyOrderElementsOf(nasSituacoes(esperada,
+                        Set.of(SituacaoEstoque.NEGATIVO, SituacaoEstoque.BAIXO, SituacaoEstoque.REPOSICAO)));
+        assertThat(nomes(Set.of(SituacaoDaPosicao.values()), OrdemDaPosicao.NOME))
+                .containsExactlyInAnyOrderElementsOf(esperada.keySet());
+    }
+
+    private static List<String> nasSituacoes(Map<String, SituacaoEstoque> esperada, Set<SituacaoEstoque> situacoes) {
+        return esperada.entrySet().stream().filter(item -> situacoes.contains(item.getValue()))
+                .map(Map.Entry::getKey).sorted().toList();
     }
 
     @Test
@@ -134,8 +142,8 @@ class ConsultaDaPosicaoDeEstoqueIT {
         saldo(salvar(produto("Menos um")), "-1");
         salvar(produto("Zero"));
 
-        assertThat(nomes(null, OrdemDaPosicao.SALDO)).containsExactly("Menos um", "Zero", "Cinco");
-        assertThat(nomes(null, OrdemDaPosicao.SALDO_DESC)).containsExactly("Cinco", "Zero", "Menos um");
+        assertThat(nomes(Set.of(), OrdemDaPosicao.SALDO)).containsExactly("Menos um", "Zero", "Cinco");
+        assertThat(nomes(Set.of(), OrdemDaPosicao.SALDO_DESC)).containsExactly("Cinco", "Zero", "Menos um");
     }
 
     @Test
@@ -145,9 +153,9 @@ class ConsultaDaPosicaoDeEstoqueIT {
         saldo(salvar(produto("Sem custo")), "7");
         saldo(salvar(produto("Negativo com custo").custo("2.00")), "-4");
 
-        assertThat(nomes(null, OrdemDaPosicao.VALOR))
+        assertThat(nomes(Set.of(), OrdemDaPosicao.VALOR))
                 .containsExactly("Valor 20", "Valor 30", "Negativo com custo", "Sem custo");
-        assertThat(nomes(null, OrdemDaPosicao.VALOR_DESC))
+        assertThat(nomes(Set.of(), OrdemDaPosicao.VALOR_DESC))
                 .containsExactly("Valor 30", "Valor 20", "Negativo com custo", "Sem custo");
     }
 
@@ -158,11 +166,11 @@ class ConsultaDaPosicaoDeEstoqueIT {
         salvar(produto("Areia Golden"));
         salvar(produto("Ração Inativa").categoria(racao).inativo());
 
-        assertThat(nomes(filtro("golden", StatusFiltro.ATIVOS, null), null, OrdemDaPosicao.NOME))
+        assertThat(nomes(filtro("golden", StatusFiltro.ATIVOS, null), Set.of(), OrdemDaPosicao.NOME))
                 .containsExactly("Areia Golden", "Ração Golden");
-        assertThat(nomes(filtro(null, StatusFiltro.TODOS, Set.of(racao.getId())), null, OrdemDaPosicao.NOME))
+        assertThat(nomes(filtro(null, StatusFiltro.TODOS, Set.of(racao.getId())), Set.of(), OrdemDaPosicao.NOME))
                 .containsExactly("Ração Golden", "Ração Inativa");
-        assertThat(nomes(filtro(null, StatusFiltro.ATIVOS, Set.of()), null, OrdemDaPosicao.NOME)).isEmpty();
+        assertThat(nomes(filtro(null, StatusFiltro.ATIVOS, Set.of()), Set.of(), OrdemDaPosicao.NOME)).isEmpty();
     }
 
     @Test
@@ -171,7 +179,7 @@ class ConsultaDaPosicaoDeEstoqueIT {
         saldo(salvar(produtoDa(outra, "Da outra")), "-5");
         saldo(salvar(produto("Daqui")), "1");
 
-        assertThat(nomes(null, OrdemDaPosicao.NOME)).containsExactly("Daqui");
+        assertThat(nomes(Set.of(), OrdemDaPosicao.NOME)).containsExactly("Daqui");
         assertThat(consulta.resumir(filtro(null, StatusFiltro.ATIVOS, null)).negativos()).isZero();
     }
 
@@ -269,25 +277,26 @@ class ConsultaDaPosicaoDeEstoqueIT {
         salvar(produto("A"));
         salvar(produto("B"));
 
-        PaginaDeIds pagina = consulta.buscar(filtro(null, StatusFiltro.ATIVOS, null), null, OrdemDaPosicao.NOME, 1, 2);
+        PaginaDeIds pagina = consulta.buscar(filtro(null, StatusFiltro.ATIVOS, null), Set.of(), OrdemDaPosicao.NOME,
+                1, 2);
 
         assertThat(pagina.ids()).isEmpty();
         assertThat(pagina.total()).isEqualTo(2);
     }
 
-    private List<String> nomes(SituacaoDaPosicao situacao, OrdemDaPosicao ordem) {
-        return nomes(filtro(null, StatusFiltro.ATIVOS, null), situacao, ordem);
+    private List<String> nomes(Set<SituacaoDaPosicao> situacoes, OrdemDaPosicao ordem) {
+        return nomes(filtro(null, StatusFiltro.ATIVOS, null), situacoes, ordem);
     }
 
-    private List<String> nomes(FiltroDeProdutos filtro, SituacaoDaPosicao situacao, OrdemDaPosicao ordem) {
-        PaginaDeIds pagina = consulta.buscar(filtro, situacao, ordem, 0, TAMANHO_GRANDE);
+    private List<String> nomes(FiltroDeProdutos filtro, Set<SituacaoDaPosicao> situacoes, OrdemDaPosicao ordem) {
+        PaginaDeIds pagina = consulta.buscar(filtro, situacoes, ordem, 0, TAMANHO_GRANDE);
         assertThat(pagina.total()).as("total coerente com a pagina").isEqualTo(pagina.ids().size());
         return pagina.ids().stream().map(nomePorId::get).toList();
     }
 
     private FiltroDeProdutos filtro(String busca, StatusFiltro status, Set<Long> categorias) {
         return new FiltroDeProdutos(empresa.getId(), TextoDeBusca.palavras(busca), TextoDeBusca.termoDeCodigo(busca),
-                TextoDeBusca.termoNumerico(busca), status, categorias, null, false, HOJE);
+                TextoDeBusca.termoNumerico(busca), status, categorias, Set.of(), false, HOJE);
     }
 
     private ProdutoTesteBuilder produto(String nome) {

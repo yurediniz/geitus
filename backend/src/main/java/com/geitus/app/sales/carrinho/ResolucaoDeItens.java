@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -101,7 +102,7 @@ public class ResolucaoDeItens {
             return List.of();
         }
         FiltroDeProdutos filtro = new FiltroDeProdutos(empresaId, palavras, termoDeCodigo,
-                TextoDeBusca.termoNumerico(busca), StatusFiltro.ATIVOS, null, null, false,
+                TextoDeBusca.termoNumerico(busca), StatusFiltro.ATIVOS, null, Set.of(), false,
                 SituacaoPromocao.hoje(relogio));
         List<Long> ids = consultaDeProdutos.buscar(filtro, OrdemDeProdutos.NOME, 0, LIMITE_DA_BUSCA).ids();
         return produtosDoPdv.respostas(empresaId, naOrdem(ids, produtosPorIds(empresaId, ids)));

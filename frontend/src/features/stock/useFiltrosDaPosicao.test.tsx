@@ -34,7 +34,7 @@ describe('useFiltrosDaPosicao', () => {
       busca: '',
       status: 'ativos',
       categoria: null,
-      situacao: null,
+      situacao: [],
       ordem: 'nome',
       pagina: 1,
     })
@@ -51,7 +51,7 @@ describe('useFiltrosDaPosicao', () => {
       busca: 'leite',
       status: 'todos',
       categoria: CATEGORIA,
-      situacao: 'negativo',
+      situacao: ['negativo'],
       ordem: '-valor',
       pagina: 3,
     })
@@ -59,24 +59,35 @@ describe('useFiltrosDaPosicao', () => {
   })
 
   it('valores invalidos voltam ao padrao', () => {
-    // `sem` e o valor antigo, antes dos seis niveis: cai em "sem filtro".
+    // `sem` e um valor antigo: cai em "sem filtro" (o `repor` e o caso seguinte).
     const { hook } = montar('/estoque?status=x&categoria=nao-uuid&situacao=sem&ordem=preco&pagina=-2')
 
     expect(hook().filtros).toEqual({
       busca: '',
       status: 'ativos',
       categoria: null,
-      situacao: null,
+      situacao: [],
       ordem: 'nome',
       pagina: 1,
     })
+  })
+
+  it('situacao com varios valores: repetida na URL, na ordem das situacoes, sem repetidos nem antigos', () => {
+    const { router, hook } = montar('/estoque?situacao=alto&situacao=repor&situacao=zerado&situacao=alto')
+
+    expect(hook().filtros.situacao).toEqual(['zerado', 'alto'])
+    expect(hook().quantidadeDeFiltros).toBe(1)
+
+    act(() => hook().alterar({ situacao: ['baixo', 'negativo'] }))
+
+    expect(router.state.location.search).toBe('?situacao=negativo&situacao=baixo')
   })
 
   it('mudar um filtro volta para a pagina 1 e cria uma entrada no historico', () => {
     const { router, hook } = montar('/estoque?pagina=4')
     const entradasAntes = router.state.historyAction
 
-    act(() => hook().alterar({ situacao: 'baixo' }))
+    act(() => hook().alterar({ situacao: ['baixo'] }))
 
     expect(router.state.location.search).toBe('?situacao=baixo')
     expect(router.state.historyAction).toBe('PUSH')
@@ -104,7 +115,7 @@ describe('useFiltrosDaPosicao', () => {
     const { router, hook } = montar('/estoque?situacao=zerado')
     const antes = router.state.location
 
-    act(() => hook().alterar({ situacao: 'zerado' }))
+    act(() => hook().alterar({ situacao: ['zerado'] }))
 
     expect(router.state.location).toBe(antes)
   })

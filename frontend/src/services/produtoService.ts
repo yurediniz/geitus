@@ -29,8 +29,8 @@ function montarQueryDaLista(params: ListarProdutosParams): string {
   if (params.categoria) {
     searchParams.set('categoria', params.categoria)
   }
-  if (params.estoque) {
-    searchParams.set('estoque', params.estoque)
+  for (const estoque of params.estoque) {
+    searchParams.append('estoque', estoque)
   }
   if (params.promocao) {
     searchParams.set('promocao', 'true')

@@ -69,7 +69,7 @@ describe('estoqueService', () => {
       busca: '',
       status: 'ativos',
       categoria: null,
-      situacao: null,
+      situacao: [],
       ordem: 'nome',
       pagina: 1,
     }
@@ -90,12 +90,12 @@ describe('estoqueService', () => {
       const signal = new AbortController().signal
 
       await listarPosicaoDeEstoque(
-        { busca: ' arroz ', status: 'todos', categoria: ID, situacao: 'negativo', ordem: '-valor', pagina: 3 },
+        { busca: ' arroz ', status: 'todos', categoria: ID, situacao: ['negativo', 'zerado'], ordem: '-valor', pagina: 3 },
         signal,
       )
 
       expect(apiGetMock).toHaveBeenCalledWith(
-        `/estoque/posicao?busca=arroz&status=todos&categoria=${ID}&situacao=negativo&ordem=-valor&pagina=2&tamanho=25`,
+        `/estoque/posicao?busca=arroz&status=todos&categoria=${ID}&situacao=negativo&situacao=zerado&ordem=-valor&pagina=2&tamanho=25`,
         { autenticada: true, signal },
       )
     })

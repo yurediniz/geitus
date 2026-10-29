@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
-import { umDe } from '@/lib/listas'
+import { algunsDe, mesmoValor, umDe } from '@/lib/listas'
 import { ESTOQUE_FILTRO, ORDENS_PRODUTOS, STATUS_FILTRO, type FiltrosDaListaDeProdutos } from '@/types/produto'
 
 /** Valores padrao: nao aparecem na URL. */
@@ -9,7 +9,7 @@ export const FILTROS_PADRAO: FiltrosDaListaDeProdutos = {
   busca: '',
   status: 'ativos',
   categoria: null,
-  estoque: null,
+  estoque: [],
   promocao: false,
   ordem: 'nome',
   pagina: 1,
@@ -35,7 +35,7 @@ function lerFiltros(params: URLSearchParams): FiltrosDaListaDeProdutos {
     busca: (params.get('busca') ?? '').trim(),
     status: umDe(STATUS_FILTRO, params.get('status')) ?? FILTROS_PADRAO.status,
     categoria: categoria !== null && UUID.test(categoria) ? categoria : null,
-    estoque: umDe(ESTOQUE_FILTRO, params.get('estoque')),
+    estoque: algunsDe(ESTOQUE_FILTRO, params.getAll('estoque')),
     promocao: params.get('promocao') === '1',
     ordem: umDe(ORDENS_PRODUTOS, params.get('ordem')) ?? FILTROS_PADRAO.ordem,
     pagina: lerPagina(params.get('pagina')),
@@ -54,8 +54,8 @@ function escreverFiltros(filtros: FiltrosDaListaDeProdutos): URLSearchParams {
   if (filtros.categoria) {
     params.set('categoria', filtros.categoria)
   }
-  if (filtros.estoque) {
-    params.set('estoque', filtros.estoque)
+  for (const estoque of filtros.estoque) {
+    params.append('estoque', estoque)
   }
   if (filtros.promocao) {
     params.set('promocao', '1')
@@ -74,7 +74,7 @@ function contarFiltros(filtros: FiltrosDaListaDeProdutos): number {
   return [
     filtros.status !== FILTROS_PADRAO.status,
     filtros.categoria !== FILTROS_PADRAO.categoria,
-    filtros.estoque !== FILTROS_PADRAO.estoque,
+    filtros.estoque.length > 0,
     filtros.promocao !== FILTROS_PADRAO.promocao,
   ].filter(Boolean).length
 }
@@ -88,7 +88,7 @@ export interface OpcoesDeAlteracao {
 
 /**
  * Estado da lista de produtos guardado na URL (`?busca=&status=&categoria=
- * &estoque=&promocao=1&ordem=&pagina=`), para "Voltar" e a volta da edicao
+ * &estoque=&estoque=&promocao=1&ordem=&pagina=`, o `estoque` repetido por valor), para "Voltar" e a volta da edicao
  * reabrirem a lista onde estava.
  *
  * - Mudar qualquer coisa alem da pagina volta para a pagina 1.
@@ -106,8 +106,10 @@ export function useFiltrosDaListaDeProdutos() {
         ...filtros,
         ...parcial,
         busca: (parcial.busca ?? filtros.busca).trim(),
+        // Na ordem da lista e sem repetidos, como a URL guarda: a comparacao abaixo e pelo conteudo.
+        estoque: algunsDe(ESTOQUE_FILTRO, parcial.estoque ?? filtros.estoque),
       }
-      const mudou = CAMPOS.filter((campo) => pedido[campo] !== filtros[campo])
+      const mudou = CAMPOS.filter((campo) => !mesmoValor(pedido[campo], filtros[campo]))
       if (mudou.length === 0) {
         return
       }

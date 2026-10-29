@@ -1,6 +1,8 @@
 package com.geitus.app.catalog.listagem;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 import com.geitus.app.catalog.RegraDeNegocioException;
@@ -16,13 +18,13 @@ import com.geitus.app.shared.paginacao.Paginacao;
  * @param busca      termo digitado, como recebido ({@code null} = sem busca); o service normaliza
  * @param status     filtro de status; {@code null} vale {@link StatusFiltro#ATIVOS}
  * @param categoria  UUID publico da categoria (com as descendentes), ou {@code null}
- * @param estoque    filtro de estoque, ou {@code null}
+ * @param estoque    situacoes do filtro de estoque, combinadas com OU; vazio (ou {@code null}) e sem filtro
  * @param emPromocao so produtos com promocao vigente hoje
  * @param ordem      ordenacao; {@code null} vale {@link OrdemDeProdutos#NOME}
  * @param pagina     pagina a partir de 0
  * @param tamanho    itens por pagina, de 1 a {@value Paginacao#TAMANHO_MAXIMO}
  */
-public record ParametrosDaListagem(String busca, StatusFiltro status, UUID categoria, EstoqueFiltro estoque,
+public record ParametrosDaListagem(String busca, StatusFiltro status, UUID categoria, Set<EstoqueFiltro> estoque,
         boolean emPromocao, OrdemDeProdutos ordem, int pagina, int tamanho) {
 
     /** Pagina quando o cliente nao informa. */
@@ -42,6 +44,7 @@ public record ParametrosDaListagem(String busca, StatusFiltro status, UUID categ
     public ParametrosDaListagem {
         status = Objects.requireNonNullElse(status, StatusFiltro.ATIVOS);
         ordem = Objects.requireNonNullElse(ordem, OrdemDeProdutos.NOME);
+        estoque = estoque == null ? Set.of() : Set.copyOf(estoque);
         if (busca != null && busca.length() > TAMANHO_MAXIMO_DA_BUSCA) {
             throw new RegraDeNegocioException(MENSAGEM_BUSCA_LONGA, CAMPO_BUSCA);
         }
@@ -53,7 +56,7 @@ public record ParametrosDaListagem(String busca, StatusFiltro status, UUID categ
      * {@code ativos}, sem filtro de estoque, sem promocao, ordem {@code nome},
      * pagina {@value #PAGINA_PADRAO} e tamanho {@value #TAMANHO_PADRAO}.
      */
-    public static ParametrosDaListagem daRequisicao(String busca, String status, UUID categoria, String estoque,
+    public static ParametrosDaListagem daRequisicao(String busca, String status, UUID categoria, List<String> estoque,
             String promocao, String ordem, Integer pagina, Integer tamanho) {
         return new ParametrosDaListagem(busca, StatusFiltro.doParametro(status), categoria,
                 EstoqueFiltro.doParametro(estoque), emPromocao(promocao), OrdemDeProdutos.doParametro(ordem),

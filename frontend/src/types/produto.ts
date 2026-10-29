@@ -269,7 +269,7 @@ export interface ProdutoRequest {
 export const STATUS_FILTRO = ['ativos', 'inativos', 'todos'] as const
 export type StatusFiltro = (typeof STATUS_FILTRO)[number]
 
-/** Filtro de estoque da lista: o mesmo da posicao de estoque (`repor` junta os que precisam de atencao); so produtos que controlam estoque. */
+/** Filtro de estoque da lista: o mesmo da posicao de estoque, com multisselecao; so produtos que controlam estoque. */
 export const ESTOQUE_FILTRO = SITUACOES_DO_FILTRO
 export type EstoqueFiltro = SituacaoDoFiltro
 
@@ -299,8 +299,8 @@ export interface FiltrosDaListaDeProdutos {
   status: StatusFiltro
   /** UUID da categoria (inclui as subcategorias); null = todas. */
   categoria: string | null
-  /** null = sem filtro de estoque. */
-  estoque: EstoqueFiltro | null
+  /** Situacoes marcadas, na ordem de `ESTOQUE_FILTRO`; vazio = sem filtro de estoque. */
+  estoque: EstoqueFiltro[]
   /** So produtos com promocao vigente hoje. */
   promocao: boolean
   ordem: OrdemProdutos

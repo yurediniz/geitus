@@ -2,16 +2,16 @@ import { useId, useState, type FormEvent } from 'react'
 import { Loader2, Search, SlidersHorizontal, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { FiltroMultiplo } from '@/components/ui/filtro-multiplo'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
-import { ROTULOS_DA_SITUACAO_DO_FILTRO } from '@/features/products/estoque/situacaoDoFiltro'
+import { OPCOES_DA_SITUACAO_DO_FILTRO } from '@/features/products/estoque/situacaoDoFiltro'
 import { SeletorCategoria } from '@/features/products/SeletorCategoria'
 import { umDe } from '@/lib/listas'
 import { cn } from '@/lib/utils'
 import type { Categoria } from '@/types/catalogo'
 import {
   ORDENS_POSICAO,
-  SITUACOES_POSICAO,
   STATUS_POSICAO,
   type FiltrosDaPosicao as Filtros,
   type OrdemDaPosicao,
@@ -187,20 +187,16 @@ export function FiltrosDaPosicao({
         </div>
 
         <div className="space-y-1.5">
-          <Rotulo htmlFor={`${id}-situacao`}>Situação</Rotulo>
-          <NativeSelect
+          <Rotulo id={`${id}-situacao-rotulo`}>Situação</Rotulo>
+          <FiltroMultiplo
             id={`${id}-situacao`}
-            value={filtros.situacao ?? ''}
-            onChange={(event) => alterar({ situacao: umDe(SITUACOES_POSICAO, event.target.value) })}
+            idRotulo={`${id}-situacao-rotulo`}
+            opcoes={OPCOES_DA_SITUACAO_DO_FILTRO}
+            valores={filtros.situacao}
+            onChange={(situacao) => alterar({ situacao })}
+            rotuloTodos="Todas"
             className={ALTURA_DO_CONTROLE}
-          >
-            <option value="">Todas</option>
-            {SITUACOES_POSICAO.map((situacao) => (
-              <option key={situacao} value={situacao}>
-                {ROTULOS_DA_SITUACAO_DO_FILTRO[situacao]}
-              </option>
-            ))}
-          </NativeSelect>
+          />
         </div>
 
         <div className="space-y-1.5">

@@ -39,10 +39,10 @@ export type SituacaoEstoque = 'NEGATIVO' | 'ZERADO' | 'BAIXO' | 'REPOSICAO' | 'R
 
 /**
  * Filtro de situacao, o mesmo na posicao de estoque (`situacao`) e na lista de
- * produtos (`estoque`): `repor` junta negativo, zerado, baixo e reposicao; os
- * demais valem uma situacao cada.
+ * produtos (`estoque`), com multisselecao: cada valor e uma situacao, e os
+ * marcados se somam (OU).
  */
-export const SITUACOES_DO_FILTRO = ['repor', 'negativo', 'zerado', 'baixo', 'reposicao', 'regular', 'alto'] as const
+export const SITUACOES_DO_FILTRO = ['negativo', 'zerado', 'baixo', 'reposicao', 'regular', 'alto'] as const
 export type SituacaoDoFiltro = (typeof SITUACOES_DO_FILTRO)[number]
 
 /** Movimento gravado (resposta do ajuste e item da lista de movimentos). */
@@ -129,7 +129,8 @@ export interface FiltrosDaPosicao {
   busca: string
   status: StatusDaPosicao
   categoria: string | null
-  situacao: SituacaoDaPosicao | null
+  /** Situacoes marcadas, na ordem de `SITUACOES_POSICAO`; vazio = sem filtro. */
+  situacao: SituacaoDaPosicao[]
   ordem: OrdemDaPosicao
   pagina: number
 }

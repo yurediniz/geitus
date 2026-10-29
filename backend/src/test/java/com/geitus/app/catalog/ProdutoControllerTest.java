@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -256,13 +257,29 @@ class ProdutoControllerTest {
 
         mockMvc.perform(get("/api/produtos").header("Authorization", "Bearer " + tokenParaUsuario(1L))
                         .param("busca", "açúcar união").param("status", "todos")
-                        .param("categoria", categoria.toString()).param("estoque", "baixo")
+                        .param("categoria", categoria.toString()).param("estoque", "baixo", "alto")
                         .param("promocao", "true").param("ordem", "-preco")
                         .param("pagina", "2").param("tamanho", "50"))
                 .andExpect(status().isOk());
 
         verify(produtoService).listarParaUsuario(1L, new ParametrosDaListagem("açúcar união", StatusFiltro.TODOS,
-                categoria, EstoqueFiltro.BAIXO, true, OrdemDeProdutos.PRECO_DESC, 2, 50));
+                categoria, Set.of(EstoqueFiltro.BAIXO, EstoqueFiltro.ALTO), true, OrdemDeProdutos.PRECO_DESC, 2, 50));
+    }
+
+    @Test
+    void estoqueAceitaListaSeparadaPorVirgulaERecusaRepor() throws Exception {
+        when(produtoService.listarParaUsuario(eq(1L), any())).thenReturn(paginaVazia());
+
+        mockMvc.perform(get("/api/produtos").header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .param("estoque", "zerado,negativo"))
+                .andExpect(status().isOk());
+        verify(produtoService).listarParaUsuario(1L, new ParametrosDaListagem(null, StatusFiltro.ATIVOS, null,
+                Set.of(EstoqueFiltro.NEGATIVO, EstoqueFiltro.ZERADO), false, OrdemDeProdutos.NOME, 0, 25));
+
+        mockMvc.perform(get("/api/produtos").header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .param("estoque", "zerado", "repor"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("estoque"));
     }
 
     @Test
@@ -416,11 +433,18 @@ class ProdutoControllerTest {
     void openApiListaOsValoresAceitosDeCadaFiltro() throws Exception {
         Map<String, List<String>> anunciados = new HashMap<>();
         for (java.lang.reflect.Parameter parametro : ProdutoController.class.getMethod("listar", Long.class,
-                String.class, String.class, UUID.class, String.class, String.class, String.class, Integer.class,
+                String.class, String.class, UUID.class, List.class, String.class, String.class, Integer.class,
                 Integer.class).getParameters()) {
             Parameter documentacao = parametro.getAnnotation(Parameter.class);
-            if (documentacao != null && documentacao.schema().allowableValues().length > 0) {
-                anunciados.put(parametro.getName(), List.of(documentacao.schema().allowableValues()));
+            if (documentacao == null) {
+                continue;
+            }
+            // Parametro de lista (estoque) anuncia os valores no schema dos itens.
+            String[] valores = documentacao.schema().allowableValues().length > 0
+                    ? documentacao.schema().allowableValues()
+                    : documentacao.array().schema().allowableValues();
+            if (valores.length > 0) {
+                anunciados.put(parametro.getName(), List.of(valores));
             }
         }
 

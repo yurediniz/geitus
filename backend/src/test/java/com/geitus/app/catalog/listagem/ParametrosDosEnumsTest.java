@@ -3,6 +3,9 @@ package com.geitus.app.catalog.listagem;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.List;
+import java.util.Set;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -61,18 +64,29 @@ class ParametrosDosEnumsTest {
 
     @Test
     void estoqueDaApi() {
-        assertThat(EstoqueFiltro.doParametro(null)).isNull();
-        assertThat(EstoqueFiltro.doParametro("")).isNull();
-        assertThat(EstoqueFiltro.doParametro("repor")).isEqualTo(EstoqueFiltro.REPOR);
-        assertThat(EstoqueFiltro.doParametro("negativo")).isEqualTo(EstoqueFiltro.NEGATIVO);
-        assertThat(EstoqueFiltro.doParametro("zerado")).isEqualTo(EstoqueFiltro.ZERADO);
-        assertThat(EstoqueFiltro.doParametro("baixo")).isEqualTo(EstoqueFiltro.BAIXO);
-        assertThat(EstoqueFiltro.doParametro("reposicao")).isEqualTo(EstoqueFiltro.REPOSICAO);
-        assertThat(EstoqueFiltro.doParametro("regular")).isEqualTo(EstoqueFiltro.REGULAR);
-        assertThat(EstoqueFiltro.doParametro("alto")).isEqualTo(EstoqueFiltro.ALTO);
-        assertThatThrownBy(() -> EstoqueFiltro.doParametro("sem"))
-                .isInstanceOf(RegraDeNegocioException.class)
-                .hasMessage("Filtro de estoque inválido.")
-                .satisfies(erro -> assertThat(((RegraDeNegocioException) erro).campo()).contains("estoque"));
+        assertThat(EstoqueFiltro.doParametro(null)).isEmpty();
+        assertThat(EstoqueFiltro.doParametro(List.of(""))).isEmpty();
+        assertThat(EstoqueFiltro.doParametro(List.of("negativo"))).containsExactly(EstoqueFiltro.NEGATIVO);
+        assertThat(EstoqueFiltro.doParametro(List.of("zerado"))).containsExactly(EstoqueFiltro.ZERADO);
+        assertThat(EstoqueFiltro.doParametro(List.of("baixo"))).containsExactly(EstoqueFiltro.BAIXO);
+        assertThat(EstoqueFiltro.doParametro(List.of("reposicao"))).containsExactly(EstoqueFiltro.REPOSICAO);
+        assertThat(EstoqueFiltro.doParametro(List.of("regular"))).containsExactly(EstoqueFiltro.REGULAR);
+        assertThat(EstoqueFiltro.doParametro(List.of("alto"))).containsExactly(EstoqueFiltro.ALTO);
+        assertThat(EstoqueFiltro.doParametro(List.of("alto", "zerado", "zerado")))
+                .containsExactly(EstoqueFiltro.ZERADO, EstoqueFiltro.ALTO);
+        for (String invalido : new String[] { "sem", "repor" }) {
+            assertThatThrownBy(() -> EstoqueFiltro.doParametro(List.of("baixo", invalido)))
+                    .isInstanceOf(RegraDeNegocioException.class)
+                    .hasMessage("Filtro de estoque inválido.")
+                    .satisfies(erro -> assertThat(((RegraDeNegocioException) erro).campo()).contains("estoque"));
+        }
+    }
+
+    @Test
+    void condicaoDoEstoqueDeixaOControleForaDoOu() {
+        assertThat(EstoqueFiltro.condicao(Set.of())).isEmpty();
+        assertThat(EstoqueFiltro.condicao(Set.of(EstoqueFiltro.ALTO, EstoqueFiltro.NEGATIVO)))
+                .isEqualTo(" AND p.controla_estoque AND (" + SituacaoDaPosicao.SALDO_NEGATIVO + " OR "
+                        + SituacaoDaPosicao.ESTOQUE_ALTO + ")");
     }
 }

@@ -2,6 +2,7 @@ package com.geitus.app.catalog.listagem;
 
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -43,10 +44,10 @@ public class ConsultaDaPosicaoDeEstoque {
     }
 
     /**
-     * Ids da {@code pagina} (a partir de 0) e o total. {@code situacao} nulo e
-     * sem filtro. Pagina alem do fim devolve {@code ids} vazio com o total real.
+     * Ids da {@code pagina} (a partir de 0) e o total. As {@code situacoes} se
+     * combinam com OU; vazio e sem filtro. Pagina alem do fim devolve {@code ids} vazio com o total real.
      */
-    public PaginaDeIds buscar(FiltroDeProdutos filtro, SituacaoDaPosicao situacao, OrdemDaPosicao ordem,
+    public PaginaDeIds buscar(FiltroDeProdutos filtro, Set<SituacaoDaPosicao> situacoes, OrdemDaPosicao ordem,
             int pagina, int tamanho) {
         if (pagina < 0 || tamanho < 1) {
             throw new IllegalArgumentException("Pagina ou tamanho fora dos limites.");
@@ -55,7 +56,7 @@ public class ConsultaDaPosicaoDeEstoque {
             return PaginaDeIds.VAZIA;
         }
         MapSqlParameterSource parametros = new MapSqlParameterSource("empresaId", filtro.empresaId());
-        String origemFiltrada = origem(filtro, parametros) + (situacao == null ? "" : situacao.condicao());
+        String origemFiltrada = origem(filtro, parametros) + SituacaoDaPosicao.condicao(situacoes);
 
         long total = jdbc.queryForObject(CONTAGEM + origemFiltrada, parametros, Long.class);
         long deslocamento = (long) pagina * tamanho;
@@ -83,7 +84,7 @@ public class ConsultaDaPosicaoDeEstoque {
     }
 
     private static String origem(FiltroDeProdutos filtro, MapSqlParameterSource parametros) {
-        if (filtro.estoque() != null || filtro.emPromocao()) {
+        if (!filtro.estoque().isEmpty() || filtro.emPromocao()) {
             throw new IllegalArgumentException("A posicao nao usa os filtros de estoque e de promocao da listagem.");
         }
         return ConsultaDeProdutos.ORIGEM + SO_CONTROLADOS + ConsultaDeProdutos.condicoes(filtro, parametros);

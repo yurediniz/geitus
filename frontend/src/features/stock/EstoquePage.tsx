@@ -263,8 +263,14 @@ function AbaPosicao({ somenteLeitura }: { somenteLeitura: boolean }) {
       <div className="space-y-2">
         <CardsDoResumo
           resumo={resumoQuery.data}
-          situacao={filtros.situacao}
-          aoEscolher={(situacao) => alterar({ situacao })}
+          situacoes={filtros.situacao}
+          aoAlternar={(situacao) =>
+            alterar({
+              situacao: filtros.situacao.includes(situacao)
+                ? filtros.situacao.filter((item) => item !== situacao)
+                : [...filtros.situacao, situacao],
+            })
+          }
         />
         {resumoQuery.isError && !resumoQuery.data && (
           <p role="alert" className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">

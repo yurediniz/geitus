@@ -1,5 +1,6 @@
 package com.geitus.app.catalog;
 
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,7 @@ import com.geitus.app.shared.paginacao.PaginaResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -82,11 +84,12 @@ public class ProdutoController {
             @RequestParam(required = false) String status,
             @Parameter(description = "UUID da categoria; inclui as subcategorias")
             @RequestParam(required = false) UUID categoria,
-            @Parameter(description = "Situacao do estoque: repor (negativo, zerado, baixo ou reposicao), negativo, "
-                    + "zerado, baixo, reposicao, regular ou alto; so produtos que controlam estoque",
-                    schema = @Schema(allowableValues = { "repor", "negativo", "zerado", "baixo", "reposicao",
-                            "regular", "alto" }))
-            @RequestParam(required = false) String estoque,
+            @Parameter(description = "Situacoes do estoque, combinadas com OU (parametro repetido ou separado "
+                    + "por virgula): negativo, zerado, baixo, reposicao, regular ou alto; so produtos que "
+                    + "controlam estoque",
+                    array = @ArraySchema(schema = @Schema(allowableValues = { "negativo", "zerado", "baixo",
+                            "reposicao", "regular", "alto" })))
+            @RequestParam(required = false) List<String> estoque,
             @Parameter(description = "true: so produtos com promocao vigente hoje",
                     schema = @Schema(allowableValues = { "true", "false" }, defaultValue = "false"))
             @RequestParam(required = false) String promocao,
