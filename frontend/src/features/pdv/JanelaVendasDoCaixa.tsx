@@ -8,12 +8,13 @@ import { Input } from '@/components/ui/input'
 import { CAIXA_QUERY_KEY } from '@/features/cash-register/caixaQuery'
 import { CarregandoCaixa, ErroAoCarregar } from '@/features/cash-register/EstadosDoCaixa'
 import { lerErroDoServidor } from '@/features/cash-register/errosDoCaixa'
-import { formatarDataHoraCaixa, formatarHora, formatarReais, ROTULO_DA_FORMA } from '@/features/cash-register/formatacaoCaixa'
+import { formatarHora, formatarReais, ROTULO_DA_FORMA } from '@/features/cash-register/formatacaoCaixa'
 import { PRODUTOS_QUERY_KEY } from '@/features/catalog/catalogoQuery'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
 import { devolverFocoAoCampo } from '@/features/pdv/focoDoPdv'
-import { formatarQuantidade } from '@/features/pdv/formatacaoPdv'
+import { cabecalhoDaVenda } from '@/features/pdv/formatacaoPdv'
 import { chaveDaVenda, chaveDasVendas, PDV_QUERY_KEY } from '@/features/pdv/pdvQuery'
+import { ResumoDaVenda } from '@/features/pdv/ResumoDaVenda'
 import { ErroDoCampo, MarcaObrigatorio } from '@/features/products/CamposFormulario'
 import { useBuscaComAtraso } from '@/hooks/useBuscaComAtraso'
 import { cn } from '@/lib/utils'
@@ -358,57 +359,11 @@ function DetalheDaVenda({
           Vendas
         </Button>
         <p className="text-sm text-muted-foreground">
-          {`Nº ${venda.numero} · ${formatarDataHoraCaixa(venda.concluidaEm)} · ${venda.vendedorNome}`}
+          {cabecalhoDaVenda(venda)}
         </p>
       </div>
 
-      {venda.clienteNome && <p className="text-sm">{`Cliente: ${venda.clienteNome}`}</p>}
-
-      <ul aria-label={`Itens da venda nº ${venda.numero}`} className="divide-y text-sm">
-        {venda.itens.map((item) => (
-          <li key={item.ordem} className="flex items-start justify-between gap-3 py-2">
-            <div className="min-w-0">
-              <p className="font-medium">{item.nome}</p>
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {/* O item da venda nao diz se a unidade e fracionada: quantidade quebrada sai com 3 casas, como na lista. */}
-                {`${formatarQuantidade(item.quantidade, item.embalagemRotulo === null && !Number.isInteger(item.quantidade))} ${item.embalagemRotulo ?? item.unidade} × ${formatarReais(item.precoUnitario)}`}
-              </p>
-            </div>
-            <span className="shrink-0 font-semibold tabular-nums">{formatarReais(item.valorLiquido)}</span>
-          </li>
-        ))}
-      </ul>
-
-      <dl className="space-y-1 rounded-md bg-muted/60 px-3 py-2 text-sm">
-        {venda.descontoItens + venda.descontoTotal > 0 && (
-          <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">Descontos</dt>
-            <dd className="tabular-nums">{`− ${formatarReais(venda.descontoItens + venda.descontoTotal)}`}</dd>
-          </div>
-        )}
-        <div className="flex justify-between gap-4 font-semibold">
-          <dt>Total</dt>
-          <dd className="tabular-nums">{formatarReais(venda.total)}</dd>
-        </div>
-        {venda.pagamentos.map((pagamento) => (
-          <div key={pagamento.forma} className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">{ROTULO_DA_FORMA[pagamento.forma]}</dt>
-            <dd className="tabular-nums">{formatarReais(pagamento.valor)}</dd>
-          </div>
-        ))}
-        {venda.troco > 0 && (
-          <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">Troco</dt>
-            <dd className="tabular-nums">{formatarReais(venda.troco)}</dd>
-          </div>
-        )}
-      </dl>
-
-      {venda.cancelamento && (
-        <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {`Cancelada por ${venda.cancelamento.canceladaPorNome} em ${formatarDataHoraCaixa(venda.cancelamento.canceladaEm)}: ${venda.cancelamento.motivo}`}
-        </p>
-      )}
+      <ResumoDaVenda venda={venda} />
 
       {erro && <ErroInline mensagem={erro} />}
 

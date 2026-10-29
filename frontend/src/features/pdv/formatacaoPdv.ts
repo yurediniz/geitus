@@ -1,7 +1,12 @@
-import { formatarReais } from '@/features/cash-register/formatacaoCaixa'
+import { formatarDataHoraCaixa, formatarReais } from '@/features/cash-register/formatacaoCaixa'
 import { formatarPercentual } from '@/lib/percentual'
 import { quantidadeParaTexto } from '@/lib/quantidade'
-import type { DescontoInformado, OrigemPrecoDaVenda } from '@/types/pdv'
+import type { DescontoInformado, OrigemPrecoDaVenda, Venda } from '@/types/pdv'
+
+/** "Nº 128 · 27/10/2026 14:05 · Ana Souza": a linha de identificacao da venda. */
+export function cabecalhoDaVenda(venda: Venda): string {
+  return `Nº ${venda.numero} · ${formatarDataHoraCaixa(venda.concluidaEm)} · ${venda.vendedorNome}`
+}
 
 /** Selo do preco unitario (spec do PDV); o preco normal e o da embalagem ficam sem selo. */
 export const SELO_DA_ORIGEM: Readonly<Partial<Record<OrigemPrecoDaVenda, string>>> = {
