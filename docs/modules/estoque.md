@@ -115,7 +115,7 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
    - `de` maior que `ate` dá 400 "A data inicial deve ser anterior à final.".
    - Um período maior que 366 dias dá 400 "O período pode ter no máximo 1 ano.".
    - Motivo de outro tipo não dá erro: a lista volta vazia.
-27. O movimento de venda, cancelamento ou devolução traz o número da venda. **(fatia 2b)** O número leva ao detalhe da venda.
+27. O movimento de venda, cancelamento ou devolução traz o número da venda. Para o ADMIN, o número abre a venda numa janela, só leitura (itens, pagamentos e cancelamento); para o OPERADOR fica como texto, porque o detalhe só atende o dono do caixa ou o ADMIN.
 
 ## 3. Contrato da API
 
@@ -182,7 +182,7 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
 - **Listagem:** "12 UN" com selo "Estoque baixo"/"Sem estoque"; "—" sem controle.
 - **Área Estoque:** item "Estoque" no menu, depois de Produtos, na rota `/estoque`, aberta a qualquer usuário (o OPERADOR lê, sem ações). Abas **Posição** e **Movimentações**, com a aba na URL (`?aba=movimentacoes`; sem ela, a Posição); trocar de aba começa com os filtros da aba de destino limpos.
   - **Posição:** cards do resumo no topo ("Sem estoque 4", "Estoque baixo 12", "Negativos 2", "Valor em estoque R$ 18.430,00 a custo"), e clicar num card aplica o filtro; o valor mostra "3 produtos sem custo ficam fora" quando houver. Os filtros de situação dizem o que incluem ("Sem estoque (zerado ou negativo)", "Baixo ou sem estoque", "Negativo"). Abaixo vêm a busca, os filtros e "Ordenar por", tudo na URL. Tabela a partir de 1.024 px e cards abaixo, no padrão da lista de produtos, com nome (abre o produto), saldo com conversão, selo da situação ("Negativo" em vermelho), níveis, custo e valor. Ações (só ADMIN): "Ajustar" abre o ajuste na Entrada e, no negativo, "Regularizar" abre na Contagem; daqui o modal não traz embalagens nem o fornecedor da última compra (como na lista de produtos). Sucesso com o nome do produto e o resumo do ajuste. Depois de um ajuste a linha e o resumo recarregam. Lista vazia: "Nenhum produto controla estoque ainda." ou "Nenhum produto neste filtro.".
-  - **Movimentações:** período com os atalhos Hoje · 7 dias · 30 dias (o padrão) e as datas, tipo, motivo (só os do tipo escolhido, os do sistema incluídos) e usuário (só ADMIN, com os inativos marcados), tudo na URL; período invertido ou maior que 1 ano mostra o erro no filtro e não consulta. A linha traz o produto (abre a página dele), tipo · motivo, data e hora, usuário, "Venda nº 123" quando houver, fornecedor, observação, "−2 UN" e "12 → 10". "Carregar mais" no fim; lista vazia com filtro oferece "Limpar filtros". **(fatia 2b)** filtro por produto (busca) e "Venda nº 123" abrindo o detalhe da venda.
+  - **Movimentações:** período com os atalhos Hoje · 7 dias · 30 dias (o padrão) e as datas, produto (busca por nome, código, EAN, SKU ou Nº; vindo da URL, o nome é carregado, e o produto que não existe mais sai do filtro com aviso), tipo, motivo (só os do tipo escolhido, os do sistema incluídos) e usuário (só ADMIN, com os inativos marcados), tudo na URL; período invertido ou maior que 1 ano mostra o erro no filtro e não consulta. A linha traz o produto (abre a página dele), tipo · motivo, data e hora, usuário, "Venda nº 123" quando houver, fornecedor, observação, "−2 UN" e "12 → 10". "Carregar mais" no fim; lista vazia com filtro oferece "Limpar filtros".
 
 ## 6. Requisitos vindos do PDV
 
