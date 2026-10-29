@@ -24,6 +24,19 @@ describe('ListaDeMovimentos', () => {
     expect(estorno).toHaveTextContent('− R$ 20,00')
   })
 
+  it('a devolucao de itens aparece com o nº da venda, a forma e o sinal de saida', () => {
+    render(
+      <ListaDeMovimentos
+        movimentos={[movimentoDeTeste({ id: 'dev', tipo: 'DEVOLUCAO', forma: 'DINHEIRO', valor: 29.9, vendaNumero: 8 })]}
+      />,
+    )
+
+    const item = screen.getByRole('listitem')
+    expect(item).toHaveTextContent('Devolução')
+    expect(item).toHaveTextContent('Venda nº 8 · Dinheiro')
+    expect(item).toHaveTextContent('− R$ 29,90')
+  })
+
   it('no modo cego, o recebimento sai sem valor', () => {
     render(
       <ListaDeMovimentos

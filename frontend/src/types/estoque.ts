@@ -23,9 +23,10 @@ export type MotivoMovimento =
   | 'ESTOQUE_INICIAL'
   | 'VENDA'
   | 'CANCELAMENTO_VENDA'
+  | 'DEVOLUCAO_VENDA'
 
 /** De onde veio o movimento. */
-export type OrigemMovimento = 'AJUSTE_MANUAL' | 'CADASTRO' | 'VENDA'
+export type OrigemMovimento = 'AJUSTE_MANUAL' | 'CADASTRO' | 'VENDA' | 'DEVOLUCAO'
 
 /**
  * Situacao do saldo calculada pelo backend (so com o controle ligado):

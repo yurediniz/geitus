@@ -12,7 +12,7 @@ const TIPOS: readonly TipoMovimento[] = ['ENTRADA', 'SAIDA', 'AJUSTE']
 
 /** Motivos que cada tipo pode ter, os do sistema incluidos (o filtro so oferece os do tipo escolhido). */
 const MOTIVOS_POR_TIPO: Readonly<Record<TipoMovimento, readonly MotivoMovimento[]>> = {
-  ENTRADA: ['COMPRA', 'DEVOLUCAO_CLIENTE', 'ESTOQUE_INICIAL', 'CANCELAMENTO_VENDA', 'OUTRO'],
+  ENTRADA: ['COMPRA', 'DEVOLUCAO_CLIENTE', 'ESTOQUE_INICIAL', 'CANCELAMENTO_VENDA', 'DEVOLUCAO_VENDA', 'OUTRO'],
   SAIDA: ['VENDA', 'PERDA_AVARIA', 'VENCIDO', 'USO_INTERNO', 'DEVOLUCAO_FORNECEDOR', 'OUTRO'],
   AJUSTE: ['CONTAGEM', 'OUTRO'],
 }

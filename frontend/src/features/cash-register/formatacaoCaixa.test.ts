@@ -120,7 +120,13 @@ describe('formatacaoCaixa', () => {
         movimento('SUPRIMENTO', 0.2),
         movimento('SANGRIA', 200),
       ])
-      expect(totais).toEqual({ suprimentos: 50.3, sangrias: 200, vendasEmDinheiro: 0, completos: true })
+      expect(totais).toEqual({
+        suprimentos: 50.3,
+        sangrias: 200,
+        vendasEmDinheiro: 0,
+        devolucoesEmDinheiro: 0,
+        completos: true,
+      })
     })
 
     it('valor oculto (modo cego) nunca entra na soma e marca os totais como incompletos', () => {
@@ -129,7 +135,13 @@ describe('formatacaoCaixa', () => {
         { ...movimento('SANGRIA', 0), valor: null },
         movimento('SUPRIMENTO', 10),
       ])
-      expect(totais).toEqual({ suprimentos: 10, sangrias: 0, vendasEmDinheiro: 0, completos: false })
+      expect(totais).toEqual({
+        suprimentos: 10,
+        sangrias: 0,
+        vendasEmDinheiro: 0,
+        devolucoesEmDinheiro: 0,
+        completos: false,
+      })
     })
 
     it('vendas em dinheiro: recebimentos menos estornos, só do dinheiro', () => {
@@ -140,7 +152,23 @@ describe('formatacaoCaixa', () => {
         movimento('RECEBIMENTO', 99, 'PIX'),
         movimento('ESTORNO', 5, 'DEBITO'),
       ])
-      expect(totais).toEqual({ suprimentos: 0, sangrias: 0, vendasEmDinheiro: 40.3, completos: true })
+      expect(totais).toEqual({
+        suprimentos: 0,
+        sangrias: 0,
+        vendasEmDinheiro: 40.3,
+        devolucoesEmDinheiro: 0,
+        completos: true,
+      })
+    })
+
+    it('a devolucao em dinheiro sai a parte das vendas; a de outra forma nao conta', () => {
+      const totais = totaisDosMovimentos([
+        movimento('ABERTURA', 100),
+        movimento('DEVOLUCAO', 29.9),
+        movimento('DEVOLUCAO', 10, 'PIX'),
+      ])
+      expect(totais.devolucoesEmDinheiro).toBe(29.9)
+      expect(totais.vendasEmDinheiro).toBe(0)
     })
 
     it('rótulo das formas de pagamento', () => {

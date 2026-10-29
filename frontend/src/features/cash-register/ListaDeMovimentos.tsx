@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowUpFromLine, ReceiptText, Undo2, Wallet } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpFromLine, PackageOpen, ReceiptText, Undo2, Wallet } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 import {
@@ -11,8 +11,8 @@ import { cn } from '@/lib/utils'
 import type { MovimentoDeCaixa, TipoDeMovimentoDeCaixa } from '@/types/caixa'
 
 /**
- * Sangria e estorno em ambar; suprimento, abertura e recebimento neutros
- * (spec do Caixa). Sempre com icone, nunca so a cor.
+ * Sangria, estorno e devolucao em ambar; suprimento, abertura e recebimento
+ * neutros (spec do Caixa). Sempre com icone, nunca so a cor.
  */
 const ESTILO_DO_TIPO: Readonly<Record<TipoDeMovimentoDeCaixa, { icone: LucideIcon; classe: string }>> = {
   ABERTURA: { icone: Wallet, classe: 'bg-muted text-muted-foreground' },
@@ -20,11 +20,12 @@ const ESTILO_DO_TIPO: Readonly<Record<TipoDeMovimentoDeCaixa, { icone: LucideIco
   SANGRIA: { icone: ArrowUpFromLine, classe: 'bg-warning-soft text-warning-soft-foreground' },
   RECEBIMENTO: { icone: ReceiptText, classe: 'bg-muted text-muted-foreground' },
   ESTORNO: { icone: Undo2, classe: 'bg-warning-soft text-warning-soft-foreground' },
+  DEVOLUCAO: { icone: PackageOpen, classe: 'bg-warning-soft text-warning-soft-foreground' },
 }
 
-/** Sangria e estorno tiram do caixa, suprimento e recebimento poem; a abertura e o fundo (sem sinal). */
+/** Sangria, estorno e devolucao tiram do caixa, suprimento e recebimento poem; a abertura e o fundo (sem sinal). */
 function sinalDoMovimento(tipo: TipoDeMovimentoDeCaixa): string {
-  if (tipo === 'SANGRIA' || tipo === 'ESTORNO') {
+  if (tipo === 'SANGRIA' || tipo === 'ESTORNO' || tipo === 'DEVOLUCAO') {
     return '− '
   }
   return tipo === 'ABERTURA' ? '' : '+ '
@@ -32,7 +33,7 @@ function sinalDoMovimento(tipo: TipoDeMovimentoDeCaixa): string {
 
 /** "Venda nº 128 · Débito" nos movimentos de venda; o motivo nos lancamentos. */
 function descricaoDoMovimento(movimento: MovimentoDeCaixa): string | null {
-  if (movimento.tipo === 'RECEBIMENTO' || movimento.tipo === 'ESTORNO') {
+  if (movimento.tipo === 'RECEBIMENTO' || movimento.tipo === 'ESTORNO' || movimento.tipo === 'DEVOLUCAO') {
     const venda = movimento.vendaNumero === null ? 'Venda' : `Venda nº ${movimento.vendaNumero}`
     return `${venda} · ${ROTULO_DA_FORMA[movimento.forma]}`
   }

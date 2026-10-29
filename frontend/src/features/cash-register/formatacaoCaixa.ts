@@ -136,11 +136,13 @@ export function totaisDosMovimentos(movimentos: readonly MovimentoDeCaixa[]): {
   suprimentos: number
   sangrias: number
   vendasEmDinheiro: number
+  devolucoesEmDinheiro: number
   completos: boolean
 } {
   let suprimentos = 0
   let sangrias = 0
   let vendasEmDinheiro = 0
+  let devolucoesEmDinheiro = 0
   let completos = true
   for (const movimento of movimentos) {
     if (movimento.valor === null) {
@@ -153,9 +155,17 @@ export function totaisDosMovimentos(movimentos: readonly MovimentoDeCaixa[]): {
       vendasEmDinheiro += emCentavos(movimento.valor)
     } else if (movimento.forma === 'DINHEIRO' && movimento.tipo === 'ESTORNO') {
       vendasEmDinheiro -= emCentavos(movimento.valor)
+    } else if (movimento.forma === 'DINHEIRO' && movimento.tipo === 'DEVOLUCAO') {
+      devolucoesEmDinheiro += emCentavos(movimento.valor)
     }
   }
-  return { suprimentos: suprimentos / 100, sangrias: sangrias / 100, vendasEmDinheiro: vendasEmDinheiro / 100, completos }
+  return {
+    suprimentos: suprimentos / 100,
+    sangrias: sangrias / 100,
+    vendasEmDinheiro: vendasEmDinheiro / 100,
+    devolucoesEmDinheiro: devolucoesEmDinheiro / 100,
+    completos,
+  }
 }
 
 /** "Débito", "Débito e PIX", "Débito, Crédito e PIX". */
@@ -224,6 +234,7 @@ export const ROTULO_DO_MOVIMENTO: Readonly<Record<TipoDeMovimentoDeCaixa, string
   SANGRIA: 'Sangria',
   RECEBIMENTO: 'Recebimento',
   ESTORNO: 'Estorno',
+  DEVOLUCAO: 'Devolução',
 }
 
 export const ROTULO_DO_STATUS: Readonly<Record<StatusDaSessao, string>> = {

@@ -102,7 +102,9 @@ export function ResumoDoFechamento({ sessao }: { sessao: SessaoDeCaixa }) {
       </p>
     )
   }
-  const { suprimentos, sangrias, vendasEmDinheiro, completos } = totaisDosMovimentos(sessao.movimentos)
+  const { suprimentos, sangrias, vendasEmDinheiro, devolucoesEmDinheiro, completos } = totaisDosMovimentos(
+    sessao.movimentos,
+  )
   const temVendasEmDinheiro = sessao.movimentos.some(
     (movimento) => movimento.forma === 'DINHEIRO' && (movimento.tipo === 'RECEBIMENTO' || movimento.tipo === 'ESTORNO'),
   )
@@ -123,6 +125,9 @@ export function ResumoDoFechamento({ sessao }: { sessao: SessaoDeCaixa }) {
               ? `− ${formatarReais(Math.abs(vendasEmDinheiro))}`
               : `+ ${formatarReais(vendasEmDinheiro)}`}
           </Linha>
+        )}
+        {completos && devolucoesEmDinheiro > 0 && (
+          <Linha rotulo="Devoluções em dinheiro">{`− ${formatarReais(devolucoesEmDinheiro)}`}</Linha>
         )}
         <Linha rotulo="Esperado na gaveta" destaque>
           {formatarReais(esperado)}

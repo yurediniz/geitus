@@ -20,9 +20,11 @@ export const FORMAS_DE_PAGAMENTO = ['DINHEIRO', 'DEBITO', 'CREDITO', 'PIX'] as c
 
 /**
  * Movimentos do caixa: a abertura e o fundo de troco; o sinal sai do tipo
- * (sangria e estorno subtraem). `RECEBIMENTO` e `ESTORNO` vem das vendas do PDV.
+ * (sangria, estorno e devolucao subtraem). `RECEBIMENTO` e `ESTORNO` vem das
+ * vendas do PDV; `DEVOLUCAO` e o reembolso de uma devolucao de itens, no caixa
+ * de quem devolveu (a venda pode ser de outro caixa).
  */
-export type TipoDeMovimentoDeCaixa = 'ABERTURA' | 'SUPRIMENTO' | 'SANGRIA' | 'RECEBIMENTO' | 'ESTORNO'
+export type TipoDeMovimentoDeCaixa = 'ABERTURA' | 'SUPRIMENTO' | 'SANGRIA' | 'RECEBIMENTO' | 'ESTORNO' | 'DEVOLUCAO'
 
 /** Os lancamentos que a tela registra no meio do dia. */
 export type TipoDeLancamento = 'SUPRIMENTO' | 'SANGRIA'
