@@ -264,3 +264,14 @@ Spec: [`pdv.md`](modules/pdv.md).
 - **Crédito em loja:** adiado para spec própria (com o Financeiro ou Clientes), porque exige saldo do cliente, nova forma de pagamento e regras de caixa e financeiro.
 
 Spec: [`estoque.md`](modules/estoque.md).
+
+## DEC-046 — Devolução de item em quatro fatias e o banco da devolução
+2026-10-29 · Aceita
+- **Fatias:** a devolução (estoque.md 6.2) tem cerca de 63 arquivos e foi dividida em quatro: 3a banco (V19) e base do caixa e do estoque; 3b domínio e API; 3c tela "Devolver itens" no PDV; 3d rótulos de caixa e estoque e docs dos módulos.
+- **Item no pedido:** a linha da venda é identificada pela `ordem` (única por venda), sem uuid novo em `itens_venda`.
+- **Caixa:** o reembolso (`DEVOLUCAO`) fica na sessão de quem devolve, então a FK da venda no movimento passou a ser só por empresa e um gatilho mantém recebimento e estorno na sessão da venda; o único da venda vale só para recebimento e estorno, e a devolução tem um único por (devolução, forma). O esperado de débito, crédito e PIX pode ficar negativo, então a contagem exige só `valor_contado >= 0`.
+- **Estoque:** origem `DEVOLUCAO` com o item da devolução (`item_devolucao_id`), entrada `DEVOLUCAO_VENDA` e, no avariado, a saída `PERDA_AVARIA`, que pode deixar o saldo negativo.
+- **Valor zero:** a devolução aceita valor 0 (item com líquido zero), sem reembolso (aprovado pelo usuário em 2026-10-29).
+- **Concorrência:** a devolução trava a venda (`FOR NO KEY UPDATE`), o que serializa as devoluções da mesma venda e o cancelamento; a conferência da devolução no commit também dispara quando entra um item ou um reembolso depois.
+
+Spec: [`estoque.md`](modules/estoque.md), seção 6.2.
