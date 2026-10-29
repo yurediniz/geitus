@@ -27,11 +27,11 @@ public interface MovimentoDeCaixaRepository extends Repository<MovimentoDeCaixa,
 
     /**
      * Dinheiro esperado na gaveta: abertura + suprimentos + recebimentos -
-     * sangrias - estornos, so em dinheiro. Nao e coluna: e sempre esta soma
+     * sangrias - estornos - devolucoes, so em dinheiro. Nao e coluna: e sempre esta soma
      * (spec do Caixa; docs/modules/pdv.md).
      */
     @Query(value = """
-            SELECT COALESCE(SUM(CASE WHEN tipo IN ('SANGRIA', 'ESTORNO') THEN -valor ELSE valor END), 0)
+            SELECT COALESCE(SUM(CASE WHEN tipo IN ('SANGRIA', 'ESTORNO', 'DEVOLUCAO') THEN -valor ELSE valor END), 0)
             FROM movimentos_caixa
             WHERE empresa_id = :empresaId AND sessao_caixa_id = :sessaoId AND forma = 'DINHEIRO'
             """, nativeQuery = true)
@@ -45,7 +45,7 @@ public interface MovimentoDeCaixaRepository extends Repository<MovimentoDeCaixa,
      */
     @Query(value = """
             SELECT sessao_caixa_id, forma,
-                   COALESCE(SUM(CASE WHEN tipo IN ('SANGRIA', 'ESTORNO') THEN -valor ELSE valor END), 0)
+                   COALESCE(SUM(CASE WHEN tipo IN ('SANGRIA', 'ESTORNO', 'DEVOLUCAO') THEN -valor ELSE valor END), 0)
             FROM movimentos_caixa
             WHERE empresa_id = :empresaId AND sessao_caixa_id = ANY(:sessaoIds)
             GROUP BY sessao_caixa_id, forma

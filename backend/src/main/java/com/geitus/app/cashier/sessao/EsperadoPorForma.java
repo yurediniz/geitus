@@ -13,8 +13,9 @@ import com.geitus.app.cashier.FormaDePagamento;
 /**
  * O esperado de cada forma na sessao (docs/modules/pdv.md): a soma dos
  * movimentos com o sinal do tipo. Dinheiro = abertura + suprimentos +
- * recebimentos - sangrias - estornos; Debito, Credito e PIX = recebimentos -
- * estornos. So entram as formas que tiveram movimento (o dinheiro sempre tem a
+ * recebimentos - sangrias - estornos - devolucoes; Debito, Credito e PIX =
+ * recebimentos - estornos - devolucoes (pode ficar negativo na sessao de quem
+ * devolve). So entram as formas que tiveram movimento (o dinheiro sempre tem a
  * abertura). Nunca e coluna: e sempre esta soma.
  */
 final class EsperadoPorForma {

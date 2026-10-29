@@ -9,8 +9,9 @@ import java.util.Set;
  * espelham o CHECK {@code ck_movimento_estoque_motivo}.
  *
  * <p>Cada motivo vale para um conjunto de tipos. Os motivos de sistema
- * ({@link #ESTOQUE_INICIAL}, so do cadastro, e {@link #VENDA} e
- * {@link #CANCELAMENTO_VENDA}, do PDV; docs/modules/pdv.md) nunca sao
+ * ({@link #ESTOQUE_INICIAL}, so do cadastro, e {@link #VENDA},
+ * {@link #CANCELAMENTO_VENDA} e {@link #DEVOLUCAO_VENDA}, do PDV;
+ * docs/modules/pdv.md e estoque.md, secao 6.2) nunca sao
  * aceitos num ajuste manual.
  */
 public enum MotivoMovimento {
@@ -24,7 +25,8 @@ public enum MotivoMovimento {
     OUTRO("Outro", true, TipoMovimento.ENTRADA, TipoMovimento.SAIDA, TipoMovimento.AJUSTE),
     ESTOQUE_INICIAL("Estoque inicial", false, TipoMovimento.ENTRADA),
     VENDA("Venda", false, TipoMovimento.SAIDA),
-    CANCELAMENTO_VENDA("Cancelamento de venda", false, TipoMovimento.ENTRADA);
+    CANCELAMENTO_VENDA("Cancelamento de venda", false, TipoMovimento.ENTRADA),
+    DEVOLUCAO_VENDA("Devolução de venda", false, TipoMovimento.ENTRADA);
 
     private final String rotulo;
     private final boolean manual;
