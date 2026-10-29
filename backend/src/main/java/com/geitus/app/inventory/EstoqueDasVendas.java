@@ -18,8 +18,10 @@ import com.geitus.app.catalog.ProdutoRepository;
 /**
  * Implementacao do {@link EstoqueDaVenda} (docs/modules/pdv.md).
  * Os movimentos passam pelo {@link EstoqueService}, que trava a linha de
- * saldo e grava o movimento ligado ao item da venda; a idempotencia e a da
- * venda ({@code uq_movimento_estoque_item_venda} e a ultima barreira).
+ * saldo e grava o movimento ligado ao item da venda (ou ao item da
+ * devolucao); a idempotencia e a da venda ou a da devolucao
+ * ({@code uq_movimento_estoque_item_venda} e
+ * {@code uq_movimento_estoque_item_devolucao} sao a ultima barreira).
  */
 @Component
 class EstoqueDasVendas implements EstoqueDaVenda {
@@ -90,11 +92,43 @@ class EstoqueDasVendas implements EstoqueDaVenda {
         }
     }
 
+    /**
+     * So volta ao estoque o item que baixou estoque na venda (a baixa existe);
+     * o avariado entra e sai em seguida, com a mesma quantidade.
+     */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void devolver(Long empresaId, Long usuarioId, List<DevolucaoDeItem> itens) {
+        if (itens.isEmpty()) {
+            return;
+        }
+        Map<Long, Produto> produtos = produtosPorId(empresaId, itens.stream().map(DevolucaoDeItem::produtoId).toList());
+        Map<Long, BigDecimal> baixado = movimentoRepository.quantidadesDosItens(empresaId,
+                itens.stream().map(DevolucaoDeItem::itemVendaId).toList(), MotivoMovimento.VENDA).stream()
+                .collect(Collectors.toMap(QuantidadeDoItem::itemVendaId, QuantidadeDoItem::quantidade));
+        for (DevolucaoDeItem item : itens) {
+            Produto produto = produtos.get(item.produtoId());
+            if (produto == null || !baixado.containsKey(item.itemVendaId())) {
+                continue;
+            }
+            estoqueService.registrarMovimentoDaDevolucao(produto, TipoMovimento.ENTRADA,
+                    MotivoMovimento.DEVOLUCAO_VENDA, item.quantidadeEstoque(), usuarioId, item.itemDevolucaoId());
+            if (item.avariado()) {
+                estoqueService.registrarMovimentoDaDevolucao(produto, TipoMovimento.SAIDA,
+                        MotivoMovimento.PERDA_AVARIA, item.quantidadeEstoque(), usuarioId, item.itemDevolucaoId());
+            }
+        }
+    }
+
     private Map<Long, Produto> produtos(Long empresaId, List<BaixaDeItem> baixas) {
-        if (baixas.isEmpty()) {
+        return produtosPorId(empresaId, baixas.stream().map(BaixaDeItem::produtoId).toList());
+    }
+
+    private Map<Long, Produto> produtosPorId(Long empresaId, Collection<Long> produtoIds) {
+        if (produtoIds.isEmpty()) {
             return Map.of();
         }
-        List<Long> ids = baixas.stream().map(BaixaDeItem::produtoId).distinct().toList();
+        List<Long> ids = produtoIds.stream().distinct().toList();
         return produtoRepository.buscarComRelacoesPorIds(empresaId, ids).stream()
                 .collect(Collectors.toMap(Produto::getId, Function.identity(), (primeiro, repetido) -> primeiro));
     }

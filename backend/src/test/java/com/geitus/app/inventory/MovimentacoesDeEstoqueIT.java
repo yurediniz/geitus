@@ -82,6 +82,22 @@ class MovimentacoesDeEstoqueIT extends IntegracaoDoPdv {
     }
 
     @Test
+    void movimentoDaDevolucaoTrazAVenda() throws Exception {
+        UUID racao = pdv.produto(empresa, NovoProduto.de("Ração", "UN", "10.00").comEstoque("10")).id();
+        abrirCaixa(empresa.operadora(), empresa.ponto(), "100.00");
+        String venda = vender(empresa.operadora(), item(racao, "2"), pagamento("DINHEIRO", "20.00"), "20.00");
+        UUID caixaDoAdmin = abrirCaixa(empresa.admin(), cenario.novoPonto(empresa.caixa(), "Caixa 2"), "100.00");
+        devolverPorJdbc(venda, caixaDoAdmin);
+
+        listar(empresa.admin(), "motivo=DEVOLUCAO_VENDA")
+                .andExpect(jsonPath("$.totalItens").value(1))
+                .andExpect(jsonPath("$.itens[0].origem").value("DEVOLUCAO"))
+                .andExpect(jsonPath("$.itens[0].quantidade").value(1.0))
+                .andExpect(jsonPath("$.itens[0].venda.id").value(venda))
+                .andExpect(jsonPath("$.itens[0].venda.numero").value(1));
+    }
+
+    @Test
     void entradaPorCompraTrazCustoEFornecedor() throws Exception {
         UUID arroz = pdv.produto(empresa, NovoProduto.de("Arroz", "UN", "8.00")).id();
         UUID central = fornecedorService.cadastrarParaUsuario(empresa.admin(), new FornecedorRequest(null, null,
@@ -212,6 +228,39 @@ class MovimentacoesDeEstoqueIT extends IntegracaoDoPdv {
                         .content(inicio + ",\"chave\":\"" + UUID.randomUUID() + "\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return JsonPath.read(corpo, "$.id");
+    }
+
+    /**
+     * Devolucao de 1 UN (R$ 10,00 em dinheiro) pelo ADMIN, toda por JDBC numa
+     * transacao (o servico da devolucao vem na fatia 3b2): devolucao, item,
+     * entrada de estoque e reembolso.
+     */
+    private void devolverPorJdbc(String venda, UUID caixaDoAdmin) {
+        jdbcTemplate.execute("""
+                BEGIN;
+                WITH v AS (SELECT id FROM vendas WHERE uuid = '%1$s'),
+                d AS (
+                    INSERT INTO devolucoes (uuid, empresa_id, venda_id, sessao_caixa_id, usuario_id, motivo, valor,
+                                            chave_idempotencia, criada_em)
+                    SELECT gen_random_uuid(), %2$d, v.id, (SELECT id FROM sessoes_caixa WHERE uuid = '%3$s'), %4$d,
+                           'Defeito', 10.00, gen_random_uuid(), now() FROM v
+                    RETURNING id, venda_id),
+                i AS (
+                    INSERT INTO itens_devolucao (empresa_id, devolucao_id, venda_id, produto_id, item_venda_id,
+                                                 quantidade, quantidade_estoque, valor, destino)
+                    SELECT %2$d, d.id, d.venda_id, iv.produto_id, iv.id, 1, 1, 10.00, 'ESTOQUE'
+                      FROM d JOIN itens_venda iv ON iv.venda_id = d.venda_id AND iv.ordem = 1
+                    RETURNING id, produto_id)
+                INSERT INTO movimentos_estoque (empresa_id, produto_id, tipo, motivo, origem, quantidade, saldo_anterior,
+                                                saldo_novo, usuario_id, item_devolucao_id)
+                SELECT %2$d, i.produto_id, 'ENTRADA', 'DEVOLUCAO_VENDA', 'DEVOLUCAO', 1, 8, 9, %4$d, i.id FROM i;
+                INSERT INTO movimentos_caixa (uuid, empresa_id, sessao_caixa_id, tipo, forma, valor, usuario_id,
+                                              venda_id, devolucao_id, criado_em)
+                SELECT gen_random_uuid(), %2$d, d.sessao_caixa_id, 'DEVOLUCAO', 'DINHEIRO', 10.00, %4$d, d.venda_id,
+                       d.id, now()
+                  FROM devolucoes d JOIN vendas v ON v.id = d.venda_id WHERE v.uuid = '%1$s';
+                COMMIT;
+                """.formatted(venda, empresa.id(), caixaDoAdmin, empresa.admin()));
     }
 
     /** Muda a hora do movimento manual (so os de venda sao imutaveis no banco). */

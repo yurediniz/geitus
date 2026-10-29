@@ -7,19 +7,30 @@ import java.util.Map;
 
 /**
  * O que o PDV faz no estoque (docs/modules/pdv.md): travar os
- * produtos da venda, baixar o estoque ao finalizar e devolver ao cancelar.
+ * produtos da venda, baixar o estoque ao finalizar, devolver ao cancelar e
+ * receber de volta os itens de uma devolucao (estoque.md, secao 6.2).
  * Publicada pelo {@code inventory} e implementada aqui mesmo; o {@code sales}
  * so conhece esta interface.
  *
  * <p>Todos os metodos exigem a transacao de quem chama. Os ids sao os
  * internos, ja resolvidos na empresa do usuario (DEC-016). Ordem das travas
  * (DT-032): a sessao de caixa primeiro (quem chama), depois os produtos em
- * ordem de id ({@link #travarSaldos}), na venda e no cancelamento.
+ * ordem de id ({@link #travarSaldos}), na venda, no cancelamento e na
+ * devolucao (nesta, a venda e os itens sao travados antes dos produtos).
  */
 public interface EstoqueDaVenda {
 
     /** Uma linha da venda: o produto, o item gravado e o que ele baixa, na unidade de venda (&gt; 0). */
     record BaixaDeItem(Long produtoId, Long itemVendaId, BigDecimal quantidadeEstoque) {
+    }
+
+    /**
+     * Uma linha da devolucao: o produto, o item da venda, o item da devolucao
+     * ja gravado, o que volta, na unidade de venda (&gt; 0), e se o destino e
+     * o avariado.
+     */
+    record DevolucaoDeItem(Long produtoId, Long itemVendaId, Long itemDevolucaoId, BigDecimal quantidadeEstoque,
+            boolean avariado) {
     }
 
     /**
@@ -42,4 +53,14 @@ public interface EstoqueDaVenda {
      * baixa; o item sem baixa (produto sem controle na venda) fica de fora.
      */
     void estornar(Long empresaId, Long usuarioId, List<BaixaDeItem> baixas);
+
+    /**
+     * Para cada item que baixou estoque na venda, uma {@code ENTRADA}/
+     * {@code DEVOLUCAO_VENDA} (origem {@code DEVOLUCAO}) com a quantidade
+     * devolvida; no avariado, logo depois, uma {@code SAIDA}/{@code PERDA_AVARIA}
+     * com a mesma quantidade, e o saldo termina onde estava (mesmo negativo).
+     * O item sem baixa fica de fora. Custo, origem do custo e fornecedor do
+     * produto nao mudam.
+     */
+    void devolver(Long empresaId, Long usuarioId, List<DevolucaoDeItem> itens);
 }

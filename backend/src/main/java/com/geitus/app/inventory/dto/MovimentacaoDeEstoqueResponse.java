@@ -15,7 +15,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 /**
  * Uma linha da aba Movimentacoes da area Estoque (docs/modules/estoque.md,
  * regras 26 e 27): os campos do {@link MovimentoEstoqueResponse} mais o produto
- * e, no movimento de venda ou cancelamento, a venda. So ids publicos (UUID) e
+ * e, no movimento de venda, cancelamento ou devolucao, a venda. So ids publicos (UUID) e
  * o nome do usuario saem; nunca ids internos ou e-mail.
  */
 @Schema(description = "Movimento de estoque com o produto, na lista de movimentacoes da empresa")
@@ -46,7 +46,7 @@ public record MovimentacaoDeEstoqueResponse(
         @Schema(description = "Fornecedor da entrada por compra; null sem fornecedor")
         FornecedorDoMovimento fornecedor,
         ProdutoDaMovimentacao produto,
-        @Schema(description = "Venda da baixa ou do cancelamento; null nos demais movimentos")
+        @Schema(description = "Venda da baixa, do cancelamento ou da devolucao; null nos demais movimentos")
         VendaDaMovimentacao venda) {
 
     @Schema(description = "Produto do movimento")

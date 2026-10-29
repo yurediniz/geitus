@@ -115,6 +115,14 @@ public class MovimentoEstoque {
     @Column(name = "item_venda_id", updatable = false)
     private Long itemVendaId;
 
+    /**
+     * Devolucao (V19): id interno do item da devolucao da entrada
+     * ({@code DEVOLUCAO_VENDA}) ou da saida do avariado ({@code PERDA_AVARIA});
+     * {@code null} nos demais.
+     */
+    @Column(name = "item_devolucao_id", updatable = false)
+    private Long itemDevolucaoId;
+
     @Column(name = "criado_em", nullable = false, updatable = false)
     private LocalDateTime criadoEm;
 
@@ -200,6 +208,19 @@ public class MovimentoEstoque {
         MovimentoEstoque movimento = new MovimentoEstoque(produto, tipo, motivo, OrigemMovimento.VENDA, quantidade,
                 saldoAnterior, saldoNovo, null, usuarioId, null);
         movimento.itemVendaId = itemVendaId;
+        return movimento;
+    }
+
+    /**
+     * Devolucao: a entrada ou a saida do avariado de um item da devolucao
+     * (origem {@code DEVOLUCAO}, sem chave: a idempotencia e a da devolucao).
+     */
+    static MovimentoEstoque daDevolucao(Produto produto, TipoMovimento tipo, MotivoMovimento motivo,
+            BigDecimal quantidade, BigDecimal saldoAnterior, BigDecimal saldoNovo, Long usuarioId,
+            Long itemDevolucaoId) {
+        MovimentoEstoque movimento = new MovimentoEstoque(produto, tipo, motivo, OrigemMovimento.DEVOLUCAO,
+                quantidade, saldoAnterior, saldoNovo, null, usuarioId, null);
+        movimento.itemDevolucaoId = itemDevolucaoId;
         return movimento;
     }
 
@@ -301,6 +322,11 @@ public class MovimentoEstoque {
     /** Id interno do fornecedor da entrada por compra, ou {@code null}. */
     public Long getFornecedorId() {
         return fornecedorId;
+    }
+
+    /** Id interno do item da devolucao (entrada ou saida do avariado), ou {@code null}. */
+    public Long getItemDevolucaoId() {
+        return itemDevolucaoId;
     }
 
     /** Id interno do item de venda (PDV), ou {@code null}. */

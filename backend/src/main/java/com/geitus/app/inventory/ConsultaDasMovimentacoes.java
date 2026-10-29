@@ -51,7 +51,9 @@ public class ConsultaDasMovimentacoes {
             + " JOIN unidades_medida un ON un.empresa_id = p.empresa_id AND un.id = p.unidade_id"
             + " LEFT JOIN fornecedores f ON f.empresa_id = m.empresa_id AND f.id = m.fornecedor_id"
             + " LEFT JOIN itens_venda iv ON iv.empresa_id = m.empresa_id AND iv.id = m.item_venda_id"
-            + " LEFT JOIN vendas v ON v.empresa_id = iv.empresa_id AND v.id = iv.venda_id";
+            // A devolucao (V19) liga o movimento ao item da devolucao, que guarda a venda.
+            + " LEFT JOIN itens_devolucao idv ON idv.empresa_id = m.empresa_id AND idv.id = m.item_devolucao_id"
+            + " LEFT JOIN vendas v ON v.empresa_id = m.empresa_id AND v.id = COALESCE(iv.venda_id, idv.venda_id)";
     private static final String ORDEM_E_PAGINA = " ORDER BY m.criado_em DESC, m.id DESC"
             + " LIMIT :tamanho OFFSET :deslocamento";
 

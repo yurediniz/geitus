@@ -233,6 +233,32 @@ public class EstoqueService {
      */
     MovimentoEstoque registrarMovimentoDaVenda(Produto produto, TipoMovimento tipo, MotivoMovimento motivo,
             BigDecimal quantidade, Long usuarioId, Long itemVendaId) {
+        MovimentoCalculado calculado = aplicarAoSaldo(produto, tipo, quantidade);
+        return movimentoRepository.save(MovimentoEstoque.daVenda(produto, tipo, motivo, calculado.variacao(),
+                calculado.anterior(), calculado.novo(), usuarioId, itemVendaId));
+    }
+
+    /**
+     * Devolucao (estoque.md, secao 6.2): a entrada ({@code ENTRADA}/
+     * {@code DEVOLUCAO_VENDA}) ou a saida do avariado ({@code SAIDA}/
+     * {@code PERDA_AVARIA}) de um item da devolucao, com a linha de saldo
+     * travada, como os movimentos da venda. Exige a transacao de quem chama,
+     * com o produto ja travado.
+     *
+     * @param quantidade o que o item devolve, na unidade de venda (&gt; 0)
+     */
+    MovimentoEstoque registrarMovimentoDaDevolucao(Produto produto, TipoMovimento tipo, MotivoMovimento motivo,
+            BigDecimal quantidade, Long usuarioId, Long itemDevolucaoId) {
+        MovimentoCalculado calculado = aplicarAoSaldo(produto, tipo, quantidade);
+        return movimentoRepository.save(MovimentoEstoque.daDevolucao(produto, tipo, motivo, calculado.variacao(),
+                calculado.anterior(), calculado.novo(), usuarioId, itemDevolucaoId));
+    }
+
+    private record MovimentoCalculado(BigDecimal variacao, BigDecimal anterior, BigDecimal novo) {
+    }
+
+    /** Trava a linha de saldo, confere o limite e aplica a variacao (negativa na saida). */
+    private MovimentoCalculado aplicarAoSaldo(Produto produto, TipoMovimento tipo, BigDecimal quantidade) {
         EstoqueSaldo saldo = travarSaldo(produto);
         BigDecimal anterior = saldo.getSaldo();
         BigDecimal emEscala = emEscalaDeQuantidade(quantidade);
@@ -242,8 +268,7 @@ public class EstoqueService {
             throw new RegraDeNegocioException(MENSAGEM_SALDO_ACIMA_DO_LIMITE, CAMPO_QUANTIDADE);
         }
         saldo.aplicar(variacao);
-        return movimentoRepository.save(MovimentoEstoque.daVenda(produto, tipo, motivo, variacao, anterior, novo,
-                usuarioId, itemVendaId));
+        return new MovimentoCalculado(variacao, anterior, novo);
     }
 
     // ---------- Ajuste manual ----------
