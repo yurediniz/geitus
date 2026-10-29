@@ -8,6 +8,7 @@ import java.util.UUID;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.geitus.app.cashier.FormaDePagamento;
 import com.geitus.app.sales.carrinho.OrigemPrecoDaVenda;
+import com.geitus.app.sales.venda.SituacaoDeDevolucao;
 import com.geitus.app.sales.venda.StatusDaVenda;
 
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -20,8 +21,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
  *   <li>{@code itens}: no detalhe e nas respostas de finalizar e cancelar;
  *       ausente na lista;</li>
  *   <li>{@code cancelamento}: {@code null} na venda concluida;</li>
- *   <li>{@code podeCancelar}: concluida, com o caixa da venda aberto, e quem
- *       consulta e o dono da sessao ou ADMIN.</li>
+ *   <li>{@code podeCancelar}: concluida, sem devolucao, com o caixa da venda
+ *       aberto, e quem consulta e o dono da sessao ou ADMIN;</li>
+ *   <li>{@code situacaoDevolucao} e {@code devolucoes}: no detalhe e nas
+ *       respostas de finalizar e cancelar (docs/modules/estoque.md, 6.2);
+ *       ausentes na lista.</li>
  * </ul>
  */
 @Schema(description = "Venda do PDV")
@@ -44,7 +48,13 @@ public record VendaResponse(
         List<ItemDaVendaResponse> itens,
         List<PagamentoResponse> pagamentos,
         @Schema(nullable = true) CancelamentoResponse cancelamento,
-        boolean podeCancelar) {
+        boolean podeCancelar,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        @Schema(description = "NENHUMA, PARCIAL ou TOTAL; ausente na lista")
+        SituacaoDeDevolucao situacaoDevolucao,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        @Schema(description = "Devolucoes da venda, da mais antiga; ausente na lista")
+        List<DevolucaoResponse> devolucoes) {
 
     /** Item da venda, a fotografia gravada (sem o custo). */
     @Schema(description = "Item da venda")

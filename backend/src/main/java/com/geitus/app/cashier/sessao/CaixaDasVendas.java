@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -173,6 +174,18 @@ class CaixaDasVendas implements RecebimentosDoCaixa, SessoesParaVendas {
                     new MovimentoDeCaixa.DaVenda(TipoDeMovimentoDeCaixa.DEVOLUCAO, reembolso.forma(),
                             reembolso.valor(), vendaId, devolucaoId), usuarioId, agora));
         }
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Map<Long, List<Reembolso>> reembolsosDasDevolucoes(Long empresaId, Collection<Long> devolucaoIds) {
+        if (devolucaoIds.isEmpty()) {
+            return Map.of();
+        }
+        return movimentoRepository.findByEmpresaIdAndDevolucaoIdIn(empresaId, devolucaoIds).stream()
+                .sorted(Comparator.comparing(MovimentoDeCaixa::getForma))
+                .collect(Collectors.groupingBy(MovimentoDeCaixa::getDevolucaoId, Collectors.mapping(
+                        movimento -> new Reembolso(movimento.getForma(), movimento.getValor()), Collectors.toList())));
     }
 
     // ---------- SessoesParaVendas ----------

@@ -101,6 +101,12 @@ public class SecurityConfig {
             "/api/pdv/**"
     };
 
+    /** Devolucao de itens da venda (DEC-045/046): so ADMIN. */
+    private static final String[] CAMINHOS_DEVOLUCAO = {
+            "/api/pdv/devolucoes/**",
+            "/api/pdv/vendas/*/devolucoes"
+    };
+
     /** Configuracao do PDV (DEC-042). */
     private static final String CAMINHO_CONFIGURACAO_DO_PDV = "/api/configuracoes/pdv";
 
@@ -202,6 +208,9 @@ public class SecurityConfig {
                         // PDV (DEC-042): toda a venda (itens, calculo, finalizar, consultar e cancelar) fica
                         // com qualquer autenticado; a regra "dono da sessao ou ADMIN" e o limite de desconto
                         // pelo perfil do banco ficam nos services.
+                        // Devolucao de itens (estoque.md, 6.2, regra 11): so ADMIN, antes da regra geral do PDV;
+                        // o service tambem confere o perfil do banco.
+                        .requestMatchers(CAMINHOS_DEVOLUCAO).hasRole("ADMIN")
                         .requestMatchers(CAMINHOS_PDV).authenticated()
                         // Configuracao do PDV: leitura para qualquer autenticado (a tela do PDV precisa das
                         // regras); qualquer outro metodo exige ADMIN, e o service confere o perfil do banco.

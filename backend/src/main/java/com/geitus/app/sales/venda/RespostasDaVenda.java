@@ -16,6 +16,7 @@ import com.geitus.app.cashier.SessoesParaVendas;
 import com.geitus.app.cashier.SessoesParaVendas.SessaoParaVenda;
 import com.geitus.app.iam.UsuarioAutenticado;
 import com.geitus.app.iam.UsuarioRepository;
+import com.geitus.app.sales.venda.dto.DevolucaoResponse;
 import com.geitus.app.sales.venda.dto.VendaResponse;
 import com.geitus.app.sales.venda.dto.VendaResponse.CancelamentoResponse;
 import com.geitus.app.sales.venda.dto.VendaResponse.ItemDaVendaResponse;
@@ -23,9 +24,10 @@ import com.geitus.app.sales.venda.dto.VendaResponse.PagamentoResponse;
 
 /**
  * Monta a {@link VendaResponse} para quem consulta (docs/modules/pdv.md):
- * o ponto e a situacao da sessao (para o {@code podeCancelar}), os nomes e os
- * pagamentos em lote (uma consulta de cada, qualquer que seja a pagina) e, no
- * detalhe, os itens. O custo nunca sai. Exige a transacao de quem chama.
+ * o ponto e a situacao da sessao e as vendas com devolucao (para o
+ * {@code podeCancelar}), os nomes e os pagamentos em lote (uma consulta de
+ * cada, qualquer que seja a pagina) e, no detalhe, os itens e as devolucoes.
+ * O custo nunca sai. Exige a transacao de quem chama.
  */
 @Component
 class RespostasDaVenda {
@@ -34,24 +36,33 @@ class RespostasDaVenda {
     private final PagamentoDaVendaRepository pagamentoRepository;
     private final SessoesParaVendas sessoes;
     private final UsuarioRepository usuarioRepository;
+    private final RespostasDaDevolucao respostasDaDevolucao;
     private final Clock relogio;
 
     RespostasDaVenda(ItemDaVendaRepository itemRepository, PagamentoDaVendaRepository pagamentoRepository,
-            SessoesParaVendas sessoes, UsuarioRepository usuarioRepository, Clock relogio) {
+            SessoesParaVendas sessoes, UsuarioRepository usuarioRepository, RespostasDaDevolucao respostasDaDevolucao,
+            Clock relogio) {
         this.itemRepository = itemRepository;
         this.pagamentoRepository = pagamentoRepository;
         this.sessoes = sessoes;
         this.usuarioRepository = usuarioRepository;
+        this.respostasDaDevolucao = respostasDaDevolucao;
         this.relogio = relogio;
     }
 
-    /** A venda com os itens (detalhe, finalizar e cancelar). */
+    /** O que so o detalhe traz: os itens, a situacao de devolucao e as devolucoes. */
+    private record Detalhe(List<ItemDaVendaResponse> itens, SituacaoDeDevolucao situacao,
+            List<DevolucaoResponse> devolucoes) {
+    }
+
+    /** A venda com os itens e as devolucoes (detalhe, finalizar e cancelar). */
     VendaResponse completa(Venda venda, UsuarioAutenticado quemVe) {
-        List<ItemDaVendaResponse> itens = itemRepository
-                .findByEmpresaIdAndVendaIdOrderByOrdemAsc(venda.getEmpresaId(), venda.getId()).stream()
-                .map(RespostasDaVenda::item)
-                .toList();
-        return respostas(List.of(venda), quemVe, Map.of(venda.getId(), itens)).get(0);
+        List<ItemDaVenda> itensDaVenda = itemRepository.findByEmpresaIdAndVendaIdOrderByOrdemAsc(venda.getEmpresaId(),
+                venda.getId());
+        Detalhe detalhe = new Detalhe(itensDaVenda.stream().map(RespostasDaVenda::item).toList(),
+                respostasDaDevolucao.situacao(itensDaVenda, respostasDaDevolucao.devolvidaPorItem(venda)),
+                respostasDaDevolucao.daVenda(venda, itensDaVenda));
+        return respostas(List.of(venda), quemVe, Map.of(venda.getId(), detalhe)).get(0);
     }
 
     /** As vendas sem os itens (a lista). */
@@ -60,8 +71,10 @@ class RespostasDaVenda {
     }
 
     private List<VendaResponse> respostas(List<Venda> vendas, UsuarioAutenticado quemVe,
-            Map<Long, List<ItemDaVendaResponse>> itens) {
+            Map<Long, Detalhe> detalhes) {
         Long empresaId = quemVe.empresaId();
+        Set<Long> comDevolucao = respostasDaDevolucao.vendasComDevolucao(empresaId,
+                vendas.stream().map(Venda::getId).toList());
         Map<Long, SessaoParaVenda> sessoesDasVendas = sessoes.porIds(empresaId,
                 vendas.stream().map(Venda::getSessaoCaixaId).collect(Collectors.toSet()));
         Map<Long, List<PagamentoResponse>> pagamentos = pagamentoRepository
@@ -73,12 +86,13 @@ class RespostasDaVenda {
         Map<Long, String> nomes = nomes(vendas);
         return vendas.stream()
                 .map(venda -> resposta(venda, quemVe, sessoesDasVendas.get(venda.getSessaoCaixaId()), nomes,
-                        itens.get(venda.getId()), pagamentos.getOrDefault(venda.getId(), List.of())))
+                        detalhes.get(venda.getId()), pagamentos.getOrDefault(venda.getId(), List.of()),
+                        comDevolucao.contains(venda.getId())))
                 .toList();
     }
 
     private VendaResponse resposta(Venda venda, UsuarioAutenticado quemVe, SessaoParaVenda sessao,
-            Map<Long, String> nomes, List<ItemDaVendaResponse> itens, List<PagamentoResponse> pagamentos) {
+            Map<Long, String> nomes, Detalhe detalhe, List<PagamentoResponse> pagamentos, boolean temDevolucao) {
         CancelamentoResponse cancelamento = venda.cancelada()
                 ? new CancelamentoResponse(nomes.get(venda.getCanceladaPor()),
                         HorarioDoCaixa.noFuso(relogio, venda.getCanceladaEm()), venda.getMotivoCancelamento())
@@ -86,13 +100,15 @@ class RespostasDaVenda {
         return new VendaResponse(venda.getUuid(), venda.getNumero(), venda.getStatus(), sessao.uuid(),
                 sessao.pontoNome(), nomes.get(venda.getUsuarioId()), venda.getClienteNome(), venda.getSubtotal(),
                 venda.getDescontoItens(), venda.getDescontoTotal(), venda.getTotal(), venda.getTroco(),
-                HorarioDoCaixa.noFuso(relogio, venda.getConcluidaEm()), itens, pagamentos, cancelamento,
-                podeCancelar(venda, sessao, quemVe));
+                HorarioDoCaixa.noFuso(relogio, venda.getConcluidaEm()), detalhe == null ? null : detalhe.itens(),
+                pagamentos, cancelamento, podeCancelar(venda, sessao, quemVe, temDevolucao),
+                detalhe == null ? null : detalhe.situacao(), detalhe == null ? null : detalhe.devolucoes());
     }
 
-    /** Concluida, com o caixa da venda aberto, e quem consulta e o dono da sessao ou ADMIN. */
-    static boolean podeCancelar(Venda venda, SessaoParaVenda sessao, UsuarioAutenticado quemVe) {
-        return !venda.cancelada() && sessao.aberta()
+    /** Concluida, sem devolucao, com o caixa da venda aberto, e quem consulta e o dono da sessao ou ADMIN. */
+    static boolean podeCancelar(Venda venda, SessaoParaVenda sessao, UsuarioAutenticado quemVe,
+            boolean temDevolucao) {
+        return !venda.cancelada() && !temDevolucao && sessao.aberta()
                 && (quemVe.ehAdmin() || sessao.abertaPor().equals(quemVe.usuarioId()));
     }
 

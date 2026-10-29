@@ -94,6 +94,7 @@ public class VendasService {
     static final String MENSAGEM_SEM_ITENS = "Adicione um item à venda.";
     static final String MENSAGEM_FALTA_PAGAR = "Falta pagar %s.";
     static final String MENSAGEM_JA_CANCELADA = "Esta venda já foi cancelada.";
+    static final String MENSAGEM_TEM_DEVOLUCAO = "Esta venda tem devolução e não pode ser cancelada.";
     static final String MENSAGEM_CAIXA_NAO_ABERTO =
             "Esta venda é de um caixa que já foi fechado ou está em conferência. Use devolução.";
     static final String MENSAGEM_MOTIVO_VAZIO = "Informe o motivo.";
@@ -114,6 +115,7 @@ public class VendasService {
     private final PagamentoDaVendaRepository pagamentoRepository;
     private final ClienteRepository clienteRepository;
     private final ConsultaDeVendas consultaDeVendas;
+    private final DevolucaoRepository devolucaoRepository;
     private final RespostasDaVenda respostas;
     private final Clock relogio;
     private final TransactionTemplate transacao;
@@ -124,7 +126,7 @@ public class VendasService {
             MontagemDoCarrinho montagem, CalculoDoCarrinho calculoDoCarrinho, Numerador numerador,
             ClienteRepository clienteRepository, Clock relogio, VendaRepository vendaRepository,
             ItemDaVendaRepository itemRepository, PagamentoDaVendaRepository pagamentoRepository,
-            ConsultaDeVendas consultaDeVendas, RespostasDaVenda respostas,
+            ConsultaDeVendas consultaDeVendas, RespostasDaVenda respostas, DevolucaoRepository devolucaoRepository,
             PlatformTransactionManager gerenciadorDeTransacoes) {
         this.resolvedor = resolvedor;
         this.recebimentos = recebimentos;
@@ -140,6 +142,7 @@ public class VendasService {
         this.itemRepository = itemRepository;
         this.pagamentoRepository = pagamentoRepository;
         this.consultaDeVendas = consultaDeVendas;
+        this.devolucaoRepository = devolucaoRepository;
         this.respostas = respostas;
         this.transacao = new TransactionTemplate(gerenciadorDeTransacoes);
     }
@@ -352,6 +355,10 @@ public class VendasService {
             }
             return respostas.completa(venda, usuario);
         }
+        // Venda com devolucao nao volta atras (estoque.md, 6.2, regra 7); a V19 tambem recusa.
+        if (devolucaoRepository.existsByEmpresaIdAndVendaId(empresaId, venda.getId())) {
+            throw new VendaConflitoException(MENSAGEM_TEM_DEVOLUCAO, null);
+        }
         if (sessao.status() != StatusDaSessao.ABERTA) {
             throw new VendaConflitoException(MENSAGEM_CAIXA_NAO_ABERTO, null);
         }
@@ -369,7 +376,8 @@ public class VendasService {
         return respostas.completa(cancelada, usuario);
     }
 
-    private static String motivoValidado(String motivo) {
+    /** O motivo aparado, de 1 a 200 caracteres (o do cancelamento e o da devolucao). */
+    static String motivoValidado(String motivo) {
         String aparado = motivo == null ? "" : motivo.strip();
         if (aparado.isEmpty()) {
             throw new DadosDaVendaInvalidosException(MENSAGEM_MOTIVO_VAZIO, CAMPO_MOTIVO);

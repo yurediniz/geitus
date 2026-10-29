@@ -1,6 +1,7 @@
 package com.geitus.app.cashier.sessao;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,6 +22,9 @@ public interface MovimentoDeCaixaRepository extends Repository<MovimentoDeCaixa,
 
     /** Os movimentos do tipo informado ligados a venda (os recebimentos que o cancelamento estorna). */
     List<MovimentoDeCaixa> findByEmpresaIdAndVendaIdAndTipo(Long empresaId, Long vendaId, TipoDeMovimentoDeCaixa tipo);
+
+    /** Os reembolsos destas devolucoes (movimentos {@code DEVOLUCAO}), numa consulta. */
+    List<MovimentoDeCaixa> findByEmpresaIdAndDevolucaoIdIn(Long empresaId, Collection<Long> devolucaoIds);
 
     /** Movimentos da sessao, do mais recente para o mais antigo. */
     List<MovimentoDeCaixa> findByEmpresaIdAndSessaoCaixaIdOrderByCriadoEmDescIdDesc(Long empresaId, Long sessaoId);

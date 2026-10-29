@@ -1,6 +1,7 @@
 package com.geitus.app.cashier;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -84,4 +85,7 @@ public interface RecebimentosDoCaixa {
      */
     void registrarReembolsos(Long empresaId, Long sessaoId, Long vendaId, Long devolucaoId, Long usuarioId,
             List<Reembolso> reembolsos);
+
+    /** Os reembolsos de cada devolucao (id interno), na ordem das formas; numa consulta. */
+    Map<Long, List<Reembolso>> reembolsosDasDevolucoes(Long empresaId, Collection<Long> devolucaoIds);
 }

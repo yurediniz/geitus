@@ -35,6 +35,11 @@ interface VendaRepository extends Repository<Venda, Long> {
 
     Optional<Venda> findByEmpresaIdAndUuid(Long empresaId, UUID uuid);
 
+    /** A venda pelo numero (a busca da devolucao, de qualquer sessao e data). */
+    Optional<Venda> findByEmpresaIdAndNumero(Long empresaId, Long numero);
+
+    Optional<Venda> findByEmpresaIdAndId(Long empresaId, Long id);
+
     /** Ids internos, sessao e vendedor, sem carregar a entidade (o cancelamento trava a sessao antes). */
     record Referencia(Long id, Long sessaoId, Long vendedorId) {
     }
