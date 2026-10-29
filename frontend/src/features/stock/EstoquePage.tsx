@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { AlertCircle, Boxes, SearchX } from 'lucide-react'
 
@@ -11,11 +11,13 @@ import { AvisoSomenteLeitura, FeedbackCatalogo } from '@/features/catalog/Feedba
 import { mensagemDeSucesso } from '@/features/products/estoque/ajusteEstoque'
 import { ModalAjusteEstoque } from '@/features/products/estoque/ModalAjusteEstoque'
 import { ROTA_PRODUTOS, type EstadoParaProduto } from '@/features/products/navegacaoProdutos'
+import { AbaMovimentacoes } from '@/features/stock/AbaMovimentacoes'
 import { CardsDoResumo } from '@/features/stock/CardsDoResumo'
 import { chaveDaPosicao, chaveDoResumo } from '@/features/stock/estoqueQuery'
 import { FiltrosDaPosicao } from '@/features/stock/FiltrosDaPosicao'
 import { CardsDaPosicao, TabelaDaPosicao } from '@/features/stock/ListaDaPosicao'
 import { useFiltrosDaPosicao } from '@/features/stock/useFiltrosDaPosicao'
+import { ABA_MOVIMENTACOES } from '@/features/stock/useFiltrosDasMovimentacoes'
 import { useAuth } from '@/hooks/useAuth'
 import { useBuscaComAtraso } from '@/hooks/useBuscaComAtraso'
 import { cn } from '@/lib/utils'
@@ -46,17 +48,99 @@ function tituloDaLista(total: number | undefined, filtrado: boolean): string {
   return total === 1 ? '1 produto' : `${quantidade} produtos`
 }
 
+type Aba = 'posicao' | 'movimentacoes'
+
+const ABAS: readonly { id: Aba; rotulo: string; para: string }[] = [
+  { id: 'posicao', rotulo: 'Posição', para: '/estoque' },
+  { id: 'movimentacoes', rotulo: 'Movimentações', para: `/estoque?aba=${ABA_MOVIMENTACOES}` },
+]
+
 /**
- * Area Estoque (spec de Estoque, regras 22 a 25): a posicao de todos os
+ * Area Estoque (spec de Estoque): as abas Posicao e Movimentacoes, com a aba
+ * na URL (`?aba=movimentacoes`; sem ela, a Posicao). Trocar de aba comeca com
+ * os filtros da aba de destino limpos. O OPERADOR le as duas, sem acoes.
+ */
+export function EstoquePage() {
+  const { usuario } = useAuth()
+  const somenteLeitura = usuario?.perfil !== 'ADMIN'
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const aba: Aba = searchParams.get('aba') === ABA_MOVIMENTACOES ? 'movimentacoes' : 'posicao'
+  const idDasAbas = useId()
+  const refsDasAbas = useRef<Partial<Record<Aba, HTMLAnchorElement | null>>>({})
+
+  // Setas trocam de aba (padrao de abas do WAI-ARIA), levando o foco junto.
+  const aoTeclarNaAba = (event: KeyboardEvent<HTMLAnchorElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+      return
+    }
+    event.preventDefault()
+    const proxima = ABAS.find((opcao) => opcao.id !== aba) ?? ABAS[0]
+    navigate(proxima.para)
+    refsDasAbas.current[proxima.id]?.focus()
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Estoque</h1>
+        <p className="mt-1 max-w-2xl text-muted-foreground">
+          {aba === 'posicao'
+            ? 'Saldo, situação e valor a custo de todos os produtos que controlam estoque.'
+            : 'Entradas, saídas, contagens e vendas de todos os produtos, da mais recente para a mais antiga.'}
+        </p>
+      </div>
+
+      <div role="tablist" aria-label="Visões do estoque" className="flex gap-1 border-b">
+        {ABAS.map((opcao) => {
+          const selecionada = opcao.id === aba
+          return (
+            <Link
+              key={opcao.id}
+              ref={(elemento) => {
+                refsDasAbas.current[opcao.id] = elemento
+              }}
+              to={opcao.para}
+              role="tab"
+              id={`${idDasAbas}-${opcao.id}`}
+              aria-selected={selecionada}
+              aria-controls={`${idDasAbas}-painel`}
+              tabIndex={selecionada ? 0 : -1}
+              onKeyDown={aoTeclarNaAba}
+              className={cn(
+                '-mb-px inline-flex h-11 items-center border-b-2 px-4 text-sm font-medium outline-none md:h-10',
+                'focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                selecionada
+                  ? 'border-primary text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {opcao.rotulo}
+            </Link>
+          )
+        })}
+      </div>
+
+      {somenteLeitura && (
+        <AvisoSomenteLeitura texto="Somente administradores podem ajustar o estoque. Você está no modo leitura." />
+      )}
+
+      <div role="tabpanel" id={`${idDasAbas}-painel`} aria-labelledby={`${idDasAbas}-${aba}`}>
+        {aba === 'posicao' ? <AbaPosicao somenteLeitura={somenteLeitura} /> : <AbaMovimentacoes admin={!somenteLeitura} />}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Aba Posicao (spec de Estoque, regras 22 a 25): a posicao de todos os
  * produtos que controlam estoque, com o resumo em cards, busca, filtros e
  * ordem na URL, e o ajuste (so ADMIN) pelo mesmo modal do produto. O produto
  * com saldo negativo (venda com "Vender sem estoque") ganha "Regularizar",
  * que abre o ajuste na Contagem.
  */
-export function EstoquePage() {
+function AbaPosicao({ somenteLeitura }: { somenteLeitura: boolean }) {
   const location = useLocation()
-  const { usuario } = useAuth()
-  const somenteLeitura = usuario?.perfil !== 'ADMIN'
   const { filtros, alterar, limpar, temFiltroAtivo, quantidadeDeFiltros } = useFiltrosDaPosicao()
   const idDoTitulo = useId()
 
@@ -174,17 +258,6 @@ export function EstoquePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Estoque</h1>
-        <p className="mt-1 max-w-2xl text-muted-foreground">
-          Saldo, situação e valor a custo de todos os produtos que controlam estoque.
-        </p>
-      </div>
-
-      {somenteLeitura && (
-        <AvisoSomenteLeitura texto="Somente administradores podem ajustar o estoque. Você está no modo leitura." />
-      )}
-
       <FeedbackCatalogo sucesso={mensagemSucesso} erro={null} />
 
       <div className="space-y-2">

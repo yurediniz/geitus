@@ -37,6 +37,7 @@ export const ROTULO_MOTIVO: Readonly<Record<MotivoMovimento, string>> = {
   CONTAGEM: 'Contagem/inventário',
   ESTOQUE_INICIAL: 'Estoque inicial',
   VENDA: 'Venda',
+  CANCELAMENTO_VENDA: 'Cancelamento de venda',
 }
 
 /** Motivos manuais de cada tipo, na ordem da spec (os do sistema ficam de fora). */

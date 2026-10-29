@@ -8,8 +8,8 @@
 export type TipoMovimento = 'ENTRADA' | 'SAIDA' | 'AJUSTE'
 
 /**
- * Motivo do movimento. `ESTOQUE_INICIAL` (cadastro) e `VENDA` (PDV, futuro)
- * sao do sistema e nunca sao aceitos num ajuste manual.
+ * Motivo do movimento. `ESTOQUE_INICIAL` (cadastro), `VENDA` e
+ * `CANCELAMENTO_VENDA` (PDV) sao do sistema e nunca sao aceitos num ajuste manual.
  */
 export type MotivoMovimento =
   | 'COMPRA'
@@ -22,6 +22,7 @@ export type MotivoMovimento =
   | 'CONTAGEM'
   | 'ESTOQUE_INICIAL'
   | 'VENDA'
+  | 'CANCELAMENTO_VENDA'
 
 /** De onde veio o movimento. */
 export type OrigemMovimento = 'AJUSTE_MANUAL' | 'CADASTRO' | 'VENDA'
@@ -154,4 +155,28 @@ export interface ResumoDaPosicao {
   valorTotalEmCusto: number
   /** Com saldo > 0 e sem custo: ficam fora do valor total. */
   semCusto: number
+}
+
+/** Estado da aba Movimentacoes guardado na URL: periodo em datas inclusivas (AAAA-MM-DD). */
+export interface FiltrosDasMovimentacoes {
+  de: string
+  ate: string
+  tipo: TipoMovimento | null
+  motivo: MotivoMovimento | null
+  /** Id do usuario que registrou (o mesmo de `/api/usuarios`); o filtro so aparece para o ADMIN. */
+  usuario: number | null
+}
+
+/** Linha de `GET /api/estoque/movimentos` (spec de Estoque, regras 26 e 27): o movimento com o produto e a venda. */
+export interface MovimentacaoDeEstoque extends MovimentoEstoque {
+  produto: {
+    /** UUID publico do produto. */
+    id: string
+    numero: number
+    nome: string
+    /** Unidade de venda: as quantidades do movimento estao nela. */
+    unidade: { sigla: string; fracionada: boolean }
+  }
+  /** Venda da baixa ou do cancelamento; null nos demais movimentos. */
+  venda: { id: string; numero: number } | null
 }

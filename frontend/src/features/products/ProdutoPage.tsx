@@ -32,6 +32,7 @@ import {
 } from '@/features/products/imagemPendente'
 import {
   destinoDaLista,
+  rotuloDoVoltar,
   rotaDoProduto,
   type EstadoParaLista,
   type EstadoParaProduto,
@@ -419,7 +420,7 @@ interface EstruturaPaginaProps {
   children: ReactNode
 }
 
-/** Sub-navegacao do catalogo, "Voltar para produtos", titulo e selo de status. */
+/** Sub-navegacao do catalogo, "Voltar para produtos" (ou "para o estoque"), titulo e selo de status. */
 function EstruturaPagina({ titulo, voltarPara, ativo, acaoStatus, acoes, children }: EstruturaPaginaProps) {
   return (
     <div className="space-y-6">
@@ -430,7 +431,7 @@ function EstruturaPagina({ titulo, voltarPara, ativo, acaoStatus, acoes, childre
           className="inline-flex min-h-11 items-center gap-1.5 rounded-md text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Voltar para produtos
+          {rotuloDoVoltar(voltarPara)}
         </Link>
         <div className="flex flex-wrap items-center gap-3">
           {/* Nome longo ocupa ate duas linhas (palavra longa quebra em vez de vazar); o nome completo fica no title. */}

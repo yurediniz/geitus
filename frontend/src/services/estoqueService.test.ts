@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   ajustarEstoque,
   buscarResumoDaPosicao,
+  listarMovimentacoes,
   listarMovimentosDeEstoque,
   listarPosicaoDeEstoque,
 } from '@/services/estoqueService'
@@ -108,6 +109,35 @@ describe('estoqueService', () => {
         autenticada: true,
         signal: undefined,
       })
+    })
+  })
+
+  describe('movimentações', () => {
+    it('leva o período, a página e 25 itens, sem os filtros vazios', async () => {
+      apiGetMock.mockResolvedValue({ itens: [], pagina: 0, tamanho: 25, totalItens: 0 })
+
+      await listarMovimentacoes({ de: '2026-09-30', ate: '2026-10-29', tipo: null, motivo: null, usuario: null }, 0)
+
+      expect(apiGetMock).toHaveBeenCalledWith('/estoque/movimentos?de=2026-09-30&ate=2026-10-29&pagina=0&tamanho=25', {
+        autenticada: true,
+        signal: undefined,
+      })
+    })
+
+    it('envia tipo, motivo e usuário', async () => {
+      apiGetMock.mockResolvedValue({ itens: [], pagina: 1, tamanho: 25, totalItens: 0 })
+      const signal = new AbortController().signal
+
+      await listarMovimentacoes(
+        { de: '2026-10-29', ate: '2026-10-29', tipo: 'SAIDA', motivo: 'VENDA', usuario: 7 },
+        1,
+        signal,
+      )
+
+      expect(apiGetMock).toHaveBeenCalledWith(
+        '/estoque/movimentos?de=2026-10-29&ate=2026-10-29&tipo=SAIDA&motivo=VENDA&usuario=7&pagina=1&tamanho=25',
+        { autenticada: true, signal },
+      )
     })
   })
 })

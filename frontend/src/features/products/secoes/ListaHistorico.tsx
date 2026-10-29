@@ -30,6 +30,10 @@ export interface ListaHistoricoProps<T> {
   chaveDoItem: (item: T, indice: number) => string | number
   /** Uma linha da lista (um `<li>`). */
   renderizarItem: (item: T) => ReactNode
+  /** Nivel do titulo: 3 dentro da secao Historico do produto (padrao); 2 quando a lista e a secao da pagina. */
+  nivelDoTitulo?: 2 | 3
+  /** Acao sob a mensagem da lista vazia (ex.: "Limpar filtros"). */
+  acaoDoVazio?: ReactNode
 }
 
 /**
@@ -47,6 +51,8 @@ export function ListaHistorico<T>({
   nota,
   chaveDoItem,
   renderizarItem,
+  nivelDoTitulo = 3,
+  acaoDoVazio,
 }: ListaHistoricoProps<T>) {
   const consulta = useInfiniteQuery({
     queryKey: chave,
@@ -59,24 +65,32 @@ export function ListaHistorico<T>({
     },
   })
 
+  const Titulo = nivelDoTitulo === 2 ? 'h2' : 'h3'
   return (
     <section aria-labelledby={`${id}-titulo`} className="space-y-3">
       <div className="space-y-1">
-        <h3 id={`${id}-titulo`} className="text-sm font-semibold">
+        <Titulo id={`${id}-titulo`} className="text-sm font-semibold">
           {titulo}
-        </h3>
+        </Titulo>
         {nota}
       </div>
-      <ConteudoDaSecao consulta={consulta} textos={textos} chaveDoItem={chaveDoItem} renderizarItem={renderizarItem} />
+      <ConteudoDaSecao
+        consulta={consulta}
+        textos={textos}
+        chaveDoItem={chaveDoItem}
+        renderizarItem={renderizarItem}
+        acaoDoVazio={acaoDoVazio}
+      />
     </section>
   )
 }
 
-interface ConteudoDaSecaoProps<T> extends Pick<ListaHistoricoProps<T>, 'textos' | 'chaveDoItem' | 'renderizarItem'> {
+interface ConteudoDaSecaoProps<T>
+  extends Pick<ListaHistoricoProps<T>, 'textos' | 'chaveDoItem' | 'renderizarItem' | 'acaoDoVazio'> {
   consulta: UseInfiniteQueryResult<InfiniteData<PaginaResponse<T>>>
 }
 
-function ConteudoDaSecao<T>({ consulta, textos, chaveDoItem, renderizarItem }: ConteudoDaSecaoProps<T>) {
+function ConteudoDaSecao<T>({ consulta, textos, chaveDoItem, renderizarItem, acaoDoVazio }: ConteudoDaSecaoProps<T>) {
   if (consulta.isPending) {
     return (
       <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -106,6 +120,7 @@ function ConteudoDaSecao<T>({ consulta, textos, chaveDoItem, renderizarItem }: C
         <History className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
         <p className="text-sm font-medium">{textos.vazioTitulo}</p>
         <p className="text-sm text-muted-foreground">{textos.vazioDescricao}</p>
+        {acaoDoVazio}
       </div>
     )
   }
