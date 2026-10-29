@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Ban, Loader2, Printer, Receipt } from 'lucide-react'
+import { ArrowLeft, Ban, Loader2, PackageOpen, Printer, Receipt, Search } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -13,15 +13,17 @@ import { PRODUTOS_QUERY_KEY } from '@/features/catalog/catalogoQuery'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
 import { devolverFocoAoCampo } from '@/features/pdv/focoDoPdv'
 import { cabecalhoDaVenda } from '@/features/pdv/formatacaoPdv'
+import { DEVOLUCAO_NA_FORMA, juntarComE } from '@/features/pdv/devolucao'
+import { FormularioDeDevolucao } from '@/features/pdv/FormularioDeDevolucao'
 import { chaveDaVenda, chaveDasVendas, PDV_QUERY_KEY } from '@/features/pdv/pdvQuery'
 import { ResumoDaVenda } from '@/features/pdv/ResumoDaVenda'
 import { ErroDoCampo, MarcaObrigatorio } from '@/features/products/CamposFormulario'
 import { useBuscaComAtraso } from '@/hooks/useBuscaComAtraso'
 import { cn } from '@/lib/utils'
 import { HttpError } from '@/services/httpClient'
-import { buscarVenda, cancelarVenda, listarVendas } from '@/services/pdvService'
+import { buscarVenda, buscarVendaParaDevolucao, cancelarVenda, listarVendas } from '@/services/pdvService'
 import { FORMAS_DE_PAGAMENTO, type FormaDePagamento } from '@/types/caixa'
-import type { FiltrosDeVendas, Venda, VendaResumo } from '@/types/pdv'
+import type { Devolucao, FiltrosDeVendas, Venda, VendaResumo } from '@/types/pdv'
 
 export interface JanelaVendasDoCaixaProps {
   aberta: boolean
@@ -39,19 +41,6 @@ const TAMANHO_MAXIMO_DO_MOTIVO = 200
 const MENSAGEM_SEM_MOTIVO = 'Informe o motivo do cancelamento.'
 const FALHA_AO_CANCELAR = 'Não foi possível cancelar a venda. Confira a conexão e tente de novo.'
 const VENDA_INDISPONIVEL = 'Esta venda não está mais disponível.'
-
-/** A forma na frase da devolucao, em minusculas: "em dinheiro", "no débito", "no crédito", "no PIX". */
-const DEVOLUCAO_NA_FORMA: Readonly<Record<FormaDePagamento, string>> = {
-  DINHEIRO: 'em dinheiro',
-  DEBITO: 'no débito',
-  CREDITO: 'no crédito',
-  PIX: 'no PIX',
-}
-
-/** "a", "a e b", "a, b e c". */
-function juntarComE(partes: readonly string[]): string {
-  return partes.length <= 1 ? (partes[0] ?? '') : `${partes.slice(0, -1).join(', ')} e ${partes[partes.length - 1]}`
-}
 
 /**
  * O que devolver ao cliente depois do cancelamento, por forma, na ordem
@@ -71,6 +60,16 @@ function mensagemDoCancelamento(venda: Venda): string {
   return partes.length > 0
     ? `Venda nº ${venda.numero} cancelada. Devolva ao cliente ${juntarComE(partes)}.`
     : `Venda nº ${venda.numero} cancelada. Estoque e caixa estornados.`
+}
+
+/** "Devolução da venda nº 8 registrada. Devolva ao cliente R$ 29,90 em dinheiro." */
+function mensagemDaDevolucao(devolucao: Devolucao): string {
+  const partes = devolucao.reembolsos.map(
+    (reembolso) => `${formatarReais(reembolso.valor)} ${DEVOLUCAO_NA_FORMA[reembolso.forma]}`,
+  )
+  return partes.length > 0
+    ? `Devolução da venda nº ${devolucao.vendaNumero} registrada. Devolva ao cliente ${juntarComE(partes)}.`
+    : `Devolução da venda nº ${devolucao.vendaNumero} registrada.`
 }
 
 /**
@@ -95,6 +94,8 @@ function ConteudoDasVendas({
   aoCancelarVenda,
 }: Omit<JanelaVendasDoCaixaProps, 'aberta' | 'aoFechar'>) {
   const [vendaId, setVendaId] = useState<string | null>(null)
+  // A venda com o formulario "Devolver itens" aberto (so ADMIN).
+  const [devolvendo, setDevolvendo] = useState<{ id: string; numero: number } | null>(null)
   const [periodo, setPeriodo] = useState({ de: '', ate: '' })
   const [aviso, setAviso] = useState<string | null>(null)
   const [numero, setNumero] = useState('')
@@ -127,14 +128,29 @@ function ConteudoDasVendas({
         </p>
       )}
 
-      {vendaId ? (
+      {devolvendo ? (
+        <FormularioDeDevolucao
+          vendaId={devolvendo.id}
+          numero={devolvendo.numero}
+          aoVoltar={() => setDevolvendo(null)}
+          aoDevolver={(devolucao) => {
+            setAviso(mensagemDaDevolucao(devolucao))
+            setDevolvendo(null)
+          }}
+        />
+      ) : vendaId ? (
         <DetalheDaVenda
           vendaId={vendaId}
+          ehAdmin={ehAdmin}
           aoVoltar={() => setVendaId(null)}
           aoImprimir={aoImprimir}
           aoCancelar={(venda) => {
             setAviso(mensagemDoCancelamento(venda))
             aoCancelarVenda(venda)
+          }}
+          aoDevolver={(venda) => {
+            setAviso(null)
+            setDevolvendo({ id: venda.id, numero: venda.numero })
           }}
         />
       ) : (
@@ -187,6 +203,16 @@ function ConteudoDasVendas({
               </>
             )}
           </div>
+          {ehAdmin && numeroComAtraso !== '' && (
+            <VendaDeOutroCaixa
+              key={numeroComAtraso}
+              numero={Number(numeroComAtraso)}
+              aoAbrir={(id) => {
+                setAviso(null)
+                setVendaId(id)
+              }}
+            />
+          )}
           <ListaDasVendas
             filtros={filtros}
             aoAbrir={(id) => {
@@ -197,6 +223,50 @@ function ConteudoDasVendas({
         </>
       )}
     </DialogContent>
+  )
+}
+
+/**
+ * So ADMIN: abre a venda pelo numero mesmo sendo de outro caixa (a lista mostra
+ * so as deste caixa sem periodo), para ver ou devolver itens. Usa a consulta
+ * da devolucao, que acha a venda em qualquer caixa da empresa.
+ */
+function VendaDeOutroCaixa({ numero, aoAbrir }: { numero: number; aoAbrir: (id: string) => void }) {
+  const [erro, setErro] = useState<string | null>(null)
+  const busca = useMutation({
+    mutationFn: () => buscarVendaParaDevolucao(numero),
+    onSuccess: (venda) => aoAbrir(venda.id),
+    onError: (falha) => {
+      if (falha instanceof HttpError && falha.status === 404) {
+        setErro(`Nenhuma venda nº ${numero} na empresa.`)
+      } else if (falha instanceof HttpError && falha.status === 409) {
+        setErro(falha.message)
+      } else {
+        setErro('Não foi possível buscar a venda. Tente de novo.')
+      }
+    },
+  })
+  return (
+    <div className="space-y-1">
+      <Button
+        type="button"
+        variant="link"
+        className="h-auto p-0 text-sm"
+        onClick={() => {
+          setErro(null)
+          busca.mutate()
+        }}
+        disabled={busca.isPending}
+      >
+        {busca.isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <Search className="h-4 w-4" aria-hidden="true" />
+        )}
+        {`Abrir a venda nº ${numero} de qualquer caixa`}
+      </Button>
+      {erro && <ErroInline mensagem={erro} />}
+    </div>
   )
 }
 
@@ -285,14 +355,19 @@ function LinhaDaVenda({ venda, aoAbrir }: { venda: VendaResumo; aoAbrir: () => v
 
 function DetalheDaVenda({
   vendaId,
+  ehAdmin,
   aoVoltar,
   aoImprimir,
   aoCancelar,
+  aoDevolver,
 }: {
   vendaId: string
+  ehAdmin: boolean
   aoVoltar: () => void
   aoImprimir: (venda: Venda) => void
   aoCancelar: (venda: Venda) => void
+  /** Abre "Devolver itens" (so ADMIN, venda concluida com algo a devolver). */
+  aoDevolver: (venda: Venda) => void
 }) {
   const queryClient = useQueryClient()
   const consulta = useQuery({ queryKey: chaveDaVenda(vendaId), queryFn: () => buscarVenda(vendaId) })
@@ -418,6 +493,12 @@ function DetalheDaVenda({
             <Button type="button" variant="outline" className="min-h-11" onClick={() => setCancelando(true)}>
               <Ban className="h-4 w-4" aria-hidden="true" />
               Cancelar venda
+            </Button>
+          )}
+          {ehAdmin && venda.status === 'CONCLUIDA' && venda.situacaoDevolucao !== 'TOTAL' && (
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => aoDevolver(venda)}>
+              <PackageOpen className="h-4 w-4" aria-hidden="true" />
+              Devolver itens
             </Button>
           )}
         </DialogFooter>

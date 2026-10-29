@@ -5,7 +5,9 @@ import {
   buscarProdutos,
   buscarVenda,
   calcular,
+  buscarVendaParaDevolucao,
   cancelarVenda,
+  devolverItens,
   finalizar,
   listarVendas,
   resolverCodigo,
@@ -102,5 +104,23 @@ describe('pdvService', () => {
 
     expect(apiGetMock).toHaveBeenCalledWith(`/pdv/vendas/${VENDA}`, AUT)
     expect(apiPostMock).toHaveBeenCalledWith(`/pdv/vendas/${VENDA}/cancelamento`, { motivo: 'Cliente desistiu' }, AUT)
+  })
+
+  it('busca a venda para devolucao pelo numero e devolve os itens', async () => {
+    apiGetMock.mockResolvedValue({})
+    apiPostComStatusMock.mockResolvedValue({ corpo: { id: 'd-1' }, status: 201 })
+    const pedido = {
+      chave: 'k-1',
+      motivo: 'Defeito',
+      itens: [{ ordem: 1, quantidade: 2, destino: 'ESTOQUE' as const }],
+      reembolsos: [{ forma: 'DINHEIRO' as const, valor: 20 }],
+    }
+
+    await buscarVendaParaDevolucao(128)
+    const devolucao = await devolverItens(VENDA, pedido)
+
+    expect(apiGetMock).toHaveBeenCalledWith('/pdv/devolucoes/venda?numero=128', AUT)
+    expect(apiPostComStatusMock).toHaveBeenCalledWith(`/pdv/vendas/${VENDA}/devolucoes`, pedido, AUT)
+    expect(devolucao).toEqual({ id: 'd-1' })
   })
 })

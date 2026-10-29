@@ -173,6 +173,86 @@ export interface VendaResumo {
 
 export interface Venda extends VendaResumo {
   itens: ItemDaVenda[]
+  /** So no detalhe (e nas respostas de finalizar e cancelar); a lista nao traz. */
+  situacaoDevolucao?: SituacaoDeDevolucao
+  devolucoes?: Devolucao[]
+}
+
+/** Devolucao de itens (spec de Estoque, 6.2): para onde vai o item devolvido. */
+export type DestinoDaDevolucao = 'ESTOQUE' | 'AVARIADO'
+
+export type SituacaoDeDevolucao = 'NENHUMA' | 'PARCIAL' | 'TOTAL'
+
+/** Uma devolucao gravada: as linhas com o destino e o reembolso por forma. */
+export interface Devolucao {
+  id: string
+  vendaId: string
+  vendaNumero: number
+  valor: number
+  motivo: string
+  criadaEm: string
+  usuarioNome: string
+  itens: {
+    ordem: number
+    nome: string
+    /** Na unidade da linha. */
+    quantidade: number
+    /** "UN" ou o rotulo da embalagem ("CX c/ 12 UN"). */
+    unidade: string
+    valor: number
+    destino: DestinoDaDevolucao
+  }[]
+  /** Vazio na devolucao de valor zero. */
+  reembolsos: { forma: FormaDePagamento; valor: number }[]
+}
+
+/** Uma linha da venda para a devolucao: o vendido, o devolvido e o que ainda pode voltar. */
+export interface LinhaParaDevolucao {
+  ordem: number
+  nome: string
+  /** O que a quantidade conta: a sigla ou o rotulo da embalagem. */
+  unidade: string
+  embalagemRotulo: string | null
+  /** Etiqueta de balanca: so volta inteira. */
+  etiqueta: boolean
+  /** Aceita fracao (ate 3 casas); a embalagem nunca. */
+  fracionada: boolean
+  precoUnitario: number
+  quantidade: number
+  devolvida: number
+  disponivel: number
+  valorLiquido: number
+  valorDisponivel: number
+}
+
+/** Uma forma que a venda recebeu: no dinheiro, sem o troco. */
+export interface FormaParaReembolso {
+  forma: FormaDePagamento
+  recebido: number
+  reembolsado: number
+  disponivel: number
+}
+
+/** `GET /pdv/devolucoes/venda?numero=` (so ADMIN). */
+export interface VendaParaDevolucao {
+  id: string
+  numero: number
+  concluidaEm: string
+  vendedorNome: string
+  clienteNome: string | null
+  total: number
+  troco: number
+  linhas: LinhaParaDevolucao[]
+  formas: FormaParaReembolso[]
+  devolucoes: Devolucao[]
+}
+
+/** `POST /pdv/vendas/{id}/devolucoes`: as linhas pela ordem na venda; o reembolso por forma. */
+export interface DevolucaoRequest {
+  chave: string
+  motivo: string
+  itens: { ordem: number; quantidade: number; destino: DestinoDaDevolucao }[]
+  reembolsos: { forma: FormaDePagamento; valor: number }[]
 }
 
 /** Filtros da lista de vendas; texto vazio = sem o filtro; `pagina` comeca em 1. */

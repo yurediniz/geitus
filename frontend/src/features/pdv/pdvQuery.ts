@@ -27,3 +27,8 @@ export function chaveDasVendas(filtros: FiltrosDeVendas) {
 export function chaveDaVenda(id: string) {
   return [...PDV_QUERY_KEY, 'venda', id] as const
 }
+
+/** A venda vista para a devolucao (o disponivel por linha e por forma), pelo numero. */
+export function chaveDaVendaParaDevolucao(numero: number) {
+  return [...PDV_QUERY_KEY, 'venda-para-devolucao', numero] as const
+}

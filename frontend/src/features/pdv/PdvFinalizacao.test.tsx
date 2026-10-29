@@ -12,11 +12,20 @@ import { obterEmpresa } from '@/services/empresaService'
 import { listarPontos, sessaoAtual } from '@/services/caixaService'
 import { buscar as buscarConfiguracao } from '@/services/configuracaoPdvService'
 import { HttpError } from '@/services/httpClient'
-import { buscarVenda, calcular, cancelarVenda, finalizar, listarVendas, resolverCodigo } from '@/services/pdvService'
+import {
+  buscarVenda,
+  buscarVendaParaDevolucao,
+  calcular,
+  cancelarVenda,
+  devolverItens,
+  finalizar,
+  listarVendas,
+  resolverCodigo,
+} from '@/services/pdvService'
 import { pontoDeTeste, sessaoDeTeste } from '@/test/fixturesCaixa'
 import { calculoFalso, itemResolvido, NEXGARD, RACAO, vendaResumo } from '@/test/fixturesPdv'
 import type { Empresa } from '@/types/empresa'
-import type { CarrinhoRequest, Venda } from '@/types/pdv'
+import type { CarrinhoRequest, Devolucao, Venda, VendaParaDevolucao } from '@/types/pdv'
 
 vi.mock('@/hooks/useAuth', () => ({ useAuth: vi.fn() }))
 vi.mock('@/features/pdv/bipeDeErro', () => ({ tocarBipeDeErro: vi.fn() }))
@@ -36,6 +45,8 @@ vi.mock('@/services/pdvService', () => ({
   listarVendas: vi.fn(),
   buscarVenda: vi.fn(),
   cancelarVenda: vi.fn(),
+  buscarVendaParaDevolucao: vi.fn(),
+  devolverItens: vi.fn(),
   listarCatalogo: vi.fn(async () => ({ produtos: [], temMais: false })),
 }))
 vi.mock('@/services/categoriaService', () => ({ listarCategorias: vi.fn(async () => []) }))
@@ -54,6 +65,8 @@ const finalizarMock = vi.mocked(finalizar)
 const listarVendasMock = vi.mocked(listarVendas)
 const buscarVendaMock = vi.mocked(buscarVenda)
 const cancelarVendaMock = vi.mocked(cancelarVenda)
+const buscarParaDevolucaoMock = vi.mocked(buscarVendaParaDevolucao)
+const devolverItensMock = vi.mocked(devolverItens)
 
 const EMPRESA = 3
 const USUARIO = 7
@@ -145,7 +158,14 @@ async function pagar(janela: HTMLElement, teclaDaForma: string, valor?: string) 
 describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    for (const mock of [finalizarMock, listarVendasMock, buscarVendaMock, cancelarVendaMock]) {
+    for (const mock of [
+      finalizarMock,
+      listarVendasMock,
+      buscarVendaMock,
+      cancelarVendaMock,
+      buscarParaDevolucaoMock,
+      devolverItensMock,
+    ]) {
       mock.mockReset()
     }
     localStorage.clear()
@@ -1009,6 +1029,173 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
       await waitFor(() =>
         expect(within(within(janela).getByRole('list', { name: 'Vendas' })).getAllByRole('listitem')).toHaveLength(1),
       )
+    })
+
+    describe('devolução de itens', () => {
+      const ITEM_128 = {
+        ordem: 1,
+        nome: 'Ração X 1kg',
+        embalagemRotulo: null,
+        quantidade: 3,
+        unidade: 'UN',
+        precoUnitario: 24.9,
+        origemPreco: 'NORMAL' as const,
+        valorBruto: 74.7,
+        descontoItem: 0,
+        descontoRateado: 0,
+        valorLiquido: 74.7,
+      }
+      const PARA_DEVOLUCAO: VendaParaDevolucao = {
+        id: 'v-128',
+        numero: 128,
+        concluidaEm: '2026-10-24T21:02:00Z',
+        vendedorNome: 'Ana Souza',
+        clienteNome: null,
+        total: 74.7,
+        troco: 0,
+        linhas: [
+          {
+            ordem: 1,
+            nome: 'Ração X 1kg',
+            unidade: 'UN',
+            embalagemRotulo: null,
+            etiqueta: false,
+            fracionada: false,
+            precoUnitario: 24.9,
+            quantidade: 3,
+            devolvida: 0,
+            disponivel: 3,
+            valorLiquido: 74.7,
+            valorDisponivel: 74.7,
+          },
+        ],
+        formas: [{ forma: 'DINHEIRO', recebido: 74.7, reembolsado: 0, disponivel: 74.7 }],
+        devolucoes: [],
+      }
+      const DEVOLUCAO: Devolucao = {
+        id: 'd-1',
+        vendaId: 'v-128',
+        vendaNumero: 128,
+        valor: 24.9,
+        motivo: 'Embalagem rasgada',
+        criadaEm: '2026-10-25T13:00:00Z',
+        usuarioNome: 'Ana Souza',
+        itens: [{ ordem: 1, nome: 'Ração X 1kg', quantidade: 1, unidade: 'UN', valor: 24.9, destino: 'AVARIADO' }],
+        reembolsos: [{ forma: 'DINHEIRO', valor: 24.9 }],
+      }
+
+      async function abrirDetalhe() {
+        renderPdv()
+        await campo()
+        await tecla('F8')
+        const janela = await screen.findByRole('dialog', { name: 'Vendas do caixa' })
+        fireEvent.click(await within(janela).findByRole('button', { name: /Nº 128/ }))
+        await within(janela).findByText('Ração X 1kg')
+        return janela
+      }
+
+      it('o ADMIN devolve pelo detalhe; volta ao detalhe com o aviso do reembolso', async () => {
+        definirUsuario('ADMIN')
+        listarVendasMock.mockResolvedValue({ itens: [vendaResumo()], pagina: 0, tamanho: 50, totalItens: 1 })
+        buscarVendaMock.mockResolvedValue(venda({ itens: [ITEM_128], situacaoDevolucao: 'NENHUMA', devolucoes: [] }))
+        buscarParaDevolucaoMock.mockResolvedValue(PARA_DEVOLUCAO)
+        devolverItensMock.mockResolvedValue(DEVOLUCAO)
+        const janela = await abrirDetalhe()
+
+        fireEvent.click(within(janela).getByRole('button', { name: 'Devolver itens' }))
+        fireEvent.change(await within(janela).findByLabelText('Devolver (UN)'), { target: { value: '1' } })
+        fireEvent.change(within(janela).getByLabelText('Destino'), { target: { value: 'AVARIADO' } })
+        fireEvent.change(within(janela).getByLabelText(/Motivo da devolução/), { target: { value: 'Embalagem rasgada' } })
+        fireEvent.click(
+          within(janela).getByRole('button', { name: /^Devolver R\$\s24,90 em dinheiro e registrar 1 UN como avariado$/ }),
+        )
+
+        await waitFor(() =>
+          expect(devolverItensMock).toHaveBeenCalledWith(
+            'v-128',
+            expect.objectContaining({
+              itens: [{ ordem: 1, quantidade: 1, destino: 'AVARIADO' }],
+              reembolsos: [{ forma: 'DINHEIRO', valor: 24.9 }],
+            }),
+          ),
+        )
+        expect(
+          await within(janela).findByText('Devolução da venda nº 128 registrada. Devolva ao cliente R$ 24,90 em dinheiro.'),
+        ).toBeInTheDocument()
+        expect(within(janela).getByRole('button', { name: 'Devolver itens' })).toBeInTheDocument()
+      })
+
+      it('o OPERADOR não vê "Devolver itens"', async () => {
+        listarVendasMock.mockResolvedValue({ itens: [vendaResumo()], pagina: 0, tamanho: 50, totalItens: 1 })
+        buscarVendaMock.mockResolvedValue(venda({ itens: [ITEM_128], situacaoDevolucao: 'NENHUMA', devolucoes: [] }))
+        const janela = await abrirDetalhe()
+
+        expect(within(janela).getByRole('button', { name: 'Cancelar venda' })).toBeInTheDocument()
+        expect(within(janela).queryByRole('button', { name: 'Devolver itens' })).not.toBeInTheDocument()
+      })
+
+      it('venda devolvida por inteiro: o resumo mostra a devolução e o botão some', async () => {
+        definirUsuario('ADMIN')
+        listarVendasMock.mockResolvedValue({ itens: [vendaResumo()], pagina: 0, tamanho: 50, totalItens: 1 })
+        buscarVendaMock.mockResolvedValue(
+          venda({
+            itens: [ITEM_128],
+            podeCancelar: false,
+            situacaoDevolucao: 'TOTAL',
+            devolucoes: [
+              {
+                ...DEVOLUCAO,
+                valor: 74.7,
+                itens: [{ ...DEVOLUCAO.itens[0], quantidade: 3, valor: 74.7 }],
+                reembolsos: [{ forma: 'DINHEIRO', valor: 74.7 }],
+              },
+            ],
+          }),
+        )
+        const janela = await abrirDetalhe()
+
+        const devolucoes = within(janela).getByRole('region', { name: 'Devoluções' })
+        expect(devolucoes).toHaveTextContent('Venda devolvida por inteiro')
+        expect(devolucoes).toHaveTextContent('3 UN Ração X 1kg (avariado)')
+        expect(devolucoes).toHaveTextContent('Embalagem rasgada')
+        expect(devolucoes.textContent?.replace(/ /g, ' ')).toContain('Devolvido R$ 74,70 em dinheiro')
+        expect(within(janela).queryByRole('button', { name: 'Devolver itens' })).not.toBeInTheDocument()
+      })
+
+      it('o ADMIN abre pelo número a venda de outro caixa; número sem venda avisa', async () => {
+        definirUsuario('ADMIN')
+        listarVendasMock.mockResolvedValue({ itens: [], pagina: 0, tamanho: 50, totalItens: 0 })
+        buscarParaDevolucaoMock
+          .mockRejectedValueOnce(new HttpError(404, 'Venda nao encontrada.'))
+          .mockResolvedValue({ ...PARA_DEVOLUCAO, id: 'v-77', numero: 77 })
+        buscarVendaMock.mockResolvedValue(venda({ id: 'v-77', numero: 77, itens: [ITEM_128] }))
+        renderPdv()
+        await campo()
+        await tecla('F8')
+        const janela = await screen.findByRole('dialog', { name: 'Vendas do caixa' })
+
+        fireEvent.change(within(janela).getByLabelText('Nº da venda'), { target: { value: '77' } })
+        fireEvent.click(await within(janela).findByRole('button', { name: 'Abrir a venda nº 77 de qualquer caixa' }))
+        expect(await within(janela).findByText('Nenhuma venda nº 77 na empresa.')).toBeInTheDocument()
+
+        fireEvent.click(within(janela).getByRole('button', { name: 'Abrir a venda nº 77 de qualquer caixa' }))
+        await waitFor(() => expect(buscarVendaMock).toHaveBeenCalledWith('v-77'))
+        expect(await within(janela).findByText('Ração X 1kg')).toBeInTheDocument()
+      })
+
+      it('o OPERADOR não tem a busca em outro caixa', async () => {
+        listarVendasMock.mockResolvedValue({ itens: [], pagina: 0, tamanho: 50, totalItens: 0 })
+        renderPdv()
+        await campo()
+        await tecla('F8')
+        const janela = await screen.findByRole('dialog', { name: 'Vendas do caixa' })
+
+        fireEvent.change(within(janela).getByLabelText('Nº da venda'), { target: { value: '77' } })
+        await waitFor(() =>
+          expect(listarVendasMock).toHaveBeenCalledWith(expect.objectContaining({ numero: '77' }), expect.anything()),
+        )
+        expect(within(janela).queryByRole('button', { name: /de qualquer caixa/ })).not.toBeInTheDocument()
+      })
     })
 
     it('sem vendas: o estado vazio; falha: "Tentar de novo"', async () => {

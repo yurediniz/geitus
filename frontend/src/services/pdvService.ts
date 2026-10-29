@@ -3,11 +3,14 @@ import type {
   CalculoDaVenda,
   CarrinhoRequest,
   CatalogoDoPdv,
+  Devolucao,
+  DevolucaoRequest,
   FiltrosDeVendas,
   FinalizarVendaRequest,
   ItemResolvido,
   ProdutoEncontrado,
   Venda,
+  VendaParaDevolucao,
   VendaResumo,
 } from '@/types/pdv'
 import type { PaginaResponse } from '@/types/produto'
@@ -90,6 +93,20 @@ export function listarVendas(filtros: FiltrosDeVendas, signal?: AbortSignal): Pr
 
 export function buscarVenda(id: string): Promise<Venda> {
   return apiGet<Venda>(caminhoDaVenda(id), AUTENTICADA)
+}
+
+/** A venda pelo numero, de qualquer caixa, com o que ainda pode ser devolvido (so ADMIN; cancelada da 409). */
+export function buscarVendaParaDevolucao(numero: number): Promise<VendaParaDevolucao> {
+  return apiGet<VendaParaDevolucao>(`/pdv/devolucoes/venda?numero=${numero}`, AUTENTICADA)
+}
+
+/**
+ * Devolve itens da venda no caixa aberto de quem devolve (so ADMIN): 201, ou
+ * 200 com a devolucao gravada quando a chave se repete com os mesmos dados.
+ */
+export async function devolverItens(vendaId: string, pedido: DevolucaoRequest): Promise<Devolucao> {
+  const { corpo } = await apiPostComStatus<Devolucao>(`${caminhoDaVenda(vendaId)}/devolucoes`, pedido, AUTENTICADA)
+  return corpo
 }
 
 /** So com o caixa da venda aberto (409 em conferencia ou fechado). Repetir com o mesmo motivo devolve 200. */

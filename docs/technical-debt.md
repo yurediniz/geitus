@@ -1,6 +1,6 @@
 # Pendências técnicas — Geitus
 
-Só itens **abertos**, curtos, agrupados por quando atacar. Item resolvido sai da lista (fica no Git). Os números DT continuam valendo; DT nova recebe o próximo número livre (DT-042). Em cada DT ficaram os itens que importam; os refinamentos menores (textos, rótulos, pequenos ajustes de tela e testes extras) estão só na versão longa, com origem e observações: `git show cb1e390:docs/technical-debt.md`.
+Só itens **abertos**, curtos, agrupados por quando atacar. Item resolvido sai da lista (fica no Git). Os números DT continuam valendo; DT nova recebe o próximo número livre (DT-043). Em cada DT ficaram os itens que importam; os refinamentos menores (textos, rótulos, pequenos ajustes de tela e testes extras) estão só na versão longa, com origem e observações: `git show cb1e390:docs/technical-debt.md`.
 
 Formato: **DT-0xx — título** · prioridade — o que falta, em 1–2 linhas.
 
@@ -110,6 +110,7 @@ Formato: **DT-0xx — título** · prioridade — o que falta, em 1–2 linhas.
   - **tela:** filtro por ponto no F8; quantidade de produto por peso vinda da busca; aviso de troco desproporcional; atalhos F3/F6/F7/F10 no Chrome/Edge do Windows;
   - **testes:** promoção vencendo entre o cálculo e o finalizar; cancelamento com queda de rede; concorrência contagem × venda.
 - **Oráculo da sangria no modo cego** (DT-039/DT-041) · baixa — tentativas de sangria recusadas permitem descobrir o esperado; limitar ou auditar.
+- **DT-042 — Devolução na lista de vendas (F8)** · baixa — a listagem (`VendaResponse` no resumo) não traz `situacaoDevolucao`, então a lista não mostra o selo "Devolvida"/"Devolução parcial"; hoje a devolução só aparece no detalhe. Pede incluir o campo na lista (backend) e o selo ao lado do "Cancelada" (fatia 3c, DEC-046).
 
 ---
 
