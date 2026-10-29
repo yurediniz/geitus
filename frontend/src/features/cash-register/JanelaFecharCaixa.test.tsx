@@ -618,5 +618,45 @@ describe('JanelaFecharCaixa', () => {
       expect(debito).toHaveTextContent('Falta de R$ 2,00')
       await waitFor(() => expect(within(janela).getByLabelText(/justificativa/i)).toHaveFocus())
     })
+
+    const AVISO_NEGATIVO = 'Negativo por devolução: o estorno foi feito na maquininha ou no banco.'
+
+    it('não cego, esperado negativo por devolução: o aviso só no campo da forma negativa', () => {
+      const janela = renderJanela(
+        sessaoDeTeste({
+          fechamentoCego: false,
+          dinheiroNaGaveta: 320,
+          formasDaContagem: ['DINHEIRO', 'PIX'],
+          porForma: [
+            { forma: 'DINHEIRO', esperado: 320, contado: null, diferenca: null },
+            { forma: 'PIX', esperado: -20, contado: null, diferenca: null },
+          ],
+        }),
+      )
+
+      expect(within(janela).getByText('Esperado -R$ 20,00')).toBeInTheDocument()
+      expect(within(janela).getAllByText(AVISO_NEGATIVO)).toHaveLength(1)
+    })
+
+    it('cego, esperado negativo por devolução: o aviso no resultado da forma negativa', async () => {
+      const cegoComPix = sessaoDeTeste({ fechamentoCego: true, dinheiroNaGaveta: null, formasDaContagem: ['DINHEIRO', 'PIX'] })
+      contarMock.mockResolvedValue({
+        ...emConferencia(cegoComPix),
+        porForma: [
+          { forma: 'DINHEIRO', esperado: 320, contado: 320, diferenca: 0 },
+          { forma: 'PIX', esperado: -20, contado: 0, diferenca: 20 },
+        ],
+      })
+      const janela = renderJanela(cegoComPix)
+
+      expect(within(janela).queryByText(AVISO_NEGATIVO)).not.toBeInTheDocument()
+      digitarContado('320,00')
+      fireEvent.change(screen.getByLabelText('PIX contado'), { target: { value: '0,00' } })
+      fireEvent.click(within(janela).getByRole('button', { name: 'Conferir' }))
+
+      const resultado = await within(janela).findByLabelText('Resultado da contagem')
+      expect(within(resultado).getByRole('group', { name: 'PIX' })).toHaveTextContent(AVISO_NEGATIVO)
+      expect(within(resultado).getByRole('group', { name: 'Dinheiro' })).not.toHaveTextContent(AVISO_NEGATIVO)
+    })
   })
 })

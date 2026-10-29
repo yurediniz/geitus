@@ -221,6 +221,12 @@ export function mensagemDoFechamento(
   return `${nomeDoPonto} fechado com ${partes.join(' e ')}`
 }
 
+/**
+ * Debito, credito e PIX podem ter esperado negativo: a devolucao registra aqui o
+ * estorno feito na maquininha ou no banco de uma venda recebida em outro caixa.
+ */
+export const AVISO_DO_ESPERADO_NEGATIVO = 'Negativo por devolução: o estorno foi feito na maquininha ou no banco.'
+
 export const ROTULO_DA_FORMA: Readonly<Record<FormaDePagamento, string>> = {
   DINHEIRO: 'Dinheiro',
   DEBITO: 'Débito',

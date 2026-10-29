@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { AlertTriangle, CheckCircle2, EyeOff } from 'lucide-react'
 
 import {
+  AVISO_DO_ESPERADO_NEGATIVO,
   formatarDataHoraCaixa,
   formatarDiferenca,
   formatarReais,
@@ -45,42 +46,50 @@ function reaisOuTraco(valor: number | null): string {
 
 /** Esperado, contado e diferenca de cada forma (spec do PDV). */
 function TabelaPorForma({ porForma }: { porForma: readonly ValoresPorForma[] }) {
+  const negativas = porForma.filter((valores) => valores.esperado !== null && valores.esperado < 0)
   return (
-    <table className="w-full text-sm">
-      <caption className="pb-1 text-left text-xs font-medium text-muted-foreground">
-        Conferência por forma de pagamento
-      </caption>
-      <thead>
-        <tr className="text-xs text-muted-foreground">
-          <th scope="col" className="py-1 text-left font-medium">
-            Forma
-          </th>
-          <th scope="col" className="py-1 text-right font-medium">
-            Esperado
-          </th>
-          <th scope="col" className="py-1 text-right font-medium">
-            Contado
-          </th>
-          <th scope="col" className="py-1 text-right font-medium">
-            Diferença
-          </th>
-        </tr>
-      </thead>
-      <tbody className="divide-y">
-        {porForma.map((valores) => (
-          <tr key={valores.forma}>
-            <th scope="row" className="py-1.5 text-left font-normal">
-              {ROTULO_DA_FORMA[valores.forma]}
+    <>
+      <table className="w-full text-sm">
+        <caption className="pb-1 text-left text-xs font-medium text-muted-foreground">
+          Conferência por forma de pagamento
+        </caption>
+        <thead>
+          <tr className="text-xs text-muted-foreground">
+            <th scope="col" className="py-1 text-left font-medium">
+              Forma
             </th>
-            <td className="py-1.5 text-right tabular-nums">{reaisOuTraco(valores.esperado)}</td>
-            <td className="py-1.5 text-right tabular-nums">{reaisOuTraco(valores.contado)}</td>
-            <td className="py-1.5 text-right">
-              {valores.diferenca === null ? '—' : <TextoDaDiferenca valor={valores.diferenca} className="justify-end" />}
-            </td>
+            <th scope="col" className="py-1 text-right font-medium">
+              Esperado
+            </th>
+            <th scope="col" className="py-1 text-right font-medium">
+              Contado
+            </th>
+            <th scope="col" className="py-1 text-right font-medium">
+              Diferença
+            </th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody className="divide-y">
+          {porForma.map((valores) => (
+            <tr key={valores.forma}>
+              <th scope="row" className="py-1.5 text-left font-normal">
+                {ROTULO_DA_FORMA[valores.forma]}
+              </th>
+              <td className="py-1.5 text-right tabular-nums">{reaisOuTraco(valores.esperado)}</td>
+              <td className="py-1.5 text-right tabular-nums">{reaisOuTraco(valores.contado)}</td>
+              <td className="py-1.5 text-right">
+                {valores.diferenca === null ? '—' : <TextoDaDiferenca valor={valores.diferenca} className="justify-end" />}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {negativas.map((valores) => (
+        <p key={valores.forma} className="text-xs text-muted-foreground">
+          {`${ROTULO_DA_FORMA[valores.forma]}: ${AVISO_DO_ESPERADO_NEGATIVO}`}
+        </p>
+      ))}
+    </>
   )
 }
 

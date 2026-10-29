@@ -216,6 +216,11 @@ describe('ajusteEstoque', () => {
       })
     })
 
+    it('a perda gravada pela devolução (avariado) se distingue da perda manual', () => {
+      expect(textoMovimento({ ...MOVIMENTO, origem: 'DEVOLUCAO' }, 'UN').titulo).toBe('Saída · Avariado na devolução')
+      expect(textoMovimento({ ...MOVIMENTO, origem: 'AJUSTE_MANUAL' }, 'UN').titulo).toBe('Saída · Perda/avaria')
+    })
+
     it('entrada com sinal de mais e fração com vírgula; contagem aparece como "Ajuste"', () => {
       expect(
         textoMovimento(

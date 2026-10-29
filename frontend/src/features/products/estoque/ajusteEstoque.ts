@@ -476,10 +476,17 @@ function textoDoRetrato(movimento: MovimentoEstoque): string {
   return embalagem ? ` (${textoEmEmbalagens(embalagem.quantidadeDeEmbalagens, embalagem.rotulo)})` : ''
 }
 
+/** O motivo na linha do historico: a perda gravada pela devolucao (destino avariado) se distingue da perda manual. */
+function rotuloDoMotivoNoHistorico(movimento: MovimentoEstoque): string {
+  return movimento.motivo === 'PERDA_AVARIA' && movimento.origem === 'DEVOLUCAO'
+    ? 'Avariado na devolução'
+    : ROTULO_MOTIVO[movimento.motivo]
+}
+
 /** Textos de uma linha de movimento no historico. */
 export function textoMovimento(movimento: MovimentoEstoque, sigla: string): TextoMovimento {
   return {
-    titulo: `${ROTULO_TIPO_HISTORICO[movimento.tipo]} · ${ROTULO_MOTIVO[movimento.motivo]}`,
+    titulo: `${ROTULO_TIPO_HISTORICO[movimento.tipo]} · ${rotuloDoMotivoNoHistorico(movimento)}`,
     quantidade: `${formatarVariacaoQuantidade(movimento.quantidade, sigla)}${textoDoRetrato(movimento)}`,
     saldos: `${numero(movimento.saldoAnterior)} → ${numero(movimento.saldoNovo)}`,
     saldosFalados: `saldo de ${numero(movimento.saldoAnterior)} para ${numero(movimento.saldoNovo)}`,

@@ -13,7 +13,12 @@ import {
   type MudancaDeEstado,
 } from '@/features/cash-register/errosDoCaixa'
 import { manterFocoMovidoPelaTela } from '@/features/cash-register/focoDoCaixa'
-import { diferencaEntre, formatarReais, ROTULO_DA_FORMA } from '@/features/cash-register/formatacaoCaixa'
+import {
+  AVISO_DO_ESPERADO_NEGATIVO,
+  diferencaEntre,
+  formatarReais,
+  ROTULO_DA_FORMA,
+} from '@/features/cash-register/formatacaoCaixa'
 import { TextoDaDiferenca } from '@/features/cash-register/ResumoDoFechamento'
 import { ErroInline } from '@/features/catalog/FeedbackCatalogo'
 import { ErroDoCampo, MarcaObrigatorio } from '@/features/products/CamposFormulario'
@@ -459,6 +464,9 @@ function CampoDaForma({
           </div>
         )}
       </div>
+      {esperado !== null && esperado < 0 && (
+        <p className="text-xs text-muted-foreground">{AVISO_DO_ESPERADO_NEGATIVO}</p>
+      )}
       <ErroDoCampo id={`${id}-erro`} mensagem={erro} />
     </div>
   )
@@ -532,6 +540,9 @@ function ValoresDaForma({
             <TextoDaDiferenca valor={diferenca} />
           </dd>
         </div>
+      )}
+      {esperado !== null && esperado < 0 && (
+        <p className="text-xs text-muted-foreground">{AVISO_DO_ESPERADO_NEGATIVO}</p>
       )}
     </dl>
   )
