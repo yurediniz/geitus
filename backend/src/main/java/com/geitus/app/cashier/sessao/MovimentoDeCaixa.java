@@ -65,9 +65,13 @@ public class MovimentoDeCaixa {
     @Column(name = "chave_idempotencia", updatable = false)
     private UUID chaveIdempotencia;
 
-    /** Id interno da venda do recebimento ou do estorno; {@code null} nos da gaveta. */
+    /** Id interno da venda do recebimento, do estorno ou da devolucao; {@code null} nos da gaveta. */
     @Column(name = "venda_id", updatable = false)
     private Long vendaId;
+
+    /** Id interno da devolucao do reembolso (V19); {@code null} nos demais. */
+    @Column(name = "devolucao_id", updatable = false)
+    private Long devolucaoId;
 
     @Column(name = "criado_em", nullable = false, updatable = false)
     private OffsetDateTime criadoEm;
@@ -80,8 +84,16 @@ public class MovimentoDeCaixa {
     public record Lancamento(TipoDeMovimentoDeCaixa tipo, BigDecimal valor, String motivo, UUID chave) {
     }
 
-    /** Dados de um recebimento ou estorno da venda; o valor ja vem na escala do dinheiro e e &gt; 0. */
-    record DaVenda(TipoDeMovimentoDeCaixa tipo, FormaDePagamento forma, BigDecimal valor, Long vendaId) {
+    /**
+     * Dados de um recebimento, estorno ou reembolso da venda; o valor ja vem na
+     * escala do dinheiro e e &gt; 0. A devolucao so no reembolso ({@code DEVOLUCAO}).
+     */
+    record DaVenda(TipoDeMovimentoDeCaixa tipo, FormaDePagamento forma, BigDecimal valor, Long vendaId,
+            Long devolucaoId) {
+
+        DaVenda(TipoDeMovimentoDeCaixa tipo, FormaDePagamento forma, BigDecimal valor, Long vendaId) {
+            this(tipo, forma, valor, vendaId, null);
+        }
     }
 
     public MovimentoDeCaixa(SessaoDeCaixa sessao, Lancamento lancamento, Long usuarioId, OffsetDateTime agora) {
@@ -97,7 +109,7 @@ public class MovimentoDeCaixa {
         this.criadoEm = agora;
     }
 
-    /** Recebimento ou estorno da venda na sessao (ja travada por quem chama). */
+    /** Recebimento, estorno ou reembolso da venda na sessao (ja travada por quem chama). */
     static MovimentoDeCaixa daVenda(Long empresaId, Long sessaoId, DaVenda daVenda, Long usuarioId,
             OffsetDateTime agora) {
         MovimentoDeCaixa movimento = new MovimentoDeCaixa();
@@ -108,6 +120,7 @@ public class MovimentoDeCaixa {
         movimento.forma = daVenda.forma();
         movimento.valor = daVenda.valor();
         movimento.vendaId = daVenda.vendaId();
+        movimento.devolucaoId = daVenda.devolucaoId();
         movimento.usuarioId = usuarioId;
         movimento.criadoEm = agora;
         return movimento;
@@ -140,6 +153,10 @@ public class MovimentoDeCaixa {
     /** Id interno da venda (recebimento e estorno), ou {@code null}. */
     public Long getVendaId() {
         return vendaId;
+    }
+
+    public Long getDevolucaoId() {
+        return devolucaoId;
     }
 
     public BigDecimal getValor() {

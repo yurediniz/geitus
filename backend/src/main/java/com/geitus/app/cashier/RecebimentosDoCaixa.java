@@ -1,6 +1,7 @@
 package com.geitus.app.cashier;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -9,12 +10,14 @@ import com.geitus.app.iam.UsuarioAutenticado;
 
 /**
  * O que o PDV grava no caixa (docs/modules/pdv.md): a trava da
- * sessao, os recebimentos da venda e os estornos do cancelamento. Declarada
+ * sessao, os recebimentos da venda, os estornos do cancelamento e os
+ * reembolsos da devolucao (estoque.md, secao 6.2). Declarada
  * aqui e implementada no proprio {@code cashier}, para que o caixa nao conheca
  * a venda alem do id.
  *
  * <p>Todos os metodos exigem a transacao de quem chama e a sessao travada por
- * {@link #travarSessaoParaVenda} ou {@link #travarSessaoDaVenda} antes de
+ * {@link #travarSessaoParaVenda}, {@link #travarSessaoParaDevolucao} ou
+ * {@link #travarSessaoDaVenda} antes de
  * gravar (o gatilho da V16 so aceita movimento em sessao aberta). Ordem das
  * travas (DT-032): a sessao primeiro, depois os produtos em ordem de id.
  */
@@ -26,6 +29,10 @@ public interface RecebimentosDoCaixa {
 
     /** A sessao de uma venda ja gravada, para o cancelamento. */
     record SessaoDaVenda(StatusDaSessao status, Long abertaPor) {
+    }
+
+    /** O reembolso de uma devolucao numa forma (valor na escala do dinheiro). */
+    record Reembolso(FormaDePagamento forma, BigDecimal valor) {
     }
 
     /**
@@ -53,4 +60,28 @@ public interface RecebimentosDoCaixa {
      *         dinheiro esperado na gaveta
      */
     void registrarEstornos(Long empresaId, Long sessaoId, Long vendaId, Long usuarioId, boolean escondeValor);
+
+    /**
+     * Trava ({@code FOR UPDATE}) a sessao em andamento aberta por quem devolve
+     * (o reembolso sai dela, que pode nao ser a da venda).
+     *
+     * @throws CaixaConflitoException 409 "Abra o caixa para devolver." sem sessao
+     *         ou "Termine o fechamento do caixa antes de devolver." em conferencia
+     */
+    SessaoAbertaParaVenda travarSessaoParaDevolucao(UsuarioAutenticado usuario);
+
+    /** O ja reembolsado da venda por forma (todas as devolucoes); a forma sem reembolso fica fora. */
+    Map<FormaDePagamento, BigDecimal> reembolsadoPorForma(Long empresaId, Long vendaId);
+
+    /**
+     * Um movimento {@code DEVOLUCAO} por forma com valor &gt; 0, ligado a venda e
+     * a devolucao, na sessao de quem devolve. No debito, no credito e no PIX o
+     * estorno e feito na maquininha ou no banco e so registrado aqui: o
+     * esperado dessas formas pode ficar negativo.
+     *
+     * @throws CaixaConflitoException 409 quando o dinheiro a devolver passa do
+     *         dinheiro esperado na gaveta
+     */
+    void registrarReembolsos(Long empresaId, Long sessaoId, Long vendaId, Long devolucaoId, Long usuarioId,
+            List<Reembolso> reembolsos);
 }

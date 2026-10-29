@@ -37,6 +37,8 @@ class CaixaDasVendas implements RecebimentosDoCaixa, SessoesParaVendas {
 
     static final String MENSAGEM_SEM_CAIXA = "Abra o caixa para vender.";
     static final String MENSAGEM_EM_CONFERENCIA = "Termine o fechamento do caixa antes de vender.";
+    static final String MENSAGEM_SEM_CAIXA_PARA_DEVOLVER = "Abra o caixa para devolver.";
+    static final String MENSAGEM_EM_CONFERENCIA_PARA_DEVOLVER = "Termine o fechamento do caixa antes de devolver.";
     static final String MENSAGEM_GAVETA_INSUFICIENTE = "Não há dinheiro suficiente na gaveta para devolver (%s).";
     static final String MENSAGEM_GAVETA_INSUFICIENTE_NO_CEGO =
             "Não há dinheiro suficiente na gaveta para devolver.";
@@ -58,10 +60,15 @@ class CaixaDasVendas implements RecebimentosDoCaixa, SessoesParaVendas {
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public SessaoAbertaParaVenda travarSessaoParaVenda(UsuarioAutenticado usuario) {
+        return travarSessaoAbertaDoUsuario(usuario, MENSAGEM_SEM_CAIXA, MENSAGEM_EM_CONFERENCIA);
+    }
+
+    private SessaoAbertaParaVenda travarSessaoAbertaDoUsuario(UsuarioAutenticado usuario, String semCaixa,
+            String emConferencia) {
         SessaoDeCaixa sessao = sessaoRepository.travarEmAndamentoDoUsuario(usuario.empresaId(), usuario.usuarioId())
-                .orElseThrow(() -> new CaixaConflitoException(MENSAGEM_SEM_CAIXA));
+                .orElseThrow(() -> new CaixaConflitoException(semCaixa));
         if (sessao.getStatus() != StatusDaSessao.ABERTA) {
-            throw new CaixaConflitoException(MENSAGEM_EM_CONFERENCIA);
+            throw new CaixaConflitoException(emConferencia);
         }
         return new SessaoAbertaParaVenda(sessao.getId(), sessao.getUuid(), sessao.getPonto().getNome());
     }
@@ -119,6 +126,52 @@ class CaixaDasVendas implements RecebimentosDoCaixa, SessoesParaVendas {
             movimentoRepository.saveAndFlush(MovimentoDeCaixa.daVenda(empresaId, sessaoId,
                     new MovimentoDeCaixa.DaVenda(TipoDeMovimentoDeCaixa.ESTORNO, recebimento.getForma(),
                             recebimento.getValor(), vendaId), usuarioId, agora));
+        }
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public SessaoAbertaParaVenda travarSessaoParaDevolucao(UsuarioAutenticado usuario) {
+        return travarSessaoAbertaDoUsuario(usuario, MENSAGEM_SEM_CAIXA_PARA_DEVOLVER,
+                MENSAGEM_EM_CONFERENCIA_PARA_DEVOLVER);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Map<FormaDePagamento, BigDecimal> reembolsadoPorForma(Long empresaId, Long vendaId) {
+        return movimentoRepository.findByEmpresaIdAndVendaIdAndTipo(empresaId, vendaId,
+                TipoDeMovimentoDeCaixa.DEVOLUCAO).stream()
+                .collect(Collectors.groupingBy(MovimentoDeCaixa::getForma,
+                        Collectors.reducing(BigDecimal.ZERO, MovimentoDeCaixa::getValor, BigDecimal::add)));
+    }
+
+    /**
+     * Quem devolve e sempre o ADMIN (estoque.md, 6.2, regra 11): a mensagem da
+     * gaveta sai com o valor, como no cancelamento fora do modo cego.
+     */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void registrarReembolsos(Long empresaId, Long sessaoId, Long vendaId, Long devolucaoId, Long usuarioId,
+            List<Reembolso> reembolsos) {
+        // So o que vai ser gravado (valor > 0) conta para a gaveta.
+        BigDecimal dinheiro = reembolsos.stream()
+                .filter(reembolso -> reembolso.forma() == FormaDePagamento.DINHEIRO && reembolso.valor().signum() > 0)
+                .map(Reembolso::valor)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (dinheiro.signum() > 0) {
+            BigDecimal naGaveta = EsperadoPorForma.dinheiro(movimentoRepository, empresaId, sessaoId);
+            if (dinheiro.compareTo(naGaveta) > 0) {
+                throw new CaixaConflitoException(MENSAGEM_GAVETA_INSUFICIENTE.formatted(Reais.formatar(naGaveta)));
+            }
+        }
+        OffsetDateTime agora = agora();
+        for (Reembolso reembolso : reembolsos) {
+            if (reembolso.valor().signum() <= 0) {
+                continue;
+            }
+            movimentoRepository.saveAndFlush(MovimentoDeCaixa.daVenda(empresaId, sessaoId,
+                    new MovimentoDeCaixa.DaVenda(TipoDeMovimentoDeCaixa.DEVOLUCAO, reembolso.forma(),
+                            reembolso.valor(), vendaId, devolucaoId), usuarioId, agora));
         }
     }
 
