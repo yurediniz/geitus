@@ -7,6 +7,7 @@ import { EstoquePage } from '@/features/stock/EstoquePage'
 import { useAuth } from '@/hooks/useAuth'
 import { listarCategorias } from '@/services/categoriaService'
 import { ajustarEstoque, buscarResumoDaPosicao, listarPosicaoDeEstoque } from '@/services/estoqueService'
+import { categoria } from '@/test/fixturesProduto'
 import type { FiltrosDaPosicao, MovimentoEstoque, PosicaoDeEstoque, ResumoDaPosicao } from '@/types/estoque'
 import type { PaginaResponse } from '@/types/produto'
 
@@ -238,11 +239,31 @@ describe('EstoquePage', () => {
     expect(ultimosFiltros()).toEqual({
       busca: '',
       status: 'ativos',
-      categoria: null,
+      categoria: [],
       situacao: ['baixo'],
       ordem: '-valor',
       pagina: 2,
     })
+  })
+
+  it('várias categorias na URL vão para a lista e para o resumo; o seletor mostra "Laticínios +1"', async () => {
+    const ID_LATICINIOS = '7a1b2c3d-0000-4000-8000-000000000001'
+    const ID_MERCEARIA = '7a1b2c3d-0000-4000-8000-000000000002'
+    listarCategoriasMock.mockResolvedValue([
+      categoria(ID_LATICINIOS, 'Laticínios', null, 'Laticínios'),
+      categoria(ID_MERCEARIA, 'Mercearia', null, 'Mercearia'),
+    ])
+    renderPagina(`/estoque?categoria=${ID_LATICINIOS}&categoria=${ID_MERCEARIA}`)
+    await carregada()
+
+    expect(ultimosFiltros().categoria).toEqual([ID_LATICINIOS, ID_MERCEARIA])
+    expect(resumoMock).toHaveBeenCalledWith(
+      expect.objectContaining({ categoria: [ID_LATICINIOS, ID_MERCEARIA] }),
+      expect.anything(),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^categoria/i })).toHaveTextContent('Laticínios +1'),
+    )
   })
 
   it('o cabeçalho Saldo ordena pela coluna e inverte no segundo clique', async () => {

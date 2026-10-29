@@ -1,5 +1,7 @@
 package com.geitus.app.catalog.categoria;
 
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -58,17 +60,21 @@ public final class CategoriaArvore {
     }
 
     /**
-     * Ids do filtro "categoria com descendentes" das listagens: {@code null} sem
-     * filtro; categoria fora desta arvore (de outra empresa ou excluida) vira
-     * conjunto vazio, que da lista vazia sem revelar nada.
+     * Ids do filtro "categorias com descendentes" das listagens (multisselecao):
+     * a uniao das subarvores das categorias escolhidas. Sem nenhuma (ou
+     * {@code null}) e {@code null}, sem filtro; categoria fora desta arvore (de
+     * outra empresa ou excluida) e ignorada, e se nenhuma valer o conjunto fica
+     * vazio, que da lista vazia sem revelar nada.
      */
-    public Set<Long> idsDoFiltro(UUID categoria) {
-        if (categoria == null) {
+    public Set<Long> idsDoFiltro(Collection<UUID> categorias) {
+        if (categorias == null || categorias.isEmpty()) {
             return null;
         }
-        return buscarPeloUuid(categoria)
-                .map(encontrada -> idsDaSubarvore(encontrada.getId()))
-                .orElse(Set.of());
+        Set<Long> ids = new HashSet<>();
+        for (UUID categoria : categorias) {
+            buscarPeloUuid(categoria).ifPresent(encontrada -> ids.addAll(idsDaSubarvore(encontrada.getId())));
+        }
+        return Set.copyOf(ids);
     }
 
     /** Mover {@code id} para baixo de {@code novoPaiId} criaria ciclo? */

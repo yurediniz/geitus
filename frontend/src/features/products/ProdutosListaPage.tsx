@@ -52,7 +52,9 @@ function tituloDaLista(total: number | undefined, filtrado: boolean): string {
 
 /** Algum filtro que restringe alem da busca (o status "todos" nao restringe). */
 function temRestricao(filtros: FiltrosDaListaDeProdutos): boolean {
-  return filtros.status === 'inativos' || filtros.categoria !== null || filtros.estoque.length > 0 || filtros.promocao
+  return (
+    filtros.status === 'inativos' || filtros.categoria.length > 0 || filtros.estoque.length > 0 || filtros.promocao
+  )
 }
 
 /**
@@ -131,13 +133,13 @@ export function ProdutosListaPage() {
     queryFn: () => listarCategorias(),
   })
   const categorias = categoriasQuery.data ?? []
-  // Categoria da URL que nao existe mais (ou de outra empresa): o seletor mostra
-  // "Todas" e a lista vazia oferece "Limpar filtros". Durante a carga ou se as
-  // categorias falharem, a da URL continua (nao da para saber se existe).
-  const categoriaExibida =
-    categoriasQuery.isSuccess && !categorias.some((categoria) => categoria.id === filtros.categoria)
-      ? null
-      : filtros.categoria
+  // Categorias da URL que nao existem mais (ou de outra empresa) saem do seletor;
+  // sem nenhuma, ele mostra "Todas" e a lista vazia oferece "Limpar filtros".
+  // Durante a carga ou se as categorias falharem, as da URL continuam (nao da
+  // para saber se existem).
+  const categoriaExibida = categoriasQuery.isSuccess
+    ? filtros.categoria.filter((id) => categorias.some((categoria) => categoria.id === id))
+    : filtros.categoria
 
   // --- Pagina alem do fim (ex.: estava na 5 e o filtro deixou 2): vai para a
   // ultima, substituindo a entrada do historico. So com a resposta final

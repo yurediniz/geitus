@@ -33,7 +33,7 @@ describe('useFiltrosDaPosicao', () => {
     expect(hook().filtros).toEqual({
       busca: '',
       status: 'ativos',
-      categoria: null,
+      categoria: [],
       situacao: [],
       ordem: 'nome',
       pagina: 1,
@@ -50,7 +50,7 @@ describe('useFiltrosDaPosicao', () => {
     expect(hook().filtros).toEqual({
       busca: 'leite',
       status: 'todos',
-      categoria: CATEGORIA,
+      categoria: [CATEGORIA],
       situacao: ['negativo'],
       ordem: '-valor',
       pagina: 3,
@@ -65,7 +65,7 @@ describe('useFiltrosDaPosicao', () => {
     expect(hook().filtros).toEqual({
       busca: '',
       status: 'ativos',
-      categoria: null,
+      categoria: [],
       situacao: [],
       ordem: 'nome',
       pagina: 1,
@@ -136,5 +136,32 @@ describe('useFiltrosDaPosicao', () => {
     hook().alterar({ busca: 'teste estoque' })
 
     expect(router.state.location.search).toBe('?busca=teste+estoque')
+  })
+
+  it('categorias: uma por parametro, sem repetidos nem invalidas, no maximo 20', () => {
+    const outra = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d'
+    const { hook } = montar(`/estoque?categoria=${CATEGORIA}&categoria=nao-uuid&categoria=${outra}&categoria=${CATEGORIA}`)
+
+    expect(hook().filtros.categoria).toEqual([CATEGORIA, outra])
+    expect(hook().quantidadeDeFiltros).toBe(1)
+
+    const vinteECinco = Array.from({ length: 25 }, (_, indice) => `00000000-0000-4000-8000-${String(indice).padStart(12, '0')}`)
+    const { hook: muitas } = montar(`/estoque?${vinteECinco.map((id) => `categoria=${id}`).join('&')}`)
+    expect(muitas().filtros.categoria).toHaveLength(20)
+  })
+
+  it('categorias vao para a URL uma por valor; a mesma lista nao mexe na URL', () => {
+    const outra = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d'
+    const { router, hook } = montar('/estoque')
+
+    act(() => hook().alterar({ categoria: [CATEGORIA, outra, CATEGORIA] }))
+
+    expect(router.state.location.search).toBe(`?categoria=${CATEGORIA}&categoria=${outra}`)
+    const antes = router.state.location
+    act(() => hook().alterar({ categoria: [CATEGORIA, outra] }))
+    expect(router.state.location).toBe(antes)
+
+    act(() => hook().alterar({ categoria: [] }))
+    expect(router.state.location.search).toBe('')
   })
 })

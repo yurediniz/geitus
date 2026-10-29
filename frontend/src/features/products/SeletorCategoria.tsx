@@ -1,5 +1,9 @@
 import { CONFIGURACAO_CATEGORIAS, CONFIGURACAO_MARCAS } from '@/features/catalog/cadastrosEmArvore'
 import { SeletorDaArvore, type SeletorDaArvoreProps } from '@/features/products/SeletorDaArvore'
+import {
+  SeletorDaArvoreMultiplo,
+  type SeletorDaArvoreMultiploProps,
+} from '@/features/products/SeletorDaArvoreMultiplo'
 import type { Categoria, Marca } from '@/types/catalogo'
 
 export type SeletorCategoriaProps = Omit<SeletorDaArvoreProps<Categoria>, 'configuracao' | 'itens'> & {
@@ -10,6 +14,15 @@ export type SeletorCategoriaProps = Omit<SeletorDaArvoreProps<Categoria>, 'confi
 /** Seletor de categoria (produto e filtro da lista): o `SeletorDaArvore` com as categorias. */
 export function SeletorCategoria({ categorias, ...props }: SeletorCategoriaProps) {
   return <SeletorDaArvore configuracao={CONFIGURACAO_CATEGORIAS} itens={categorias} {...props} />
+}
+
+export type SeletorCategoriaMultiploProps = Omit<SeletorDaArvoreMultiploProps<Categoria>, 'configuracao' | 'itens'> & {
+  categorias: Categoria[]
+}
+
+/** Filtro de varias categorias (posicao de estoque e lista de produtos): o `SeletorDaArvoreMultiplo`. */
+export function SeletorCategoriaMultiplo({ categorias, ...props }: SeletorCategoriaMultiploProps) {
+  return <SeletorDaArvoreMultiplo configuracao={CONFIGURACAO_CATEGORIAS} itens={categorias} {...props} />
 }
 
 export type SeletorMarcaProps = Omit<SeletorDaArvoreProps<Marca>, 'configuracao' | 'itens'> & {

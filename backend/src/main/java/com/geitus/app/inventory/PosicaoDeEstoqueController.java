@@ -64,8 +64,10 @@ public class PosicaoDeEstoqueController {
             @RequestParam(required = false) String busca,
             @Parameter(description = "ativos (padrao), inativos ou todos")
             @RequestParam(required = false) String status,
-            @Parameter(description = "UUID da categoria; inclui as descendentes")
-            @RequestParam(required = false) UUID categoria,
+            @Parameter(description = "UUIDs das categorias, combinadas com OU (parametro repetido ou separado "
+                    + "por virgula, ate 20); cada uma inclui as descendentes",
+                    array = @ArraySchema(schema = @Schema(type = "string", format = "uuid"), maxItems = 20))
+            @RequestParam(required = false) List<UUID> categoria,
             @Parameter(description = "Situacoes, combinadas com OU (parametro repetido ou separado por virgula)",
                     array = @ArraySchema(schema = @Schema(allowableValues = { "negativo", "zerado", "baixo",
                             "reposicao", "regular", "alto" })))
@@ -98,7 +100,9 @@ public class PosicaoDeEstoqueController {
             @AuthenticationPrincipal Long idUsuario,
             @RequestParam(required = false) String busca,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) UUID categoria) {
+            @Parameter(description = "UUIDs das categorias, como na listagem",
+                    array = @ArraySchema(schema = @Schema(type = "string", format = "uuid"), maxItems = 20))
+            @RequestParam(required = false) List<UUID> categoria) {
         ParametrosDaPosicao parametros = ParametrosDaPosicao.daRequisicao(busca, status, categoria, null, null, null,
                 null);
         return ResponseEntity.ok(posicaoService.resumoParaUsuario(idUsuario, parametros));

@@ -6,7 +6,7 @@ import { FiltroMultiplo } from '@/components/ui/filtro-multiplo'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { OPCOES_DA_SITUACAO_DO_FILTRO } from '@/features/products/estoque/situacaoDoFiltro'
-import { SeletorCategoria } from '@/features/products/SeletorCategoria'
+import { SeletorCategoriaMultiplo } from '@/features/products/SeletorCategoria'
 import { umDe } from '@/lib/listas'
 import { cn } from '@/lib/utils'
 import type { Categoria } from '@/types/catalogo'
@@ -17,6 +17,7 @@ import {
   type OrdemDaPosicao,
   type StatusDaPosicao,
 } from '@/types/estoque'
+import { MAXIMO_CATEGORIAS_NO_FILTRO } from '@/types/produto'
 
 const ROTULOS_DA_ORDEM: Record<OrdemDaPosicao, string> = {
   nome: 'Nome (A–Z)',
@@ -46,7 +47,8 @@ export interface FiltrosDaPosicaoProps {
   aoBuscarAgora: () => void
   buscando: boolean
   categorias: Categoria[]
-  categoriaExibida: string | null
+  /** Categorias mostradas no seletor: so as da URL que ainda existem. */
+  categoriaExibida: string[]
   erroNasCategorias: boolean
 }
 
@@ -170,15 +172,15 @@ export function FiltrosDaPosicao({
 
         <div className="space-y-1.5">
           <Rotulo id={`${id}-categoria-rotulo`}>Categoria</Rotulo>
-          <SeletorCategoria
+          <SeletorCategoriaMultiplo
             id={`${id}-categoria`}
             idRotulo={`${id}-categoria-rotulo`}
             categorias={categorias}
-            valor={categoriaExibida}
+            valores={categoriaExibida}
             onChange={(categoria) => alterar({ categoria })}
-            podeCriar={false}
+            maximo={MAXIMO_CATEGORIAS_NO_FILTRO}
             incluirInativas
-            rotuloSemValor="Todas"
+            rotuloTodos="Todas"
             className={ALTURA_DO_CONTROLE}
           />
           {erroNasCategorias && (

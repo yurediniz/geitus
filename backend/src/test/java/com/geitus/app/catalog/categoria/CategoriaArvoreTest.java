@@ -216,9 +216,25 @@ class CategoriaArvoreTest {
         CategoriaArvore arvore = arvore();
 
         assertThat(arvore.idsDoFiltro(null)).isNull();
-        assertThat(arvore.idsDoFiltro(UUID.randomUUID())).isEmpty();
-        assertThat(arvore.idsDoFiltro(racao.getUuid())).containsExactlyInAnyOrder(1L, 2L, 3L, 4L);
-        assertThat(arvore.idsDoFiltro(seca.getUuid())).containsExactly(4L);
+        assertThat(arvore.idsDoFiltro(List.of())).isNull();
+        assertThat(arvore.idsDoFiltro(List.of(UUID.randomUUID()))).isEmpty();
+        assertThat(arvore.idsDoFiltro(List.of(racao.getUuid()))).containsExactlyInAnyOrder(1L, 2L, 3L, 4L);
+        assertThat(arvore.idsDoFiltro(List.of(seca.getUuid()))).containsExactly(4L);
+    }
+
+    @Test
+    void idsDoFiltroUneAsSubarvoresSemDuplicarEIgnoraAsDesconhecidas() {
+        CategoriaArvore arvore = arvore();
+
+        // Duas arvores diferentes: a uniao das duas.
+        assertThat(arvore.idsDoFiltro(List.of(bebidas.getUuid(), seca.getUuid()))).containsExactlyInAnyOrder(4L, 5L);
+        // Pai e filho juntos: a subarvore do filho ja esta na do pai.
+        assertThat(arvore.idsDoFiltro(List.of(racao.getUuid(), seca.getUuid())))
+                .containsExactlyInAnyOrder(1L, 2L, 3L, 4L);
+        // Uma desconhecida (outra empresa ou excluida) no meio fica de fora.
+        assertThat(arvore.idsDoFiltro(List.of(UUID.randomUUID(), seca.getUuid()))).containsExactly(4L);
+        // Nenhuma conhecida: vazio (lista vazia sem ir ao banco).
+        assertThat(arvore.idsDoFiltro(List.of(UUID.randomUUID(), UUID.randomUUID()))).isEmpty();
     }
 
     @Test

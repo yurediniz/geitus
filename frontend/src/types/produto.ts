@@ -292,13 +292,16 @@ export const ORDENS_PRODUTOS = [
 ] as const
 export type OrdemProdutos = (typeof ORDENS_PRODUTOS)[number]
 
+/** Quantas categorias o filtro aceita (o limite da API, na lista de produtos e na posicao de estoque). */
+export const MAXIMO_CATEGORIAS_NO_FILTRO = 20
+
 /** Estado da lista de produtos (o mesmo da URL da tela). */
 export interface FiltrosDaListaDeProdutos {
   /** Texto da busca, aparado; vazio = sem busca. */
   busca: string
   status: StatusFiltro
-  /** UUID da categoria (inclui as subcategorias); null = todas. */
-  categoria: string | null
+  /** UUIDs das categorias marcadas (cada uma inclui as subcategorias); vazio = todas. */
+  categoria: string[]
   /** Situacoes marcadas, na ordem de `ESTOQUE_FILTRO`; vazio = sem filtro de estoque. */
   estoque: EstoqueFiltro[]
   /** So produtos com promocao vigente hoje. */

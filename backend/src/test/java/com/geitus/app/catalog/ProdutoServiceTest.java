@@ -977,7 +977,7 @@ class ProdutoServiceTest {
         consultaDevolve(0);
 
         produtoService.listarParaUsuario(9L,
-                ParametrosDaListagem.daRequisicao(null, null, racao.getUuid(), null, null, null, 0, 25));
+                ParametrosDaListagem.daRequisicao(null, null, List.of(racao.getUuid()), null, null, null, 0, 25));
 
         assertThat(filtroConsultado().categoriaIds()).containsExactlyInAnyOrder(100L, 101L);
         verify(categoriaService, times(1)).arvoreDaEmpresa(EMPRESA_ID);
@@ -991,7 +991,7 @@ class ProdutoServiceTest {
         consultaDevolve(0);
 
         produtoService.listarParaUsuario(9L,
-                ParametrosDaListagem.daRequisicao(null, null, UUID.randomUUID(), null, null, null, 0, 25));
+                ParametrosDaListagem.daRequisicao(null, null, List.of(UUID.randomUUID()), null, null, null, 0, 25));
 
         assertThat(filtroConsultado().categoriaIds()).isEmpty();
     }

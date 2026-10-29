@@ -68,7 +68,7 @@ describe('produtoService', () => {
     const PADRAO = {
       busca: '',
       status: 'ativos',
-      categoria: null,
+      categoria: [] as string[],
       estoque: [] as EstoqueFiltro[],
       promocao: false,
       ordem: 'nome',
@@ -95,7 +95,7 @@ describe('produtoService', () => {
         {
           busca: ' café & leite ',
           status: 'todos',
-          categoria: '3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e5f',
+          categoria: ['3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e5f', '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d'],
           estoque: ['zerado', 'baixo'],
           promocao: true,
           ordem: '-preco',
@@ -106,7 +106,7 @@ describe('produtoService', () => {
       )
 
       expect(apiGetMock).toHaveBeenCalledWith(
-        '/produtos?busca=caf%C3%A9+%26+leite&status=todos&categoria=3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e5f&estoque=zerado&estoque=baixo&promocao=true&ordem=-preco&pagina=2&tamanho=10',
+        '/produtos?busca=caf%C3%A9+%26+leite&status=todos&categoria=3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e5f&categoria=0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d&estoque=zerado&estoque=baixo&promocao=true&ordem=-preco&pagina=2&tamanho=10',
         { autenticada: true, signal: controle.signal },
       )
     })

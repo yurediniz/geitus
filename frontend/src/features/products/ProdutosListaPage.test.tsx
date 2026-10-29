@@ -192,7 +192,7 @@ describe('ProdutosListaPage', () => {
 
     await listaCarregada()
     expect(listarProdutosMock).toHaveBeenCalledWith(
-      { busca: '', status: 'ativos', categoria: null, estoque: [], promocao: false, ordem: 'nome', pagina: 1 },
+      { busca: '', status: 'ativos', categoria: [], estoque: [], promocao: false, ordem: 'nome', pagina: 1 },
       expect.any(AbortSignal),
     )
   })
@@ -764,18 +764,30 @@ describe('ProdutosListaPage', () => {
       expect(router.state.location.search).toBe('?promocao=1')
     })
 
-    it('a categoria e escolhida pelo seletor com busca e vai para a API', async () => {
+    it('as categorias sao marcadas no seletor (com busca), vao para a API e o painel continua aberto', async () => {
       const router = renderLista('/produtos?pagina=3')
       await screen.findByRole('searchbox')
       expect(gatilhoCategoria()).toHaveTextContent('Todas')
       expect(gatilhoCategoria()).toHaveClass('h-11', 'md:h-9')
 
       fireEvent.click(gatilhoCategoria())
-      fireEvent.click(await screen.findByRole('option', { name: 'Ração › Sachê' }))
+      fireEvent.change(await screen.findByRole('textbox', { name: 'Buscar categoria' }), { target: { value: 'sache' } })
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Ração › Sachê' }))
 
-      await waitFor(() => expect(ultimosParametros()).toMatchObject({ categoria: ID_SACHE, pagina: 1 }))
+      await waitFor(() => expect(ultimosParametros()).toMatchObject({ categoria: [ID_SACHE], pagina: 1 }))
       expect(router.state.location.search).toBe(`?categoria=${ID_SACHE}`)
-      expect(gatilhoCategoria()).toHaveTextContent('Ração › Sachê')
+      expect(gatilhoCategoria()).toHaveTextContent('Sachê')
+      // O botao mostra so o ultimo trecho; o caminho inteiro fica no title.
+      expect(gatilhoCategoria()).toHaveAttribute('title', 'Ração › Sachê')
+
+      fireEvent.change(screen.getByRole('textbox', { name: 'Buscar categoria' }), { target: { value: '' } })
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Ração' }))
+
+      // Na ordem da arvore: a Ração antes do Sachê.
+      await waitFor(() => expect(ultimosParametros()).toMatchObject({ categoria: [ID_RACAO, ID_SACHE] }))
+      expect(router.state.location.search).toBe(`?categoria=${ID_RACAO}&categoria=${ID_SACHE}`)
+      expect(gatilhoCategoria()).toHaveTextContent('Ração +1')
+      expect(gatilhoCategoria()).toHaveAttribute('title', 'Ração, Ração › Sachê')
     })
 
     it('categoria que nao existe mais na URL mostra "Todas" e oferece "Limpar filtros"', async () => {
@@ -783,7 +795,7 @@ describe('ProdutosListaPage', () => {
 
       const vazio = await estadoVazio('Nenhum produto encontrado com os filtros escolhidos.')
       await waitFor(() => expect(gatilhoCategoria()).toHaveTextContent('Todas'))
-      expect(ultimosParametros().categoria).toBe(ID_SUMIDA)
+      expect(ultimosParametros().categoria).toEqual([ID_SUMIDA])
       expect(within(vazio).getByRole('button', { name: 'Limpar filtros' })).toBeInTheDocument()
     })
 
@@ -801,7 +813,7 @@ describe('ProdutosListaPage', () => {
 
       expect(await screen.findByText('Não foi possível carregar as categorias.')).toBeInTheDocument()
       expect(gatilhoCategoria()).toHaveTextContent('Categoria selecionada')
-      expect(ultimosParametros().categoria).toBe(ID_RACAO)
+      expect(ultimosParametros().categoria).toEqual([ID_RACAO])
     })
 
     it('a URL preenche os filtros na tela', async () => {

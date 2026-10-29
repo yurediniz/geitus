@@ -21,6 +21,7 @@ class ParametrosDaPosicaoTest {
 
         assertThat(parametros.status()).isEqualTo(StatusFiltro.ATIVOS);
         assertThat(parametros.situacao()).isEmpty();
+        assertThat(parametros.categorias()).isEmpty();
         assertThat(parametros.ordem()).isEqualTo(OrdemDaPosicao.NOME);
         assertThat(parametros.pagina()).isZero();
         assertThat(parametros.tamanho()).isEqualTo(25);

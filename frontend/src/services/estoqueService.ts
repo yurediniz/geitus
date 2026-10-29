@@ -53,8 +53,8 @@ function parametrosDaBusca(filtros: Pick<FiltrosDaPosicao, 'busca' | 'status' | 
     searchParams.set('busca', busca)
   }
   searchParams.set('status', filtros.status)
-  if (filtros.categoria) {
-    searchParams.set('categoria', filtros.categoria)
+  for (const categoria of filtros.categoria) {
+    searchParams.append('categoria', categoria)
   }
   return searchParams
 }

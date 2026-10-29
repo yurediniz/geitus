@@ -286,6 +286,7 @@ Spec: [`estoque.md`](modules/estoque.md), regras 16, 23 e 24.
 ## DEC-048 — Filtros com multisseleção
 2026-10-29 · Aceita
 - **Situação:** `situacao` (posição) e `estoque` (produtos) aceitam várias situações (parâmetro repetido ou por vírgula), combinadas com OU por fragmentos SQL fixos; o grupo `repor` saiu, porque o usuário monta o próprio conjunto. Os cards da posição ligam e desligam a sua situação no filtro.
+- **Categoria:** `categoria` (posição, resumo e produtos) aceita até 20 categorias, somadas como a união das subárvores; as de outra empresa são ignoradas, e se nenhuma valer a lista volta vazia. Os filtros usam um `SeletorDaArvoreMultiplo` próprio (o seletor único do cadastro não mudou); o catálogo do PDV continua com uma categoria só.
 - **Tela:** componente `FiltroMultiplo` (popover do `radix-ui` já instalado com caixas de seleção nativas, sem dependência nova).
 
 Spec: [`estoque.md`](modules/estoque.md), regra 23; [`produtos.md`](modules/produtos.md), regra 3.

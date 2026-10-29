@@ -19,6 +19,7 @@ const apiGetMock = vi.mocked(apiGet)
 const apiPostMock = vi.mocked(apiPost)
 
 const ID = '3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e5f'
+const OUTRA = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d'
 
 describe('estoqueService', () => {
   beforeEach(() => {
@@ -68,7 +69,7 @@ describe('estoqueService', () => {
     const PADRAO: FiltrosDaPosicao = {
       busca: '',
       status: 'ativos',
-      categoria: null,
+      categoria: [],
       situacao: [],
       ordem: 'nome',
       pagina: 1,
@@ -85,26 +86,38 @@ describe('estoqueService', () => {
       })
     })
 
-    it('envia busca aparada, categoria, situação, ordem e página', async () => {
+    it('envia busca aparada, categorias, situação, ordem e página', async () => {
       apiGetMock.mockResolvedValue({ itens: [], pagina: 2, tamanho: 25, totalItens: 0 })
       const signal = new AbortController().signal
 
       await listarPosicaoDeEstoque(
-        { busca: ' arroz ', status: 'todos', categoria: ID, situacao: ['negativo', 'zerado'], ordem: '-valor', pagina: 3 },
+        {
+          busca: ' arroz ',
+          status: 'todos',
+          categoria: [ID, OUTRA],
+          situacao: ['negativo', 'zerado'],
+          ordem: '-valor',
+          pagina: 3,
+        },
         signal,
       )
 
       expect(apiGetMock).toHaveBeenCalledWith(
-        `/estoque/posicao?busca=arroz&status=todos&categoria=${ID}&situacao=negativo&situacao=zerado&ordem=-valor&pagina=2&tamanho=25`,
+        `/estoque/posicao?busca=arroz&status=todos&categoria=${ID}&categoria=${OUTRA}&situacao=negativo&situacao=zerado&ordem=-valor&pagina=2&tamanho=25`,
         { autenticada: true, signal },
       )
     })
 
-    it('o resumo leva só busca, status e categoria', async () => {
+    it('o resumo leva só busca, status e categorias', async () => {
       apiGetMock.mockResolvedValue({})
 
-      await buscarResumoDaPosicao({ busca: 'leite', status: 'ativos', categoria: null })
+      await buscarResumoDaPosicao({ busca: 'leite', status: 'ativos', categoria: [] })
+      await buscarResumoDaPosicao({ busca: '', status: 'ativos', categoria: [ID, OUTRA] })
 
+      expect(apiGetMock).toHaveBeenCalledWith(`/estoque/posicao/resumo?status=ativos&categoria=${ID}&categoria=${OUTRA}`, {
+        autenticada: true,
+        signal: undefined,
+      })
       expect(apiGetMock).toHaveBeenCalledWith('/estoque/posicao/resumo?busca=leite&status=ativos', {
         autenticada: true,
         signal: undefined,

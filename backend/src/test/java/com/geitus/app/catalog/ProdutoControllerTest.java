@@ -263,7 +263,34 @@ class ProdutoControllerTest {
                 .andExpect(status().isOk());
 
         verify(produtoService).listarParaUsuario(1L, new ParametrosDaListagem("açúcar união", StatusFiltro.TODOS,
-                categoria, Set.of(EstoqueFiltro.BAIXO, EstoqueFiltro.ALTO), true, OrdemDeProdutos.PRECO_DESC, 2, 50));
+                Set.of(categoria), Set.of(EstoqueFiltro.BAIXO, EstoqueFiltro.ALTO), true, OrdemDeProdutos.PRECO_DESC,
+                2, 50));
+    }
+
+    @Test
+    void categoriaAceitaVariasRepetidasOuPorVirgulaERecusaMaisDeVinte() throws Exception {
+        UUID racao = UUID.fromString("00000000-0000-0000-0000-0000000000a1");
+        UUID bebidas = UUID.fromString("00000000-0000-0000-0000-0000000000a2");
+        when(produtoService.listarParaUsuario(eq(1L), any())).thenReturn(paginaVazia());
+        ParametrosDaListagem esperado = new ParametrosDaListagem(null, StatusFiltro.ATIVOS, Set.of(racao, bebidas),
+                null, false, OrdemDeProdutos.NOME, 0, 25);
+
+        mockMvc.perform(get("/api/produtos").header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .param("categoria", racao.toString(), bebidas.toString(), racao.toString()))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/produtos").header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .param("categoria", racao + "," + bebidas))
+                .andExpect(status().isOk());
+        verify(produtoService, times(2)).listarParaUsuario(1L, esperado);
+
+        String[] vinteEUma = java.util.stream.IntStream.rangeClosed(1, 21)
+                .mapToObj(i -> String.format("00000000-0000-0000-0000-%012d", i))
+                .toArray(String[]::new);
+        mockMvc.perform(get("/api/produtos").header("Authorization", "Bearer " + tokenParaUsuario(1L))
+                        .param("categoria", vinteEUma))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("categoria"))
+                .andExpect(jsonPath("$.campos[0].mensagem").value("Escolha até 20 categorias."));
     }
 
     @Test
@@ -433,7 +460,7 @@ class ProdutoControllerTest {
     void openApiListaOsValoresAceitosDeCadaFiltro() throws Exception {
         Map<String, List<String>> anunciados = new HashMap<>();
         for (java.lang.reflect.Parameter parametro : ProdutoController.class.getMethod("listar", Long.class,
-                String.class, String.class, UUID.class, List.class, String.class, String.class, Integer.class,
+                String.class, String.class, List.class, List.class, String.class, String.class, Integer.class,
                 Integer.class).getParameters()) {
             Parameter documentacao = parametro.getAnnotation(Parameter.class);
             if (documentacao == null) {

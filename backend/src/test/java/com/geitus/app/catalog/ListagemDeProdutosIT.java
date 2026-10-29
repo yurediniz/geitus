@@ -187,6 +187,30 @@ class ListagemDeProdutosIT {
         assertThat(nomes(listar(loja, porCategoria(daLoja)))).containsExactly("Água");
     }
 
+    /** Multisselecao: as categorias se somam (cada uma com as descendentes) e as de outra empresa sao ignoradas. */
+    @Test
+    void variasCategoriasSomamOsProdutosEIgnoramAsDeOutraEmpresa() {
+        Loja loja = novaLoja();
+        Loja outra = novaLoja();
+        UUID racao = categoria(loja, "Ração", null);
+        UUID umida = categoria(loja, "Úmida", racao);
+        UUID bebidas = categoria(loja, "Bebidas", null);
+        UUID limpeza = categoria(loja, "Limpeza", null);
+        UUID daOutra = categoria(outra, "Ração", null);
+        cadastrar(loja, comUnidade(loja).nome("Ração seca").categoriaId(racao));
+        cadastrar(loja, comUnidade(loja).nome("Sachê").categoriaId(umida));
+        cadastrar(loja, comUnidade(loja).nome("Água").categoriaId(bebidas));
+        cadastrar(loja, comUnidade(loja).nome("Detergente").categoriaId(limpeza));
+        cadastrar(loja, comUnidade(loja).nome("Sem categoria"));
+
+        assertThat(nomes(listar(loja, porCategoria(racao, bebidas))))
+                .containsExactlyInAnyOrder("Ração seca", "Sachê", "Água");
+        // Pai e filho juntos: o filho ja esta na subarvore do pai, sem duplicar.
+        assertThat(listar(loja, porCategoria(racao, umida)).totalItens()).isEqualTo(2);
+        assertThat(nomes(listar(loja, porCategoria(daOutra, bebidas)))).containsExactly("Água");
+        assertThat(listar(loja, porCategoria(daOutra, UUID.randomUUID())).totalItens()).isZero();
+    }
+
     /** Review Focus 2: pagina alem do fim traz os itens vazios com o total real. */
     @Test
     void paginaAlemDoFimRetornaTotal() {
@@ -229,7 +253,7 @@ class ListagemDeProdutosIT {
                                     List.of("FD-" + i, "FD2-" + i))));
         }
         ParametrosDaListagem semFiltro = parametros(null, null, 0, 25);
-        ParametrosDaListagem comFiltros = ParametrosDaListagem.daRequisicao("produto", null, racao,
+        ParametrosDaListagem comFiltros = ParametrosDaListagem.daRequisicao("produto", null, List.of(racao),
                 List.of("negativo", "zerado", "baixo", "reposicao"), null, null, 0, 25);
 
         for (ParametrosDaListagem parametros : List.of(semFiltro, comFiltros)) {
@@ -435,7 +459,7 @@ class ListagemDeProdutosIT {
     }
 
     private static ParametrosDaListagem comTamanho(ParametrosDaListagem base, int tamanho) {
-        return new ParametrosDaListagem(base.busca(), base.status(), base.categoria(), base.estoque(),
+        return new ParametrosDaListagem(base.busca(), base.status(), base.categorias(), base.estoque(),
                 base.emPromocao(), base.ordem(), 0, tamanho);
     }
 
@@ -448,8 +472,8 @@ class ListagemDeProdutosIT {
         return produtos.stream().filter(condicao).map(ProdutoResponse::nome).collect(Collectors.toSet());
     }
 
-    private static ParametrosDaListagem porCategoria(UUID categoria) {
-        return ParametrosDaListagem.daRequisicao(null, null, categoria, null, null, null, 0, 25);
+    private static ParametrosDaListagem porCategoria(UUID... categorias) {
+        return ParametrosDaListagem.daRequisicao(null, null, List.of(categorias), null, null, null, 0, 25);
     }
 
     private PaginaResponse<ProdutoResponse> listar(Loja loja, ParametrosDaListagem parametros) {

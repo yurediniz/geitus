@@ -33,7 +33,7 @@ describe('useFiltrosDaListaDeProdutos', () => {
     expect(hook().filtros).toEqual({
       busca: '',
       status: 'ativos',
-      categoria: null,
+      categoria: [],
       estoque: [],
       promocao: false,
       ordem: 'nome',
@@ -50,7 +50,7 @@ describe('useFiltrosDaListaDeProdutos', () => {
     expect(hook().filtros).toEqual({
       busca: 'arroz',
       status: 'todos',
-      categoria: CATEGORIA,
+      categoria: [CATEGORIA],
       estoque: ['zerado'],
       promocao: true,
       ordem: '-margem',
@@ -170,7 +170,7 @@ describe('useFiltrosDaListaDeProdutos', () => {
     // O valor antigo (antes dos seis niveis) cai em "sem filtro".
     ['estoque=sem', { estoque: [] }],
     ['promocao=talvez', { promocao: false }],
-    ['categoria=nao-e-uuid', { categoria: null }],
+    ['categoria=nao-e-uuid', { categoria: [] }],
     ['busca=%20%20', { busca: '' }],
   ])('valor invalido na URL vira o padrao (%s)', (query, esperado) => {
     const { hook } = montar(`/produtos?${query}`)
@@ -220,5 +220,32 @@ describe('useFiltrosDaListaDeProdutos', () => {
     hook().alterar({ busca: 'arroz' })
 
     expect(router.state.location.search).toBe('?busca=arroz')
+  })
+
+  it('categorias: uma por parametro, sem repetidos nem invalidas, no maximo 20', () => {
+    const outra = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d'
+    const { hook } = montar(`/produtos?categoria=${CATEGORIA}&categoria=nao-uuid&categoria=${outra}&categoria=${CATEGORIA}`)
+
+    expect(hook().filtros.categoria).toEqual([CATEGORIA, outra])
+    expect(hook().quantidadeDeFiltros).toBe(1)
+
+    const vinteECinco = Array.from({ length: 25 }, (_, indice) => `00000000-0000-4000-8000-${String(indice).padStart(12, '0')}`)
+    const { hook: muitas } = montar(`/produtos?${vinteECinco.map((id) => `categoria=${id}`).join('&')}`)
+    expect(muitas().filtros.categoria).toHaveLength(20)
+  })
+
+  it('categorias vao para a URL uma por valor; a mesma lista nao mexe na URL', () => {
+    const outra = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d'
+    const { router, hook } = montar('/produtos')
+
+    act(() => hook().alterar({ categoria: [CATEGORIA, outra, CATEGORIA] }))
+
+    expect(router.state.location.search).toBe(`?categoria=${CATEGORIA}&categoria=${outra}`)
+    const antes = router.state.location
+    act(() => hook().alterar({ categoria: [CATEGORIA, outra] }))
+    expect(router.state.location).toBe(antes)
+
+    act(() => hook().alterar({ categoria: [] }))
+    expect(router.state.location.search).toBe('')
   })
 })

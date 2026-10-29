@@ -128,7 +128,8 @@ export type StatusDaPosicao = (typeof STATUS_POSICAO)[number]
 export interface FiltrosDaPosicao {
   busca: string
   status: StatusDaPosicao
-  categoria: string | null
+  /** UUIDs das categorias marcadas (cada uma inclui as subcategorias); vazio = todas. */
+  categoria: string[]
   /** Situacoes marcadas, na ordem de `SITUACOES_POSICAO`; vazio = sem filtro. */
   situacao: SituacaoDaPosicao[]
   ordem: OrdemDaPosicao

@@ -194,10 +194,11 @@ function AbaPosicao({ somenteLeitura }: { somenteLeitura: boolean }) {
     queryFn: () => listarCategorias(),
   })
   const categorias = categoriasQuery.data ?? []
-  const categoriaExibida =
-    categoriasQuery.isSuccess && !categorias.some((categoria) => categoria.id === filtros.categoria)
-      ? null
-      : filtros.categoria
+  // Categorias da URL que nao existem mais (ou de outra empresa) saem do seletor; durante a carga ou
+  // se as categorias falharem, as da URL continuam (nao da para saber se existem).
+  const categoriaExibida = categoriasQuery.isSuccess
+    ? filtros.categoria.filter((id) => categorias.some((categoria) => categoria.id === id))
+    : filtros.categoria
 
   // Pagina alem do fim (ex.: o filtro deixou menos itens): vai para a ultima, substituindo o historico.
   const ultimaPagina = pagina ? Math.max(1, Math.ceil(pagina.totalItens / pagina.tamanho)) : 1

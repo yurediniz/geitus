@@ -571,14 +571,14 @@ public class ProdutoService {
      * Filtro da consulta: o termo vira as palavras normalizadas, o termo de
      * codigo (sem nenhum espaco Unicode; so espacos = sem busca, Review Focus 1)
      * e, se for so de digitos, o termo numerico sem zeros a esquerda (numero e
-     * codigo do produto, Fase B2); a categoria vira ela e as descendentes.
+     * codigo do produto, Fase B2); as categorias viram elas e as descendentes.
      */
     private static FiltroDeProdutos filtroDaListagem(Long empresaId, ParametrosDaListagem parametros,
             CategoriaArvore arvore, LocalDate hoje) {
         return new FiltroDeProdutos(empresaId, TextoDeBusca.palavras(parametros.busca()),
                 TextoDeBusca.termoDeCodigo(parametros.busca()), TextoDeBusca.termoNumerico(parametros.busca()),
                 parametros.status(),
-                arvore.idsDoFiltro(parametros.categoria()), parametros.estoque(), parametros.emPromocao(),
+                arvore.idsDoFiltro(parametros.categorias()), parametros.estoque(), parametros.emPromocao(),
                 hoje);
     }
 

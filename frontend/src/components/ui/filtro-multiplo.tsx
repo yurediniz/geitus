@@ -25,16 +25,14 @@ export interface FiltroMultiploProps<T extends string> {
 }
 
 /** "Todas", o rotulo da unica opcao marcada ou "Zerado +2" (o primeiro na ordem das opcoes). */
+/** O nome da primeira marcada (ou o rotulo de "todas") e quantas mais; o "+N" vai num span que nao trunca. */
 function textoDoFiltroMultiplo<T extends string>(
   opcoes: readonly OpcaoDoFiltroMultiplo<T>[],
   valores: readonly T[],
   rotuloTodos: string,
-): string {
+): { nome: string; mais: number } {
   const marcadas = opcoes.filter((opcao) => valores.includes(opcao.valor))
-  if (marcadas.length === 0) {
-    return rotuloTodos
-  }
-  return marcadas.length === 1 ? marcadas[0].rotulo : `${marcadas[0].rotulo} +${marcadas.length - 1}`
+  return marcadas.length === 0 ? { nome: rotuloTodos, mais: 0 } : { nome: marcadas[0].rotulo, mais: marcadas.length - 1 }
 }
 
 /**
@@ -57,7 +55,7 @@ export function FiltroMultiplo<T extends string>({
   const idGatilho = id ?? idGerado
   const idValor = `${idGatilho}-valor`
   const listaRef = React.useRef<HTMLDivElement>(null)
-  const texto = textoDoFiltroMultiplo(opcoes, valores, rotuloTodos)
+  const { nome, mais } = textoDoFiltroMultiplo(opcoes, valores, rotuloTodos)
   // "Negativo +1" nao diz quais: a lista completa fica no title.
   const todosOsEscolhidos = opcoes
     .filter((opcao) => valores.includes(opcao.valor))
@@ -97,13 +95,18 @@ export function FiltroMultiplo<T extends string>({
             className,
           )}
         >
-          <span id={idValor} className={cn('truncate', valores.length === 0 && 'text-muted-foreground')}>
-            {texto}
+          <span id={idValor} className={cn('flex min-w-0 gap-1', valores.length === 0 && 'text-muted-foreground')}>
+            <span className="truncate">{nome}</span>
+            {mais > 0 && <>{' '}<span className="shrink-0">{`+${mais}`}</span></>}
           </span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" aria-labelledby={idRotulo} className="w-(--radix-popover-trigger-width) min-w-56 p-1">
+      <PopoverContent
+        align="start"
+        aria-labelledby={idRotulo}
+        className="max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) min-w-56 overflow-y-auto p-1"
+      >
         <div
           ref={listaRef}
           role="group"

@@ -2,20 +2,19 @@ import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { PAGINA_MAXIMA, type OpcoesDeAlteracao } from '@/features/products/listagem/useFiltrosDaListaDeProdutos'
-import { algunsDe, mesmoValor, umDe } from '@/lib/listas'
+import { algunsDe, mesmoValor, umDe, uuidsUnicos } from '@/lib/listas'
 import { ORDENS_POSICAO, SITUACOES_POSICAO, STATUS_POSICAO, type FiltrosDaPosicao } from '@/types/estoque'
+import { MAXIMO_CATEGORIAS_NO_FILTRO } from '@/types/produto'
 
 /** Valores padrao: nao aparecem na URL. */
 export const FILTROS_PADRAO_DA_POSICAO: FiltrosDaPosicao = {
   busca: '',
   status: 'ativos',
-  categoria: null,
+  categoria: [],
   situacao: [],
   ordem: 'nome',
   pagina: 1,
 }
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function lerPagina(valor: string | null): number {
   if (valor === null || !/^\d+$/.test(valor)) {
@@ -27,11 +26,10 @@ function lerPagina(valor: string | null): number {
 
 /** Le a URL; qualquer valor desconhecido ou malformado vira o padrao (a URL nao e confiavel). */
 function lerFiltros(params: URLSearchParams): FiltrosDaPosicao {
-  const categoria = params.get('categoria')
   return {
     busca: (params.get('busca') ?? '').trim(),
     status: umDe(STATUS_POSICAO, params.get('status')) ?? FILTROS_PADRAO_DA_POSICAO.status,
-    categoria: categoria !== null && UUID.test(categoria) ? categoria : null,
+    categoria: uuidsUnicos(params.getAll('categoria'), MAXIMO_CATEGORIAS_NO_FILTRO),
     situacao: algunsDe(SITUACOES_POSICAO, params.getAll('situacao')),
     ordem: umDe(ORDENS_POSICAO, params.get('ordem')) ?? FILTROS_PADRAO_DA_POSICAO.ordem,
     pagina: lerPagina(params.get('pagina')),
@@ -47,8 +45,8 @@ function escreverFiltros(filtros: FiltrosDaPosicao): URLSearchParams {
   if (filtros.status !== FILTROS_PADRAO_DA_POSICAO.status) {
     params.set('status', filtros.status)
   }
-  if (filtros.categoria) {
-    params.set('categoria', filtros.categoria)
+  for (const categoria of filtros.categoria) {
+    params.append('categoria', categoria)
   }
   for (const situacao of filtros.situacao) {
     params.append('situacao', situacao)
@@ -66,7 +64,7 @@ function escreverFiltros(filtros: FiltrosDaPosicao): URLSearchParams {
 function contarFiltros(filtros: FiltrosDaPosicao): number {
   return [
     filtros.status !== FILTROS_PADRAO_DA_POSICAO.status,
-    filtros.categoria !== FILTROS_PADRAO_DA_POSICAO.categoria,
+    filtros.categoria.length > 0,
     filtros.situacao.length > 0,
   ].filter(Boolean).length
 }
@@ -74,8 +72,8 @@ function contarFiltros(filtros: FiltrosDaPosicao): number {
 const CAMPOS = Object.keys(FILTROS_PADRAO_DA_POSICAO) as (keyof FiltrosDaPosicao)[]
 
 /**
- * Estado da posicao de estoque guardado na URL (`?busca=&status=&categoria=
- * &situacao=&situacao=&ordem=&pagina=`, a situacao repetida por valor), com
+ * Estado da posicao de estoque guardado na URL (`?busca=&status=&categoria=&categoria=
+ * &situacao=&situacao=&ordem=&pagina=`, categoria e situacao repetidas por valor), com
  * as mesmas regras da lista de produtos: mudar qualquer coisa alem da pagina
  * volta para a 1; a busca substitui a
  * entrada do historico; alterar sem mudanca real nao mexe na URL.
@@ -92,6 +90,7 @@ export function useFiltrosDaPosicao() {
         busca: (parcial.busca ?? filtros.busca).trim(),
         // Na ordem da lista e sem repetidos, como a URL guarda: a comparacao abaixo e pelo conteudo.
         situacao: algunsDe(SITUACOES_POSICAO, parcial.situacao ?? filtros.situacao),
+        categoria: uuidsUnicos(parcial.categoria ?? filtros.categoria, MAXIMO_CATEGORIAS_NO_FILTRO),
       }
       const mudou = CAMPOS.filter((campo) => !mesmoValor(pedido[campo], filtros[campo]))
       if (mudou.length === 0) {

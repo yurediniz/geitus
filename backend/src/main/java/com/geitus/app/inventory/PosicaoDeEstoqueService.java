@@ -62,7 +62,7 @@ public class PosicaoDeEstoqueService {
         Long empresaId = resolvedor.resolver(idUsuario).empresaId();
         CategoriaArvore categorias = categoriaService.arvoreDaEmpresa(empresaId);
         FiltroDeProdutos filtro = filtro(empresaId, parametros.busca(), parametros.status(),
-                categorias.idsDoFiltro(parametros.categoria()));
+                categorias.idsDoFiltro(parametros.categorias()));
         PaginaDeIds pagina = consulta.buscar(filtro, parametros.situacao(), parametros.ordem(), parametros.pagina(),
                 parametros.tamanho());
         return new PaginaResponse<>(linhas(empresaId, pagina.ids(), categorias), parametros.pagina(),
@@ -75,7 +75,7 @@ public class PosicaoDeEstoqueService {
         Long empresaId = resolvedor.resolver(idUsuario).empresaId();
         CategoriaArvore categorias = categoriaService.arvoreDaEmpresa(empresaId);
         return ResumoDaPosicaoResponse.de(consulta.resumir(filtro(empresaId, parametros.busca(), parametros.status(),
-                categorias.idsDoFiltro(parametros.categoria()))));
+                categorias.idsDoFiltro(parametros.categorias()))));
     }
 
     /** Mesma montagem da busca da listagem de produtos, sem filtro de estoque nem promocao. */

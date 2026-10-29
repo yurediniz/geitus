@@ -68,7 +68,8 @@ public class ProdutoController {
                     + "palavra, ate 5, em qualquer ordem) ou por parte de qualquer codigo de barras; um termo so "
                     + "de digitos tambem encontra o produto pelo numero ou pelo codigo do produto, sem zeros a "
                     + "esquerda (\"0542\" = 542). Filtros "
-                    + "combinados com E; categoria de outra empresa ou inexistente devolve pagina vazia. Valor "
+                    + "combinados com E; varias categorias se combinam com OU (ate 20), e as de outra empresa ou "
+                    + "inexistentes sao ignoradas (nenhuma valida devolve pagina vazia). Valor "
                     + "invalido em status, estoque, ordem, promocao, pagina ou tamanho responde 400. Pagina alem "
                     + "do fim devolve itens vazio com o totalItens real.",
             security = @SecurityRequirement(name = "bearer-jwt"))
@@ -82,8 +83,10 @@ public class ProdutoController {
             @Parameter(description = "Status dos produtos",
                     schema = @Schema(allowableValues = { "ativos", "inativos", "todos" }, defaultValue = "ativos"))
             @RequestParam(required = false) String status,
-            @Parameter(description = "UUID da categoria; inclui as subcategorias")
-            @RequestParam(required = false) UUID categoria,
+            @Parameter(description = "UUIDs das categorias, combinadas com OU (parametro repetido ou separado "
+                    + "por virgula, ate 20); cada uma inclui as subcategorias",
+                    array = @ArraySchema(schema = @Schema(type = "string", format = "uuid"), maxItems = 20))
+            @RequestParam(required = false) List<UUID> categoria,
             @Parameter(description = "Situacoes do estoque, combinadas com OU (parametro repetido ou separado "
                     + "por virgula): negativo, zerado, baixo, reposicao, regular ou alto; so produtos que "
                     + "controlam estoque",

@@ -25,6 +25,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.geitus.app.catalog.ProdutoService;
+import com.geitus.app.catalog.categoria.CategoriaService;
+import com.geitus.app.catalog.categoria.dto.CategoriaRequest;
 import com.geitus.app.catalog.dto.EmbalagemRequest;
 import com.geitus.app.catalog.dto.ProdutoResponse;
 
@@ -70,6 +72,9 @@ class PosicaoDeEstoqueIT {
 
     @Autowired
     private PosicaoDeEstoqueService posicaoService;
+
+    @Autowired
+    private CategoriaService categoriaService;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -171,6 +176,46 @@ class PosicaoDeEstoqueIT {
     }
 
     @Test
+    void variasCategoriasNaPosicaoENoResumo() throws Exception {
+        CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
+        CenarioDeEstoque.EmpresaDeTeste outra = cenario.novaEmpresa();
+        UUID racao = categoria(empresa, "Ração", null);
+        UUID umida = categoria(empresa, "Úmida", racao);
+        UUID bebidas = categoria(empresa, "Bebidas", null);
+        UUID daOutra = categoria(outra, "Ração", null);
+        naCategoria(cenario.novoProduto(empresa, "UN", "Ração seca"), racao);
+        UUID sache = cenario.novoProduto(empresa, "UN", "Sachê");
+        naCategoria(sache, umida);
+        saldo(sache, "-1");
+        naCategoria(cenario.novoProduto(empresa, "UN", "Água"), bebidas);
+        cenario.novoProduto(empresa, "UN", "Sem categoria");
+        String token = cenario.token(empresa.admin());
+
+        mockMvc.perform(get(POSICAO).param("categoria", racao.toString(), bebidas.toString())
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItens").value(3));
+        mockMvc.perform(get(POSICAO).param("categoria", racao + "," + umida).header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalItens").value(2));
+        mockMvc.perform(get(RESUMO).param("categoria", racao.toString(), bebidas.toString())
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.produtos").value(3))
+                .andExpect(jsonPath("$.negativos").value(1))
+                .andExpect(jsonPath("$.zerados").value(2));
+        // A de outra empresa no meio e ignorada; so de outra empresa, lista e resumo vazios.
+        mockMvc.perform(get(POSICAO).param("categoria", daOutra.toString(), bebidas.toString())
+                        .header("Authorization", token))
+                .andExpect(jsonPath("$.totalItens").value(1))
+                .andExpect(jsonPath("$.itens[0].nome").value("Água"));
+        mockMvc.perform(get(POSICAO).param("categoria", daOutra.toString()).header("Authorization", token))
+                .andExpect(jsonPath("$.totalItens").value(0));
+        mockMvc.perform(get(RESUMO).param("categoria", daOutra.toString()).header("Authorization", token))
+                .andExpect(jsonPath("$.produtos").value(0));
+    }
+
+    @Test
     void outraEmpresaNaoAparece() throws Exception {
         CenarioDeEstoque.EmpresaDeTeste minha = cenario.novaEmpresa();
         CenarioDeEstoque.EmpresaDeTeste outra = cenario.novaEmpresa();
@@ -203,6 +248,16 @@ class PosicaoDeEstoqueIT {
                 .andExpect(jsonPath("$.campos[0].campo").value("status"));
         mockMvc.perform(get(POSICAO).param("tamanho", "101").header("Authorization", token))
                 .andExpect(status().isBadRequest());
+        String[] vinteEUma = java.util.stream.IntStream.rangeClosed(1, 21)
+                .mapToObj(i -> String.format("00000000-0000-0000-0000-%012d", i))
+                .toArray(String[]::new);
+        mockMvc.perform(get(POSICAO).param("categoria", vinteEUma).header("Authorization", token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("categoria"))
+                .andExpect(jsonPath("$.campos[0].mensagem").value("Escolha até 20 categorias."));
+        mockMvc.perform(get(RESUMO).param("categoria", vinteEUma).header("Authorization", token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.campos[0].campo").value("categoria"));
     }
 
     @Test
@@ -223,6 +278,16 @@ class PosicaoDeEstoqueIT {
         assertThat(posicaoService.listarParaUsuario(empresa.admin(),
                 ParametrosDaPosicao.daRequisicao(null, null, null, null, null, 0, 25)).itens()).hasSize(esperados);
         return estatisticas.getPrepareStatementCount();
+    }
+
+    private UUID categoria(CenarioDeEstoque.EmpresaDeTeste empresa, String nome, UUID pai) {
+        return categoriaService.cadastrarParaUsuario(empresa.admin(), new CategoriaRequest(nome, pai)).id();
+    }
+
+    /** Liga o produto a categoria direto no banco (o cenario cria o produto sem categoria). */
+    private void naCategoria(UUID produto, UUID categoria) {
+        jdbcTemplate.update("UPDATE produtos SET categoria_id = (SELECT id FROM categorias WHERE uuid = ?) WHERE id = ?",
+                categoria, cenario.idInterno(produto));
     }
 
     /** Grava o saldo direto (a posicao so le); a linha pode nao existir ainda. */

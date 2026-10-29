@@ -6,11 +6,12 @@ import { FiltroMultiplo } from '@/components/ui/filtro-multiplo'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
 import { OPCOES_DA_SITUACAO_DO_FILTRO } from '@/features/products/estoque/situacaoDoFiltro'
-import { SeletorCategoria } from '@/features/products/SeletorCategoria'
+import { SeletorCategoriaMultiplo } from '@/features/products/SeletorCategoria'
 import { umDe } from '@/lib/listas'
 import { cn } from '@/lib/utils'
 import type { Categoria } from '@/types/catalogo'
 import {
+  MAXIMO_CATEGORIAS_NO_FILTRO,
   ORDENS_PRODUTOS,
   STATUS_FILTRO,
   type FiltrosDaListaDeProdutos,
@@ -54,8 +55,8 @@ export interface FiltrosProdutosProps {
   aoBuscarAgora: () => void
   buscando: boolean
   categorias: Categoria[]
-  /** Categoria mostrada no seletor: null ("Todas") quando a da URL nao existe mais. */
-  categoriaExibida: string | null
+  /** Categorias mostradas no seletor: so as da URL que ainda existem (vazio = "Todas"). */
+  categoriaExibida: string[]
   /** As categorias nao carregaram: o seletor fica com a da URL e aparece um aviso. */
   erroNasCategorias: boolean
 }
@@ -183,15 +184,15 @@ export function FiltrosProdutos({
 
         <div className="space-y-1.5">
           <Rotulo id={`${id}-categoria-rotulo`}>Categoria</Rotulo>
-          <SeletorCategoria
+          <SeletorCategoriaMultiplo
             id={`${id}-categoria`}
             idRotulo={`${id}-categoria-rotulo`}
             categorias={categorias}
-            valor={categoriaExibida}
+            valores={categoriaExibida}
             onChange={(categoria) => alterar({ categoria })}
-            podeCriar={false}
+            maximo={MAXIMO_CATEGORIAS_NO_FILTRO}
             incluirInativas
-            rotuloSemValor="Todas"
+            rotuloTodos="Todas"
             className={ALTURA_DO_CONTROLE}
           />
           {erroNasCategorias && (
