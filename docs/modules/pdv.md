@@ -1,6 +1,6 @@
 # PDV
 
-> DEC-042 (venda), DEC-044 (busca, catálogo, visual, comprovante). Migration V17. Depende de [Caixa](caixa.md), [Produtos](produtos.md) e do [Estoque](estoque.md). Pendências: DT-041.
+> DEC-042 (venda), DEC-044 (busca, catálogo, visual, comprovante), DEC-045/DEC-046 (devolução de item). Migrations V17 e V19. Depende de [Caixa](caixa.md), [Produtos](produtos.md) e do [Estoque](estoque.md). Pendências: DT-041, DT-042.
 
 ## 1. Objetivo
 
@@ -49,6 +49,14 @@ Vender no balcão com rapidez (scanner, teclado, total sempre visível). O carri
 22. O servidor recalcula preços, descontos, total e troco e relê a etiqueta (ignora a quantidade enviada); produto, embalagem e cliente são buscados na empresa do usuário (de outra → 404 com o campo); o custo não sai em nenhuma resposta; modo cego como no [Caixa](caixa.md).
 23. Configurações › PDV: "Vender sem estoque" (padrão ligado) e "Desconto máximo do operador (%)" (padrão 10,00, 0 a 100, até 2 casas). Todos leem; só ADMIN altera (token e banco); registra quem e quando.
 
+### Devolução de item
+24. **Quem e qual venda:** só o ADMIN (perfil do token e do banco; OPERADOR → 403), porque devolve dinheiro de uma venda de outra sessão. A venda é achada pelo número, de qualquer sessão e data, e precisa estar `CONCLUIDA` (cancelada → 409 "Esta venda foi cancelada e não pode ser devolvida."). Exige o caixa aberto de quem devolve, porque o reembolso sai dele (409 "Abra o caixa para devolver." / em conferência, "Termine o fechamento do caixa antes de devolver."). Sem prazo e sem comprovante de devolução no MVP.
+25. **Linhas:** cada linha da venda é indicada pela `ordem` e entra uma vez só ("Cada linha da venda entra uma vez só."; inexistente: "Esta linha não existe na venda."); ao menos uma ("Escolha ao menos um item para devolver."). Quantidade > 0, até 3 casas, no máximo vendida − já devolvida, na unidade da linha ("Só restam 2 UN para devolver nesta linha."; "Esta linha já foi devolvida."). Fração só em unidade fracionada ("Esta unidade não é fracionada: devolva uma quantidade inteira."); embalagem em número inteiro ("Devolva um número inteiro de embalagens."); etiqueta de balança só a linha inteira ("Item de balança só volta inteiro (1,250 KG).").
+26. **Valor:** a parte proporcional do líquido da linha (bruto − desconto do item − parte do desconto da venda), a centavos e meio para cima, sem passar do que resta. A devolução que zera a linha leva o resto, então a soma das devoluções nunca passa do líquido. O valor pode ser zero (linha de líquido zero): a devolução vai sem reembolso, e informar um reembolso nela dá 400 "Esta devolução não tem valor a reembolsar.".
+27. **Reembolso pela forma original:** um valor por forma que a venda recebeu ("Esta venda não recebeu em PIX."), > 0, cada um até o recebido (no dinheiro, sem o troco) − já devolvido nessa forma ("Em PIX restam R$ 10,00 para devolver."). A soma é igual ao valor ("Distribua R$ 24,90 entre as formas de pagamento."). Em dinheiro não passa da gaveta, com a mensagem do estorno (regra 19). O caixa grava um `DEVOLUCAO` por forma na sessão de quem devolve ([Caixa](caixa.md), regras 7 e 11).
+28. **Destino e estoque:** por linha, "Voltar ao estoque" (padrão) ou "Avariado"; os movimentos estão no [Estoque](estoque.md), seção 6.2. O item que não baixou estoque na venda não gera movimento.
+29. **Depois:** motivo obrigatório, aparado, até 200, e `chave` com a regra do ajuste de estoque (repetida com os mesmos dados → 200 com a devolução gravada; com outros → 409 "Esta operação já foi registrada com outros dados."). A venda continua `CONCLUIDA`, com a situação de devolução calculada (`NENHUMA`, `PARCIAL` ou `TOTAL`), e não pode mais ser cancelada (409 "Esta venda tem devolução e não pode ser cancelada.").
+
 ## 3. Contrato da API
 
 Autenticadas; empresa do JWT. Venda de outra empresa (ou, para o OPERADOR, de sessão de outra pessoa) responde 404, inclusive em `GET /vendas/{id}`.
@@ -61,20 +69,25 @@ Autenticadas; empresa do JWT. Venda de outra empresa (ou, para o OPERADOR, de se
 | `POST /api/pdv/calculo` | todos | 200 com o cálculo e os `erros` por campo; 400 só para corpo malformado |
 | `POST /api/pdv/vendas` | todos | Carrinho + `chave` + `totalEsperado` · 201 / 200 (chave repetida) / 400 / 409 |
 | `GET /api/pdv/vendas` | OPERADOR: próprias sessões · ADMIN: todas | Paginado (20); `sessaoId` (padrão: a atual), `status`, `de`, `ate`, `numero`; sem itens |
-| `GET /api/pdv/vendas/{id}` | dono da sessão ou ADMIN | Itens, pagamentos, cancelamento, `podeCancelar` |
+| `GET /api/pdv/vendas/{id}` | dono da sessão ou ADMIN | Itens, pagamentos, cancelamento, `podeCancelar`, `situacaoDevolucao` e `devolucoes` |
 | `POST /api/pdv/vendas/{id}/cancelamento` | dono da sessão ou ADMIN | `{motivo}` |
+| `GET /api/pdv/devolucoes/venda?numero=` | ADMIN | Venda de qualquer sessão com o disponível por linha (`ordem`, vendido, devolvido, disponível, líquido, valor disponível) e por forma (recebido, devolvido, disponível) e as devoluções; 404 / 409 cancelada |
+| `POST /api/pdv/vendas/{id}/devolucoes` | ADMIN | `{chave, motivo, itens[{ordem, quantidade, destino: ESTOQUE\|AVARIADO}], reembolsos[{forma, valor}]}` · 201 / 200 (chave repetida) / 400 / 404 / 409 |
 | `GET` · `PUT /api/configuracoes/pdv` | todos · ADMIN | |
 
 Carrinho: `itens[{produtoId, embalagemId, quantidade, codigoLido, etiqueta, desconto{tipo: VALOR|PERCENTUAL, valor}}]`, `desconto`, `clienteId`, `pagamentos[{forma, valor}]`. Valores até 10 inteiros e 2 casas; quantidade até 9 e 3 casas. Erros por campo: `itens[i].quantidade`, `itens[i].desconto`, `itens[i]`, `desconto`, `pagamentos`, `pagamentos[i].valor`, `clienteId`, `motivo`.
+
+Devolução: o detalhe da venda ganha `situacaoDevolucao` e `devolucoes[{id, vendaId, vendaNumero, valor, motivo, criadaEm, usuarioNome, itens[{ordem, nome, quantidade, unidade, valor, destino}], reembolsos[{forma, valor}]}]` (a lista não traz, DT-042). Erros por campo: `itens`, `itens[i].ordem`, `itens[i].quantidade`, `itens[i].destino`, `reembolsos`, `reembolsos[i].forma`, `reembolsos[i].valor`, `motivo`, `chave`.
 
 ## 4. Dados
 
 - **V17:** `vendas` (número e chave únicos por empresa; `CHECK` dos totais; só `CONCLUIDA → CANCELADA`, sem `DELETE`; FK que obriga o vendedor a ser o dono da sessão), `itens_venda` e `pagamentos_venda` (imutáveis; um pagamento por forma), `configuracoes_pdv`. Item → produto com FK `RESTRICT`.
 - **Conferência no commit** (constraint trigger deferida): ao menos um item; somas dos itens = totais; pagamentos − troco = total; troco ≤ dinheiro.
-- **Estoque:** motivo `CANCELAMENTO_VENDA`; movimento ligado ao item (`item_venda_id`, único por item e motivo); movimentos de venda imutáveis; o `CHECK` de saldo saiu de `estoque_saldos` e virou `saldo_novo >= 0 OR motivo = 'VENDA' OR tipo = 'ENTRADA'` em `movimentos_estoque`.
+- **Estoque:** motivo `CANCELAMENTO_VENDA`; movimento ligado ao item (`item_venda_id`, único por item e motivo); movimentos de venda imutáveis; o `CHECK` de saldo saiu de `estoque_saldos` e virou `saldo_novo >= 0 OR motivo = 'VENDA' OR tipo = 'ENTRADA'` em `movimentos_estoque` (a V19 acrescenta a saída do avariado da devolução).
 - **Caixa:** forma, recebimento, estorno e contagem por forma (ver [Caixa](caixa.md)).
 - **Gatilhos de coerência:** recebimento igual ao pagamento da venda; baixa igual à quantidade de estoque do item; venda só entra e só é cancelada com a sessão aberta (`FOR SHARE`); o cancelamento só fecha no commit com o estorno de todos os recebimentos.
 - **Ordem de travas:** sessão → produtos por `id` → saldos (renomear marca também trava produtos por `id`).
+- **V19 (devolução):** `devolucoes` (venda, sessão de caixa de quem devolve, usuário, motivo, chave única por empresa, valor, `TIMESTAMPTZ`) e `itens_devolucao` (item da venda, quantidade, quantidade de estoque, valor, destino), ambas imutáveis. A aplicação trava a venda (`FOR UPDATE`) antes de devolver. Gatilhos na inserção: soma devolvida ≤ vendida por item, com o valor até o líquido e o resto na devolução que zera a linha; entrada de estoque = quantidade de estoque do item da devolução. **Conferência no commit** (deferida): ao menos um item; soma dos itens = valor; reembolsos = valor; todo item que baixou estoque tem a entrada (e, no avariado, a saída).
 
 ## 5. Telas
 
@@ -87,9 +100,10 @@ Carrinho: `itens[{produtoId, embalagemId, quantidade, codigoLido, etiqueta, desc
 - **Concluída:** "Venda nº 128 concluída · Troco R$ 5,00", carrinho vazio, foco no campo, sem tela intermediária, "Imprimir comprovante" (F9); nada imprime sozinho.
 - **Comprovante não fiscal** (80 mm, impressão do navegador): dados da empresa, "DOCUMENTO NÃO FISCAL", itens (quantidade × unitário, valor, desconto), totais, descontos, formas, troco, consumidor (ou "CONSUMIDOR NÃO IDENTIFICADO"), nº, data, ponto, operador e o aviso de que não substitui a nota. Cancelada: "*** VENDA CANCELADA ***".
 - **F7:** hora, itens, total, Retomar e Descartar (com confirmação). **F8:** vendas da sessão (nº, hora, cliente, formas, troco, total, situação), "Carregar mais", busca por número; detalhe com reimpressão e "Cancelar venda" com motivo.
+- **Devolução (ADMIN), no F8:** com um número digitado, "Abrir a venda nº X de qualquer caixa" (404: "Nenhuma venda nº X na empresa."). No detalhe da venda concluída com algo a devolver, "Devolver itens": uma linha por item ("Vendido 5 UN · devolvido 1 UN · restam 4 UN", linha esgotada sem campo), quantidade (na etiqueta, "Não devolver"/"Tudo") com o foco na primeira, destino "Voltar ao estoque"/"Avariado (não volta)" e o valor previsto; o reembolso por forma ("Dinheiro · até R$ 89,70"), já distribuído na ordem das formas e editável ("Distribuir sozinho de novo"); motivo. Rodapé fixo com "Total da devolução", o aviso do reembolso ("faltam"/"sobram"), o erro do envio e o botão que diz o que acontece ("Devolver R$ 29,90 em dinheiro e registrar 1 UN como avariado", somando as linhas da mesma unidade). Depois: "Devolução da venda nº 8 registrada. Devolva ao cliente R$ 29,90 em dinheiro." e o detalhe com a seção "Devoluções" (data, quem, motivo, itens, "(avariado)" e o devolvido por forma), também na janela da venda da área Estoque.
 - **Configurações › PDV:** "Quando ligado, a venda passa mesmo sem saldo e o estoque fica negativo até o ajuste." e "Acima disso, só administradores dão desconto. Nenhum desconto passa do preço mínimo do produto."
 
 ## 6. Fora do escopo e pendências
 
-- Fora: TEF, devolução após o fechamento, parcelas, crediário/a prazo, vale/voucher/crédito em loja, link de pagamento, PIX dividido, NSU, orçamento, autorização do ADMIN no balcão, "Montar 1 CX + 1 UN?", PDV offline (a calculadora já está isolada), registro de itens removidos, espera em outro computador, filtro por espécie e por ponto no F8, NFC-e.
-- Pendências: [DT-041](../technical-debt.md).
+- Fora: TEF, comprovante e prazo de devolução, troca com nova venda vinculada, parcelas, crediário/a prazo, vale/voucher/crédito em loja, link de pagamento, PIX dividido, NSU, orçamento, autorização do ADMIN no balcão, "Montar 1 CX + 1 UN?", PDV offline (a calculadora já está isolada), registro de itens removidos, espera em outro computador, filtro por espécie e por ponto no F8, NFC-e.
+- Pendências: [DT-041](../technical-debt.md); DT-042 (situação de devolução na lista do F8).

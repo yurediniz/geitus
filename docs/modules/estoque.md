@@ -1,8 +1,6 @@
 # Estoque
 
-> Decisões: DEC-034 (estoque básico), DEC-038 (custo pela última entrada), DEC-037 (ajuste por embalagem), DEC-039 (fornecedor na compra), DEC-042 (baixa e estorno pela venda), DEC-045 (etapa 12: posição, movimentações e devolução). Pacote `inventory`. Migrations V9, V12, V13, V14, V17 e V18.
-
-> O que está marcado **(etapa 12)** ainda não foi implementado. A marca sai quando a fatia é entregue.
+> Decisões: DEC-034 (estoque básico), DEC-038 (custo pela última entrada), DEC-037 (ajuste por embalagem), DEC-039 (fornecedor na compra), DEC-042 (baixa e estorno pela venda), DEC-045 (etapa 12: posição, movimentações e devolução), DEC-046 (devolução de item). Pacote `inventory`. Migrations V9, V12, V13, V14, V17, V18 e V19.
 
 ## 1. Objetivo
 
@@ -33,7 +31,7 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
    | Entrada | `COMPRA` (Compra/recebimento), `DEVOLUCAO_CLIENTE`, `OUTRO` |
    | Saída | `PERDA_AVARIA`, `VENCIDO`, `USO_INTERNO`, `DEVOLUCAO_FORNECEDOR`, `OUTRO` |
    | Contagem | `CONTAGEM` (Contagem/inventário), `OUTRO` |
-   | Só do sistema | `ESTOQUE_INICIAL` (cadastro), `VENDA` e `CANCELAMENTO_VENDA` (PDV) |
+   | Só do sistema | `ESTOQUE_INICIAL` (cadastro), `VENDA`, `CANCELAMENTO_VENDA` e `DEVOLUCAO_VENDA` (PDV) |
 
    Motivo de outro tipo dá 400 "Este motivo não vale para o tipo de movimento escolhido.", e motivo do sistema num ajuste dá 400 "Este motivo é registrado só pelo sistema.". A observação é opcional, com até 200 caracteres, e obrigatória em `OUTRO` ("Descreva o motivo.").
 7. **Ajuste por embalagem** (Entrada e Saída, produto com embalagem):
@@ -93,8 +91,8 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
 **Venda** (regras completas no [PDV](pdv.md))
 
 19. A venda grava uma `SAIDA`/`VENDA` por item que controla estoque, ligada ao item. O cancelamento grava a `ENTRADA`/`CANCELAMENTO_VENDA` correspondente, com a mesma quantidade. São no máximo uma baixa e um estorno por item, de origem `VENDA`, sem chave própria (a idempotência é a da venda).
-20. **O saldo só fica negativo por venda** (com "Vender sem estoque" ligada). Uma entrada nunca é recusada por saldo negativo, porque não piora o saldo.
-21. Os movimentos de origem `VENDA` não podem ser alterados nem apagados.
+20. **O saldo só fica negativo por venda** (com "Vender sem estoque" ligada); a saída do avariado na devolução só devolve o saldo a onde estava (seção 6.2). Uma entrada nunca é recusada por saldo negativo, porque não piora o saldo.
+21. Os movimentos de origem `VENDA` e `DEVOLUCAO` não podem ser alterados nem apagados.
 
 **Posição de estoque**
 
@@ -115,7 +113,7 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
    - `de` maior que `ate` dá 400 "A data inicial deve ser anterior à final.".
    - Um período maior que 366 dias dá 400 "O período pode ter no máximo 1 ano.".
    - Motivo de outro tipo não dá erro: a lista volta vazia.
-27. O movimento de venda, cancelamento ou devolução traz o número da venda. Para o ADMIN, o número abre a venda numa janela, só leitura (itens, pagamentos e cancelamento); para o OPERADOR fica como texto, porque o detalhe só atende o dono do caixa ou o ADMIN.
+27. O movimento de venda, cancelamento ou devolução traz o número da venda. Para o ADMIN, o número abre a venda numa janela, só leitura (itens, pagamentos, cancelamento e devoluções); para o OPERADOR fica como texto, porque o detalhe só atende o dono do caixa ou o ADMIN.
 
 ## 3. Contrato da API
 
@@ -163,7 +161,7 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
   - gatilhos: a baixa tira exatamente a quantidade de estoque do item, o estorno devolve exatamente a baixa, e o movimento de venda é imutável.
 - A posição não cria tabela: lê `estoque_saldos` com o produto, com a mesma busca da listagem de produtos.
 - **V18:** índice `(empresa_id, criado_em DESC, id DESC)` em `movimentos_estoque`, para as movimentações sem filtro de produto.
-- **V19 (etapa 12, devolução):** ver a seção 6.
+- **V19 (devolução):** origem `DEVOLUCAO` com `item_devolucao_id` (FK para o item da devolução), motivo `DEVOLUCAO_VENDA` (só `ENTRADA`); no avariado, a saída `PERDA_AVARIA` de origem `DEVOLUCAO`, que pode deixar o saldo negativo (exceção na CHECK de saldo da V17). Gatilhos: a entrada é igual à quantidade de estoque do item da devolução, e os movimentos de devolução são imutáveis. As tabelas da devolução estão no [PDV](pdv.md).
 - `criado_em` dos movimentos é `TIMESTAMP` sem fuso (V9, [DT-030](../technical-debt.md)). O filtro por dia usa o mesmo relógio que grava a coluna.
 
 ## 5. Telas
@@ -182,7 +180,7 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
 - **Listagem:** "12 UN" com selo "Estoque baixo"/"Sem estoque"; "—" sem controle.
 - **Área Estoque:** item "Estoque" no menu, depois de Produtos, na rota `/estoque`, aberta a qualquer usuário (o OPERADOR lê, sem ações). Abas **Posição** e **Movimentações**, com a aba na URL (`?aba=movimentacoes`; sem ela, a Posição); trocar de aba começa com os filtros da aba de destino limpos.
   - **Posição:** cards do resumo no topo ("Sem estoque 4", "Estoque baixo 12", "Negativos 2", "Valor em estoque R$ 18.430,00 a custo"), e clicar num card aplica o filtro; o valor mostra "3 produtos sem custo ficam fora" quando houver. Os filtros de situação dizem o que incluem ("Sem estoque (zerado ou negativo)", "Baixo ou sem estoque", "Negativo"). Abaixo vêm a busca, os filtros e "Ordenar por", tudo na URL. Tabela a partir de 1.024 px e cards abaixo, no padrão da lista de produtos, com nome (abre o produto), saldo com conversão, selo da situação ("Negativo" em vermelho), níveis, custo e valor. Ações (só ADMIN): "Ajustar" abre o ajuste na Entrada e, no negativo, "Regularizar" abre na Contagem; daqui o modal não traz embalagens nem o fornecedor da última compra (como na lista de produtos). Sucesso com o nome do produto e o resumo do ajuste. Depois de um ajuste a linha e o resumo recarregam. Lista vazia: "Nenhum produto controla estoque ainda." ou "Nenhum produto neste filtro.".
-  - **Movimentações:** período com os atalhos Hoje · 7 dias · 30 dias (o padrão) e as datas, produto (busca por nome, código, EAN, SKU ou Nº; vindo da URL, o nome é carregado, e o produto que não existe mais sai do filtro com aviso), tipo, motivo (só os do tipo escolhido, os do sistema incluídos) e usuário (só ADMIN, com os inativos marcados), tudo na URL; período invertido ou maior que 1 ano mostra o erro no filtro e não consulta. A linha traz o produto (abre a página dele), tipo · motivo, data e hora, usuário, "Venda nº 123" quando houver, fornecedor, observação, "−2 UN" e "12 → 10". "Carregar mais" no fim; lista vazia com filtro oferece "Limpar filtros".
+  - **Movimentações:** período com os atalhos Hoje · 7 dias · 30 dias (o padrão) e as datas, produto (busca por nome, código, EAN, SKU ou Nº; vindo da URL, o nome é carregado, e o produto que não existe mais sai do filtro com aviso), tipo, motivo (só os do tipo escolhido, os do sistema incluídos) e usuário (só ADMIN, com os inativos marcados), tudo na URL; período invertido ou maior que 1 ano mostra o erro no filtro e não consulta. A linha traz o produto (abre a página dele), tipo · motivo ("Saída · Avariado na devolução" na saída do avariado), data e hora, usuário, "Venda nº 123" quando houver, fornecedor, observação, "−2 UN" e "12 → 10". "Carregar mais" no fim; lista vazia com filtro oferece "Limpar filtros".
 
 ## 6. Requisitos vindos do PDV
 
@@ -190,29 +188,14 @@ Ajustes do PDV que dependem do estoque, decididos em 2026-10-26 (DEC-045).
 
 **6.1 Saldo negativo a regularizar.** Com "Vender sem estoque" ligada, a venda pode deixar o saldo negativo (regra 20). A posição mostra esses produtos (filtro, card e selo) e o atalho para corrigir (regra 25).
 
-**6.2 Devolução de item** (etapa 12, última fatia). Hoje o cancelamento só vale com o caixa da venda aberto e manda usar a devolução. Na entrega, as regras de venda e de caixa passam para o [pdv.md](pdv.md) e o [caixa.md](caixa.md), e aqui ficam só as de estoque.
+**6.2 Devolução de item** (DEC-046). As regras de venda, valor e reembolso estão no [PDV](pdv.md) (regras 24 a 29) e as do caixa no [Caixa](caixa.md) (regras 7 e 11). Aqui ficam as de estoque.
 
-1. **Venda:** só `CONCLUIDA`, de qualquer data e sessão, encontrada pelo número. Exige o caixa aberto de quem devolve, porque o reembolso sai dele. Motivo obrigatório (aparado, até 200) e `chave` de idempotência com a mesma regra do ajuste (regra 18).
-2. **Quantidade por linha:** > 0 e ≤ vendida − já devolvida, na unidade da linha ("Só restam 2 UN para devolver nesta linha."), com a regra de fração da unidade. Linha de embalagem devolve número inteiro de embalagens; linha de etiqueta de balança, só a linha inteira.
-3. **Valor:** a parte proporcional do líquido da linha (bruto − desconto do item − parte do desconto da venda), a centavos e meio para cima. A devolução que zera a linha leva o resto, e a soma das devoluções nunca passa do líquido.
-4. **Reembolso pela forma original:** o usuário distribui o valor entre as formas que a venda recebeu (com uma forma só, ela já vem preenchida). Cada forma vai no máximo até o recebido menos o já devolvido, sem contar o troco no dinheiro. A soma é igual ao valor da devolução. Reembolso em dinheiro não passa da gaveta, com a mesma mensagem do cancelamento.
-5. **Caixa:** um movimento `DEVOLUCAO` por forma reembolsada, na sessão aberta, ligado à venda e à devolução, que sai do esperado da forma. No débito, no crédito e no PIX o estorno é feito na maquininha ou no banco e só registrado aqui, então o esperado da sessão nessas formas pode ficar negativo.
-6. **Estoque:** para cada linha cujo item baixou estoque na venda, uma `ENTRADA`/`DEVOLUCAO_VENDA` (novo motivo, só do sistema, origem nova `DEVOLUCAO`) com a quantidade de estoque devolvida, ligada ao item da devolução. O destino é escolhido por linha:
-   - **Volta ao estoque** (padrão): só a entrada;
-   - **Avariado:** a entrada e, logo depois, uma `SAIDA`/`PERDA_AVARIA` de origem `DEVOLUCAO` com a mesma quantidade. O saldo termina onde estava, mesmo que negativo (exceção nova na CHECK de saldo da V17).
-
-   Item que não baixou estoque na venda não gera movimento. O custo, a origem do custo e o fornecedor do produto não mudam. Os movimentos de origem `DEVOLUCAO` são imutáveis, como os de venda.
-7. **Venda depois da devolução:** continua `CONCLUIDA`, com a situação de devolução calculada (nenhuma, parcial ou total). Venda com devolução não pode mais ser cancelada ("Esta venda tem devolução e não pode ser cancelada.").
-8. **Dados (V19):**
-   - `devolucoes` (venda, sessão de caixa, usuário, motivo, chave única por empresa, valor, `TIMESTAMPTZ`) e `itens_devolucao` (item da venda, quantidade, quantidade de estoque, valor, destino), ambas imutáveis;
-   - gatilhos garantem: soma devolvida ≤ vendida por item; entrada = quantidade de estoque do item da devolução; reembolsos = valor da devolução.
-9. **API:**
-   - `GET /api/pdv/devolucoes/venda?numero=` traz a venda com o disponível por linha e por forma;
-   - `POST /api/pdv/vendas/{id}/devolucoes` com `{ chave, motivo, itens: [{ itemId, quantidade, destino }], reembolsos: [{ forma, valor }] }` responde 201 (ou 200 na chave repetida) e 400/404/409;
-   - o detalhe da venda ganha `devolucoes[]` e a situação de devolução.
-10. **Tela:** "Devolver itens" no detalhe da venda (F8) e uma busca de venda por número para as vendas de outras sessões. Quantidade e destino por linha, prévia do valor e das formas, e confirmação que diz o que vai acontecer ("Devolver R$ 24,90 em dinheiro e voltar 3 UN ao estoque").
-11. **Perfil e limites:** só o ADMIN devolve (perfil do banco; o OPERADOR recebe 403), porque devolve dinheiro de uma venda de outra sessão. Não há prazo de devolução nem comprovante de devolução no MVP.
-12. **Para depois:** o Financeiro registra a saída da devolução (requisito na spec do Financeiro), e o **crédito em loja** entra como mais um destino do reembolso, com spec própria (junto com o Financeiro ou com Clientes).
+1. **Entrada:** para cada linha devolvida cujo item baixou estoque na venda, uma `ENTRADA`/`DEVOLUCAO_VENDA` (motivo só do sistema, origem `DEVOLUCAO`) com a quantidade de estoque devolvida (quantidade × quantidade da embalagem), ligada ao item da devolução. Item que não baixou estoque na venda não gera movimento.
+2. **Destino por linha:**
+   - **Voltar ao estoque** (padrão): só a entrada;
+   - **Avariado:** a entrada e, logo depois, uma `SAIDA`/`PERDA_AVARIA` de origem `DEVOLUCAO` com a mesma quantidade. O saldo termina onde estava, mesmo que negativo. Na tela, essa saída aparece como "Saída · Avariado na devolução", e o filtro de motivo continua em "Perda/avaria".
+3. O custo, a origem do custo e o fornecedor do produto não mudam. Os movimentos de origem `DEVOLUCAO` são imutáveis, como os de venda, e trazem o número da venda (regra 27).
+4. O **crédito em loja** e a saída da devolução no Financeiro ficam para depois (spec do Financeiro ou de Clientes).
 
 ## 7. Fora do escopo e pendências
 
