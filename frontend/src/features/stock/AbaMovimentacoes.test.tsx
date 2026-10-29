@@ -199,9 +199,11 @@ describe('Aba Movimentações', () => {
     vi.mocked(listarCategorias).mockResolvedValue([])
     vi.mocked(buscarResumoDaPosicao).mockResolvedValue({
       produtos: 0,
-      semEstoque: 0,
-      baixo: 0,
       negativos: 0,
+      zerados: 0,
+      baixo: 0,
+      reposicao: 0,
+      alto: 0,
       valorTotalEmCusto: 0,
       semCusto: 0,
     })

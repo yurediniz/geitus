@@ -29,11 +29,21 @@ export type MotivoMovimento =
 export type OrigemMovimento = 'AJUSTE_MANUAL' | 'CADASTRO' | 'VENDA' | 'DEVOLUCAO'
 
 /**
- * Situacao do saldo calculada pelo backend (so com o controle ligado):
- * SEM_ESTOQUE com saldo <= 0; BAIXO com saldo <= ponto de reposicao (ou <=
- * estoque minimo, sem ponto); NORMAL nos demais casos.
+ * Situacao do saldo calculada pelo backend (so com o controle ligado; spec de
+ * Estoque, regra 16), a primeira que valer: NEGATIVO (saldo < 0), ZERADO
+ * (saldo = 0), BAIXO (saldo <= minimo), REPOSICAO (saldo <= ponto de
+ * reposicao), ALTO (saldo > maximo) e REGULAR nos demais casos. Cada nivel so
+ * vale com o campo preenchido.
  */
-export type SituacaoEstoque = 'NORMAL' | 'BAIXO' | 'SEM_ESTOQUE'
+export type SituacaoEstoque = 'NEGATIVO' | 'ZERADO' | 'BAIXO' | 'REPOSICAO' | 'REGULAR' | 'ALTO'
+
+/**
+ * Filtro de situacao, o mesmo na posicao de estoque (`situacao`) e na lista de
+ * produtos (`estoque`): `repor` junta negativo, zerado, baixo e reposicao; os
+ * demais valem uma situacao cada.
+ */
+export const SITUACOES_DO_FILTRO = ['repor', 'negativo', 'zerado', 'baixo', 'reposicao', 'regular', 'alto'] as const
+export type SituacaoDoFiltro = (typeof SITUACOES_DO_FILTRO)[number]
 
 /** Movimento gravado (resposta do ajuste e item da lista de movimentos). */
 export interface MovimentoEstoque {
@@ -102,9 +112,9 @@ export interface AjusteEstoqueRequest {
   fornecedorId?: string
 }
 
-/** Filtro de situacao da posicao de estoque: `baixo` inclui os sem estoque e `negativo` esta contido em `sem`. */
-export const SITUACOES_POSICAO = ['sem', 'baixo', 'negativo'] as const
-export type SituacaoDaPosicao = (typeof SITUACOES_POSICAO)[number]
+/** Filtro de situacao da posicao de estoque (o mesmo da lista de produtos). */
+export const SITUACOES_POSICAO = SITUACOES_DO_FILTRO
+export type SituacaoDaPosicao = SituacaoDoFiltro
 
 /** Ordens da posicao de estoque (com `-` = decrescente); sem valor fica sempre no fim. */
 export const ORDENS_POSICAO = ['nome', '-nome', 'saldo', '-saldo', 'valor', '-valor'] as const
@@ -147,12 +157,14 @@ export interface PosicaoDeEstoque {
   embalagemPrincipal: { sigla: string; quantidade: number } | null
 }
 
-/** `GET /api/estoque/posicao/resumo` (regra 24): busca, categoria e status, sem a situacao. */
+/** `GET /api/estoque/posicao/resumo` (regra 24): busca, categoria e status, sem a situacao; contagens exclusivas. */
 export interface ResumoDaPosicao {
   produtos: number
-  semEstoque: number
-  baixo: number
   negativos: number
+  zerados: number
+  baixo: number
+  reposicao: number
+  alto: number
   valorTotalEmCusto: number
   /** Com saldo > 0 e sem custo: ficam fora do valor total. */
   semCusto: number

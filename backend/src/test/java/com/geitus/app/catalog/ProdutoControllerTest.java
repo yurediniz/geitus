@@ -306,7 +306,7 @@ class ProdutoControllerTest {
 
     @Test
     void estoqueInvalido_400() throws Exception {
-        mockMvc.perform(get("/api/produtos").param("estoque", "zerado")
+        mockMvc.perform(get("/api/produtos").param("estoque", "sem")
                         .header("Authorization", "Bearer " + tokenParaUsuario(1L)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem").value("Filtro de estoque inválido."))
@@ -1155,7 +1155,7 @@ class ProdutoControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.controlaEstoque").value(true))
                 .andExpect(jsonPath("$.estoqueAtual").value(12.0))
-                .andExpect(jsonPath("$.situacaoEstoque").value("BAIXO"))
+                .andExpect(jsonPath("$.situacaoEstoque").value("REPOSICAO"))
                 .andExpect(jsonPath("$.podeExcluir").value(true));
 
         ArgumentCaptor<ProdutoRequest> request = ArgumentCaptor.forClass(ProdutoRequest.class);

@@ -1,4 +1,4 @@
-import { CircleAlert, CircleMinus, TriangleAlert, Wallet, type LucideIcon } from 'lucide-react'
+import { CircleAlert, CircleMinus, PackagePlus, TrendingUp, TriangleAlert, Wallet, type LucideIcon } from 'lucide-react'
 
 import { formatarMoeda } from '@/features/products/formatacaoProduto'
 import { cn } from '@/lib/utils'
@@ -11,29 +11,22 @@ interface CardDeSituacao {
   Icone: LucideIcon
   /** Cor do icone e do numero quando ha produtos nessa situacao. */
   tom: string
-  /** Os numeros se sobrepoem (regra 24): a linha diz o que o card inclui. */
-  inclui?: string
 }
 
-/** Na ordem da spec (regra 24): sem estoque, baixo (inclui os sem) e negativos (contidos nos sem). */
+/** Na ordem da spec (regra 24); as contagens sao exclusivas (um produto esta em uma situacao so). */
 const CARDS: readonly CardDeSituacao[] = [
-  { situacao: 'sem', titulo: 'Sem estoque', quantidade: (r) => r.semEstoque, Icone: CircleAlert, tom: 'text-destructive' },
+  { situacao: 'negativo', titulo: 'Negativo', quantidade: (r) => r.negativos, Icone: CircleMinus, tom: 'text-destructive' },
+  { situacao: 'zerado', titulo: 'Zerado', quantidade: (r) => r.zerados, Icone: CircleAlert, tom: 'text-destructive' },
+  // Baixo (reserva ja em uso) mais forte que Reposicao (hora de pedir), como nos selos.
+  { situacao: 'baixo', titulo: 'Baixo', quantidade: (r) => r.baixo, Icone: TriangleAlert, tom: 'text-warning' },
   {
-    situacao: 'baixo',
-    titulo: 'Estoque baixo',
-    quantidade: (r) => r.baixo,
-    Icone: TriangleAlert,
+    situacao: 'reposicao',
+    titulo: 'Reposição',
+    quantidade: (r) => r.reposicao,
+    Icone: PackagePlus,
     tom: 'text-warning-soft-foreground',
-    inclui: 'inclui os sem estoque',
   },
-  {
-    situacao: 'negativo',
-    titulo: 'Negativos',
-    quantidade: (r) => r.negativos,
-    Icone: CircleMinus,
-    tom: 'text-destructive',
-    inclui: 'também em Sem estoque',
-  },
+  { situacao: 'alto', titulo: 'Alto', quantidade: (r) => r.alto, Icone: TrendingUp, tom: 'text-info-soft-foreground' },
 ]
 
 function produtosSemCusto(quantidade: number): string {
@@ -49,14 +42,17 @@ export interface CardsDoResumoProps {
 }
 
 /**
- * Cards do resumo da posicao (spec de Estoque, regra 24): tres botoes que ligam
- * e desligam o filtro de situacao (`aria-pressed`) e o valor do estoque a custo.
- * Os numeros valem para a busca, o status e a categoria, sem a situacao.
+ * Cards do resumo da posicao (spec de Estoque, regra 24): cinco botoes
+ * (negativo, zerado, baixo, reposicao e alto) que ligam e desligam o filtro de
+ * situacao (`aria-pressed`) e o valor do estoque a custo. Os numeros valem para
+ * a busca, o status e a categoria, sem a situacao.
  */
 export function CardsDoResumo({ resumo, situacao, aoEscolher }: CardsDoResumoProps) {
   return (
-    // Celular: as tres situacoes numa linha e o valor na linha inteira (o valor em reais nao cabe num terco).
-    <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
+    // Celular: as cinco situacoes em duas linhas de tres e o valor na linha inteira (o valor em reais
+    // nao cabe num terco); a partir de 640 px, o valor ocupa a vaga da segunda linha (grade 3 x 2); a
+    // partir de 1280 px, tudo numa linha, com o valor mais largo.
+    <div className="grid grid-cols-3 gap-2 sm:gap-3 xl:grid-cols-[repeat(5,minmax(0,1fr))_minmax(0,1.5fr)]">
       {CARDS.map((card) => {
         const quantidade = resumo ? card.quantidade(resumo) : null
         const escolhido = situacao === card.situacao
@@ -74,23 +70,26 @@ export function CardsDoResumo({ resumo, situacao, aoEscolher }: CardsDoResumoPro
             )}
           >
             <span className="flex items-start gap-1.5 text-sm text-muted-foreground">
-              <card.Icone className={cn('mt-0.5 h-4 w-4 shrink-0', comAtencao ? card.tom : 'opacity-60')} aria-hidden="true" />
+              {/* No celular o icone sai: "Reposição" nao cabe com ele num terco da tela. */}
+              <card.Icone
+                className={cn('mt-0.5 hidden h-4 w-4 shrink-0 sm:block', comAtencao ? card.tom : 'opacity-60')}
+                aria-hidden="true"
+              />
               {card.titulo}
             </span>
             <span className={cn('text-2xl font-semibold tabular-nums', comAtencao && card.tom)}>
               {quantidade === null ? '—' : quantidade.toLocaleString('pt-BR')}
             </span>
-            {card.inclui && <span className="text-xs text-muted-foreground">{card.inclui}</span>}
           </button>
         )
       })}
 
-      <div className="col-span-3 flex min-w-0 flex-col items-start gap-1 rounded-xl border bg-card p-3 shadow-xs sm:p-4 lg:col-span-1">
+      <div className="col-span-3 flex min-w-0 flex-col items-start gap-1 rounded-xl border bg-card p-3 shadow-xs sm:col-span-1 sm:p-4">
         <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Wallet className="h-4 w-4 opacity-60" aria-hidden="true" />
           Valor em estoque
         </span>
-        <span className="max-w-full text-xl font-semibold break-words tabular-nums xl:text-2xl">
+        <span className="max-w-full text-xl font-semibold break-words tabular-nums 2xl:text-2xl">
           {resumo ? formatarMoeda(resumo.valorTotalEmCusto) : '—'}
         </span>
         <span className="text-xs text-muted-foreground">

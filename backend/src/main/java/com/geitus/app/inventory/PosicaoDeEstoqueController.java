@@ -44,7 +44,8 @@ public class PosicaoDeEstoqueController {
 
     @Operation(summary = "Posicao de estoque dos produtos que controlam estoque",
             description = "Saldo, situacao, niveis, custo e valor em custo, paginados (25 por padrao, ate 100). "
-                    + "Busca e categoria como na listagem de produtos; situacao sem, baixo ou negativo; ordem nome, "
+                    + "Busca e categoria como na listagem de produtos; situacao repor, negativo, zerado, baixo, "
+                    + "reposicao, regular ou alto; ordem nome, "
                     + "saldo ou valor (com - para decrescente).",
             security = @SecurityRequirement(name = "bearer-jwt"))
     @ApiResponses({
@@ -63,7 +64,8 @@ public class PosicaoDeEstoqueController {
             @RequestParam(required = false) String status,
             @Parameter(description = "UUID da categoria; inclui as descendentes")
             @RequestParam(required = false) UUID categoria,
-            @Parameter(description = "sem, baixo ou negativo")
+            @Parameter(description = "repor (negativo, zerado, baixo ou reposicao), negativo, zerado, baixo, "
+                    + "reposicao, regular ou alto")
             @RequestParam(required = false) String situacao,
             @Parameter(description = "nome (padrao), -nome, saldo, -saldo, valor ou -valor")
             @RequestParam(required = false) String ordem,
@@ -77,7 +79,8 @@ public class PosicaoDeEstoqueController {
     }
 
     @Operation(summary = "Resumo da posicao de estoque",
-            description = "Contagens (produtos, sem estoque, baixo, negativos, sem custo) e valor total em custo para "
+            description = "Contagens exclusivas (produtos, negativos, zerados, baixo, reposicao, alto, sem custo) e "
+                    + "valor total em custo para "
                     + "a busca, a categoria e o status, sem o filtro de situacao.",
             security = @SecurityRequirement(name = "bearer-jwt"))
     @ApiResponses({

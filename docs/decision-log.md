@@ -275,3 +275,10 @@ Spec: [`estoque.md`](modules/estoque.md).
 - **Concorrência:** a devolução trava a venda (`FOR NO KEY UPDATE`), o que serializa as devoluções da mesma venda e o cancelamento; a conferência da devolução no commit também dispara quando entra um item ou um reembolso depois.
 
 Spec: [`estoque.md`](modules/estoque.md), seção 6.2.
+
+## DEC-047 — Situação do estoque em seis níveis
+2026-10-29 · Aceita
+- **Níveis:** Negativo (< 0), Zerado (= 0), Baixo (≤ mínimo), Reposição (≤ ponto de reposição), Alto (> máximo) e Regular; vale o primeiro que se aplica, e cada nível só conta com o campo preenchido. Substitui `SEM_ESTOQUE`/`BAIXO`/`NORMAL`: o mínimo é a reserva de segurança e o ponto de reposição é a hora de pedir, e o máximo passa a acender o "Alto" (dinheiro parado).
+- **Filtros:** posição (`situacao`) e listagem de produtos (`estoque`) com os mesmos valores, mais `repor` (negativo, zerado, baixo ou reposição), que ocupa o lugar do antigo `baixo`; `sem` saiu. Os cards da posição passaram a contagens exclusivas.
+
+Spec: [`estoque.md`](modules/estoque.md), regras 16, 23 e 24.

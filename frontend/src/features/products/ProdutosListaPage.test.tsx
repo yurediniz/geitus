@@ -284,7 +284,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('busca vazia com outros filtros cita o termo e os filtros; "Limpar filtros" restaura', async () => {
-      const router = renderLista('/produtos?busca=a%C3%A7%C3%BAcar&estoque=sem&pagina=2')
+      const router = renderLista('/produtos?busca=a%C3%A7%C3%BAcar&estoque=zerado&pagina=2')
 
       const vazio = await estadoVazio('Nenhum produto encontrado para "açúcar" com os filtros escolhidos.')
       expect(within(vazio).queryByRole('button', { name: 'Buscar também nos inativos' })).not.toBeInTheDocument()
@@ -296,7 +296,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('vazio com filtros (sem busca) fala dos filtros escolhidos', async () => {
-      renderLista('/produtos?estoque=sem')
+      renderLista('/produtos?estoque=zerado')
 
       const vazio = await estadoVazio('Nenhum produto encontrado com os filtros escolhidos.')
       expect(within(vazio).getByRole('button', { name: 'Limpar filtros' })).toBeInTheDocument()
@@ -367,7 +367,7 @@ describe('ProdutosListaPage', () => {
       const simples = await linhaDoProduto('Produto Simples')
       expect(within(simples).getByText('Nº 3')).toBeInTheDocument()
       expect(within(simples).getAllByText('—').length).toBeGreaterThanOrEqual(2)
-      expect(within(simples).getByText('Sem estoque')).toBeInTheDocument()
+      expect(within(simples).getByText('Zerado')).toBeInTheDocument()
     })
 
     it('o selo "Inativo" aparece ao lado do nome so nos inativos (tabela e card)', async () => {
@@ -690,7 +690,7 @@ describe('ProdutosListaPage', () => {
 
     it.each([
       ['Status', 'inativos', { status: 'inativos' }, '?status=inativos'],
-      ['Estoque', 'baixo', { estoque: 'baixo' }, '?estoque=baixo'],
+      ['Estoque', 'reposicao', { estoque: 'reposicao' }, '?estoque=reposicao'],
       ['Ordenar por', '-preco', { ordem: '-preco' }, '?ordem=-preco'],
     ] as const)('%s chama a API com o parametro e volta para a pagina 1', async (rotulo, valor, esperado, search) => {
       const router = renderLista('/produtos?pagina=3')
@@ -728,15 +728,24 @@ describe('ProdutosListaPage', () => {
       }
     })
 
-    it('o filtro de estoque diz "Baixo ou sem estoque"', async () => {
+    it('o filtro de estoque tem as situações da posição, com "Repor" primeiro', async () => {
       renderLista()
       await screen.findByRole('searchbox')
 
       const estoque = screen.getByRole('combobox', { name: 'Estoque' })
-      expect(within(estoque).getAllByRole('option').map((opcao) => opcao.textContent)).toEqual([
-        'Todos',
-        'Baixo ou sem estoque',
-        'Sem estoque',
+      expect(
+        within(estoque)
+          .getAllByRole('option')
+          .map((opcao) => [opcao.textContent, (opcao as HTMLOptionElement).value]),
+      ).toEqual([
+        ['Todos', ''],
+        ['Repor (negativo, zerado, baixo ou reposição)', 'repor'],
+        ['Negativo', 'negativo'],
+        ['Zerado', 'zerado'],
+        ['Baixo', 'baixo'],
+        ['Reposição', 'reposicao'],
+        ['Regular', 'regular'],
+        ['Alto', 'alto'],
       ])
     })
 
@@ -791,12 +800,12 @@ describe('ProdutosListaPage', () => {
     })
 
     it('a URL preenche os filtros na tela', async () => {
-      renderLista(`/produtos?busca=arroz&status=todos&categoria=${ID_RACAO}&estoque=sem&promocao=1&ordem=-margem`)
+      renderLista(`/produtos?busca=arroz&status=todos&categoria=${ID_RACAO}&estoque=zerado&promocao=1&ordem=-margem`)
 
       await estadoVazio('Nenhum produto encontrado para "arroz" com os filtros escolhidos.')
       expect(campoBusca()).toHaveValue('arroz')
       expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('todos')
-      expect(screen.getByRole('combobox', { name: 'Estoque' })).toHaveValue('sem')
+      expect(screen.getByRole('combobox', { name: 'Estoque' })).toHaveValue('zerado')
       expect(screen.getByRole('combobox', { name: 'Ordenar por' })).toHaveValue('-margem')
       expect(screen.getByRole('checkbox', { name: 'Só em promoção' })).toBeChecked()
       await waitFor(() => expect(gatilhoCategoria()).toHaveTextContent('Ração'))
@@ -833,7 +842,7 @@ describe('ProdutosListaPage', () => {
     })
 
     it('no celular, "Filtros (n)" abre e fecha o bloco e conta os filtros ativos', async () => {
-      renderLista('/produtos?estoque=sem&promocao=1')
+      renderLista('/produtos?estoque=zerado&promocao=1')
       await screen.findByRole('searchbox')
 
       const alternar = screen.getByRole('button', { name: 'Filtros (2)' })

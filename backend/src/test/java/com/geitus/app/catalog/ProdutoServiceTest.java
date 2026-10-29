@@ -957,12 +957,12 @@ class ProdutoServiceTest {
         consultaDevolve(0);
 
         produtoService.listarParaUsuario(9L,
-                ParametrosDaListagem.daRequisicao(null, "inativos", null, "sem", "true", "-margem", 4, 10));
+                ParametrosDaListagem.daRequisicao(null, "inativos", null, "zerado", "true", "-margem", 4, 10));
 
         ArgumentCaptor<FiltroDeProdutos> filtro = ArgumentCaptor.forClass(FiltroDeProdutos.class);
         verify(consultaDeProdutos).buscar(filtro.capture(), eq(OrdemDeProdutos.MARGEM_DESC), eq(4), eq(10));
         assertThat(filtro.getValue()).isEqualTo(new FiltroDeProdutos(EMPRESA_ID, List.of(), null, null,
-                StatusFiltro.INATIVOS, null, EstoqueFiltro.SEM, true, HOJE_DO_RELOGIO));
+                StatusFiltro.INATIVOS, null, EstoqueFiltro.ZERADO, true, HOJE_DO_RELOGIO));
     }
 
     @Test
@@ -2094,18 +2094,18 @@ class ProdutoServiceTest {
 
         assertThat(resposta.controlaEstoque()).isTrue();
         assertThat(resposta.estoqueAtual()).isEqualByComparingTo("12");
-        assertThat(resposta.situacaoEstoque()).isEqualTo(SituacaoEstoque.BAIXO);
+        assertThat(resposta.situacaoEstoque()).isEqualTo(SituacaoEstoque.REPOSICAO);
     }
 
     @Test
-    void produtoSemMovimentoTemSaldoZeroESemEstoque() {
+    void produtoSemMovimentoTemSaldoZeroEZerado() {
         usuarioAtivoDaEmpresa(9L);
         produtoExistente();
 
         ProdutoResponse resposta = produtoService.buscarPorIdParaUsuario(9L, produtoUuid);
 
         assertThat(resposta.estoqueAtual()).isEqualByComparingTo("0");
-        assertThat(resposta.situacaoEstoque()).isEqualTo(SituacaoEstoque.SEM_ESTOQUE);
+        assertThat(resposta.situacaoEstoque()).isEqualTo(SituacaoEstoque.ZERADO);
     }
 
     @Test

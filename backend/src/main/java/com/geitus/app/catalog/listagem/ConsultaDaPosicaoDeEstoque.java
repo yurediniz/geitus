@@ -27,9 +27,11 @@ public class ConsultaDaPosicaoDeEstoque {
     private static final String IDS = "SELECT p.id";
     private static final String PAGINA = " LIMIT :tamanho OFFSET :deslocamento";
     private static final String RESUMO = "SELECT count(*) AS produtos,"
-            + " count(*) FILTER (WHERE " + SituacaoDaPosicao.SEM_ESTOQUE + ") AS sem_estoque,"
-            + " count(*) FILTER (WHERE " + SituacaoDaPosicao.ESTOQUE_BAIXO + ") AS baixo,"
             + " count(*) FILTER (WHERE " + SituacaoDaPosicao.SALDO_NEGATIVO + ") AS negativos,"
+            + " count(*) FILTER (WHERE " + SituacaoDaPosicao.SALDO_ZERADO + ") AS zerados,"
+            + " count(*) FILTER (WHERE " + SituacaoDaPosicao.ESTOQUE_BAIXO + ") AS baixo,"
+            + " count(*) FILTER (WHERE " + SituacaoDaPosicao.EM_REPOSICAO + ") AS reposicao,"
+            + " count(*) FILTER (WHERE " + SituacaoDaPosicao.ESTOQUE_ALTO + ") AS alto,"
             + " COALESCE(sum(round(s.saldo * p.custo, 2)) FILTER (WHERE " + OrdemDaPosicao.TEM_VALOR + "), 0)"
             + " AS valor_total,"
             + " count(*) FILTER (WHERE p.custo IS NULL AND COALESCE(s.saldo, 0) > 0) AS sem_custo";
@@ -73,8 +75,9 @@ public class ConsultaDaPosicaoDeEstoque {
         }
         MapSqlParameterSource parametros = new MapSqlParameterSource("empresaId", filtro.empresaId());
         return jdbc.queryForObject(RESUMO + origem(filtro, parametros), parametros,
-                (linha, numero) -> new ResumoDaPosicao(linha.getLong("produtos"), linha.getLong("sem_estoque"),
-                        linha.getLong("baixo"), linha.getLong("negativos"),
+                (linha, numero) -> new ResumoDaPosicao(linha.getLong("produtos"), linha.getLong("negativos"),
+                        linha.getLong("zerados"), linha.getLong("baixo"), linha.getLong("reposicao"),
+                        linha.getLong("alto"),
                         linha.getBigDecimal("valor_total").setScale(2, RoundingMode.HALF_UP),
                         linha.getLong("sem_custo")));
     }

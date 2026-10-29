@@ -14,7 +14,8 @@ import com.geitus.app.catalog.RegraDeNegocioException;
 class ParametrosDaPosicaoEnumsTest {
 
     @ParameterizedTest
-    @CsvSource({ "sem,SEM", "baixo,BAIXO", "negativo,NEGATIVO" })
+    @CsvSource({ "repor,REPOR", "negativo,NEGATIVO", "zerado,ZERADO", "baixo,BAIXO", "reposicao,REPOSICAO",
+            "regular,REGULAR", "alto,ALTO" })
     void situacaoDaApi(String parametro, SituacaoDaPosicao esperada) {
         assertThat(SituacaoDaPosicao.doParametro(parametro)).isEqualTo(esperada);
     }
@@ -26,7 +27,7 @@ class ParametrosDaPosicaoEnumsTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = { "SEM", "zerado", "1=1", "normal" })
+    @ValueSource(strings = { "sem", "ZERADO", "1=1", "normal" })
     void situacaoDesconhecida400(String parametro) {
         assertThatThrownBy(() -> SituacaoDaPosicao.doParametro(parametro))
                 .isInstanceOf(RegraDeNegocioException.class)

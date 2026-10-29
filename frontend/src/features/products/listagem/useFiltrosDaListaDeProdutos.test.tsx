@@ -44,14 +44,14 @@ describe('useFiltrosDaListaDeProdutos', () => {
 
   it('le todos os parametros da URL', () => {
     const { hook } = montar(
-      `/produtos?busca=arroz&status=todos&categoria=${CATEGORIA}&estoque=sem&promocao=1&ordem=-margem&pagina=3`,
+      `/produtos?busca=arroz&status=todos&categoria=${CATEGORIA}&estoque=zerado&promocao=1&ordem=-margem&pagina=3`,
     )
 
     expect(hook().filtros).toEqual({
       busca: 'arroz',
       status: 'todos',
       categoria: CATEGORIA,
-      estoque: 'sem',
+      estoque: 'zerado',
       promocao: true,
       ordem: '-margem',
       pagina: 3,
@@ -77,11 +77,11 @@ describe('useFiltrosDaListaDeProdutos', () => {
   })
 
   it('mudar a pagina mantem os filtros e cria entrada no historico', () => {
-    const { router, hook } = montar('/produtos?busca=arroz&estoque=sem')
+    const { router, hook } = montar('/produtos?busca=arroz&estoque=zerado')
 
     act(() => hook().alterar({ pagina: 2 }))
 
-    expect(router.state.location.search).toBe('?busca=arroz&estoque=sem&pagina=2')
+    expect(router.state.location.search).toBe('?busca=arroz&estoque=zerado&pagina=2')
     expect(router.state.historyAction).toBe('PUSH')
   })
 
@@ -142,6 +142,8 @@ describe('useFiltrosDaListaDeProdutos', () => {
     ['pagina=2.5', { pagina: 1 }],
     ['status=qualquer', { status: 'ativos' }],
     ['estoque=muito', { estoque: null }],
+    // O valor antigo (antes dos seis niveis) cai em "sem filtro".
+    ['estoque=sem', { estoque: null }],
     ['promocao=talvez', { promocao: false }],
     ['categoria=nao-e-uuid', { categoria: null }],
     ['busca=%20%20', { busca: '' }],

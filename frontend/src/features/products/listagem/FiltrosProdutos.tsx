@@ -4,6 +4,7 @@ import { Loader2, Search, SlidersHorizontal, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
+import { ROTULOS_DA_SITUACAO_DO_FILTRO } from '@/features/products/estoque/situacaoDoFiltro'
 import { SeletorCategoria } from '@/features/products/SeletorCategoria'
 import { umDe } from '@/lib/listas'
 import { cn } from '@/lib/utils'
@@ -12,7 +13,6 @@ import {
   ESTOQUE_FILTRO,
   ORDENS_PRODUTOS,
   STATUS_FILTRO,
-  type EstoqueFiltro,
   type FiltrosDaListaDeProdutos,
   type OrdemProdutos,
   type StatusFiltro,
@@ -35,12 +35,6 @@ const ROTULOS_DE_STATUS: Record<StatusFiltro, string> = {
   ativos: 'Ativos',
   inativos: 'Inativos',
   todos: 'Todos',
-}
-
-/** `baixo` inclui os sem estoque (regra da spec): o rotulo diz isso. */
-const ROTULOS_DE_ESTOQUE: Record<EstoqueFiltro, string> = {
-  baixo: 'Baixo ou sem estoque',
-  sem: 'Sem estoque',
 }
 
 const ALTURA_DO_CONTROLE = 'h-11 md:h-9'
@@ -216,7 +210,7 @@ export function FiltrosProdutos({
             <option value="">Todos</option>
             {ESTOQUE_FILTRO.map((estoque) => (
               <option key={estoque} value={estoque}>
-                {ROTULOS_DE_ESTOQUE[estoque]}
+                {ROTULOS_DA_SITUACAO_DO_FILTRO[estoque]}
               </option>
             ))}
           </NativeSelect>

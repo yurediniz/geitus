@@ -35,8 +35,9 @@ export function PrecoDoProduto({ produto, className }: { produto: Produto; class
 }
 
 /**
- * Saldo da lista: "12 UN" com o selo "Estoque baixo" ou "Sem estoque"; "—"
- * para produto sem controle de estoque (o saldo guardado nao aparece).
+ * Saldo da lista: "12 UN" com o selo da situacao ("Negativo", "Zerado",
+ * "Baixo", "Reposição" ou "Alto"); "—" para produto sem controle de estoque
+ * (o saldo guardado nao aparece).
  */
 export function EstoqueDoProduto({ produto, className }: { produto: Produto; className?: string }) {
   if (!produto.controlaEstoque) {
@@ -45,7 +46,7 @@ export function EstoqueDoProduto({ produto, className }: { produto: Produto; cla
   return (
     <span className={cn('inline-flex flex-wrap items-center gap-x-2 gap-y-1', className)}>
       <span className="tabular-nums">{formatarQuantidade(produto.estoqueAtual, produto.unidade.sigla)}</span>
-      <SeloSituacaoEstoque situacao={produto.situacaoEstoque} saldo={produto.estoqueAtual} />
+      <SeloSituacaoEstoque situacao={produto.situacaoEstoque} />
     </span>
   )
 }

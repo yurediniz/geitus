@@ -45,7 +45,7 @@ function item(extra: Partial<PosicaoDeEstoque>): PosicaoDeEstoque {
     categoria: { caminho: 'Laticínios' },
     ativo: true,
     saldo: 55,
-    situacao: 'NORMAL',
+    situacao: 'REGULAR',
     estoqueMinimo: 5,
     pontoReposicao: 10,
     estoqueMaximo: null,
@@ -63,12 +63,21 @@ const NEGATIVO = item({
   nome: 'Arroz 5 kg',
   categoria: null,
   saldo: -3,
-  situacao: 'SEM_ESTOQUE',
+  situacao: 'NEGATIVO',
   valorEmCusto: null,
   embalagemPrincipal: null,
 })
 
-const RESUMO: ResumoDaPosicao = { produtos: 2, semEstoque: 1, baixo: 1, negativos: 1, valorTotalEmCusto: 247.5, semCusto: 0 }
+const RESUMO: ResumoDaPosicao = {
+  produtos: 2,
+  negativos: 1,
+  zerados: 0,
+  baixo: 0,
+  reposicao: 0,
+  alto: 0,
+  valorTotalEmCusto: 247.5,
+  semCusto: 0,
+}
 
 function paginaDe(itens: PosicaoDeEstoque[]): PaginaResponse<PosicaoDeEstoque> {
   return { itens, pagina: 0, tamanho: 25, totalItens: itens.length }
@@ -138,7 +147,7 @@ describe('EstoquePage', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Estoque' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 2, name: '2 produtos' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /negativos\s*1/i })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: /^negativo\s*1$/i })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByText('R$ 247,50', { selector: 'span.text-xl' })).toBeInTheDocument()
 
     const leite = linhaDe('Leite Integral')
@@ -155,19 +164,60 @@ describe('EstoquePage', () => {
     expect(within(arroz).getByText('Sem saldo')).toBeInTheDocument()
   })
 
+  it('os cinco cards mostram as contagens exclusivas, sem a linha "inclui"', async () => {
+    resumoMock.mockResolvedValue({ ...RESUMO, negativos: 1, zerados: 2, baixo: 3, reposicao: 4, alto: 5 })
+    renderPagina()
+    await carregada()
+
+    for (const [titulo, quantidade] of [
+      ['Negativo', 1],
+      ['Zerado', 2],
+      ['Baixo', 3],
+      ['Reposição', 4],
+      ['Alto', 5],
+    ] as const) {
+      expect(await screen.findByRole('button', { name: new RegExp(`^${titulo}\\s*${quantidade}$`, 'i') })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      )
+    }
+    expect(screen.queryByText(/inclui|também em/i)).not.toBeInTheDocument()
+  })
+
+  it('o filtro "Situação" tem as mesmas opções da lista de produtos e vai para a URL', async () => {
+    const router = renderPagina()
+    await carregada()
+
+    const situacao = screen.getByRole('combobox', { name: 'Situação' })
+    expect(within(situacao).getAllByRole('option').map((opcao) => (opcao as HTMLOptionElement).value)).toEqual([
+      '',
+      'repor',
+      'negativo',
+      'zerado',
+      'baixo',
+      'reposicao',
+      'regular',
+      'alto',
+    ])
+    fireEvent.change(situacao, { target: { value: 'repor' } })
+
+    await waitFor(() => expect(router.state.location.search).toBe('?situacao=repor'))
+    await waitFor(() => expect(ultimosFiltros().situacao).toBe('repor'))
+  })
+
   it('o card de situação liga e desliga o filtro na URL', async () => {
     const router = renderPagina()
     await carregada()
 
-    fireEvent.click(screen.getByRole('button', { name: /negativos/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^negativo\s*\d/i }))
 
     await waitFor(() => expect(router.state.location.search).toBe('?situacao=negativo'))
     await waitFor(() => expect(ultimosFiltros().situacao).toBe('negativo'))
-    expect(screen.getByRole('button', { name: /negativos/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /^negativo\s*\d/i })).toHaveAttribute('aria-pressed', 'true')
     // O resumo nao depende da situacao: nao consulta de novo.
     expect(resumoMock).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(screen.getByRole('button', { name: /negativos/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^negativo\s*\d/i }))
 
     await waitFor(() => expect(router.state.location.search).toBe(''))
   })
@@ -301,12 +351,12 @@ describe('EstoquePage', () => {
     expect(screen.getByText('Não foi possível carregar o resumo do estoque.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Tentar carregar o resumo de novo' }))
 
-    expect(await screen.findByRole('button', { name: /negativos\s*1/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /^negativo\s*1$/i })).toBeInTheDocument()
   })
 
   it('vazio com o status Todos conta como filtro e oferece limpar', async () => {
     listarPosicaoMock.mockResolvedValue(paginaDe([]))
-    resumoMock.mockResolvedValue({ ...RESUMO, produtos: 0, semEstoque: 0, baixo: 0, negativos: 0, valorTotalEmCusto: 0 })
+    resumoMock.mockResolvedValue({ ...RESUMO, produtos: 0, negativos: 0, valorTotalEmCusto: 0 })
     renderPagina('/estoque?status=todos')
     await carregada()
 

@@ -4703,17 +4703,17 @@ describe('ProdutoPage', () => {
 
       const saldo = screen.getByRole('group', { name: 'Saldo atual' })
       expect(within(saldo).getByText('8 UN')).toBeInTheDocument()
-      expect(within(saldo).getByText('Estoque baixo')).toBeInTheDocument()
+      expect(within(saldo).getByText('Baixo')).toBeInTheDocument()
       expect(screen.queryByLabelText('Estoque inicial (opcional)')).not.toBeInTheDocument()
     })
 
-    it('situação normal não tem selo', async () => {
+    it('situação regular não tem selo', async () => {
       renderEdicao()
       await esperarFormulario()
 
       const saldo = screen.getByRole('group', { name: 'Saldo atual' })
       expect(within(saldo).getByText('12 UN')).toBeInTheDocument()
-      expect(within(saldo).queryByText(/estoque baixo|sem estoque/i)).not.toBeInTheDocument()
+      expect(within(saldo).queryByText(/^(negativo|zerado|baixo|reposição|alto)$/i)).not.toBeInTheDocument()
     })
 
     it('desligar o controle esconde o estoque inicial e os níveis; religar mostra de novo', async () => {
@@ -4756,7 +4756,7 @@ describe('ProdutoPage', () => {
     })
 
     it('desligar um produto com saldo zero não mostra o aviso', async () => {
-      renderEdicao({ ...produtoAtivo, estoqueAtual: 0, situacaoEstoque: 'SEM_ESTOQUE' })
+      renderEdicao({ ...produtoAtivo, estoqueAtual: 0, situacaoEstoque: 'ZERADO' })
       await esperarFormulario()
 
       fireEvent.click(interruptorControle())
@@ -4900,7 +4900,7 @@ describe('ProdutoPage', () => {
       expect(screen.getByLabelText('Estoque máximo em UN (opcional)')).toBeInTheDocument()
       expect(
         screen.getByText(
-          'O selo Estoque baixo aparece quando o saldo chega ao ponto de reposição (ou ao mínimo, se o ponto estiver vazio).',
+          'Saldo igual ou abaixo do mínimo mostra Baixo; até o ponto de reposição, Reposição; acima do máximo, Alto. Campo vazio não gera aviso.',
         ),
       ).toBeInTheDocument()
     })
@@ -4961,7 +4961,7 @@ describe('ProdutoPage', () => {
     })
 
     it('sem saldo, o diálogo de exclusão não fala de estoque', async () => {
-      renderEdicao({ ...produtoAtivo, estoqueAtual: 0, situacaoEstoque: 'SEM_ESTOQUE' })
+      renderEdicao({ ...produtoAtivo, estoqueAtual: 0, situacaoEstoque: 'ZERADO' })
       await esperarFormulario()
 
       fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))

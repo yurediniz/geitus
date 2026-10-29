@@ -42,7 +42,8 @@ public record PosicaoDeEstoqueResponse(UUID id, Long numero, Integer codigo, Str
         return new PosicaoDeEstoqueResponse(produto.getUuid(), produto.getNumero(), produto.getCodigo(),
                 produto.getNome(), new Unidade(produto.getUnidade().getSigla(), produto.getUnidade().isFracionada()),
                 categoria, produto.isAtivo(), saldoAtual,
-                SituacaoEstoque.de(true, saldoAtual, produto.getPontoReposicao(), produto.getEstoqueMinimo()),
+                SituacaoEstoque.de(true, saldoAtual, produto.getPontoReposicao(), produto.getEstoqueMinimo(),
+                        produto.getEstoqueMaximo()),
                 produto.getEstoqueMinimo(), produto.getPontoReposicao(), produto.getEstoqueMaximo(), produto.getCusto(),
                 valorEmCusto(saldoAtual, produto.getCusto()), embalagem);
     }

@@ -137,7 +137,7 @@ class EstoqueCatalogoIT {
 
         assertThat(cadastrado.controlaEstoque()).isTrue();
         assertThat(cadastrado.estoqueAtual()).isEqualByComparingTo("12.5");
-        assertThat(cadastrado.situacaoEstoque()).isEqualTo(SituacaoEstoque.NORMAL);
+        assertThat(cadastrado.situacaoEstoque()).isEqualTo(SituacaoEstoque.REGULAR);
         assertThat(cadastrado.podeExcluir()).isTrue();
         assertThat(jdbcTemplate.queryForMap("""
                 SELECT m.tipo, m.motivo, m.origem, m.quantidade, m.saldo_anterior, m.saldo_novo, m.usuario_id,
@@ -350,7 +350,7 @@ class EstoqueCatalogoIT {
                 CenarioDeEstoque.produto(un, "Arroz", true, null));
 
         assertThat(religado.estoqueAtual()).isEqualByComparingTo("12");
-        assertThat(religado.situacaoEstoque()).isEqualTo(SituacaoEstoque.NORMAL);
+        assertThat(religado.situacaoEstoque()).isEqualTo(SituacaoEstoque.REGULAR);
     }
 
     // ---------- Listagem em lote ----------

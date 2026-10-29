@@ -4,6 +4,7 @@ import { Loader2, Search, SlidersHorizontal, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
+import { ROTULOS_DA_SITUACAO_DO_FILTRO } from '@/features/products/estoque/situacaoDoFiltro'
 import { SeletorCategoria } from '@/features/products/SeletorCategoria'
 import { umDe } from '@/lib/listas'
 import { cn } from '@/lib/utils'
@@ -14,7 +15,6 @@ import {
   STATUS_POSICAO,
   type FiltrosDaPosicao as Filtros,
   type OrdemDaPosicao,
-  type SituacaoDaPosicao,
   type StatusDaPosicao,
 } from '@/types/estoque'
 
@@ -31,13 +31,6 @@ const ROTULOS_DE_STATUS: Record<StatusDaPosicao, string> = {
   ativos: 'Ativos',
   inativos: 'Inativos',
   todos: 'Todos',
-}
-
-/** `baixo` inclui os sem estoque e `negativo` esta contido em `sem` (regra 23): os rotulos dizem isso. */
-const ROTULOS_DA_SITUACAO: Record<SituacaoDaPosicao, string> = {
-  sem: 'Sem estoque (zerado ou negativo)',
-  baixo: 'Baixo ou sem estoque',
-  negativo: 'Negativo',
 }
 
 const ALTURA_DO_CONTROLE = 'h-11 md:h-9'
@@ -204,7 +197,7 @@ export function FiltrosDaPosicao({
             <option value="">Todas</option>
             {SITUACOES_POSICAO.map((situacao) => (
               <option key={situacao} value={situacao}>
-                {ROTULOS_DA_SITUACAO[situacao]}
+                {ROTULOS_DA_SITUACAO_DO_FILTRO[situacao]}
               </option>
             ))}
           </NativeSelect>

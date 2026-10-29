@@ -59,7 +59,8 @@ describe('useFiltrosDaPosicao', () => {
   })
 
   it('valores invalidos voltam ao padrao', () => {
-    const { hook } = montar('/estoque?status=x&categoria=nao-uuid&situacao=zerado&ordem=preco&pagina=-2')
+    // `sem` e o valor antigo, antes dos seis niveis: cai em "sem filtro".
+    const { hook } = montar('/estoque?status=x&categoria=nao-uuid&situacao=sem&ordem=preco&pagina=-2')
 
     expect(hook().filtros).toEqual({
       busca: '',
@@ -83,11 +84,11 @@ describe('useFiltrosDaPosicao', () => {
   })
 
   it('so a pagina muda sem voltar para a 1', () => {
-    const { router, hook } = montar('/estoque?situacao=sem')
+    const { router, hook } = montar('/estoque?situacao=zerado')
 
     act(() => hook().alterar({ pagina: 2 }))
 
-    expect(router.state.location.search).toBe('?situacao=sem&pagina=2')
+    expect(router.state.location.search).toBe('?situacao=zerado&pagina=2')
   })
 
   it('a busca substitui a entrada do historico e chega aparada', () => {
@@ -100,16 +101,16 @@ describe('useFiltrosDaPosicao', () => {
   })
 
   it('alterar sem mudanca real nao mexe na URL', () => {
-    const { router, hook } = montar('/estoque?situacao=sem')
+    const { router, hook } = montar('/estoque?situacao=zerado')
     const antes = router.state.location
 
-    act(() => hook().alterar({ situacao: 'sem' }))
+    act(() => hook().alterar({ situacao: 'zerado' }))
 
     expect(router.state.location).toBe(antes)
   })
 
   it('limpar tira os filtros e preserva a ordem', () => {
-    const { router, hook } = montar(`/estoque?busca=x&status=todos&categoria=${CATEGORIA}&situacao=sem&ordem=saldo`)
+    const { router, hook } = montar(`/estoque?busca=x&status=todos&categoria=${CATEGORIA}&situacao=zerado&ordem=saldo`)
 
     act(() => hook().limpar())
 

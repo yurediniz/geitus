@@ -236,7 +236,7 @@ export function SecaoEstoque({
             </h3>
             <p className="text-xs text-muted-foreground">
               {controla
-                ? 'O selo Estoque baixo aparece quando o saldo chega ao ponto de reposição (ou ao mínimo, se o ponto estiver vazio).'
+                ? 'Saldo igual ou abaixo do mínimo mostra Baixo; até o ponto de reposição, Reposição; acima do máximo, Alto. Campo vazio não gera aviso.'
                 : 'Corrija ou apague estes valores para salvar.'}
             </p>
           </div>

@@ -106,16 +106,26 @@ class ConsultaDaPosicaoDeEstoqueIT {
         assertThat(nomes(null, OrdemDaPosicao.NOME)).containsExactly("Controla", "Controla sem linha de saldo");
     }
 
+    /**
+     * Cada filtro em SQL traz exatamente os produtos que {@link SituacaoEstoque#de}
+     * classifica naquela situacao (os dois lados da regra 16 nao divergem), com
+     * os limites iguais e os niveis ausentes; {@code repor} junta os quatro primeiros.
+     */
     @Test
-    void situacoesSemBaixoENegativo() {
-        saldo(salvar(produto("Negativo")), "-2");
-        salvar(produto("Zerado"));
-        saldo(salvar(produto("Baixo").pontoReposicao("10")), "8");
-        saldo(salvar(produto("Normal").pontoReposicao("10")), "11");
+    void cadaFiltroCasaComASituacaoCalculadaEmJava() {
+        Map<String, SituacaoEstoque> esperada = cenarioDasSeisSituacoes();
 
-        assertThat(nomes(SituacaoDaPosicao.SEM, OrdemDaPosicao.NOME)).containsExactly("Negativo", "Zerado");
-        assertThat(nomes(SituacaoDaPosicao.BAIXO, OrdemDaPosicao.NOME)).containsExactly("Baixo", "Negativo", "Zerado");
-        assertThat(nomes(SituacaoDaPosicao.NEGATIVO, OrdemDaPosicao.NOME)).containsExactly("Negativo");
+        for (SituacaoEstoque situacao : SituacaoEstoque.values()) {
+            List<String> doJava = esperada.entrySet().stream().filter(item -> item.getValue() == situacao)
+                    .map(Map.Entry::getKey).sorted().toList();
+            assertThat(nomes(SituacaoDaPosicao.valueOf(situacao.name()), OrdemDaPosicao.NOME))
+                    .as("filtro %s", situacao).containsExactlyInAnyOrderElementsOf(doJava);
+        }
+        assertThat(nomes(SituacaoDaPosicao.REPOR, OrdemDaPosicao.NOME)).containsExactlyInAnyOrderElementsOf(
+                esperada.entrySet().stream()
+                        .filter(item -> Set.of(SituacaoEstoque.NEGATIVO, SituacaoEstoque.ZERADO, SituacaoEstoque.BAIXO,
+                                SituacaoEstoque.REPOSICAO).contains(item.getValue()))
+                        .map(Map.Entry::getKey).sorted().toList());
     }
 
     @Test
@@ -166,10 +176,26 @@ class ConsultaDaPosicaoDeEstoqueIT {
     }
 
     @Test
-    void resumoContaSituacoesEValorArredondadoPorProduto() {
+    void resumoContaCadaSituacaoUmaVezSo() {
+        Map<String, SituacaoEstoque> esperada = cenarioDasSeisSituacoes();
+
+        ResumoDaPosicao resumo = consulta.resumir(filtro(null, StatusFiltro.ATIVOS, null));
+
+        assertThat(resumo.produtos()).isEqualTo(esperada.size());
+        assertThat(resumo.negativos()).isEqualTo(contar(esperada, SituacaoEstoque.NEGATIVO));
+        assertThat(resumo.zerados()).isEqualTo(contar(esperada, SituacaoEstoque.ZERADO));
+        assertThat(resumo.baixo()).isEqualTo(contar(esperada, SituacaoEstoque.BAIXO));
+        assertThat(resumo.reposicao()).isEqualTo(contar(esperada, SituacaoEstoque.REPOSICAO));
+        assertThat(resumo.alto()).isEqualTo(contar(esperada, SituacaoEstoque.ALTO));
+        assertThat(resumo.produtos() - resumo.negativos() - resumo.zerados() - resumo.baixo() - resumo.reposicao()
+                - resumo.alto()).as("regulares").isEqualTo(contar(esperada, SituacaoEstoque.REGULAR));
+    }
+
+    @Test
+    void resumoSomaValorArredondadoPorProduto() {
         saldo(salvar(produto("Negativo").custo("2.00")), "-2");
         salvar(produto("Zerado"));
-        saldo(salvar(produto("Baixo").pontoReposicao("10").custo("1.00")), "8");
+        saldo(salvar(produto("Baixo").estoqueMinimo("10").custo("1.00")), "8");
         // 1,333 x 0,10 = 0,1333 -> 0,13 (cada produto a centavos antes de somar)
         saldo(salvar(produto("Fracao").custo("0.10")), "1.333");
         saldo(salvar(produto("Sem custo")), "4");
@@ -178,9 +204,9 @@ class ConsultaDaPosicaoDeEstoqueIT {
         ResumoDaPosicao resumo = consulta.resumir(filtro(null, StatusFiltro.ATIVOS, null));
 
         assertThat(resumo.produtos()).isEqualTo(5);
-        assertThat(resumo.semEstoque()).isEqualTo(2);
-        assertThat(resumo.baixo()).isEqualTo(3);
         assertThat(resumo.negativos()).isEqualTo(1);
+        assertThat(resumo.zerados()).isEqualTo(1);
+        assertThat(resumo.baixo()).isEqualTo(1);
         assertThat(resumo.valorTotalEmCusto()).isEqualByComparingTo("8.13");
         assertThat(resumo.valorTotalEmCusto().scale()).isEqualTo(2);
         assertThat(resumo.semCusto()).isEqualTo(1);
@@ -190,7 +216,52 @@ class ConsultaDaPosicaoDeEstoqueIT {
     void resumoSemProdutosVemZerado() {
         ResumoDaPosicao resumo = consulta.resumir(filtro(null, StatusFiltro.ATIVOS, null));
 
-        assertThat(resumo).isEqualTo(new ResumoDaPosicao(0, 0, 0, 0, new BigDecimal("0.00"), 0));
+        assertThat(resumo).isEqualTo(new ResumoDaPosicao(0, 0, 0, 0, 0, 0, new BigDecimal("0.00"), 0));
+    }
+
+    /**
+     * Produtos em todas as situacoes, com os tres niveis (minimo 2, ponto 5,
+     * maximo 10), com um nivel so e sem niveis, incluindo os limites iguais. Cada
+     * situacao esperada e conferida contra {@link SituacaoEstoque#de}.
+     */
+    private Map<String, SituacaoEstoque> cenarioDasSeisSituacoes() {
+        Map<String, SituacaoEstoque> esperada = new HashMap<>();
+        comNiveis(esperada, "Negativo", "-2", SituacaoEstoque.NEGATIVO);
+        comNiveis(esperada, "Zerado", null, SituacaoEstoque.ZERADO);
+        comNiveis(esperada, "Baixo no minimo", "2", SituacaoEstoque.BAIXO);
+        comNiveis(esperada, "Reposicao no ponto", "5", SituacaoEstoque.REPOSICAO);
+        comNiveis(esperada, "Regular no maximo", "10", SituacaoEstoque.REGULAR);
+        comNiveis(esperada, "Alto", "10.001", SituacaoEstoque.ALTO);
+        guardar(esperada, produto("So minimo").estoqueMinimo("2"), "1", SituacaoEstoque.BAIXO);
+        guardar(esperada, produto("So ponto").pontoReposicao("5"), "3", SituacaoEstoque.REPOSICAO);
+        guardar(esperada, produto("So maximo").estoqueMaximo("10"), "11", SituacaoEstoque.ALTO);
+        guardar(esperada, produto("Minimo sem ponto acima").estoqueMinimo("2").estoqueMaximo("10"), "3",
+                SituacaoEstoque.REGULAR);
+        guardar(esperada, produto("Sem niveis"), "7", SituacaoEstoque.REGULAR);
+        guardar(esperada, produto("Sem niveis zerado"), "0", SituacaoEstoque.ZERADO);
+        return esperada;
+    }
+
+    private void comNiveis(Map<String, SituacaoEstoque> esperada, String nome, String saldo,
+            SituacaoEstoque situacao) {
+        guardar(esperada, produto(nome).estoqueMinimo("2").pontoReposicao("5").estoqueMaximo("10"), saldo, situacao);
+    }
+
+    /** Salva com o saldo ({@code null} = sem linha de saldo) e confere a situacao esperada contra o Java. */
+    private void guardar(Map<String, SituacaoEstoque> esperada, ProdutoTesteBuilder builder, String saldo,
+            SituacaoEstoque situacao) {
+        Produto salvo = salvar(builder);
+        if (saldo != null) {
+            saldo(salvo, saldo);
+        }
+        BigDecimal atual = saldo == null ? BigDecimal.ZERO : new BigDecimal(saldo);
+        assertThat(SituacaoEstoque.de(true, atual, salvo.getPontoReposicao(), salvo.getEstoqueMinimo(),
+                salvo.getEstoqueMaximo())).as("situacao de %s em Java", salvo.getNome()).isEqualTo(situacao);
+        esperada.put(salvo.getNome(), situacao);
+    }
+
+    private static long contar(Map<String, SituacaoEstoque> esperada, SituacaoEstoque situacao) {
+        return esperada.values().stream().filter(situacao::equals).count();
     }
 
     @Test

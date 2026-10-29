@@ -112,7 +112,7 @@ public record ProdutoResponse(
         @Schema(description = "Saldo atual (derivado dos movimentos); guardado mesmo com o controle desligado",
                 example = "12.000")
         BigDecimal estoqueAtual,
-        @Schema(description = "NORMAL, BAIXO ou SEM_ESTOQUE; null sem controle de estoque")
+        @Schema(description = "NEGATIVO, ZERADO, BAIXO, REPOSICAO, REGULAR ou ALTO; null sem controle de estoque")
         SituacaoEstoque situacaoEstoque,
         @Schema(description = "Codigos de barras na ordem (o primeiro e o principal)")
         List<CodigoBarrasResponse> codigosBarras,
@@ -184,7 +184,7 @@ public record ProdutoResponse(
                 produto.isControlaEstoque(),
                 estoque.saldo(),
                 SituacaoEstoque.de(produto.isControlaEstoque(), estoque.saldo(), produto.getPontoReposicao(),
-                        produto.getEstoqueMinimo()),
+                        produto.getEstoqueMinimo(), produto.getEstoqueMaximo()),
                 produto.getCodigosBarras().stream().map(CodigoBarrasResponse::de).toList(),
                 embalagens(produto, hoje),
                 produto.getSku(),

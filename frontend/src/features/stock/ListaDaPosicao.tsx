@@ -46,7 +46,7 @@ function SaldoDoItem({ item, className }: { item: PosicaoDeEstoque; className?: 
         {formatarQuantidade(item.saldo, item.unidade.sigla)}
       </span>
       {conversao && <span className="text-xs text-muted-foreground tabular-nums">({conversao})</span>}
-      <SeloSituacaoEstoque situacao={item.situacao} saldo={item.saldo} />
+      <SeloSituacaoEstoque situacao={item.situacao} />
     </span>
   )
 }

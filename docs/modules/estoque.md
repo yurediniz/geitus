@@ -1,6 +1,6 @@
 # Estoque
 
-> Decisões: DEC-034 (estoque básico), DEC-038 (custo pela última entrada), DEC-037 (ajuste por embalagem), DEC-039 (fornecedor na compra), DEC-042 (baixa e estorno pela venda), DEC-045 (etapa 12: posição, movimentações e devolução), DEC-046 (devolução de item). Pacote `inventory`. Migrations V9, V12, V13, V14, V17, V18 e V19.
+> Decisões: DEC-034 (estoque básico), DEC-038 (custo pela última entrada), DEC-037 (ajuste por embalagem), DEC-039 (fornecedor na compra), DEC-042 (baixa e estorno pela venda), DEC-045 (etapa 12: posição, movimentações e devolução), DEC-046 (devolução de item), DEC-047 (situação em seis níveis). Pacote `inventory`. Migrations V9, V12, V13, V14, V17, V18 e V19.
 
 ## 1. Objetivo
 
@@ -75,10 +75,18 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
 **Níveis e situação**
 
 15. Mínimo ≤ ponto de reposição ≤ máximo, quando os dois lados de cada par estão informados (400 com o campo).
-16. A situação é calculada (não é coluna) e só existe com o controle ligado:
-   - `SEM_ESTOQUE` quando o saldo ≤ 0;
-   - `BAIXO` quando o saldo ≤ ponto de reposição, ou ≤ mínimo quando não há ponto;
-   - `NORMAL` nos demais casos.
+16. A situação é calculada (não é coluna) e só existe com o controle ligado. Vale a primeira que se aplica, e cada nível só conta se o campo dele estiver preenchido:
+
+   | Situação | Quando | Selo |
+   |---|---|---|
+   | `NEGATIVO` | saldo < 0 | "Negativo" (vermelho forte) |
+   | `ZERADO` | saldo = 0 | "Zerado" (vermelho suave) |
+   | `BAIXO` | saldo ≤ mínimo | "Baixo" (âmbar forte) |
+   | `REPOSICAO` | saldo ≤ ponto de reposição | "Reposição" (âmbar suave) |
+   | `ALTO` | saldo > máximo | "Alto" (azul) |
+   | `REGULAR` | nos demais casos | sem selo |
+
+   Sem nenhum nível, o produto só fica Negativo, Zerado ou Regular. A regra 15 garante que os intervalos não se cruzam.
 
 **Concorrência e idempotência**
 
@@ -100,10 +108,10 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
 23. Filtros combinados com E:
    - `busca` e `categoria` com a mesma regra da listagem de produtos ([produtos.md](produtos.md): sem acento, categoria com descendentes);
    - `status`: `ativos` (padrão), `inativos` ou `todos`;
-   - `situacao`: `sem` (saldo ≤ 0), `baixo` (inclui os sem estoque, como na listagem de produtos) ou `negativo` (saldo < 0).
+   - `situacao`: uma das situações da regra 16 (`negativo`, `zerado`, `baixo`, `reposicao`, `regular`, `alto`) ou `repor` (negativo, zerado, baixo ou reposição: o que precisa de atenção). Os mesmos valores do filtro `estoque` da listagem de produtos.
 
    Ordem: `nome` (padrão) / `-nome`, `saldo` / `-saldo`, `valor` / `-valor` (sem valor sempre no fim), com desempate por nome e id. Valor inválido dá 400.
-24. O **resumo** vale para o filtro de busca, categoria e status (sem paginação e sem o filtro de situação, para os cards mostrarem as contagens): produtos, sem estoque, baixo, negativos, valor total em custo e quantos produtos com saldo > 0 estão sem custo.
+24. O **resumo** vale para o filtro de busca, categoria e status (sem paginação e sem o filtro de situação, para os cards mostrarem as contagens): produtos, negativos, zerados, baixo, reposição e alto (contagens exclusivas, sem sobreposição), valor total em custo e quantos produtos com saldo > 0 estão sem custo.
 25. **Saldo negativo** (requisito do PDV, seção 6): o produto negativo ganha o selo "Negativo", e o ADMIN tem a ação "Regularizar", que abre o ajuste na Contagem. O ajuste segue as regras 3 a 6: o saldo contado é ≥ 0, e uma entrada também regulariza.
 
 **Movimentações de todos os produtos**
@@ -131,7 +139,7 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
   - o request ganha `controlaEstoque` (obrigatório) e `estoqueInicial` (só no POST);
   - a response ganha `estoqueAtual` (sempre com 3 casas, mesmo com o controle desligado), `situacaoEstoque`, `podeExcluir` e `custoOrigem { tipo, em, quantidade, quantidadeDeEmbalagens, embalagemRotulo } | null`. Na listagem, `custoOrigem` traz só `tipo` e `em`.
 - **Histórico de preços:** as linhas de custo trazem `origem` (`EDICAO`/`ENTRADA_COMPRA`) e, na compra, `entrada { quantidade, quantidadeDeEmbalagens, embalagemRotulo }`.
-- **Posição:** `id`, `numero`, `codigo`, `nome`, `unidade { sigla, fracionada }`, `categoria { caminho } | null`, `ativo`, `saldo`, `embalagemPrincipal { sigla, quantidade } | null` (a de compra ou a primeira, para a conversão "55 UN (18 CX + 1 UN)"), `situacao`, `estoqueMinimo`, `pontoReposicao`, `estoqueMaximo`, `custo`, `valorEmCusto`. **Resumo:** `produtos`, `semEstoque`, `baixo`, `negativos`, `valorTotalEmCusto`, `semCusto`.
+- **Posição:** `id`, `numero`, `codigo`, `nome`, `unidade { sigla, fracionada }`, `categoria { caminho } | null`, `ativo`, `saldo`, `embalagemPrincipal { sigla, quantidade } | null` (a de compra ou a primeira, para a conversão "55 UN (18 CX + 1 UN)"), `situacao`, `estoqueMinimo`, `pontoReposicao`, `estoqueMaximo`, `custo`, `valorEmCusto`. **Resumo:** `produtos`, `negativos`, `zerados`, `baixo`, `reposicao`, `alto`, `valorTotalEmCusto`, `semCusto`.
 - **Movimentações:** o movimento acima mais `produto { id, numero, nome, unidade { sigla, fracionada } }` e `venda { id, numero } | null`. Produto ou usuário de outra empresa no filtro dá lista vazia, não 404.
 - **Erros por campo:** `tipo`, `quantidade`, `motivo`, `observacao`, `custo`, `fornecedorId`; na posição, `situacao`, `status`, `ordem` e `busca`; nas movimentações, `de`, `ate`, `tipo` e `motivo`. Produto de outra empresa dá 404.
 - **Origem dos dados:** empresa e usuário do movimento vêm sempre do usuário autenticado. Na listagem, os saldos e o `podeExcluir` saem em lote, sem N+1. O catálogo consulta o estoque por interfaces (`UsoDoProdutoNoEstoque`, `RegistroDeEstoqueInicial`) e não depende do pacote `inventory`.
@@ -177,9 +185,9 @@ Saldo do produto controlado por **movimentos imutáveis**: nada altera o saldo s
   - sucesso com o resumo ("Entrada de 36 UN (2 CX c/ 18 UN) registrada. Saldo: 46 UN. Custo atualizado para R$ 10,00."); qualquer falha recarrega o saldo.
 - **Nota do custo (Preços):** "Último custo de entrada: R$ 10,00 por UN, em 24/10/2026 (compra de 2 CX c/ 18 UN), de {fornecedor}." ou "Custo editado manualmente em 24/10/2026.". Compra feita na página atualiza o campo Custo se ele não foi mexido; senão avisa que, ao salvar, vale o campo.
 - **Histórico:** seção Estoque antes de Preços, cada uma com "Carregar mais"; a linha traz data, usuário, tipo · motivo, "−2 UN", "12 → 10", observação, embalagem, custo e fornecedor.
-- **Listagem:** "12 UN" com selo "Estoque baixo"/"Sem estoque"; "—" sem controle.
+- **Listagem:** "12 UN" com o selo da situação (regra 16); "—" sem controle. O filtro "Estoque" tem as mesmas opções do filtro de situação da posição.
 - **Área Estoque:** item "Estoque" no menu, depois de Produtos, na rota `/estoque`, aberta a qualquer usuário (o OPERADOR lê, sem ações). Abas **Posição** e **Movimentações**, com a aba na URL (`?aba=movimentacoes`; sem ela, a Posição); trocar de aba começa com os filtros da aba de destino limpos.
-  - **Posição:** cards do resumo no topo ("Sem estoque 4", "Estoque baixo 12", "Negativos 2", "Valor em estoque R$ 18.430,00 a custo"), e clicar num card aplica o filtro; o valor mostra "3 produtos sem custo ficam fora" quando houver. Os filtros de situação dizem o que incluem ("Sem estoque (zerado ou negativo)", "Baixo ou sem estoque", "Negativo"). Abaixo vêm a busca, os filtros e "Ordenar por", tudo na URL. Tabela a partir de 1.024 px e cards abaixo, no padrão da lista de produtos, com nome (abre o produto), saldo com conversão, selo da situação ("Negativo" em vermelho), níveis, custo e valor. Ações (só ADMIN): "Ajustar" abre o ajuste na Entrada e, no negativo, "Regularizar" abre na Contagem; daqui o modal não traz embalagens nem o fornecedor da última compra (como na lista de produtos). Sucesso com o nome do produto e o resumo do ajuste. Depois de um ajuste a linha e o resumo recarregam. Lista vazia: "Nenhum produto controla estoque ainda." ou "Nenhum produto neste filtro.".
+  - **Posição:** cards do resumo no topo (Negativo, Zerado, Baixo, Reposição e Alto, mais "Valor em estoque R$ 18.430,00 a custo"; três por linha no celular, uma linha no desktop), e clicar num card aplica o filtro; o valor mostra "3 produtos sem custo ficam fora" quando houver. O filtro "Situação" tem "Repor (negativo, zerado, baixo ou reposição)" e cada situação. Abaixo vêm a busca, os filtros e "Ordenar por", tudo na URL. Tabela a partir de 1.024 px e cards abaixo, no padrão da lista de produtos, com nome (abre o produto), saldo com conversão, selo da situação (regra 16), níveis, custo e valor. Ações (só ADMIN): "Ajustar" abre o ajuste na Entrada e, no negativo, "Regularizar" abre na Contagem; daqui o modal não traz embalagens nem o fornecedor da última compra (como na lista de produtos). Sucesso com o nome do produto e o resumo do ajuste. Depois de um ajuste a linha e o resumo recarregam. Lista vazia: "Nenhum produto controla estoque ainda." ou "Nenhum produto neste filtro.".
   - **Movimentações:** período com os atalhos Hoje · 7 dias · 30 dias (o padrão) e as datas, produto (busca por nome, código, EAN, SKU ou Nº; vindo da URL, o nome é carregado, e o produto que não existe mais sai do filtro com aviso), tipo, motivo (só os do tipo escolhido, os do sistema incluídos) e usuário (só ADMIN, com os inativos marcados), tudo na URL; período invertido ou maior que 1 ano mostra o erro no filtro e não consulta. A linha traz o produto (abre a página dele), tipo · motivo ("Saída · Avariado na devolução" na saída do avariado), data e hora, usuário, "Venda nº 123" quando houver, fornecedor, observação, "−2 UN" e "12 → 10". "Carregar mais" no fim; lista vazia com filtro oferece "Limpar filtros".
 
 ## 6. Requisitos vindos do PDV

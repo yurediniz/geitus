@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -228,7 +229,7 @@ class ListagemDeProdutosIT {
                                     List.of("FD-" + i, "FD2-" + i))));
         }
         ParametrosDaListagem semFiltro = parametros(null, null, 0, 25);
-        ParametrosDaListagem comFiltros = ParametrosDaListagem.daRequisicao("produto", null, racao, "baixo", null,
+        ParametrosDaListagem comFiltros = ParametrosDaListagem.daRequisicao("produto", null, racao, "repor", null,
                 null, 0, 25);
 
         for (ParametrosDaListagem parametros : List.of(semFiltro, comFiltros)) {
@@ -317,6 +318,8 @@ class ListagemDeProdutosIT {
         cadastrar(loja, comUnidade(loja).nome("No minimo sem ponto").estoqueMinimo("5").estoqueInicial("5"));
         cadastrar(loja, comUnidade(loja).nome("Zerado"));
         cadastrar(loja, comUnidade(loja).nome("Acima do ponto").pontoReposicao("10").estoqueInicial("11"));
+        cadastrar(loja, comUnidade(loja).nome("No ponto so com ponto").pontoReposicao("10").estoqueInicial("4"));
+        cadastrar(loja, comUnidade(loja).nome("Acima do maximo").estoqueMaximo("20").estoqueInicial("21"));
         cadastrar(loja, comUnidade(loja).nome("Sem controle").controlaEstoque(false));
         cadastrar(loja, comUnidade(loja).nome("Promo comeca hoje").estoqueInicial("50")
                 .promocao("8.00", hoje, hoje.plusDays(3)));
@@ -326,18 +329,28 @@ class ListagemDeProdutosIT {
                 .promocao("8.00", hoje.plusDays(1), hoje.plusDays(3)));
         List<ProdutoResponse> todos = listar(loja, porFiltro(null, null)).itens();
 
-        Set<String> baixoPelosSelos = nomesQue(todos, produto -> produto.situacaoEstoque() == SituacaoEstoque.BAIXO
-                || produto.situacaoEstoque() == SituacaoEstoque.SEM_ESTOQUE);
-        Set<String> semPelosSelos = nomesQue(todos,
-                produto -> produto.situacaoEstoque() == SituacaoEstoque.SEM_ESTOQUE);
+        Set<SituacaoEstoque> aRepor = Set.of(SituacaoEstoque.NEGATIVO, SituacaoEstoque.ZERADO, SituacaoEstoque.BAIXO,
+                SituacaoEstoque.REPOSICAO);
+        Set<String> aReporPelosSelos = nomesQue(todos,
+                produto -> produto.situacaoEstoque() != null && aRepor.contains(produto.situacaoEstoque()));
         Set<String> promocaoPelosSelos = nomesQue(todos, ProdutoResponse::emPromocao);
 
-        assertThat(todos).hasSize(8);
-        assertThat(baixoPelosSelos).containsExactlyInAnyOrder("No ponto", "No minimo sem ponto", "Zerado");
-        assertThat(semPelosSelos).containsExactly("Zerado");
+        assertThat(todos).hasSize(10);
+        assertThat(nomesQue(todos, produto -> produto.situacaoEstoque() == SituacaoEstoque.BAIXO))
+                .containsExactly("No minimo sem ponto");
+        assertThat(nomesQue(todos, produto -> produto.situacaoEstoque() == SituacaoEstoque.REPOSICAO))
+                .containsExactlyInAnyOrder("No ponto", "No ponto so com ponto");
+        assertThat(nomesQue(todos, produto -> produto.situacaoEstoque() == SituacaoEstoque.ALTO))
+                .containsExactly("Acima do maximo");
+        assertThat(aReporPelosSelos)
+                .containsExactlyInAnyOrder("No ponto", "No minimo sem ponto", "Zerado", "No ponto so com ponto");
         assertThat(promocaoPelosSelos).containsExactlyInAnyOrder("Promo comeca hoje", "Promo termina hoje");
-        assertThat(nomes(listar(loja, porFiltro("baixo", null)))).containsExactlyInAnyOrderElementsOf(baixoPelosSelos);
-        assertThat(nomes(listar(loja, porFiltro("sem", null)))).containsExactlyInAnyOrderElementsOf(semPelosSelos);
+        for (SituacaoEstoque situacao : SituacaoEstoque.values()) {
+            Set<String> pelosSelos = nomesQue(todos, produto -> produto.situacaoEstoque() == situacao);
+            assertThat(nomes(listar(loja, porFiltro(situacao.name().toLowerCase(Locale.ROOT), null)))).as("filtro %s", situacao)
+                    .containsExactlyInAnyOrderElementsOf(pelosSelos);
+        }
+        assertThat(nomes(listar(loja, porFiltro("repor", null)))).containsExactlyInAnyOrderElementsOf(aReporPelosSelos);
         assertThat(nomes(listar(loja, porFiltro(null, "true"))))
                 .containsExactlyInAnyOrderElementsOf(promocaoPelosSelos);
     }

@@ -63,9 +63,14 @@ class ParametrosDosEnumsTest {
     void estoqueDaApi() {
         assertThat(EstoqueFiltro.doParametro(null)).isNull();
         assertThat(EstoqueFiltro.doParametro("")).isNull();
+        assertThat(EstoqueFiltro.doParametro("repor")).isEqualTo(EstoqueFiltro.REPOR);
+        assertThat(EstoqueFiltro.doParametro("negativo")).isEqualTo(EstoqueFiltro.NEGATIVO);
+        assertThat(EstoqueFiltro.doParametro("zerado")).isEqualTo(EstoqueFiltro.ZERADO);
         assertThat(EstoqueFiltro.doParametro("baixo")).isEqualTo(EstoqueFiltro.BAIXO);
-        assertThat(EstoqueFiltro.doParametro("sem")).isEqualTo(EstoqueFiltro.SEM);
-        assertThatThrownBy(() -> EstoqueFiltro.doParametro("zerado"))
+        assertThat(EstoqueFiltro.doParametro("reposicao")).isEqualTo(EstoqueFiltro.REPOSICAO);
+        assertThat(EstoqueFiltro.doParametro("regular")).isEqualTo(EstoqueFiltro.REGULAR);
+        assertThat(EstoqueFiltro.doParametro("alto")).isEqualTo(EstoqueFiltro.ALTO);
+        assertThatThrownBy(() -> EstoqueFiltro.doParametro("sem"))
                 .isInstanceOf(RegraDeNegocioException.class)
                 .hasMessage("Filtro de estoque inválido.")
                 .satisfies(erro -> assertThat(((RegraDeNegocioException) erro).campo()).contains("estoque"));

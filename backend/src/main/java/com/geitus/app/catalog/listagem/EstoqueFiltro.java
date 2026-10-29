@@ -5,14 +5,18 @@ import com.geitus.app.catalog.RegraDeNegocioException;
 /**
  * Filtro de estoque da listagem (spec de Produtos), so para produtos que controlam
  * estoque; o saldo vem do {@code LEFT JOIN estoque_saldos s} (sem linha = 0).
- * Cada valor guarda o fragmento SQL FIXO do {@code WHERE}, coerente com
- * {@code SituacaoEstoque}: {@link #BAIXO} inclui os sem estoque.
+ * Os mesmos valores e os mesmos fragmentos SQL FIXOS do filtro de situacao da
+ * posicao ({@link SituacaoDaPosicao}), coerentes com {@code SituacaoEstoque}.
  */
 public enum EstoqueFiltro {
-    /** Saldo ate o ponto de reposicao (ou, sem ponto, ate o minimo), incluindo os zerados. */
-    BAIXO("baixo", " AND p.controla_estoque AND " + SituacaoDaPosicao.ESTOQUE_BAIXO),
-    /** Saldo menor ou igual a zero. */
-    SEM("sem", " AND p.controla_estoque AND " + SituacaoDaPosicao.SEM_ESTOQUE);
+    /** Precisa de atencao: negativo, zerado, baixo ou reposicao. */
+    REPOR(SituacaoDaPosicao.REPOR),
+    NEGATIVO(SituacaoDaPosicao.NEGATIVO),
+    ZERADO(SituacaoDaPosicao.ZERADO),
+    BAIXO(SituacaoDaPosicao.BAIXO),
+    REPOSICAO(SituacaoDaPosicao.REPOSICAO),
+    REGULAR(SituacaoDaPosicao.REGULAR),
+    ALTO(SituacaoDaPosicao.ALTO);
 
     static final String MENSAGEM_INVALIDO = "Filtro de estoque inválido.";
     static final String CAMPO = "estoque";
@@ -20,9 +24,9 @@ public enum EstoqueFiltro {
     private final String nomeNaApi;
     private final String condicao;
 
-    EstoqueFiltro(String nomeNaApi, String condicao) {
-        this.nomeNaApi = nomeNaApi;
-        this.condicao = condicao;
+    EstoqueFiltro(SituacaoDaPosicao situacao) {
+        this.nomeNaApi = situacao.nomeNaApi();
+        this.condicao = " AND p.controla_estoque" + situacao.condicao();
     }
 
     /** Valor aceito no parametro da API (a allow-list; tambem anunciado na OpenAPI). */

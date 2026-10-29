@@ -96,7 +96,8 @@ class PosicaoDeEstoqueIT {
         mockMvc.perform(get(RESUMO).header("Authorization", cenario.token(operador)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.produtos").value(1))
-                .andExpect(jsonPath("$.semEstoque").value(1));
+                .andExpect(jsonPath("$.zerados").value(1))
+                .andExpect(jsonPath("$.semEstoque").doesNotExist());
     }
 
     @Test
@@ -116,7 +117,7 @@ class PosicaoDeEstoqueIT {
                 .andExpect(jsonPath("$.itens[0].unidade.fracionada").value(false))
                 .andExpect(jsonPath("$.itens[0].ativo").value(true))
                 .andExpect(jsonPath("$.itens[0].saldo").value(7.0))
-                .andExpect(jsonPath("$.itens[0].situacao").value("NORMAL"))
+                .andExpect(jsonPath("$.itens[0].situacao").value("REGULAR"))
                 .andExpect(jsonPath("$.itens[0].custo").value(1.99))
                 .andExpect(jsonPath("$.itens[0].valorEmCusto").value(13.93))
                 .andExpect(jsonPath("$.itens[0].embalagemPrincipal.sigla").value("CX"))
@@ -136,13 +137,14 @@ class PosicaoDeEstoqueIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalItens").value(1))
                 .andExpect(jsonPath("$.itens[0].nome").value("Vendido sem estoque"))
-                .andExpect(jsonPath("$.itens[0].situacao").value("SEM_ESTOQUE"))
+                .andExpect(jsonPath("$.itens[0].situacao").value("NEGATIVO"))
                 .andExpect(jsonPath("$.itens[0].valorEmCusto").doesNotExist());
         // O resumo ignora a situacao (regra 24).
         mockMvc.perform(get(RESUMO).param("situacao", "negativo").header("Authorization", token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.produtos").value(2))
-                .andExpect(jsonPath("$.negativos").value(1));
+                .andExpect(jsonPath("$.negativos").value(1))
+                .andExpect(jsonPath("$.zerados").value(1));
     }
 
     @Test
@@ -164,7 +166,7 @@ class PosicaoDeEstoqueIT {
         CenarioDeEstoque.EmpresaDeTeste empresa = cenario.novaEmpresa();
         String token = cenario.token(empresa.admin());
 
-        mockMvc.perform(get(POSICAO).param("situacao", "zerado").header("Authorization", token))
+        mockMvc.perform(get(POSICAO).param("situacao", "sem").header("Authorization", token))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.campos[0].campo").value("situacao"));
         mockMvc.perform(get(POSICAO).param("ordem", "preco").header("Authorization", token))

@@ -7,7 +7,7 @@
  */
 
 import type { CategoriaResumo, MarcaResumo, UnidadeResumo } from '@/types/catalogo'
-import type { SituacaoEstoque } from '@/types/estoque'
+import { SITUACOES_DO_FILTRO, type SituacaoDoFiltro, type SituacaoEstoque } from '@/types/estoque'
 
 /**
  * Formato reconhecido de um codigo de barras: EAN-8, UPC-A e EAN-13 (so digitos,
@@ -269,9 +269,9 @@ export interface ProdutoRequest {
 export const STATUS_FILTRO = ['ativos', 'inativos', 'todos'] as const
 export type StatusFiltro = (typeof STATUS_FILTRO)[number]
 
-/** Filtro de estoque da lista: `baixo` inclui os sem estoque; so produtos que controlam estoque. */
-export const ESTOQUE_FILTRO = ['baixo', 'sem'] as const
-export type EstoqueFiltro = (typeof ESTOQUE_FILTRO)[number]
+/** Filtro de estoque da lista: o mesmo da posicao de estoque (`repor` junta os que precisam de atencao); so produtos que controlam estoque. */
+export const ESTOQUE_FILTRO = SITUACOES_DO_FILTRO
+export type EstoqueFiltro = SituacaoDoFiltro
 
 /**
  * Ordenacao da lista (parametro `ordem` da API), na ordem do select da tela;

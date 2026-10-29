@@ -270,22 +270,25 @@ class ConsultaDeProdutosIT {
     // ---------- Estoque (spec de Produtos) ----------
 
     @Test
-    void estoqueSem() {
+    void estoqueZerado() {
         salvar(produto("Sem linha de saldo"));
         saldo(salvar(produto("Saldo zero")), "0");
         saldo(salvar(produto("Com saldo")), "5");
         salvar(produto("Nao controla").semControleDeEstoque());
 
-        assertThat(nomes(filtro().estoque(EstoqueFiltro.SEM))).containsExactly("Saldo zero", "Sem linha de saldo");
+        assertThat(nomes(filtro().estoque(EstoqueFiltro.ZERADO))).containsExactly("Saldo zero", "Sem linha de saldo");
     }
 
     @Test
-    void estoqueBaixoPeloPonto() {
+    void estoqueReposicaoEntreOMinimoEOPonto() {
         saldo(salvar(produto("No ponto").pontoReposicao("10").estoqueMinimo("5")), "10");
         saldo(salvar(produto("Abaixo do ponto").pontoReposicao("10").estoqueMinimo("5")), "8");
         saldo(salvar(produto("Acima do ponto").pontoReposicao("10").estoqueMinimo("5")), "10.001");
+        saldo(salvar(produto("No minimo com ponto").pontoReposicao("10").estoqueMinimo("5")), "5");
 
-        assertThat(nomes(filtro().estoque(EstoqueFiltro.BAIXO))).containsExactly("Abaixo do ponto", "No ponto");
+        assertThat(nomes(filtro().estoque(EstoqueFiltro.REPOSICAO))).containsExactly("Abaixo do ponto", "No ponto");
+        assertThat(nomes(filtro().estoque(EstoqueFiltro.BAIXO))).containsExactly("No minimo com ponto");
+        assertThat(nomes(filtro().estoque(EstoqueFiltro.REGULAR))).containsExactly("Acima do ponto");
     }
 
     @Test
@@ -297,12 +300,12 @@ class ConsultaDeProdutosIT {
     }
 
     @Test
-    void estoqueBaixoIncluiZerados() {
+    void estoqueReporIncluiZerados() {
         salvar(produto("Zerado sem niveis"));
         saldo(salvar(produto("Zerado com ponto").pontoReposicao("10")), "0");
         saldo(salvar(produto("Com saldo sem niveis")), "3");
 
-        assertThat(nomes(filtro().estoque(EstoqueFiltro.BAIXO))).containsExactly("Zerado com ponto",
+        assertThat(nomes(filtro().estoque(EstoqueFiltro.REPOR))).containsExactly("Zerado com ponto",
                 "Zerado sem niveis");
     }
 
@@ -311,8 +314,8 @@ class ConsultaDeProdutosIT {
         saldo(salvar(produto("Nao controla zerado").pontoReposicao("10").semControleDeEstoque()), "0");
         saldo(salvar(produto("Nao controla baixo").pontoReposicao("10").semControleDeEstoque()), "2");
 
-        assertThat(nomes(filtro().estoque(EstoqueFiltro.BAIXO))).isEmpty();
-        assertThat(nomes(filtro().estoque(EstoqueFiltro.SEM))).isEmpty();
+        assertThat(nomes(filtro().estoque(EstoqueFiltro.REPOR))).isEmpty();
+        assertThat(nomes(filtro().estoque(EstoqueFiltro.ZERADO))).isEmpty();
     }
 
     // ---------- Promocao ----------
@@ -341,7 +344,7 @@ class ConsultaDeProdutosIT {
         salvar(produto("Golden fora da categoria promo zerada").promocao("8.00", HOJE, HOJE));
         salvar(produto("Ração Premier promo zerada").categoria(racao).promocao("8.00", HOJE, HOJE));
 
-        Filtro todos = filtro().busca("golden racao").categorias(Set.of(racao.getId())).estoque(EstoqueFiltro.SEM)
+        Filtro todos = filtro().busca("golden racao").categorias(Set.of(racao.getId())).estoque(EstoqueFiltro.ZERADO)
                 .emPromocao();
 
         assertThat(nomes(todos)).containsExactly("Ração Golden promo zerada");
@@ -550,7 +553,7 @@ class ConsultaDeProdutosIT {
         assertThat(nomes(filtro())).containsExactly("Arroz da A");
         assertThat(nomes(filtro().busca("arroz"))).containsExactly("Arroz da A");
         assertThat(nomes(filtro().busca(EAN13))).isEmpty();
-        assertThat(nomes(filtro().estoque(EstoqueFiltro.SEM))).containsExactly("Arroz da A");
+        assertThat(nomes(filtro().estoque(EstoqueFiltro.ZERADO))).containsExactly("Arroz da A");
         assertThat(nomes(new Filtro(outra.getId()).busca("arroz"))).containsExactly("Arroz da B");
     }
 

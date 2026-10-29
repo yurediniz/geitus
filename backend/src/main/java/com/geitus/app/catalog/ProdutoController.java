@@ -82,8 +82,10 @@ public class ProdutoController {
             @RequestParam(required = false) String status,
             @Parameter(description = "UUID da categoria; inclui as subcategorias")
             @RequestParam(required = false) UUID categoria,
-            @Parameter(description = "baixo (inclui os sem estoque) ou sem; so produtos que controlam estoque",
-                    schema = @Schema(allowableValues = { "baixo", "sem" }))
+            @Parameter(description = "Situacao do estoque: repor (negativo, zerado, baixo ou reposicao), negativo, "
+                    + "zerado, baixo, reposicao, regular ou alto; so produtos que controlam estoque",
+                    schema = @Schema(allowableValues = { "repor", "negativo", "zerado", "baixo", "reposicao",
+                            "regular", "alto" }))
             @RequestParam(required = false) String estoque,
             @Parameter(description = "true: so produtos com promocao vigente hoje",
                     schema = @Schema(allowableValues = { "true", "false" }, defaultValue = "false"))
