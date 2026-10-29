@@ -45,6 +45,7 @@ export const MENSAGEM_PERIODO_INVERTIDO = 'A data inicial deve ser anterior à f
 export const MENSAGEM_PERIODO_LONGO = 'O período pode ter no máximo 1 ano.'
 
 const DATA_VALIDA = /^\d{4}-\d{2}-\d{2}$/
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DIA_EM_MS = 24 * 60 * 60 * 1000
 
 function lerData(valor: string | null): string | null {
@@ -69,11 +70,13 @@ function diasEntre(de: string, ate: string): number {
 function lerFiltros(params: URLSearchParams, hoje: string, podeFiltrarUsuario: boolean): FiltrosDasMovimentacoes {
   const ate = lerData(params.get('ate')) ?? hoje
   const de = lerData(params.get('de')) ?? somarDias(ate, -(DIAS_DO_PADRAO - 1))
+  const produto = params.get('produto')
   const tipo = umDe(TIPOS, params.get('tipo'))
   const usuario = params.get('usuario')
   return {
     de,
     ate,
+    produto: produto !== null && UUID.test(produto) ? produto : null,
     tipo,
     // Motivo que o tipo nao tem e ignorado: o select nao teria como mostra-lo.
     motivo: umDe(motivosDoFiltro(tipo), params.get('motivo')),
@@ -93,6 +96,9 @@ function escreverFiltros(filtros: FiltrosDasMovimentacoes, hoje: string): URLSea
     params.set('de', filtros.de)
     params.set('ate', filtros.ate)
   }
+  if (filtros.produto) {
+    params.set('produto', filtros.produto)
+  }
   if (filtros.tipo) {
     params.set('tipo', filtros.tipo)
   }
@@ -105,11 +111,11 @@ function escreverFiltros(filtros: FiltrosDasMovimentacoes, hoje: string): URLSea
   return params
 }
 
-const CAMPOS: readonly (keyof FiltrosDasMovimentacoes)[] = ['de', 'ate', 'tipo', 'motivo', 'usuario']
+const CAMPOS: readonly (keyof FiltrosDasMovimentacoes)[] = ['de', 'ate', 'produto', 'tipo', 'motivo', 'usuario']
 
 /**
  * Estado da aba Movimentacoes guardado na URL (`?aba=movimentacoes&de=&ate=
- * &tipo=&motivo=&usuario=`). Sem datas, os ultimos 30 dias. Trocar o tipo tira
+ * &produto=&tipo=&motivo=&usuario=`). Sem datas, os ultimos 30 dias. Trocar o tipo tira
  * o motivo que ele nao tem. O periodo invertido ou maior que 1 ano vira
  * `erroDoPeriodo` (a lista nao e consultada). Sem `podeFiltrarUsuario` (so o
  * ADMIN ve o filtro), o `usuario` da URL e ignorado.
@@ -123,7 +129,8 @@ export function useFiltrosDasMovimentacoes(podeFiltrarUsuario = true) {
   )
 
   const alterar = useCallback(
-    (parcial: Partial<FiltrosDasMovimentacoes>) => {
+    // `substituir`: troca a entrada do historico (ex.: tirar um filtro invalido sem prender o Voltar).
+    (parcial: Partial<FiltrosDasMovimentacoes>, { substituir = false }: { substituir?: boolean } = {}) => {
       const pedido: FiltrosDasMovimentacoes = { ...filtros, ...parcial }
       if (pedido.motivo !== null && !motivosDoFiltro(pedido.tipo).includes(pedido.motivo)) {
         pedido.motivo = null
@@ -132,7 +139,7 @@ export function useFiltrosDasMovimentacoes(podeFiltrarUsuario = true) {
         return
       }
       // flushSync: a URL nova e o proximo render saem juntos (ver useFiltrosDaListaDeProdutos).
-      setSearchParams(escreverFiltros(pedido, hoje), { flushSync: true })
+      setSearchParams(escreverFiltros(pedido, hoje), { replace: substituir, flushSync: true })
     },
     [filtros, hoje, setSearchParams],
   )
@@ -157,7 +164,11 @@ export function useFiltrosDasMovimentacoes(podeFiltrarUsuario = true) {
   const erroDoPeriodo =
     distancia < 0 ? MENSAGEM_PERIODO_INVERTIDO : distancia > DIAS_ENTRE_DATAS_NO_MAXIMO ? MENSAGEM_PERIODO_LONGO : null
   const temFiltroAtivo =
-    !ehOPeriodoPadrao(filtros, hoje) || filtros.tipo !== null || filtros.motivo !== null || filtros.usuario !== null
+    !ehOPeriodoPadrao(filtros, hoje) ||
+    filtros.produto !== null ||
+    filtros.tipo !== null ||
+    filtros.motivo !== null ||
+    filtros.usuario !== null
 
   return { filtros, alterar, limpar, escolherAtalho, atalho, erroDoPeriodo, temFiltroAtivo, hoje }
 }

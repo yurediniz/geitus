@@ -116,7 +116,7 @@ describe('estoqueService', () => {
     it('leva o período, a página e 25 itens, sem os filtros vazios', async () => {
       apiGetMock.mockResolvedValue({ itens: [], pagina: 0, tamanho: 25, totalItens: 0 })
 
-      await listarMovimentacoes({ de: '2026-09-30', ate: '2026-10-29', tipo: null, motivo: null, usuario: null }, 0)
+      await listarMovimentacoes({ de: '2026-09-30', ate: '2026-10-29', produto: null, tipo: null, motivo: null, usuario: null }, 0)
 
       expect(apiGetMock).toHaveBeenCalledWith('/estoque/movimentos?de=2026-09-30&ate=2026-10-29&pagina=0&tamanho=25', {
         autenticada: true,
@@ -129,13 +129,13 @@ describe('estoqueService', () => {
       const signal = new AbortController().signal
 
       await listarMovimentacoes(
-        { de: '2026-10-29', ate: '2026-10-29', tipo: 'SAIDA', motivo: 'VENDA', usuario: 7 },
+        { de: '2026-10-29', ate: '2026-10-29', produto: '3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e02', tipo: 'SAIDA', motivo: 'VENDA', usuario: 7 },
         1,
         signal,
       )
 
       expect(apiGetMock).toHaveBeenCalledWith(
-        '/estoque/movimentos?de=2026-10-29&ate=2026-10-29&tipo=SAIDA&motivo=VENDA&usuario=7&pagina=1&tamanho=25',
+        '/estoque/movimentos?de=2026-10-29&ate=2026-10-29&produto=3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e02&tipo=SAIDA&motivo=VENDA&usuario=7&pagina=1&tamanho=25',
         { autenticada: true, signal },
       )
     })

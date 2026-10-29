@@ -7,9 +7,13 @@ import { EstoquePage } from '@/features/stock/EstoquePage'
 import { useAuth } from '@/hooks/useAuth'
 import { listarCategorias } from '@/services/categoriaService'
 import { buscarResumoDaPosicao, listarMovimentacoes, listarPosicaoDeEstoque } from '@/services/estoqueService'
+import { HttpError } from '@/services/httpClient'
+import { buscarVenda } from '@/services/pdvService'
+import { buscarProduto, listarProdutos } from '@/services/produtoService'
 import { listarUsuarios } from '@/services/usuarioService'
 import type { FiltrosDasMovimentacoes, MovimentacaoDeEstoque } from '@/types/estoque'
-import type { PaginaResponse } from '@/types/produto'
+import type { Venda } from '@/types/pdv'
+import type { PaginaResponse, Produto } from '@/types/produto'
 import type { Usuario } from '@/types/usuario'
 
 vi.mock('@/services/estoqueService', () => ({
@@ -22,6 +26,15 @@ vi.mock('@/services/estoqueService', () => ({
 
 vi.mock('@/services/usuarioService', () => ({
   listarUsuarios: vi.fn(),
+}))
+
+vi.mock('@/services/produtoService', () => ({
+  listarProdutos: vi.fn(),
+  buscarProduto: vi.fn(),
+}))
+
+vi.mock('@/services/pdvService', () => ({
+  buscarVenda: vi.fn(),
 }))
 
 vi.mock('@/services/categoriaService', () => ({
@@ -40,6 +53,9 @@ vi.mock('@/features/products/produtoFormulario', async (original) => ({
 
 const listarMovimentacoesMock = vi.mocked(listarMovimentacoes)
 const listarUsuariosMock = vi.mocked(listarUsuarios)
+const listarProdutosMock = vi.mocked(listarProdutos)
+const buscarProdutoMock = vi.mocked(buscarProduto)
+const buscarVendaMock = vi.mocked(buscarVenda)
 const useAuthMock = vi.mocked(useAuth)
 
 const ID_ARROZ = '3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e02'
@@ -95,6 +111,45 @@ function usuario(id: number, nome: string, ativo = true): Usuario {
     atualizadoEm: null,
     empresa: { id: 1, nome: 'Mercado Central', ativo: true, criadoEm: '2026-01-01T00:00:00Z', atualizadoEm: null },
   }
+}
+
+/** Produto da busca e do `buscarProduto` (so os campos que a tela le). */
+function produto(id: string, nome: string, numero: number): Produto {
+  return { id, nome, numero, ativo: true } as Produto
+}
+
+const VENDA: Venda = {
+  id: 'venda-1',
+  numero: 123,
+  status: 'CONCLUIDA',
+  sessaoId: 'sessao-1',
+  pontoNome: 'Caixa 1',
+  concluidaEm: '2026-10-29T10:15:00-03:00',
+  vendedorNome: 'Ana Souza',
+  clienteNome: null,
+  itens: [
+    {
+      ordem: 1,
+      nome: 'Arroz 5 kg',
+      embalagemRotulo: null,
+      quantidade: 2,
+      unidade: 'UN',
+      precoUnitario: 25,
+      origemPreco: 'NORMAL',
+      valorBruto: 50,
+      descontoItem: 0,
+      descontoRateado: 0,
+      valorLiquido: 50,
+    },
+  ],
+  subtotal: 50,
+  descontoItens: 0,
+  descontoTotal: 0,
+  total: 50,
+  pagamentos: [{ forma: 'PIX', valor: 50 }],
+  troco: 0,
+  cancelamento: null,
+  podeCancelar: false,
 }
 
 function definirPerfil(perfil: 'ADMIN' | 'OPERADOR') {
@@ -172,7 +227,7 @@ describe('Aba Movimentações', () => {
     expect(within(ajuste).getByText('Regularizado após contagem')).toBeInTheDocument()
     expect(within(ajuste).queryByText(/Venda nº/)).not.toBeInTheDocument()
     // Sem filtros na URL: os ultimos 30 dias.
-    expect(ultimosFiltros()).toEqual({ de: '2026-09-30', ate: '2026-10-29', tipo: null, motivo: null, usuario: null })
+    expect(ultimosFiltros()).toEqual({ de: '2026-09-30', ate: '2026-10-29', produto: null, tipo: null, motivo: null, usuario: null })
     expect(screen.getByRole('button', { name: '30 dias' })).toHaveAttribute('aria-pressed', 'true')
   })
 
@@ -252,6 +307,82 @@ describe('Aba Movimentações', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /limpar filtros/i }).at(-1) as HTMLElement)
 
     await waitFor(() => expect(router.state.location.search).toBe('?aba=movimentacoes'))
+  })
+
+  it('escolher um produto na busca filtra pela URL e mostra o nome', async () => {
+    listarProdutosMock.mockResolvedValue({ itens: [produto('3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e02', 'Arroz 5 kg', 16)], pagina: 0, tamanho: 8, totalItens: 1 })
+    const router = renderPagina()
+    await listaCarregada()
+
+    fireEvent.click(screen.getByRole('button', { name: /produto\s*todos/i }))
+    fireEvent.click(await screen.findByRole('option', { name: /arroz 5 kg/i }))
+
+    await waitFor(() => expect(router.state.location.search).toBe('?aba=movimentacoes&produto=3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e02'))
+    await waitFor(() => expect(ultimosFiltros().produto).toBe('3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e02'))
+    expect(screen.getByRole('button', { name: /produto\s*arroz 5 kg/i })).toBeInTheDocument()
+    // O nome ja veio da busca: nao consulta o produto.
+    expect(buscarProdutoMock).not.toHaveBeenCalled()
+  })
+
+  it('vindo da URL, o nome do produto é carregado pelo id', async () => {
+    buscarProdutoMock.mockResolvedValue(produto('3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e02', 'Arroz 5 kg', 16))
+    renderPagina(`${ABA}&produto=3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e02`)
+
+    expect(await screen.findByRole('button', { name: /produto\s*arroz 5 kg/i })).toBeInTheDocument()
+    expect(buscarProdutoMock).toHaveBeenCalledWith('3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e02')
+    expect(ultimosFiltros().produto).toBe('3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e02')
+  })
+
+  it('produto da URL que não existe mais sai do filtro com um aviso', async () => {
+    buscarProdutoMock.mockRejectedValue(new HttpError(404, 'Produto não encontrado.'))
+    const router = renderPagina(`${ABA}&produto=3f2a9c1e-7b4d-4e8a-9c2f-0a1b2c3d4e02`)
+
+    expect(await screen.findByText('Produto do filtro não encontrado.')).toBeInTheDocument()
+    await waitFor(() => expect(router.state.location.search).toBe('?aba=movimentacoes'))
+    // Substitui a entrada do historico: o Voltar do navegador nao volta para o produto inexistente.
+    expect(router.state.historyAction).toBe('REPLACE')
+    expect(screen.getByRole('button', { name: /produto\s*todos/i })).toBeInTheDocument()
+  })
+
+  it('o ADMIN abre a venda do movimento numa janela', async () => {
+    buscarVendaMock.mockResolvedValue(VENDA)
+    renderPagina()
+    await listaCarregada()
+
+    const botao = screen.getByRole('button', { name: /^Venda\snº\s123$/ })
+    fireEvent.click(botao)
+
+    const janela = await screen.findByRole('dialog', { name: 'Venda nº 123' })
+    expect(await within(janela).findByRole('list', { name: 'Itens da venda nº 123' })).toBeInTheDocument()
+    expect(within(janela).getByText('Arroz 5 kg')).toBeInTheDocument()
+    expect(within(janela).getByText('Total')).toBeInTheDocument()
+    expect(buscarVendaMock).toHaveBeenCalledWith('venda-1')
+
+    // O "Fechar" do rodape (o X do canto tem o mesmo nome).
+    fireEvent.click(within(janela).getAllByRole('button', { name: 'Fechar' }).at(-1) as HTMLElement)
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(botao).toHaveFocus()
+  })
+
+  it('venda que não está mais disponível mostra a mensagem', async () => {
+    buscarVendaMock.mockRejectedValue(new HttpError(404, 'Venda não encontrada.'))
+    renderPagina()
+    await listaCarregada()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Venda\snº\s123$/ }))
+
+    const janela = await screen.findByRole('dialog', { name: 'Venda nº 123' })
+    expect(await within(janela).findByText('Esta venda não está mais disponível.')).toBeInTheDocument()
+    expect(buscarVendaMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('para o OPERADOR, o número da venda é só texto', async () => {
+    definirPerfil('OPERADOR')
+    renderPagina()
+    await listaCarregada()
+
+    expect(screen.getByText('Venda nº 123')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Venda\snº\s123$/ })).not.toBeInTheDocument()
   })
 
   it('as abas trocam pela URL, e a Posição continua sendo a aba padrão', async () => {

@@ -105,6 +105,9 @@ export function listarMovimentacoes(
   signal?: AbortSignal,
 ): Promise<PaginaResponse<MovimentacaoDeEstoque>> {
   const searchParams = new URLSearchParams({ de: filtros.de, ate: filtros.ate })
+  if (filtros.produto) {
+    searchParams.set('produto', filtros.produto)
+  }
   if (filtros.tipo) {
     searchParams.set('tipo', filtros.tipo)
   }

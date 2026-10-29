@@ -161,6 +161,8 @@ export interface ResumoDaPosicao {
 export interface FiltrosDasMovimentacoes {
   de: string
   ate: string
+  /** UUID publico do produto, ou null. */
+  produto: string | null
   tipo: TipoMovimento | null
   motivo: MotivoMovimento | null
   /** Id do usuario que registrou (o mesmo de `/api/usuarios`); o filtro so aparece para o ADMIN. */

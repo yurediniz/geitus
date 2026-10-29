@@ -4,6 +4,7 @@ import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/native-select'
+import { BuscaDeProduto, type ProdutoEscolhido } from '@/features/products/BuscaDeProduto'
 import { ROTULO_MOTIVO } from '@/features/products/estoque/ajusteEstoque'
 import {
   ATALHOS_DE_PERIODO,
@@ -39,6 +40,11 @@ export interface FiltrosDasMovimentacoesProps {
   hoje: string
   aoLimpar: () => void
   temFiltroAtivo: boolean
+  /** Produto do filtro (com o nome, para o gatilho); null = todos. */
+  produto: ProdutoEscolhido | null
+  aoEscolherProduto: (produto: ProdutoEscolhido | null) => void
+  /** Aviso sob o campo Produto (ex.: o produto da URL nao existe mais). */
+  avisoDoProduto: string | null
   /** Usuarios da empresa para o filtro; `undefined` esconde o filtro (so o ADMIN o ve). */
   usuarios: readonly Usuario[] | undefined
   carregandoUsuarios: boolean
@@ -47,8 +53,8 @@ export interface FiltrosDasMovimentacoesProps {
 
 /**
  * Filtros da aba Movimentacoes (spec de Estoque, regra 26): o periodo, com os
- * atalhos Hoje, 7 dias e 30 dias e as duas datas, o tipo, o motivo (so os do
- * tipo escolhido) e, para o ADMIN, o usuario.
+ * atalhos Hoje, 7 dias e 30 dias e as duas datas, o produto (busca), o tipo,
+ * o motivo (so os do tipo escolhido) e, para o ADMIN, o usuario.
  */
 export function FiltrosDasMovimentacoes({
   filtros,
@@ -59,6 +65,9 @@ export function FiltrosDasMovimentacoes({
   hoje,
   aoLimpar,
   temFiltroAtivo,
+  produto,
+  aoEscolherProduto,
+  avisoDoProduto,
   usuarios,
   carregandoUsuarios,
   erroNosUsuarios,
@@ -129,7 +138,22 @@ export function FiltrosDasMovimentacoes({
         )}
       </fieldset>
 
-      <div className={cn('grid gap-3 sm:grid-cols-2', mostrarUsuario ? 'md:grid-cols-4' : 'md:grid-cols-3')}>
+      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+        <div className="space-y-1.5">
+          <span id={`${id}-produto-rotulo`} className="block text-sm font-medium">
+            Produto
+          </span>
+          <BuscaDeProduto
+            id={`${id}-produto`}
+            idRotulo={`${id}-produto-rotulo`}
+            valor={produto}
+            onChange={aoEscolherProduto}
+            textoSemValor="Todos"
+            className={ALTURA_DO_CONTROLE}
+          />
+          {avisoDoProduto && <p className="text-xs text-muted-foreground">{avisoDoProduto}</p>}
+        </div>
+
         <div className="space-y-1.5">
           <label htmlFor={`${id}-tipo`} className="block text-sm font-medium">
             Tipo
