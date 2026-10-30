@@ -74,8 +74,10 @@ public class VendaController {
     }
 
     @Operation(summary = "Vendas, da mais recente (OPERADOR: so as das proprias sessoes)",
-            description = "Sem os itens. Sem sessaoId e sem periodo, a sessao atual do usuario; com periodo, todas "
-                    + "as que ele pode ver. Paginado: pagina a partir de 0; tamanho de 1 a 100 (padrao 20).",
+            description = "Sem os itens, com a situacao de devolucao. Sem sessaoId, periodo e numero, a sessao "
+                    + "atual do usuario; com periodo (no maximo 1 ano), todas as que ele pode ver; com numero e sem "
+                    + "sessaoId, aquele numero em qualquer data. pontoId e vendedorId so valem para o ADMIN. "
+                    + "Paginado: pagina a partir de 0; tamanho de 1 a 100 (padrao 20).",
             security = @SecurityRequirement(name = "bearer-jwt"))
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Pagina de vendas"),
@@ -90,12 +92,17 @@ public class VendaController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate de,
             @Parameter(description = "Concluidas ate esta data, inclusive (AAAA-MM-DD)")
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate ate,
-            @Parameter(description = "Numero da venda") @RequestParam(required = false) Long numero,
+            @Parameter(description = "Numero da venda; sem sessaoId, em qualquer data (ignora o periodo)")
+            @RequestParam(required = false) Long numero,
+            @Parameter(description = "UUID do ponto de caixa (so ADMIN; outra empresa: lista vazia)")
+            @RequestParam(required = false) UUID pontoId,
+            @Parameter(description = "Id do vendedor, o de /api/usuarios (so ADMIN; outra empresa: lista vazia)")
+            @RequestParam(required = false) Long vendedorId,
             @Parameter(description = "Pagina, a partir de 0") @RequestParam(defaultValue = PAGINA_PADRAO) int pagina,
             @Parameter(description = "Itens por pagina, de 1 a 100")
             @RequestParam(defaultValue = TAMANHO_PADRAO) int tamanho) {
         return ResponseEntity.ok(vendasService.listarParaUsuario(idUsuario,
-                new FiltroDeVendas(sessaoId, status, de, ate, numero), pagina, tamanho));
+                new FiltroDeVendas(sessaoId, status, de, ate, numero, pontoId, vendedorId), pagina, tamanho));
     }
 
     @Operation(summary = "Detalhe da venda com os itens (dono da sessao ou ADMIN)",

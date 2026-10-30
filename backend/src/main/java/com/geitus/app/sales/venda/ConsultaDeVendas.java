@@ -4,6 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.stereotype.Repository;
 
@@ -25,6 +26,10 @@ class ConsultaDeVendas {
     private static final String DA_EMPRESA = " WHERE v.empresaId = :empresaId";
     private static final String DO_VENDEDOR = " AND v.usuarioId = :vendedor";
     private static final String DA_SESSAO = " AND v.sessaoCaixaId = :sessaoId";
+    // A venda nao guarda o ponto: entram as das sessoes daquele ponto, da mesma empresa (ponto de outra
+    // empresa ou inexistente nao tem sessao aqui, e a lista volta vazia).
+    private static final String DO_PONTO = " AND v.sessaoCaixaId IN (SELECT s.id FROM SessaoDeCaixa s"
+            + " WHERE s.empresaId = :empresaId AND s.ponto.uuid = :pontoId)";
     private static final String COM_STATUS = " AND v.status = :status";
     private static final String COM_NUMERO = " AND v.numero = :numero";
     private static final String DESDE = " AND v.concluidaEm >= :inicio";
@@ -39,10 +44,12 @@ class ConsultaDeVendas {
 
     /**
      * Criterios ja resolvidos: {@code vendedor} restringe o OPERADOR as vendas
-     * das proprias sessoes (o vendedor e sempre quem abriu a sessao); o periodo
-     * e meio aberto, {@code [inicio, fim)}. Cada criterio {@code null} fica de fora.
+     * das proprias sessoes (o vendedor e sempre quem abriu a sessao) ou e o
+     * vendedor escolhido pelo ADMIN; {@code pontoId} e o UUID do ponto de caixa;
+     * o periodo e meio aberto, {@code [inicio, fim)}. Cada criterio {@code null}
+     * fica de fora.
      */
-    record Criterios(Long empresaId, Long vendedor, Long sessaoId, StatusDaVenda status, Long numero,
+    record Criterios(Long empresaId, Long vendedor, Long sessaoId, UUID pontoId, StatusDaVenda status, Long numero,
             OffsetDateTime inicio, OffsetDateTime fim) {
     }
 
@@ -70,6 +77,7 @@ class ConsultaDeVendas {
         parametros.put("empresaId", criterios.empresaId());
         adicionar(jpql, parametros, DO_VENDEDOR, "vendedor", criterios.vendedor());
         adicionar(jpql, parametros, DA_SESSAO, "sessaoId", criterios.sessaoId());
+        adicionar(jpql, parametros, DO_PONTO, "pontoId", criterios.pontoId());
         adicionar(jpql, parametros, COM_STATUS, "status", criterios.status());
         adicionar(jpql, parametros, COM_NUMERO, "numero", criterios.numero());
         adicionar(jpql, parametros, DESDE, "inicio", criterios.inicio());

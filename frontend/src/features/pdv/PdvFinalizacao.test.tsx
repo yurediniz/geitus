@@ -914,10 +914,11 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
         itens: [
           vendaResumo(),
           vendaResumo({ id: 'v-127', numero: 127, status: 'CANCELADA', podeCancelar: false, total: 10 }),
+          vendaResumo({ id: 'v-126', numero: 126, situacaoDevolucao: 'PARCIAL' }),
         ],
         pagina: 0,
         tamanho: 50,
-        totalItens: 2,
+        totalItens: 3,
       })
       buscarVendaMock.mockResolvedValue(
         venda({
@@ -952,6 +953,8 @@ describe('PDV: pagamento, finalização, espera e vendas do caixa', () => {
       expect(primeira).toHaveTextContent('Dinheiro')
       expect(primeira).toHaveTextContent('R$ 74,70')
       expect(segunda).toHaveTextContent('Cancelada')
+      // DT-042: a lista mostra a devolucao.
+      expect(within(lista).getAllByRole('listitem')[2]).toHaveTextContent('Devolução parcial')
 
       fireEvent.click(within(primeira).getByRole('button', { name: /Nº 128/ }))
       expect(await within(janela).findByText('Ração X 1kg')).toBeInTheDocument()

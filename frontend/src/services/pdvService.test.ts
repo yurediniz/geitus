@@ -95,6 +95,33 @@ describe('pdvService', () => {
     )
   })
 
+  it('lista as vendas por caixa e vendedor (so quando preenchidos), com 50 por pagina', async () => {
+    apiGetMock.mockResolvedValue({ itens: [], pagina: 0, tamanho: 50, totalItens: 0 })
+
+    await listarVendas({
+      sessaoId: '',
+      status: '',
+      de: '2026-10-29',
+      ate: '2026-10-29',
+      numero: '',
+      pontoId: 'p-2',
+      vendedorId: '9',
+      pagina: 1,
+    })
+    await listarVendas({ sessaoId: '', status: '', de: '', ate: '', numero: '42', pontoId: '', vendedorId: '', pagina: 1 })
+
+    expect(TAMANHO_PAGINA_VENDAS).toBe(50)
+    expect(apiGetMock).toHaveBeenNthCalledWith(
+      1,
+      `/pdv/vendas?de=2026-10-29&ate=2026-10-29&pontoId=p-2&vendedorId=9&pagina=0&tamanho=50`,
+      { autenticada: true, signal: undefined },
+    )
+    expect(apiGetMock).toHaveBeenNthCalledWith(2, `/pdv/vendas?numero=42&pagina=0&tamanho=50`, {
+      autenticada: true,
+      signal: undefined,
+    })
+  })
+
   it('busca e cancela a venda pelo id', async () => {
     apiGetMock.mockResolvedValue({})
     apiPostMock.mockResolvedValue({})

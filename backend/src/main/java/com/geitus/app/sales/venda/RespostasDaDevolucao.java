@@ -65,6 +65,28 @@ class RespostasDaDevolucao {
         return tudo ? SituacaoDeDevolucao.TOTAL : SituacaoDeDevolucao.PARCIAL;
     }
 
+    /**
+     * A situacao de devolucao de cada venda da lista, em duas consultas (os
+     * itens e o devolvido de todas): {@code comDevolucao} sao as vendas que ja
+     * tem devolucao; as demais ficam NENHUMA.
+     */
+    Map<Long, SituacaoDeDevolucao> situacoes(Long empresaId, Set<Long> comDevolucao,
+            Function<Set<Long>, List<ItemDaVenda>> itensDasVendas) {
+        if (comDevolucao.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, BigDecimal> devolvidaPorItem = itemDevolucaoRepository
+                .findByEmpresaIdAndVendaIdIn(empresaId, comDevolucao).stream()
+                .collect(Collectors.groupingBy(ItemDaDevolucao::getItemVendaId,
+                        Collectors.reducing(BigDecimal.ZERO, ItemDaDevolucao::getQuantidade, BigDecimal::add)));
+        Map<Long, List<ItemDaVenda>> itensPorVenda = itensDasVendas.apply(comDevolucao).stream()
+                .collect(Collectors.groupingBy(ItemDaVenda::getVendaId));
+        // O id do item e unico: o mapa de todas as vendas serve a cada uma (e nao e vazio, todas tem devolucao).
+        Map<Long, SituacaoDeDevolucao> situacoes = new HashMap<>();
+        itensPorVenda.forEach((vendaId, itens) -> situacoes.put(vendaId, situacao(itens, devolvidaPorItem)));
+        return situacoes;
+    }
+
     /** A soma devolvida de cada item da venda (id interno do item), na unidade da linha. */
     Map<Long, BigDecimal> devolvidaPorItem(Venda venda) {
         return itemDevolucaoRepository.findByEmpresaIdAndVendaId(venda.getEmpresaId(), venda.getId()).stream()

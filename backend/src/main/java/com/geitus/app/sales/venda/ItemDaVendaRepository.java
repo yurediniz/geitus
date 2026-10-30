@@ -1,5 +1,6 @@
 package com.geitus.app.sales.venda;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -13,6 +14,9 @@ interface ItemDaVendaRepository extends Repository<ItemDaVenda, Long> {
     ItemDaVenda saveAndFlush(ItemDaVenda item);
 
     List<ItemDaVenda> findByEmpresaIdAndVendaIdOrderByOrdemAsc(Long empresaId, Long vendaId);
+
+    /** Os itens destas vendas, numa consulta (a situacao de devolucao da lista). */
+    List<ItemDaVenda> findByEmpresaIdAndVendaIdIn(Long empresaId, Collection<Long> vendaIds);
 
     /** Os produtos destes que tem algum item de venda (a FK RESTRICT do item tambem barra a exclusao). */
     @Query("""

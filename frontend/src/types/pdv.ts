@@ -169,12 +169,13 @@ export interface VendaResumo {
   pagamentos: PagamentoInformado[]
   cancelamento: CancelamentoDaVenda | null
   podeCancelar: boolean
+  /** Na lista e no detalhe (e nas respostas de finalizar e cancelar). */
+  situacaoDevolucao?: SituacaoDeDevolucao
 }
 
 export interface Venda extends VendaResumo {
   itens: ItemDaVenda[]
-  /** So no detalhe (e nas respostas de finalizar e cancelar); a lista nao traz. */
-  situacaoDevolucao?: SituacaoDeDevolucao
+  /** So no detalhe; a lista nao traz. */
   devolucoes?: Devolucao[]
 }
 
@@ -264,6 +265,10 @@ export interface FiltrosDeVendas {
   de: string
   ate: string
   numero: string
+  /** So o ADMIN filtra por ponto e por vendedor (para o OPERADOR o backend ignora). Vazio ou ausente: todos. */
+  pontoId?: string
+  /** O id do usuario (de `/api/usuarios`). */
+  vendedorId?: string
   pagina: number
 }
 

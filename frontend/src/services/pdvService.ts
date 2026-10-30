@@ -67,7 +67,9 @@ export async function finalizar(dados: FinalizarVendaRequest): Promise<Venda> {
 
 /**
  * Uma pagina das vendas, da mais recente para a mais antiga (OPERADOR: so das
- * proprias sessoes). Sem `sessaoId`, o backend usa a sessao atual do usuario.
+ * proprias). Sem `sessaoId`, periodo nem numero, o backend usa a sessao atual
+ * do usuario; com `numero` e sem `sessaoId`, procura em qualquer data.
+ * `pontoId` e `vendedorId` so valem para o ADMIN.
  */
 export function listarVendas(filtros: FiltrosDeVendas, signal?: AbortSignal): Promise<PaginaResponse<VendaResumo>> {
   const params = new URLSearchParams()
@@ -85,6 +87,12 @@ export function listarVendas(filtros: FiltrosDeVendas, signal?: AbortSignal): Pr
   }
   if (filtros.numero) {
     params.set('numero', filtros.numero)
+  }
+  if (filtros.pontoId) {
+    params.set('pontoId', filtros.pontoId)
+  }
+  if (filtros.vendedorId) {
+    params.set('vendedorId', filtros.vendedorId)
   }
   params.set('pagina', String(Math.max(0, filtros.pagina - 1)))
   params.set('tamanho', String(TAMANHO_PAGINA_VENDAS))

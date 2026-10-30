@@ -8,6 +8,7 @@ import {
   UserCog,
   ShoppingCart,
   Wallet,
+  ReceiptText,
   LineChart,
   Building2,
   LogOut,
@@ -90,6 +91,7 @@ function montarBlocosDeNavegacao(ehAdmin: boolean): BlocoDeNavegacao[] {
       itens: [
         { rotulo: 'PDV', to: '/pdv', icone: ShoppingCart },
         { rotulo: 'Caixa', to: '/caixa', icone: Wallet },
+        { rotulo: 'Vendas', to: '/vendas', icone: ReceiptText },
       ],
     },
     {

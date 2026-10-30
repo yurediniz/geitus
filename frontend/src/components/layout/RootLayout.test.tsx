@@ -305,6 +305,7 @@ describe('RootLayout - menu em secoes', () => {
       'Início',
       'PDV',
       'Caixa',
+      'Vendas',
       'Produtos',
       'Estoque',
       'Categorias',

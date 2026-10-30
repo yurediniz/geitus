@@ -295,3 +295,9 @@ Spec: [`estoque.md`](modules/estoque.md), regra 23; [`produtos.md`](modules/prod
 2026-10-29 · Aceita
 - **Seções:** Início; **Vendas** (PDV, Caixa); **Catálogo** (Produtos, Estoque, Categorias, Marcas, Fornecedores, Unidades); Clientes; Financeiro; **Configurações** (Empresa, Usuários, Caixa e PDV, Balança). As seções recolhem (estado no navegador); a do item ativo abre sozinha a cada visita e só fecha se o usuário a recolher ali. As abas do catálogo saíram; as rotas `/produtos/...` não mudaram.
 - **Balança:** passou para Configurações (`/configuracoes/balanca`, só ADMIN; `/produtos/balanca` redireciona). O OPERADOR deixa de abrir a tela, que só via e testava; a leitura pela API (usada pelo PDV) não muda.
+
+## DEC-050 — Tela de Vendas
+2026-10-29 · Aceita
+- **Tela:** `/vendas` consulta as vendas fora do PDV (período, situação, número; caixa e vendedor só para o ADMIN), com o mesmo detalhe do F8 (extraído para `DetalheDaVenda`). Totais e exportação ficam para Relatórios.
+- **API:** `GET /api/pdv/vendas` ganhou `pontoId` e `vendedorId` (só ADMIN; o OPERADOR continua vendo só as próprias vendas), busca por número em qualquer data quando não vem `sessaoId`, limite de 1 ano no período e `situacaoDevolucao` em cada item da lista (resolve a DT-042). No F8, o ADMIN que usa o período (sem `sessaoId`) também passa a achar o número em qualquer data.
+- **Dependência:** o filtro por caixa é uma subconsulta JPQL sobre `SessaoDeCaixa` (do `cashier`) dentro de `ConsultaDeVendas`, porque a venda não guarda o ponto; é a primeira referência direta de `sales` a uma entidade do caixa (o resto passa pelas portas `SessoesParaVendas`, `RecebimentosDoCaixa`).

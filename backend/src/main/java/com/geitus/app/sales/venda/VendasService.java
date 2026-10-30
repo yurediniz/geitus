@@ -313,8 +313,10 @@ public class VendasService {
 
     /**
      * Vendas da mais recente: o OPERADOR so as das proprias sessoes; o ADMIN,
-     * todas. Sem sessao e sem periodo, a sessao atual do usuario (sem sessao
-     * atual, pagina vazia); com periodo e sem sessao, todas as que ele pode ver.
+     * todas, podendo filtrar por ponto e por vendedor (ignorados para o
+     * OPERADOR). Sem sessao, periodo e numero, a sessao atual do usuario (sem
+     * sessao atual, pagina vazia); com periodo e sem sessao, todas as que ele
+     * pode ver; com numero e sem sessao, aquele numero em qualquer data.
      */
     @Transactional(readOnly = true)
     public PaginaResponse<VendaResponse> listarParaUsuario(Long idUsuario, FiltroDeVendas filtro, int pagina,
@@ -330,9 +332,12 @@ public class VendasService {
             return new PaginaResponse<>(List.of(), pagina, tamanho, 0);
         }
         ZoneId fuso = relogio.getZone();
-        PaginaDeVendas vendas = consultaDeVendas.buscar(new Criterios(usuario.empresaId(),
-                usuario.ehAdmin() ? null : usuario.usuarioId(), sessao.map(SessaoParaVenda::id).orElse(null),
-                filtro.status(), filtro.numero(), filtro.inicio(fuso), filtro.fim(fuso)), pagina, tamanho);
+        // O OPERADOR ve so as proprias vendas: o ponto e o vendedor pedidos so valem para o ADMIN.
+        Long vendedor = usuario.ehAdmin() ? filtro.vendedorId() : usuario.usuarioId();
+        UUID ponto = usuario.ehAdmin() ? filtro.pontoId() : null;
+        PaginaDeVendas vendas = consultaDeVendas.buscar(new Criterios(usuario.empresaId(), vendedor,
+                sessao.map(SessaoParaVenda::id).orElse(null), ponto, filtro.status(), filtro.numero(),
+                filtro.inicio(fuso), filtro.fim(fuso)), pagina, tamanho);
         return new PaginaResponse<>(respostas.resumos(vendas.vendas(), usuario), pagina, tamanho, vendas.total());
     }
 

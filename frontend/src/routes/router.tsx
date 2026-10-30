@@ -5,6 +5,7 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { CaixaPage } from '@/features/cash-register/CaixaPage'
 import { HistoricoDoCaixaPage } from '@/features/cash-register/HistoricoDoCaixaPage'
 import { PdvPage } from '@/features/pdv/PdvPage'
+import { VendasPage } from '@/features/sales/VendasPage'
 import { CategoriasPage } from '@/features/catalog/CategoriasPage'
 import { EtiquetaBalancaPage } from '@/features/catalog/EtiquetaBalancaPage'
 import { MarcasPage } from '@/features/catalog/MarcasPage'
@@ -77,6 +78,7 @@ const privateRoutes: RouteObject[] = [
           { path: 'caixa', element: <CaixaPage /> },
           // Historico: OPERADOR ve so as sessoes que abriu (filtrado no backend).
           { path: 'caixa/historico', element: <HistoricoDoCaixaPage /> },
+          { path: 'vendas', element: <VendasPage /> },
           // PDV: qualquer autenticado vende no proprio caixa aberto (o servidor recalcula e grava a venda).
           { path: 'pdv', element: <PdvPage /> },
           { path: 'empresa', element: <EmpresaPage /> },

@@ -23,9 +23,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
  *   <li>{@code cancelamento}: {@code null} na venda concluida;</li>
  *   <li>{@code podeCancelar}: concluida, sem devolucao, com o caixa da venda
  *       aberto, e quem consulta e o dono da sessao ou ADMIN;</li>
- *   <li>{@code situacaoDevolucao} e {@code devolucoes}: no detalhe e nas
- *       respostas de finalizar e cancelar (docs/modules/estoque.md, 6.2);
- *       ausentes na lista.</li>
+ *   <li>{@code situacaoDevolucao}: na lista e no detalhe;</li>
+ *   <li>{@code devolucoes}: no detalhe e nas respostas de finalizar e
+ *       cancelar (docs/modules/pdv.md, regras 24 a 29); ausente na lista.</li>
  * </ul>
  */
 @Schema(description = "Venda do PDV")
@@ -49,8 +49,7 @@ public record VendaResponse(
         List<PagamentoResponse> pagamentos,
         @Schema(nullable = true) CancelamentoResponse cancelamento,
         boolean podeCancelar,
-        @JsonInclude(JsonInclude.Include.NON_NULL)
-        @Schema(description = "NENHUMA, PARCIAL ou TOTAL; ausente na lista")
+        @Schema(description = "NENHUMA, PARCIAL ou TOTAL (na lista e no detalhe)")
         SituacaoDeDevolucao situacaoDevolucao,
         @JsonInclude(JsonInclude.Include.NON_NULL)
         @Schema(description = "Devolucoes da venda, da mais antiga; ausente na lista")

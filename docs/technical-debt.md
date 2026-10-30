@@ -110,7 +110,6 @@ Formato: **DT-0xx — título** · prioridade — o que falta, em 1–2 linhas.
   - **tela:** filtro por ponto no F8; quantidade de produto por peso vinda da busca; aviso de troco desproporcional; atalhos F3/F6/F7/F10 no Chrome/Edge do Windows;
   - **testes:** promoção vencendo entre o cálculo e o finalizar; cancelamento com queda de rede; concorrência contagem × venda.
 - **Oráculo da sangria no modo cego** (DT-039/DT-041) · baixa — tentativas de sangria recusadas permitem descobrir o esperado; limitar ou auditar.
-- **DT-042 — Devolução na lista de vendas (F8)** · baixa — a listagem (`VendaResponse` no resumo) não traz `situacaoDevolucao`, então a lista não mostra o selo "Devolvida"/"Devolução parcial"; hoje a devolução só aparece no detalhe. Pede incluir o campo na lista (backend) e o selo ao lado do "Cancelada" (fatia 3c, DEC-046).
 
 ---
 
@@ -121,3 +120,4 @@ Formato: **DT-0xx — título** · prioridade — o que falta, em 1–2 linhas.
 - **DT-038 — Imagens** — acompanhar `pg_total_relation_size('produto_imagens')`; avaliar armazenamento externo acima de 5 GB; backup com `pg_dump -Fc`.
 - **Índices de Caixa, Estoque e PDV** (DT-036/DT-040/DT-041) — índices compostos e parciais listados na versão longa, quando o volume de movimentos crescer.
 - **`Numerador` da venda** (DT-041) — serializa as finalizações da empresa; aceitável no MVP.
+- **Vendas por vendedor e por caixa** (DEC-050) — os filtros `vendedorId` e `pontoId` da tela de Vendas não têm índice próprio (usam `ix_venda_concluida_em` pelo período); criar `(empresa_id, usuario_id, concluida_em DESC)` se ficarem lentos.

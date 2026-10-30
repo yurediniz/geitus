@@ -65,7 +65,7 @@ class RespostasDaVenda {
         return respostas(List.of(venda), quemVe, Map.of(venda.getId(), detalhe)).get(0);
     }
 
-    /** As vendas sem os itens (a lista). */
+    /** As vendas sem os itens nem as devolucoes, com a situacao de devolucao (a lista). */
     List<VendaResponse> resumos(List<Venda> vendas, UsuarioAutenticado quemVe) {
         return vendas.isEmpty() ? List.of() : respostas(vendas, quemVe, Map.of());
     }
@@ -75,6 +75,11 @@ class RespostasDaVenda {
         Long empresaId = quemVe.empresaId();
         Set<Long> comDevolucao = respostasDaDevolucao.vendasComDevolucao(empresaId,
                 vendas.stream().map(Venda::getId).toList());
+        // Na lista (sem detalhe), a situacao de devolucao de todas as vendas em lote; no detalhe, a do detalhe.
+        Map<Long, SituacaoDeDevolucao> situacoes = detalhes.isEmpty()
+                ? respostasDaDevolucao.situacoes(empresaId, comDevolucao,
+                        ids -> itemRepository.findByEmpresaIdAndVendaIdIn(empresaId, ids))
+                : Map.of();
         Map<Long, SessaoParaVenda> sessoesDasVendas = sessoes.porIds(empresaId,
                 vendas.stream().map(Venda::getSessaoCaixaId).collect(Collectors.toSet()));
         Map<Long, List<PagamentoResponse>> pagamentos = pagamentoRepository
@@ -87,12 +92,14 @@ class RespostasDaVenda {
         return vendas.stream()
                 .map(venda -> resposta(venda, quemVe, sessoesDasVendas.get(venda.getSessaoCaixaId()), nomes,
                         detalhes.get(venda.getId()), pagamentos.getOrDefault(venda.getId(), List.of()),
-                        comDevolucao.contains(venda.getId())))
+                        comDevolucao.contains(venda.getId()),
+                        situacoes.getOrDefault(venda.getId(), SituacaoDeDevolucao.NENHUMA)))
                 .toList();
     }
 
     private VendaResponse resposta(Venda venda, UsuarioAutenticado quemVe, SessaoParaVenda sessao,
-            Map<Long, String> nomes, Detalhe detalhe, List<PagamentoResponse> pagamentos, boolean temDevolucao) {
+            Map<Long, String> nomes, Detalhe detalhe, List<PagamentoResponse> pagamentos, boolean temDevolucao,
+            SituacaoDeDevolucao situacaoNaLista) {
         CancelamentoResponse cancelamento = venda.cancelada()
                 ? new CancelamentoResponse(nomes.get(venda.getCanceladaPor()),
                         HorarioDoCaixa.noFuso(relogio, venda.getCanceladaEm()), venda.getMotivoCancelamento())
@@ -102,7 +109,7 @@ class RespostasDaVenda {
                 venda.getDescontoItens(), venda.getDescontoTotal(), venda.getTotal(), venda.getTroco(),
                 HorarioDoCaixa.noFuso(relogio, venda.getConcluidaEm()), detalhe == null ? null : detalhe.itens(),
                 pagamentos, cancelamento, podeCancelar(venda, sessao, quemVe, temDevolucao),
-                detalhe == null ? null : detalhe.situacao(), detalhe == null ? null : detalhe.devolucoes());
+                detalhe == null ? situacaoNaLista : detalhe.situacao(), detalhe == null ? null : detalhe.devolucoes());
     }
 
     /** Concluida, sem devolucao, com o caixa da venda aberto, e quem consulta e o dono da sessao ou ADMIN. */

@@ -48,7 +48,7 @@ const DATA_VALIDA = /^\d{4}-\d{2}-\d{2}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DIA_EM_MS = 24 * 60 * 60 * 1000
 
-function lerData(valor: string | null): string | null {
+export function lerData(valor: string | null): string | null {
   if (valor === null || !DATA_VALIDA.test(valor)) {
     return null
   }
@@ -62,7 +62,7 @@ export function somarDias(data: string, dias: number): string {
   return new Date(Date.parse(`${data}T00:00:00Z`) + dias * DIA_EM_MS).toISOString().slice(0, 10)
 }
 
-function diasEntre(de: string, ate: string): number {
+export function diasEntre(de: string, ate: string): number {
   return Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / DIA_EM_MS)
 }
 
