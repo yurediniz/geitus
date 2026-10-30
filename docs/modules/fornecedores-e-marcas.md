@@ -1,6 +1,6 @@
 # Fornecedores e fabricantes/marcas
 
-> Decisão: DEC-039. Pacotes `supplier` e `catalog.marca`. Migration V14. Abas de Produtos: Produtos · Categorias · **Marcas** · **Fornecedores** · Unidades · Balança.
+> Decisão: DEC-039. Pacotes `supplier` e `catalog.marca`. Migration V14. Itens da seção Catálogo do menu (DEC-049): Produtos · Estoque · Categorias · **Marcas** · **Fornecedores** · Unidades.
 
 ## 1. Objetivo
 

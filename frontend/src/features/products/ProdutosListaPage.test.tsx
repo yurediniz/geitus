@@ -180,11 +180,11 @@ describe('ProdutosListaPage', () => {
     listarProdutosMock.mockResolvedValue(paginaDe([]))
   })
 
-  it('exibe a sub-navegacao do catalogo com Produtos como aba atual', async () => {
+  it('nao tem mais as abas do catalogo (a navegacao fica no menu lateral)', async () => {
     renderLista()
 
-    const nav = await screen.findByRole('navigation', { name: /catálogo/i })
-    expect(within(nav).getByRole('link', { name: 'Produtos' })).toHaveAttribute('aria-current', 'page')
+    await listaCarregada()
+    expect(screen.queryByRole('navigation', { name: /catálogo/i })).not.toBeInTheDocument()
   })
 
   it('consulta com os padroes: ativos, por nome, pagina 1', async () => {

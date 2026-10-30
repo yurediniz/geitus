@@ -13,7 +13,6 @@ import {
 import { ConfirmarExclusaoDialog } from '@/features/catalog/ConfirmarExclusaoDialog'
 import { AvisoSomenteLeitura, FeedbackCatalogo } from '@/features/catalog/FeedbackCatalogo'
 import { UnidadeFormulario, type UnidadeCampoFormulario } from '@/features/catalog/UnidadeFormulario'
-import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
 import { HttpError } from '@/services/httpClient'
@@ -195,8 +194,6 @@ export function UnidadesPage() {
 
   return (
     <div className="space-y-6">
-      <CatalogoNav />
-
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Unidades de medida</h1>

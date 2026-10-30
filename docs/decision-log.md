@@ -290,3 +290,8 @@ Spec: [`estoque.md`](modules/estoque.md), regras 16, 23 e 24.
 - **Tela:** componente `FiltroMultiplo` (popover do `radix-ui` já instalado com caixas de seleção nativas, sem dependência nova).
 
 Spec: [`estoque.md`](modules/estoque.md), regra 23; [`produtos.md`](modules/produtos.md), regra 3.
+
+## DEC-049 — Menu lateral em seções e balança em Configurações
+2026-10-29 · Aceita
+- **Seções:** Início; **Vendas** (PDV, Caixa); **Catálogo** (Produtos, Estoque, Categorias, Marcas, Fornecedores, Unidades); Clientes; Financeiro; **Configurações** (Empresa, Usuários, Caixa e PDV, Balança). As seções recolhem (estado no navegador); a do item ativo abre sozinha a cada visita e só fecha se o usuário a recolher ali. As abas do catálogo saíram; as rotas `/produtos/...` não mudaram.
+- **Balança:** passou para Configurações (`/configuracoes/balanca`, só ADMIN; `/produtos/balanca` redireciona). O OPERADOR deixa de abrir a tela, que só via e testava; a leitura pela API (usada pelo PDV) não muda.

@@ -1,4 +1,4 @@
-import { createBrowserRouter, type RouteObject } from 'react-router-dom'
+import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-dom'
 
 import { RootLayout } from '@/components/layout/RootLayout'
 import { LoginPage } from '@/features/auth/LoginPage'
@@ -64,8 +64,8 @@ const privateRoutes: RouteObject[] = [
           { path: 'produtos/fornecedores/novo', element: <FornecedorPage /> },
           { path: 'produtos/fornecedores/:id', element: <FornecedorPage /> },
           { path: 'produtos/unidades', element: <UnidadesPage /> },
-          // Etiqueta de balanca: leitura e teste a qualquer autenticado; salvar so ADMIN (pagina e backend).
-          { path: 'produtos/balanca', element: <EtiquetaBalancaPage /> },
+          // A etiqueta de balanca mudou para Configuracoes (so ADMIN): o endereco antigo redireciona.
+          { path: 'produtos/balanca', element: <Navigate to="/configuracoes/balanca" replace /> },
           // Pagina do produto: OPERADOR abre em modo leitura; cadastro e escrita so ADMIN (pagina e backend).
           { path: 'produtos/novo', element: <ProdutoPage /> },
           { path: 'produtos/:id', element: <ProdutoPage /> },
@@ -86,6 +86,8 @@ const privateRoutes: RouteObject[] = [
             children: [
               { path: 'usuarios', element: <UsuariosPage /> },
               { path: 'configuracoes', element: <ConfiguracoesPage /> },
+              // Etiqueta de balanca: a leitura da configuracao pela API continua aberta (o PDV usa); salvar so ADMIN.
+              { path: 'configuracoes/balanca', element: <EtiquetaBalancaPage /> },
             ],
           },
         ],
@@ -105,8 +107,6 @@ const fallbackRoute: RouteObject = { path: '*', element: <NotFoundPage /> }
  * Configuracao de rotas da aplicacao, separada em rotas publicas, privadas e
  * o fallback de "nao encontrada".
  */
-export const router = createBrowserRouter([
-  ...publicRoutes,
-  ...privateRoutes,
-  fallbackRoute,
-])
+export const rotasDaAplicacao: RouteObject[] = [...publicRoutes, ...privateRoutes, fallbackRoute]
+
+export const router = createBrowserRouter(rotasDaAplicacao)

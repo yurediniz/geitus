@@ -10,7 +10,6 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { Switch } from '@/components/ui/switch'
 import { ETIQUETA_BALANCA_QUERY_KEY, mensagemErroCatalogo } from '@/features/catalog/catalogoQuery'
 import { AvisoSomenteLeitura, ErroInline, FeedbackCatalogo } from '@/features/catalog/FeedbackCatalogo'
-import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { rotaDoProduto } from '@/features/products/navegacaoProdutos'
 import { useAuth } from '@/hooks/useAuth'
 import { useAvisoAlteracoesNaoSalvas } from '@/hooks/useAvisoAlteracoesNaoSalvas'
@@ -68,9 +67,10 @@ function semPadrao({ padrao: _padrao, ...configuracao }: ConfiguracaoEtiquetaRes
 }
 
 /**
- * Tela "Balança" do catalogo (/produtos/balanca, spec de Produtos): o formato da
- * etiqueta que a balanca imprime, com modelos prontos, a previa e o teste de
- * uma etiqueta. Leitura e teste para todos; salvar so ADMIN (o backend tambem barra).
+ * Tela "Balança" de Configuracoes (/configuracoes/balanca, so ADMIN; spec de
+ * Produtos): o formato da etiqueta que a balanca imprime, com modelos prontos,
+ * a previa e o teste de uma etiqueta. O aviso de modo leitura continua para um
+ * perfil sem permissao (o backend tambem barra o salvar).
  */
 export function EtiquetaBalancaPage() {
   const { usuario } = useAuth()
@@ -103,7 +103,6 @@ export function EtiquetaBalancaPage() {
 
   return (
     <div className="space-y-6">
-      <CatalogoNav />
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Etiqueta de balança</h1>
         <p className="mt-1 max-w-2xl text-muted-foreground">

@@ -16,7 +16,6 @@ import {
 } from '@/features/catalog/catalogoQuery'
 import { ConfirmarExclusaoDialog } from '@/features/catalog/ConfirmarExclusaoDialog'
 import { AvisoSomenteLeitura, ErroInline, FeedbackCatalogo } from '@/features/catalog/FeedbackCatalogo'
-import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { formatarQuantidade } from '@/features/products/formatacaoProduto'
 import { useFornecedoresGravados } from '@/features/products/fornecedoresGravados'
 import {
@@ -420,11 +419,10 @@ interface EstruturaPaginaProps {
   children: ReactNode
 }
 
-/** Sub-navegacao do catalogo, "Voltar para produtos" (ou "para o estoque"), titulo e selo de status. */
+/** "Voltar para produtos" (ou "para o estoque"), titulo e selo de status. */
 function EstruturaPagina({ titulo, voltarPara, ativo, acaoStatus, acoes, children }: EstruturaPaginaProps) {
   return (
     <div className="space-y-6">
-      <CatalogoNav />
       <header className="space-y-2">
         <Link
           to={voltarPara}

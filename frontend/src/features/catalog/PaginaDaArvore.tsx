@@ -17,7 +17,6 @@ import { FormularioNomeDaArvore } from '@/features/catalog/FormularioNomeDaArvor
 import { MoverNaArvoreDialog } from '@/features/catalog/MoverNaArvoreDialog'
 import { comMaiuscula, descreverVinculos } from '@/features/catalog/textosCatalogo'
 import type { DestinoFoco } from '@/features/catalog/useFocoDeOrigem'
-import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { useAuth } from '@/hooks/useAuth'
 import { montarArvore, type NoDaArvore } from '@/lib/arvoreCategorias'
 import { HttpError } from '@/services/httpClient'
@@ -296,8 +295,6 @@ export function PaginaDaArvore<T extends ItemDaArvore>({ configuracao }: PaginaD
 
   return (
     <div className="space-y-6">
-      <CatalogoNav />
-
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{textos.titulo}</h1>

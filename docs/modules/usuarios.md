@@ -43,7 +43,7 @@ Tabela `usuario` (V1):
 
 ## 5. Telas
 
-- `/usuarios` sob `AdminRoute`: o item "Usuários" na sidebar só aparece para ADMIN, e o acesso direto do OPERADOR é bloqueado.
+- `/usuarios` sob `AdminRoute`: o item "Usuários" (seção Configurações do menu) só aparece para ADMIN, e o acesso direto do OPERADOR é bloqueado.
 - Lista com busca e filtros (`ativo`, `perfil`), criar/editar (React Hook Form + Zod), inativar/reativar e redefinir senha; estados de carregando, erro, vazio e sucesso.
 - **Trocar a própria senha:** pelo menu do usuário (`TrocarSenhaSheet`), com senha atual, nova senha e confirmação.
 

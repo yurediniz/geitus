@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { RootLayout } from '@/components/layout/RootLayout'
@@ -35,9 +35,19 @@ function renderLayout(entrada = '/') {
         <MemoryRouter initialEntries={[entrada]}>
           <Routes>
             <Route path="/" element={<RootLayout />}>
-              <Route index element={<div>Conteudo</div>} />
+              <Route
+                index
+                element={
+                  <div>
+                    Conteudo <Link to="/produtos/categorias">Ir para categorias</Link>
+                  </div>
+                }
+              />
               <Route path="produtos" element={<div>Produtos</div>} />
               <Route path="produtos/categorias" element={<div>Categorias</div>} />
+              <Route path="produtos/fornecedores/:id" element={<div>Um fornecedor</div>} />
+              <Route path="produtos/:id" element={<div>Um produto</div>} />
+              <Route path="configuracoes/balanca" element={<div>Balanca</div>} />
               <Route path="estoque" element={<div>Estoque</div>} />
               <Route path="clientes" element={<div>Clientes</div>} />
               <Route path="pdv" element={<div>Tela do PDV</div>} />
@@ -81,15 +91,35 @@ describe('RootLayout - logout', () => {
     expect(screen.getAllByText(/^em breve$/i).length).toBeGreaterThan(0)
   })
 
-  it('mantem Produtos ativo nas sub-rotas do catalogo e Inicio inativo', async () => {
+  it('em /produtos/categorias o ativo e Categorias (item proprio), nao Produtos nem Inicio', async () => {
     setStoredToken('token-valido')
     getMeMock.mockResolvedValue(usuarioFake)
 
     renderLayout('/produtos/categorias')
 
     await screen.findByText('Ana Souza')
-    expect(screen.getByRole('link', { name: /produtos/i })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Categorias' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: /produtos/i })).not.toHaveAttribute('aria-current')
     expect(screen.getByRole('link', { name: /início/i })).not.toHaveAttribute('aria-current')
+  })
+
+  it('Produtos fica ativo na pagina de um produto', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    renderLayout('/produtos/p-1')
+    await screen.findByText('Ana Souza')
+    expect(screen.getByRole('link', { name: /produtos/i })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('Fornecedores fica ativo na pagina de um fornecedor', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    renderLayout('/produtos/fornecedores/f-1')
+    await screen.findByText('Ana Souza')
+    expect(screen.getByRole('link', { name: 'Fornecedores' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: /produtos/i })).not.toHaveAttribute('aria-current')
   })
 
   it('exibe Estoque logo depois de Produtos, ativo em /estoque, tambem para o OPERADOR', async () => {
@@ -217,25 +247,147 @@ describe('RootLayout - Caixa e Configurações', () => {
     expect(within(caixa).queryByText(/^em breve$/i)).not.toBeInTheDocument()
   })
 
-  it('mostra "Configurações" para ADMIN, levando a /configuracoes', async () => {
+  it('ADMIN: a secao Configurações tem Empresa, Usuários, "Caixa e PDV" e Balança', async () => {
     setStoredToken('token-valido')
     getMeMock.mockResolvedValue(usuarioFake)
 
-    renderLayout()
+    renderLayout('/configuracoes/balanca')
 
     await screen.findByText('Ana Souza')
-    expect(screen.getByRole('link', { name: /configurações/i })).toHaveAttribute('href', '/configuracoes')
+    const secao = document.getElementById(
+      screen.getByRole('button', { name: 'Configurações' }).getAttribute('aria-controls') ?? '',
+    ) as HTMLElement
+    expect(within(secao).getAllByRole('link').map((link) => link.textContent)).toEqual([
+      'Empresa',
+      'Usuários',
+      'Caixa e PDV',
+      'Balança',
+    ])
+    expect(within(secao).getByRole('link', { name: 'Caixa e PDV' })).toHaveAttribute('href', '/configuracoes')
+    expect(within(secao).getByRole('link', { name: 'Caixa e PDV' })).not.toHaveAttribute('aria-current')
+    expect(within(secao).getByRole('link', { name: 'Balança' })).toHaveAttribute('aria-current', 'page')
   })
 
-  it('OPERADOR não vê "Configurações"', async () => {
+  it('OPERADOR: em Configurações so ve Empresa', async () => {
     setStoredToken('token-valido')
     getMeMock.mockResolvedValue({ ...usuarioFake, perfil: 'OPERADOR' })
 
     renderLayout()
 
     await screen.findByText('Ana Souza')
-    expect(screen.queryByRole('link', { name: /configurações/i })).not.toBeInTheDocument()
-    expect(screen.queryByText('Configurações')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Empresa' })).toHaveAttribute('href', '/empresa')
+    expect(screen.queryByRole('link', { name: 'Caixa e PDV' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Balança' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Usuários' })).not.toBeInTheDocument()
+  })
+})
+
+describe('RootLayout - menu em secoes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  it('mostra as secoes na ordem: Inicio, Vendas, Catalogo, Clientes, Financeiro e Configurações', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    renderLayout()
+
+    await screen.findByText('Ana Souza')
+    const barra = screen.getByRole('complementary', { hidden: true })
+    expect(within(barra).getAllByRole('button', { name: /vendas|catálogo|configurações/i }).map((b) => b.textContent)).toEqual([
+      'Vendas',
+      'Catálogo',
+      'Configurações',
+    ])
+    expect(within(barra).getAllByRole('link').map((link) => link.textContent)).toEqual([
+      'Início',
+      'PDV',
+      'Caixa',
+      'Produtos',
+      'Estoque',
+      'Categorias',
+      'Marcas',
+      'Fornecedores',
+      'Unidades',
+      'Clientes',
+      'Empresa',
+      'Usuários',
+      'Caixa e PDV',
+      'Balança',
+    ])
+  })
+
+  it('o titulo recolhe e expande a secao, e o navegador lembra', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    const { unmount } = renderLayout()
+
+    await screen.findByText('Ana Souza')
+    const vendas = screen.getByRole('button', { name: 'Vendas' })
+    expect(vendas).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(vendas)
+    expect(vendas).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('link', { name: /^pdv$/i })).not.toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem('geitus.menu.recolhidas') ?? '[]')).toEqual(['vendas'])
+
+    unmount()
+    renderLayout()
+    await screen.findByText('Ana Souza')
+    expect(screen.getByRole('button', { name: 'Vendas' })).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(screen.getByRole('button', { name: 'Vendas' }))
+    expect(screen.getByRole('link', { name: /^pdv$/i })).toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem('geitus.menu.recolhidas') ?? '[]')).toEqual([])
+  })
+
+  it('a secao do item ativo abre sozinha, mesmo recolhida antes; recolher ali mesmo fecha', async () => {
+    localStorage.setItem('geitus.menu.recolhidas', JSON.stringify(['catalogo']))
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    renderLayout('/estoque')
+
+    await screen.findByText('Ana Souza')
+    const catalogo = screen.getByRole('button', { name: 'Catálogo' })
+    expect(catalogo).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('link', { name: /estoque/i })).toHaveAttribute('aria-current', 'page')
+
+    fireEvent.click(catalogo)
+    expect(catalogo).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('recolhida numa pagina, a secao reabre ao voltar a essa mesma pagina numa nova visita', async () => {
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    renderLayout('/produtos/categorias')
+
+    await screen.findByText('Ana Souza')
+    const catalogo = screen.getByRole('button', { name: 'Catálogo' })
+    fireEvent.click(catalogo)
+    expect(catalogo).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(screen.getByRole('link', { name: /início/i }))
+    expect(catalogo).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(await screen.findByRole('link', { name: 'Ir para categorias' }))
+
+    // Nova visita a /produtos/categorias: o item ativo nao pode sumir do menu.
+    expect(await screen.findByText('Categorias', { selector: 'div' })).toBeInTheDocument()
+    expect(catalogo).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('link', { name: /categorias/i })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('valor estragado no navegador nao quebra o menu (tudo aberto)', async () => {
+    localStorage.setItem('geitus.menu.recolhidas', '{nao e json')
+    setStoredToken('token-valido')
+    getMeMock.mockResolvedValue(usuarioFake)
+
+    renderLayout()
+
+    await screen.findByText('Ana Souza')
+    expect(screen.getByRole('button', { name: 'Vendas' })).toHaveAttribute('aria-expanded', 'true')
   })
 })
 

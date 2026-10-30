@@ -804,6 +804,8 @@ describe('ProdutoPage', () => {
       expect(campoCodigoProduto()).toBeDisabled()
       expect(interruptorBalanca()).toBeDisabled()
       expect(screen.queryByRole('button', { name: /usar o número do produto/i })).not.toBeInTheDocument()
+      // A configuração da etiqueta é só do ADMIN: o OPERADOR não recebe o link.
+      expect(screen.queryByRole('link', { name: 'Configurar etiqueta' })).not.toBeInTheDocument()
     })
   })
 
@@ -839,7 +841,8 @@ describe('ProdutoPage', () => {
       expect(interruptorBalanca()).toHaveAccessibleDescription(
         'Ligue para produtos pesados na balança. O PDV lê o código e o valor da etiqueta.',
       )
-      expect(screen.getByRole('link', { name: 'Configurar etiqueta' })).toHaveAttribute('href', '/produtos/balanca')
+      // A etiqueta fica em Configurações (so ADMIN).
+      expect(screen.getByRole('link', { name: 'Configurar etiqueta' })).toHaveAttribute('href', '/configuracoes/balanca')
     })
 
     it('erros em código de barras e no código: vai primeiro ao de barras, com a contagem da seção', async () => {
@@ -1587,13 +1590,14 @@ describe('ProdutoPage', () => {
       expect(atualizarProdutoMock).not.toHaveBeenCalled()
     })
 
-    it('também protege a saída pelas abas do catálogo', async () => {
-      renderNovo()
+    it('também protege a saída por outra rota (o menu lateral)', async () => {
+      const router = renderNovo()
       await esperarFormulario()
       fireEvent.change(campoNome(), { target: { value: 'Café' } })
 
-      const nav = screen.getByRole('navigation', { name: /catálogo/i })
-      fireEvent.click(within(nav).getByRole('link', { name: 'Categorias' }))
+      act(() => {
+        void router.navigate('/produtos/categorias')
+      })
 
       expect(await screen.findByRole('dialog', { name: 'Descartar alterações?' })).toBeInTheDocument()
     })

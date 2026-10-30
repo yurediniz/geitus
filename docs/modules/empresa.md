@@ -32,7 +32,7 @@ Tabela `empresa` (V1), ampliada na **V3**. Representante legal e endereço são 
 
 ## 5. Telas
 
-- `/empresa`, com item na sidebar para todos. O ADMIN edita; o OPERADOR vê em modo leitura (campos desabilitados, sem salvar).
+- `/empresa`, com item na seção Configurações do menu, para todos (é o único item da seção que o OPERADOR vê). O ADMIN edita; o OPERADOR vê em modo leitura (campos desabilitados, sem salvar).
 - Seções:
   - Representante legal;
   - Empresa, com a pergunta "Já possui CNPJ?" que revela os campos de PJ;

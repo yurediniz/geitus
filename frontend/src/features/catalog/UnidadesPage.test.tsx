@@ -108,8 +108,8 @@ describe('UnidadesPage', () => {
     expect(within(linhaUn).getByText('Ativa')).toBeInTheDocument()
     expect(within(await linhaDa('KG')).getByText('Sim')).toBeInTheDocument()
     expect(within(await linhaDa('DZ')).getByText('Inativa')).toBeInTheDocument()
-    // A aba atual da sub-navegacao e Unidades.
-    expect(screen.getByRole('link', { name: 'Unidades' })).toHaveAttribute('aria-current', 'page')
+    // A navegacao do catalogo fica no menu lateral, nao em abas na pagina.
+    expect(screen.queryByRole('navigation', { name: 'Catálogo' })).not.toBeInTheDocument()
   })
 
   it('exibe carregamento e erro com tentar novamente', async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 
@@ -51,10 +51,10 @@ function renderPagina() {
   // Data router: o aviso de alteracoes nao salvas usa o useBlocker.
   const router = createMemoryRouter(
     [
-      { path: '/produtos/balanca', element: <EtiquetaBalancaPage /> },
+      { path: '/configuracoes/balanca', element: <EtiquetaBalancaPage /> },
       { path: '/produtos', element: <h1>Lista de produtos</h1> },
     ],
-    { initialEntries: ['/produtos/balanca'] },
+    { initialEntries: ['/configuracoes/balanca'] },
   )
   render(
     <QueryClientProvider client={queryClient}>
@@ -96,12 +96,11 @@ describe('EtiquetaBalancaPage', () => {
     buscarMock.mockResolvedValue({ ...CONFIGURACAO_ETIQUETA_PADRAO, padrao: true })
   })
 
-  it('fica na aba "Balança" do catálogo', async () => {
+  it('mostra o título, sem as antigas abas do catálogo (a página fica em Configurações)', async () => {
     renderPagina()
     await esperarFormulario()
 
-    const catalogo = screen.getByRole('navigation', { name: 'Catálogo' })
-    expect(within(catalogo).getByRole('link', { name: 'Balança' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.queryByRole('navigation', { name: 'Catálogo' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1, name: 'Etiqueta de balança' })).toBeInTheDocument()
   })
 
@@ -319,11 +318,14 @@ describe('EtiquetaBalancaPage', () => {
   })
 
   it('sair com alterações não salvas pede confirmação', async () => {
-    renderPagina()
+    const router = renderPagina()
     await esperarFormulario()
     fireEvent.change(campo('Modelo'), { target: { value: 'toledo-4-0-6-dv' } })
 
-    fireEvent.click(within(screen.getByRole('navigation', { name: 'Catálogo' })).getByRole('link', { name: 'Produtos' }))
+    // Sair por qualquer link (o menu lateral) passa pelo bloqueio do router.
+    act(() => {
+      void router.navigate('/produtos')
+    })
 
     const dialogo = await screen.findByRole('dialog', { name: 'Descartar alterações?' })
     expect(dialogo).toHaveTextContent('Você alterou a etiqueta da balança e ainda não salvou.')

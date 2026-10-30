@@ -10,7 +10,6 @@ import { NativeSelect } from '@/components/ui/native-select'
 import { PaginacaoLista } from '@/components/ui/paginacao-lista'
 import { FORNECEDORES_QUERY_KEY } from '@/features/catalog/catalogoQuery'
 import { AvisoSomenteLeitura, FeedbackCatalogo } from '@/features/catalog/FeedbackCatalogo'
-import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { sucessoDaNavegacao } from '@/features/products/navegacaoProdutos'
 import { chaveDaListaDeFornecedores, FORNECEDORES_EXISTENTES_QUERY_KEY } from '@/features/suppliers/fornecedorQuery'
 import { ListaDeFornecedores } from '@/features/suppliers/ListaDeFornecedores'
@@ -226,8 +225,6 @@ export function FornecedoresPage() {
 
   return (
     <div className="space-y-6">
-      <CatalogoNav />
-
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Fornecedores</h1>

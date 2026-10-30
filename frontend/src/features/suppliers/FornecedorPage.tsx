@@ -10,7 +10,6 @@ import { FORNECEDORES_QUERY_KEY, TODAS_MARCAS_QUERY_KEY, ehMensagemGenerica } fr
 import { ConfirmarExclusaoDialog } from '@/features/catalog/ConfirmarExclusaoDialog'
 import { AvisoSomenteLeitura, ErroInline, FeedbackCatalogo } from '@/features/catalog/FeedbackCatalogo'
 import { pluralizar } from '@/features/catalog/textosCatalogo'
-import { CatalogoNav } from '@/features/products/CatalogoNav'
 import { sucessoDaNavegacao } from '@/features/products/navegacaoProdutos'
 import { rolarEFocarCampo } from '@/features/products/secoes/rolagem'
 import { SeloStatus } from '@/features/products/SeloStatus'
@@ -187,7 +186,6 @@ interface EstruturaPaginaProps {
 function EstruturaPagina({ titulo, voltarPara, ativo, acaoStatus, acoes, children }: EstruturaPaginaProps) {
   return (
     <div className="space-y-6">
-      <CatalogoNav />
       <header className="space-y-2">
         <Link
           to={voltarPara}

@@ -15,6 +15,7 @@ import {
   type ProdutoFormValues,
 } from '@/features/products/produtoFormulario'
 import { idDaSecao } from '@/features/products/secoes/rolagem'
+import { useAuth } from '@/hooks/useAuth'
 import { CODIGO_PRODUTO_MAXIMO } from '@/lib/codigoProduto'
 import { sugerirSku } from '@/services/produtoService'
 import type { Produto } from '@/types/produto'
@@ -66,6 +67,7 @@ export function SecaoCodigos({
     trigger,
     formState: { errors, isSubmitted },
   } = useFormContext<ProdutoFormValues>()
+  const ehAdmin = useAuth().usuario?.perfil === 'ADMIN'
   const [anuncioSku, setAnuncioSku] = useState('')
   const [codigo, vendidoBalanca] = useWatch({ control, name: ['codigo', 'vendidoBalanca'] })
   // So se ha embalagem: digitar na quantidade ou no preco de uma embalagem nao renderiza esta secao.
@@ -183,12 +185,15 @@ export function SecaoCodigos({
           <p id="vendidoBalanca-ajuda" className="text-xs text-muted-foreground">
             Ligue para produtos pesados na balança. O PDV lê o código e o valor da etiqueta.
           </p>
-          <Link
-            to="/produtos/balanca"
-            className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4"
-          >
-            Configurar etiqueta
-          </Link>
+          {/* A etiqueta fica em Configurações, so do ADMIN. */}
+          {ehAdmin && (
+            <Link
+              to="/configuracoes/balanca"
+              className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4"
+            >
+              Configurar etiqueta
+            </Link>
+          )}
           {pedeNumero && numeroNaoCabe === null && (
             <Button
               type="button"

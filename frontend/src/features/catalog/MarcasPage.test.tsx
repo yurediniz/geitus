@@ -110,24 +110,12 @@ describe('MarcasPage', () => {
     definirPerfil('ADMIN')
   })
 
-  it('mostra as abas na ordem da spec com Marcas atual e o titulo "Fabricantes e marcas"', async () => {
+  it('mostra o titulo "Fabricantes e marcas", sem as antigas abas do catalogo (a navegacao fica no menu)', async () => {
     listarMarcasMock.mockResolvedValue(TODAS)
 
     renderPagina()
 
-    const abas = within(screen.getByRole('navigation', { name: 'Catálogo' })).getAllByRole('link')
-    expect(abas.map((aba) => aba.textContent)).toEqual([
-      'Produtos',
-      'Categorias',
-      'Marcas',
-      'Fornecedores',
-      'Unidades',
-      'Balança',
-    ])
-    expect(within(screen.getByRole('navigation', { name: 'Catálogo' })).getByRole('link', { name: 'Marcas' })).toHaveAttribute(
-      'aria-current',
-      'page',
-    )
+    expect(screen.queryByRole('navigation', { name: 'Catálogo' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1, name: 'Fabricantes e marcas' })).toBeInTheDocument()
     expect(await screen.findByRole('tree', { name: 'Marcas' })).toBeInTheDocument()
   })
